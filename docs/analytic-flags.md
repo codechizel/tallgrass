@@ -136,6 +136,24 @@ This is a living document — add entries as each analysis phase surfaces new fi
 - **Explanation:** These two senators occupy a unique position in the 2D space: extreme ideology combined with low party loyalty. Adding the loyalty dimension modestly improves cluster quality (2D sil > 1D sil at k=3-4), suggesting the loyalty axis contributes to the structure.
 - **Downstream:** Network analysis should check whether Tyson-Thompson have lower within-Republican edge weights than typical R pairs, confirming their distinctiveness in pairwise agreement (not just in the IRT+loyalty feature space).
 
+## Joint Cross-Chamber Model
+
+### Joint MCMC Model — Failed, Replaced with Test Equating
+
+- **Phase:** IRT (Joint)
+- **Observation:** A full joint MCMC IRT model was attempted with 71 shared bills and 169 legislators. It did not converge: R-hat > 1.7, ESS < 10, despite 4 anchors (one per chamber extreme), 4 chains, target_accept=0.95, and a shared-bills-only matrix (95.5% observed). Both full-matrix (420 cols, 61.3% observed) and shared-bills-only (71 cols, 95.5%) variants failed identically.
+- **Explanation:** 71 shared bills for 169 legislators gives 0.42 bills per legislator — far too few for a joint IRT model. Many legislators vote identically on the shared bills, creating a degenerate posterior. The block-diagonal structure (House-only and Senate-only columns) further complicates MCMC geometry even when removed.
+- **Resolution:** Replaced with classical test equating (mean/sigma method):
+  - **A = 1.136** (scale factor) from SD ratio of shared bill discrimination parameters (51 concordant / 71 shared bills)
+  - **B = -0.305** (location shift) from 3 bridging legislators' per-chamber ideal points
+  - Senate ideal points transformed to House scale: xi_equated = 1.136 × xi_senate - 0.305
+  - Equated vs per-chamber correlations: House r = 1.000 (unchanged), Senate r = 1.000 (linear transformation)
+- **Downstream:**
+  - **Network:** Equated ideal points enable cross-chamber comparisons. The Senate scale is ~14% wider than House (A > 1); Tyson's equated xi = +4.43 exceeds any House member (+2.90 max).
+  - **Interpretation:** Equated scores are transformed marginals, not a joint posterior. Use per-chamber models for within-chamber analyses. Equated scores for cross-chamber ranking only.
+  - **Limitation:** B depends on only 3 bridging legislators. Thompson's large cross-chamber shift (House +2.43 → Senate +3.44) may reflect genuine ideology change or model noise.
+- **Status:** Resolved as of 2026-02-20 (test equating). Joint MCMC deferred to future work if more shared items become available.
+
 ## Template
 
 ```

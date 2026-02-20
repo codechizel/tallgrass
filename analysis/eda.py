@@ -152,9 +152,7 @@ All outputs land in `results/<session>/eda/<date>/`:
 
 MINORITY_THRESHOLD = 0.025  # Drop votes where minority < 2.5% (VoteView standard)
 MIN_VOTES = 20  # Drop legislators with fewer than 20 substantive votes
-VOTE_CATEGORIES = [
-    "Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting"
-]
+VOTE_CATEGORIES = ["Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting"]
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
 
 # Kansas Legislature constitutional seat counts. These are fixed and serve as
@@ -231,11 +229,7 @@ def print_session_summary(
         print(f"    {row['party']:12s}  {row['len']}")
 
     print("\n  By chamber × party:")
-    cp = (
-        legislators.group_by("chamber", "party")
-        .agg(pl.len())
-        .sort("chamber", "party")
-    )
+    cp = legislators.group_by("chamber", "party").agg(pl.len()).sort("chamber", "party")
     for row in cp.iter_rows(named=True):
         print(f"    {row['chamber']:8s}  {row['party']:12s}  {row['len']}")
 
@@ -382,10 +376,7 @@ def check_data_integrity(
 
     unknown_slugs = voted_slugs - all_slugs
     if unknown_slugs:
-        msg = (
-            f"{len(unknown_slugs)} vote slugs not in legislators CSV: "
-            f"{sorted(unknown_slugs)}"
-        )
+        msg = f"{len(unknown_slugs)} vote slugs not in legislators CSV: {sorted(unknown_slugs)}"
         print(f"  [WARN] {msg}")
         findings["warnings"].append(msg)
     else:
@@ -393,11 +384,7 @@ def check_data_integrity(
 
     # ── 4. Duplicate vote check ──
     # Same legislator voting twice on the same rollcall is impossible.
-    dupes = (
-        votes.group_by("vote_id", "legislator_slug")
-        .agg(pl.len())
-        .filter(pl.col("len") > 1)
-    )
+    dupes = votes.group_by("vote_id", "legislator_slug").agg(pl.len()).filter(pl.col("len") > 1)
     if dupes.height > 0:
         msg = f"{dupes.height} duplicate votes (same legislator + rollcall)"
         print(f"  [WARN] {msg}")
@@ -465,9 +452,7 @@ def check_data_integrity(
     ).filter(pl.col("total_votes") > pl.col("chamber_size"))
 
     if overcount.height > 0:
-        msg = (
-            f"{overcount.height} rollcalls exceed chamber seat count"
-        )
+        msg = f"{overcount.height} rollcalls exceed chamber seat count"
         print(f"  [WARN] {msg}")
         for row in overcount.head(5).iter_rows(named=True):
             print(
@@ -483,16 +468,13 @@ def check_data_integrity(
     # A mismatch means the scraper assigned a legislator to the wrong chamber.
     vote_with_chamber = votes.select("vote_id", "legislator_slug", "chamber")
     cross_chamber = vote_with_chamber.filter(
-        (pl.col("legislator_slug").str.starts_with("sen_")
-         & (pl.col("chamber") == "House"))
-        | (pl.col("legislator_slug").str.starts_with("rep_")
-           & (pl.col("chamber") == "Senate"))
+        (pl.col("legislator_slug").str.starts_with("sen_") & (pl.col("chamber") == "House"))
+        | (pl.col("legislator_slug").str.starts_with("rep_") & (pl.col("chamber") == "Senate"))
     )
     if cross_chamber.height > 0:
         n_affected = cross_chamber["vote_id"].n_unique()
         msg = (
-            f"{cross_chamber.height} votes with chamber-slug mismatch "
-            f"across {n_affected} rollcalls"
+            f"{cross_chamber.height} votes with chamber-slug mismatch across {n_affected} rollcalls"
         )
         print(f"  [WARN] {msg}")
         findings["warnings"].append(msg)
@@ -529,9 +511,7 @@ def check_data_integrity(
     return findings
 
 
-def _check_near_duplicate_rollcalls(
-    votes: pl.DataFrame, findings: dict
-) -> None:
+def _check_near_duplicate_rollcalls(votes: pl.DataFrame, findings: dict) -> None:
     """Detect rollcalls with nearly identical vote vectors.
 
     Checks within each chamber separately, and ONLY among contested votes
@@ -545,22 +525,11 @@ def _check_near_duplicate_rollcalls(
 
     for chamber in ["House", "Senate"]:
         prefix = "sen_" if chamber == "Senate" else "rep_"
-        chamber_votes = (
-            votes.filter(
-                pl.col("vote").is_in(["Yea", "Nay"])
-                & pl.col("legislator_slug").str.starts_with(prefix)
-            )
-            .with_columns(
-                pl.when(pl.col("vote") == "Yea")
-                .then(1)
-                .otherwise(0)
-                .alias("vote_binary")
-            )
-        )
+        chamber_votes = votes.filter(
+            pl.col("vote").is_in(["Yea", "Nay"]) & pl.col("legislator_slug").str.starts_with(prefix)
+        ).with_columns(pl.when(pl.col("vote") == "Yea").then(1).otherwise(0).alias("vote_binary"))
 
-        binary = chamber_votes.pivot(
-            on="vote_id", index="legislator_slug", values="vote_binary"
-        )
+        binary = chamber_votes.pivot(on="vote_id", index="legislator_slug", values="vote_binary")
         vote_ids = [c for c in binary.columns if c != "legislator_slug"]
         if len(vote_ids) < 2:
             continue
@@ -594,8 +563,7 @@ def _check_near_duplicate_rollcalls(
                 diffs = int((mat[mask, i] != mat[mask, j]).sum())
                 if diffs <= 1:
                     all_near_dupes.append(
-                        (contested_vote_ids[i], contested_vote_ids[j],
-                         chamber, int(shared), diffs)
+                        (contested_vote_ids[i], contested_vote_ids[j], chamber, int(shared), diffs)
                     )
 
     if all_near_dupes:
@@ -621,8 +589,11 @@ def _check_near_duplicate_rollcalls(
 
         findings["near_duplicate_rollcalls"] = [
             {
-                "vote_id_a": a, "vote_id_b": b, "chamber": ch,
-                "shared_voters": s, "differences": d,
+                "vote_id_a": a,
+                "vote_id_b": b,
+                "chamber": ch,
+                "shared_voters": s,
+                "differences": d,
             }
             for a, b, ch, s, d in all_near_dupes
         ]
@@ -636,9 +607,7 @@ def _check_near_duplicate_rollcalls(
 # could contaminate downstream models (PCA, IRT, clustering).
 
 
-def compute_rice_cohesion(
-    votes: pl.DataFrame, legislators: pl.DataFrame
-) -> pl.DataFrame:
+def compute_rice_cohesion(votes: pl.DataFrame, legislators: pl.DataFrame) -> pl.DataFrame:
     """Compute Rice Cohesion Index per party per rollcall.
 
     The Rice Index measures party unity:
@@ -649,13 +618,10 @@ def compute_rice_cohesion(
     Returns DataFrame with columns: vote_id, party, rice_index, n_voting.
     """
     # Only count substantive Yea/Nay votes — abstentions excluded per Rice formula
-    substantive = (
-        votes.filter(pl.col("vote").is_in(["Yea", "Nay"]))
-        .join(
-            legislators.select("slug", "party"),
-            left_on="legislator_slug",
-            right_on="slug",
-        )
+    substantive = votes.filter(pl.col("vote").is_in(["Yea", "Nay"])).join(
+        legislators.select("slug", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
     )
 
     rice = (
@@ -777,13 +743,10 @@ def _detect_perfect_partisans(
     Returns (perfect_partisans_df, full_unity_df).
     """
     # Join votes with party info, keep only Yea/Nay
-    v = (
-        votes.filter(pl.col("vote").is_in(["Yea", "Nay"]))
-        .join(
-            legislators.select("slug", "party"),
-            left_on="legislator_slug",
-            right_on="slug",
-        )
+    v = votes.filter(pl.col("vote").is_in(["Yea", "Nay"])).join(
+        legislators.select("slug", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
     )
 
     # Compute party majority direction per rollcall:
@@ -807,23 +770,17 @@ def _detect_perfect_partisans(
         party_majority.select("vote_id", "party", "party_direction"),
         on=["vote_id", "party"],
     )
-    v = v.with_columns(
-        (pl.col("vote") == pl.col("party_direction")).alias("with_party")
-    )
+    v = v.with_columns((pl.col("vote") == pl.col("party_direction")).alias("with_party"))
 
     # Aggregate per legislator
-    unity = (
-        v.group_by("legislator_slug")
-        .agg(
-            pl.col("with_party").mean().alias("party_unity_rate"),
-            pl.col("with_party").len().alias("n_contested"),
-        )
+    unity = v.group_by("legislator_slug").agg(
+        pl.col("with_party").mean().alias("party_unity_rate"),
+        pl.col("with_party").len().alias("n_contested"),
     )
 
     # Flag: 100% party line with sufficient contested votes
     perfect = unity.filter(
-        (pl.col("party_unity_rate") == 1.0)
-        & (pl.col("n_contested") >= min_contested)
+        (pl.col("party_unity_rate") == 1.0) & (pl.col("n_contested") >= min_contested)
     )
 
     return perfect, unity
@@ -887,14 +844,12 @@ def filter_vote_matrix(
     # Restrict to chamber if specified — use slug prefix as chamber indicator
     # (sen_* = Senate, rep_* = House) and only include that chamber's rollcalls
     if chamber:
-        chamber_vote_ids = set(
-            rollcalls.filter(pl.col("chamber") == chamber)["vote_id"].to_list()
-        )
+        chamber_vote_ids = set(rollcalls.filter(pl.col("chamber") == chamber)["vote_id"].to_list())
         chamber_slugs_prefix = "sen_" if chamber == "Senate" else "rep_"
         vote_cols = [c for c in vote_cols if c in chamber_vote_ids]
-        matrix = matrix.filter(
-            pl.col(slug_col).str.starts_with(chamber_slugs_prefix)
-        ).select([slug_col, *vote_cols])
+        matrix = matrix.filter(pl.col(slug_col).str.starts_with(chamber_slugs_prefix)).select(
+            [slug_col, *vote_cols]
+        )
 
     manifest["legislators_before"] = matrix.height
     manifest["votes_before"] = len(vote_cols)
@@ -930,13 +885,11 @@ def filter_vote_matrix(
     # Count non-null (Yea or Nay) values per legislator across contested votes.
     non_null_counts = filtered.select(
         slug_col,
-        pl.sum_horizontal(
-            *[pl.col(c).is_not_null().cast(pl.Int32) for c in contested_cols]
-        ).alias("n_votes"),
+        pl.sum_horizontal(*[pl.col(c).is_not_null().cast(pl.Int32) for c in contested_cols]).alias(
+            "n_votes"
+        ),
     )
-    active_slugs = (
-        non_null_counts.filter(pl.col("n_votes") >= min_votes)[slug_col].to_list()
-    )
+    active_slugs = non_null_counts.filter(pl.col("n_votes") >= min_votes)[slug_col].to_list()
     dropped_legislators = manifest["legislators_before"] - len(active_slugs)
     filtered = filtered.filter(pl.col(slug_col).is_in(active_slugs))
 
@@ -947,9 +900,7 @@ def filter_vote_matrix(
     return filtered, manifest
 
 
-def print_matrix_stats(
-    full: pl.DataFrame, manifests: dict[str, dict]
-) -> None:
+def print_matrix_stats(full: pl.DataFrame, manifests: dict[str, dict]) -> None:
     """Print vote matrix dimensions and filtering results."""
     print_header("VOTE MATRIX STATISTICS")
     slug_col = "legislator_slug"
@@ -1014,10 +965,7 @@ def print_descriptive_stats(rollcalls: pl.DataFrame) -> None:
     ):
         if row["total"] > 0:
             pct = 100 * row["passed_count"] / row["total"]
-            print(
-                f"    {row['vote_type']:30s}  "
-                f"{row['passed_count']}/{row['total']} ({pct:5.1f}%)"
-            )
+            print(f"    {row['vote_type']:30s}  {row['passed_count']}/{row['total']} ({pct:5.1f}%)")
 
     # Vote margin distribution — expect bimodal: peak near 1.0, spread for contested
     rc_with_margin = rollcalls.with_columns(
@@ -1064,9 +1012,7 @@ def classify_party_line(
             (pl.col("vote") == "Yea").sum().alias("yea"),
             (pl.col("vote") == "Nay").sum().alias("nay"),
         )
-        .with_columns(
-            (pl.col("yea") / (pl.col("yea") + pl.col("nay"))).alias("yea_rate")
-        )
+        .with_columns((pl.col("yea") / (pl.col("yea") + pl.col("nay"))).alias("yea_rate"))
     )
 
     # Pivot to get R and D yea_rates side by side
@@ -1094,9 +1040,7 @@ def classify_party_line(
         )
 
         alignment_counts = (
-            classified.group_by("vote_alignment")
-            .agg(pl.len())
-            .sort("len", descending=True)
+            classified.group_by("vote_alignment").agg(pl.len()).sort("len", descending=True)
         )
         print("\n  Vote alignment classification:")
         for row in alignment_counts.iter_rows(named=True):
@@ -1124,11 +1068,7 @@ def analyze_participation(
     print_header("PARTICIPATION ANALYSIS")
 
     # Count rollcalls per chamber — this is the denominator for participation
-    chamber_rc_counts = dict(
-        rollcalls.group_by("chamber")
-        .agg(pl.len())
-        .iter_rows()
-    )
+    chamber_rc_counts = dict(rollcalls.group_by("chamber").agg(pl.len()).iter_rows())
 
     # Count substantive (Yea or Nay) votes per legislator
     substantive = votes.filter(pl.col("vote").is_in(["Yea", "Nay"]))
@@ -1144,12 +1084,9 @@ def analyze_participation(
 
     # Compute participation rate = substantive votes / chamber rollcalls
     participation = participation.with_columns(
-        pl.col("chamber")
-        .replace_strict(chamber_rc_counts, default=0)
-        .alias("chamber_rollcalls")
+        pl.col("chamber").replace_strict(chamber_rc_counts, default=0).alias("chamber_rollcalls")
     ).with_columns(
-        (pl.col("substantive_votes") / pl.col("chamber_rollcalls"))
-        .alias("participation_rate")
+        (pl.col("substantive_votes") / pl.col("chamber_rollcalls")).alias("participation_rate")
     )
 
     participation = participation.sort("participation_rate", descending=True)
@@ -1305,9 +1242,7 @@ def plot_agreement_heatmap(
 
     # Map each slug to its party color for the annotation sidebar
     slug_to_party = dict(
-        legislators.select("slug", "party")
-        .filter(pl.col("slug").is_in(slugs))
-        .iter_rows()
+        legislators.select("slug", "party").filter(pl.col("slug").is_in(slugs)).iter_rows()
     )
     parties = [slug_to_party.get(s, "Unknown") for s in slugs]
     row_colors = [PARTY_COLORS.get(p, "#999999") for p in parties]
@@ -1335,11 +1270,11 @@ def plot_agreement_heatmap(
 
     g = sns.clustermap(
         df,
-        method="ward",       # Ward linkage minimizes within-cluster variance
+        method="ward",  # Ward linkage minimizes within-cluster variance
         metric="euclidean",
         row_colors=row_color_series,
         col_colors=row_color_series,
-        cmap="RdYlGn",       # Red (disagree) → Yellow → Green (agree)
+        cmap="RdYlGn",  # Red (disagree) → Yellow → Green (agree)
         vmin=0,
         vmax=1,
         figsize=(size, size),
@@ -1349,15 +1284,9 @@ def plot_agreement_heatmap(
         dendrogram_ratio=(0.12, 0.12),
         cbar_pos=(0.02, 0.8, 0.03, 0.15),
     )
-    g.ax_heatmap.set_xticklabels(
-        g.ax_heatmap.get_xticklabels(), fontsize=fontsize, rotation=90
-    )
-    g.ax_heatmap.set_yticklabels(
-        g.ax_heatmap.get_yticklabels(), fontsize=fontsize
-    )
-    g.fig.suptitle(
-        f"{chamber} — Pairwise Agreement (Contested Votes)", y=1.01, fontsize=14
-    )
+    g.ax_heatmap.set_xticklabels(g.ax_heatmap.get_xticklabels(), fontsize=fontsize, rotation=90)
+    g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), fontsize=fontsize)
+    g.fig.suptitle(f"{chamber} — Pairwise Agreement (Contested Votes)", y=1.01, fontsize=14)
 
     # Party color legend
     from matplotlib.patches import Patch
@@ -1367,8 +1296,12 @@ def plot_agreement_heatmap(
         Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
     ]
     g.ax_heatmap.legend(
-        handles=legend_elements, loc="lower left", bbox_to_anchor=(0, -0.15),
-        ncol=2, frameon=False, fontsize=9,
+        handles=legend_elements,
+        loc="lower left",
+        bbox_to_anchor=(0, -0.15),
+        ncol=2,
+        frameon=False,
+        fontsize=9,
     )
 
     path = out_dir / f"agreement_heatmap_{chamber.lower()}.png"
@@ -1391,8 +1324,11 @@ def plot_vote_type_distribution(rollcalls: pl.DataFrame, out_dir: Path) -> None:
     ax.set_title("Roll Call Vote Types")
     for bar, count in zip(bars, counts[::-1]):
         ax.text(
-            bar.get_width() + 2, bar.get_y() + bar.get_height() / 2,
-            str(count), va="center", fontsize=9,
+            bar.get_width() + 2,
+            bar.get_y() + bar.get_height() / 2,
+            str(count),
+            va="center",
+            fontsize=9,
         )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -1411,7 +1347,10 @@ def plot_vote_margin_distribution(rollcalls: pl.DataFrame, out_dir: Path) -> Non
     ax.hist(yea_pcts, bins=50, color="#4C72B0", edgecolor="white", alpha=0.9)
     ax.axvline(0.5, color="red", linestyle="--", alpha=0.5, label="50% threshold")
     ax.axvline(
-        2 / 3, color="orange", linestyle="--", alpha=0.5,
+        2 / 3,
+        color="orange",
+        linestyle="--",
+        alpha=0.5,
         label="2/3 threshold (veto)",
     )
     ax.set_xlabel("Yea Percentage")
@@ -1429,9 +1368,7 @@ def plot_temporal_activity(rollcalls: pl.DataFrame, out_dir: Path) -> None:
     Expect activity bursts near session deadlines (turnaround, sine die).
     """
     monthly = (
-        rollcalls.with_columns(
-            pl.col("vote_datetime").str.slice(0, 7).alias("month")
-        )
+        rollcalls.with_columns(pl.col("vote_datetime").str.slice(0, 7).alias("month"))
         .group_by("month", "chamber")
         .agg(pl.len())
         .sort("month")
@@ -1441,12 +1378,8 @@ def plot_temporal_activity(rollcalls: pl.DataFrame, out_dir: Path) -> None:
     house_counts = []
     senate_counts = []
     for m in months:
-        h = monthly.filter(
-            (pl.col("month") == m) & (pl.col("chamber") == "House")
-        )
-        s = monthly.filter(
-            (pl.col("month") == m) & (pl.col("chamber") == "Senate")
-        )
+        h = monthly.filter((pl.col("month") == m) & (pl.col("chamber") == "House"))
+        s = monthly.filter((pl.col("month") == m) & (pl.col("chamber") == "Senate"))
         house_counts.append(h["len"].sum() if h.height > 0 else 0)
         senate_counts.append(s["len"].sum() if s.height > 0 else 0)
 
@@ -1501,9 +1434,7 @@ def plot_party_vote_breakdown(
             fracs.append(count / total if total > 0 else 0)
             colors.append(cat_colors[cat])
 
-        bars = ax.barh(
-            cats[::-1], [f * 100 for f in fracs[::-1]], color=colors[::-1]
-        )
+        bars = ax.barh(cats[::-1], [f * 100 for f in fracs[::-1]], color=colors[::-1])
         ax.set_xlabel("Percentage of All Votes")
         ax.set_title(f"{party}")
         ax.set_xlim(0, 100)
@@ -1512,7 +1443,9 @@ def plot_party_vote_breakdown(
                 ax.text(
                     bar.get_width() + 0.5,
                     bar.get_y() + bar.get_height() / 2,
-                    f"{frac * 100:.1f}%", va="center", fontsize=9,
+                    f"{frac * 100:.1f}%",
+                    va="center",
+                    fontsize=9,
                 )
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -1522,9 +1455,7 @@ def plot_party_vote_breakdown(
     save_fig(fig, out_dir / "party_vote_breakdown.png")
 
 
-def plot_participation_rates(
-    participation: pl.DataFrame, chamber: str, out_dir: Path
-) -> None:
+def plot_participation_rates(participation: pl.DataFrame, chamber: str, out_dir: Path) -> None:
     """Horizontal bar chart of per-legislator participation rates, colored by party.
 
     Dashed lines at 95% (normal threshold) and 90% (notable threshold) help
@@ -1620,9 +1551,7 @@ def main() -> None:
         # because House and Senate vote on different bills.
         manifests: dict[str, dict] = {}
 
-        house_filtered, house_manifest = filter_vote_matrix(
-            full_matrix, rollcalls, chamber="House"
-        )
+        house_filtered, house_manifest = filter_vote_matrix(full_matrix, rollcalls, chamber="House")
         manifests["House"] = house_manifest
 
         senate_filtered, senate_manifest = filter_vote_matrix(
@@ -1665,9 +1594,7 @@ def main() -> None:
             slug_col = "legislator_slug"
             slugs = filtered[slug_col].to_list()
 
-            def numpy_matrix_to_polars(
-                mat: np.ndarray, slugs: list[str]
-            ) -> pl.DataFrame:
+            def numpy_matrix_to_polars(mat: np.ndarray, slugs: list[str]) -> pl.DataFrame:
                 """Convert a square numpy matrix to a polars DataFrame with slug labels."""
                 cols = {slug: mat[:, i].tolist() for i, slug in enumerate(slugs)}
                 cols["legislator_slug"] = slugs
@@ -1675,19 +1602,13 @@ def main() -> None:
 
             agree_pl = numpy_matrix_to_polars(agreement, slugs)
             kappa_pl = numpy_matrix_to_polars(kappa, slugs)
-            agree_pl.write_parquet(
-                ctx.data_dir / f"agreement_raw_{label.lower()}.parquet"
-            )
-            kappa_pl.write_parquet(
-                ctx.data_dir / f"agreement_kappa_{label.lower()}.parquet"
-            )
+            agree_pl.write_parquet(ctx.data_dir / f"agreement_raw_{label.lower()}.parquet")
+            kappa_pl.write_parquet(ctx.data_dir / f"agreement_kappa_{label.lower()}.parquet")
             print(f"  Saved: agreement_raw_{label.lower()}.parquet")
             print(f"  Saved: agreement_kappa_{label.lower()}.parquet")
 
             # Plot heatmap
-            plot_agreement_heatmap(
-                filtered, agreement, legislators, label, ctx.plots_dir
-            )
+            plot_agreement_heatmap(filtered, agreement, legislators, label, ctx.plots_dir)
 
         # ── 6. Plots ──
         print_header("GENERATING PLOTS")

@@ -29,7 +29,7 @@ Bayesian IRT is the canonical baseline analysis per the analytic workflow rules:
 
 4. **In-sample holdout prediction.** Use posterior means from the full model to predict a random 20% of observed cells. This is documented as in-sample (the model saw all data during fitting). The proper Bayesian validation is the posterior predictive check (PPC), which samples from the full posterior and compares replicated data to observed. A true out-of-sample holdout would require refitting — available as a future enhancement but not worth the doubled runtime for the baseline.
 
-5. **Per-chamber models.** House and Senate are fitted independently. Joint modeling with bridging legislators (e.g., Miller who served in both chambers) is deferred to a future enhancement. The analytic flags document notes Miller as a bridging candidate. Per-chamber is the standard approach (NOMINATE, Clinton et al. 2004) and avoids the complexity of cross-chamber identification.
+5. **Per-chamber models + cross-chamber test equating.** House and Senate are first fitted independently as the primary per-chamber models. A classical test-equating transformation then links the scales using (a) shared bill discrimination ratios for the scale factor and (b) bridging legislators for the location shift. A full joint MCMC model was attempted but does not converge — 71 shared bills for 169 legislators is insufficient (R-hat > 1.7 despite 4 anchors and 4 chains). Test equating uses the already-converged per-chamber posteriors and is instantaneous. Per-chamber models remain the primary output; equated scores are for cross-chamber comparisons. Use `--skip-joint` to skip equating. See `analysis/design/irt.md` for details.
 
 6. **ArviZ NetCDF for posterior storage.** `idata.to_netcdf()` produces a self-describing file that can be reloaded with `az.from_netcdf()` for downstream analysis (e.g., posterior predictive checks on new data, model comparison via LOO-CV). NetCDF is the ArviZ default and is supported by xarray for advanced slicing.
 
@@ -48,8 +48,11 @@ Bayesian IRT is the canonical baseline analysis per the analytic workflow rules:
 - PCA anchors assume PCA and IRT agree on who is most extreme. Same validation applies.
 - 2 chains provide less multi-modal detection power than 4. If R-hat > 1.01 or ESS < 400, the user should re-run with `--n-chains 4`.
 - In-sample holdout overstates predictive performance. This is clearly documented in the output and is supplemented by PPC.
-- Per-chamber models cannot leverage bridging legislators. This is deferred, not abandoned.
+- Test equating assumes shared bills have the same ideological content in both chambers. If bills are substantially amended between chambers, the equating is weakened.
+- With only 3 bridging legislators, the location shift (B) has limited precision. A single outlier can shift the entire Senate scale.
 
 **Revision history:**
 - 2026-02-19: Initial decision — LogNormal(0.5, 0.5) discrimination prior.
 - 2026-02-20: Changed to Normal(0, 1) after discovering the D-Yea blind spot. See `analysis/design/beta_prior_investigation.md`.
+- 2026-02-20: Added joint cross-chamber model (Decision 5 updated from per-chamber-only to per-chamber + joint).
+- 2026-02-20: Changed from joint MCMC to test equating after convergence failure. See `analysis/design/irt.md` "Why Not a Joint MCMC Model?"

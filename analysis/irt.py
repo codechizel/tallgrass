@@ -194,6 +194,10 @@ MIN_PARTICIPATION_FOR_ANCHOR = 0.50  # Anchors must have >= 50% participation
 
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
 
+# Joint model defaults
+JOINT_TARGET_ACCEPT = 0.95
+JOINT_N_CHAINS = 4
+
 # Convergence thresholds
 RHAT_THRESHOLD = 1.01
 ESS_THRESHOLD = 400
@@ -235,6 +239,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-sensitivity",
         action="store_true",
         help="Skip sensitivity analysis (halves runtime)",
+    )
+    parser.add_argument(
+        "--skip-joint",
+        action="store_true",
+        help="Skip joint cross-chamber model",
     )
     return parser.parse_args()
 
@@ -278,6 +287,676 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     rollcalls = pl.read_csv(data_dir / f"ks_{session_slug}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"ks_{session_slug}_legislators.csv")
     return rollcalls, legislators
+
+
+# ── Joint Cross-Chamber Functions ───────────────────────────────────────────
+
+
+def build_joint_vote_matrix(
+    house_matrix: pl.DataFrame,
+    senate_matrix: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+) -> tuple[pl.DataFrame, dict]:
+    """Build a joint vote matrix linking House and Senate via shared bills.
+
+    For each bill_number appearing in both chambers' filtered matrices:
+    - Prefer the vote_id with "Final Action" or "Emergency Final Action" motion
+    - If multiple, pick the latest chronologically
+    - Create ONE matched column: House members get their House value, Senate get theirs
+
+    Bridging legislators (serving in both chambers) are merged into a single row
+    using the House slug as canonical.
+
+    Returns (joint_matrix, mapping_info).
+    """
+    slug_col = "legislator_slug"
+    house_vote_ids = [c for c in house_matrix.columns if c != slug_col]
+    senate_vote_ids = [c for c in senate_matrix.columns if c != slug_col]
+
+    # Build vote_id → bill_number mapping from rollcalls
+    rc = rollcalls.select("vote_id", "bill_number", "motion").filter(
+        pl.col("vote_id").is_in(house_vote_ids + senate_vote_ids)
+    )
+    vid_to_bill = dict(zip(rc["vote_id"].to_list(), rc["bill_number"].to_list()))
+    vid_to_motion = dict(zip(rc["vote_id"].to_list(), rc["motion"].to_list()))
+
+    # Group vote_ids by bill_number and chamber
+    house_bill_vids: dict[str, list[str]] = {}
+    for vid in house_vote_ids:
+        bill = vid_to_bill.get(vid)
+        if bill:
+            house_bill_vids.setdefault(bill, []).append(vid)
+
+    senate_bill_vids: dict[str, list[str]] = {}
+    for vid in senate_vote_ids:
+        bill = vid_to_bill.get(vid)
+        if bill:
+            senate_bill_vids.setdefault(bill, []).append(vid)
+
+    # Find shared bills
+    shared_bills = set(house_bill_vids.keys()) & set(senate_bill_vids.keys())
+    print(f"  Joint: {len(shared_bills)} shared bills found")
+
+    def _pick_best_vid(vids: list[str]) -> str:
+        """Pick the best vote_id: prefer Final Action, then latest chronologically."""
+        final_vids = [
+            v
+            for v in vids
+            if vid_to_motion.get(v, "").lower()
+            in (
+                "final action",
+                "emergency final action",
+            )
+        ]
+        candidates = final_vids if final_vids else vids
+        return sorted(candidates)[-1]  # Latest chronologically (vote_id encodes timestamp)
+
+    # Build matched columns
+    matched_bills: list[dict] = []
+    matched_col_names: list[str] = []
+    house_used: set[str] = set()
+    senate_used: set[str] = set()
+
+    for bill in sorted(shared_bills):
+        h_vid = _pick_best_vid(house_bill_vids[bill])
+        s_vid = _pick_best_vid(senate_bill_vids[bill])
+        col_name = f"matched_{bill}"
+        matched_bills.append(
+            {
+                "bill_number": bill,
+                "house_vote_id": h_vid,
+                "senate_vote_id": s_vid,
+                "matched_col": col_name,
+            }
+        )
+        matched_col_names.append(col_name)
+        house_used.add(h_vid)
+        senate_used.add(s_vid)
+
+    house_only_vids = [v for v in house_vote_ids if v not in house_used]
+    senate_only_vids = [v for v in senate_vote_ids if v not in senate_used]
+
+    # Identify bridging legislators (same person with both rep_ and sen_ slugs)
+    # Match by name from legislators table
+    house_legs = legislators.filter(pl.col("chamber") == "House").select("slug", "full_name")
+    senate_legs = legislators.filter(pl.col("chamber") == "Senate").select("slug", "full_name")
+    bridging: list[dict] = []
+    for h_row in house_legs.iter_rows(named=True):
+        match = senate_legs.filter(pl.col("full_name") == h_row["full_name"])
+        if match.height > 0:
+            bridging.append(
+                {
+                    "house_slug": h_row["slug"],
+                    "senate_slug": match["slug"][0],
+                    "full_name": h_row["full_name"],
+                }
+            )
+
+    print(f"  Joint: {len(bridging)} bridging legislators found")
+    for b in bridging:
+        print(f"    {b['full_name']}: {b['house_slug']} + {b['senate_slug']}")
+
+    # Build mapping from senate_slug → house_slug for bridging
+    senate_to_house = {b["senate_slug"]: b["house_slug"] for b in bridging}
+
+    # Construct the joint matrix
+    # Start with all House legislators
+    house_slugs = house_matrix[slug_col].to_list()
+    senate_slugs = senate_matrix[slug_col].to_list()
+
+    # All rows: House legislators + non-bridging Senate legislators
+    all_slugs = list(house_slugs)
+    for s_slug in senate_slugs:
+        if s_slug not in senate_to_house:
+            all_slugs.append(s_slug)
+
+    # Build row data
+    joint_data: dict[str, list] = {slug_col: all_slugs}
+
+    # Matched columns
+    house_slug_set = set(house_slugs)
+    senate_slug_set = set(senate_slugs)
+
+    for info in matched_bills:
+        col_name = info["matched_col"]
+        h_vid = info["house_vote_id"]
+        s_vid = info["senate_vote_id"]
+
+        # Build lookup dicts
+        h_vals = dict(zip(house_matrix[slug_col].to_list(), house_matrix[h_vid].to_list()))
+        s_vals = dict(zip(senate_matrix[slug_col].to_list(), senate_matrix[s_vid].to_list()))
+
+        col_data = []
+        for slug in all_slugs:
+            if slug in house_slug_set:
+                val = h_vals.get(slug)
+                # If bridging, also check senate vote
+                if slug in [b["house_slug"] for b in bridging]:
+                    s_slug = next(b["senate_slug"] for b in bridging if b["house_slug"] == slug)
+                    s_val = s_vals.get(s_slug)
+                    # Prefer House vote, fall back to Senate
+                    val = val if val is not None else s_val
+                col_data.append(val)
+            elif slug in senate_slug_set:
+                col_data.append(s_vals.get(slug))
+            else:
+                col_data.append(None)
+        joint_data[col_name] = col_data
+
+    # House-only columns
+    for vid in house_only_vids:
+        h_vals = dict(zip(house_matrix[slug_col].to_list(), house_matrix[vid].to_list()))
+        col_data = []
+        for slug in all_slugs:
+            if slug in house_slug_set:
+                col_data.append(h_vals.get(slug))
+            elif slug in [b["house_slug"] for b in bridging]:
+                col_data.append(h_vals.get(slug))
+            else:
+                col_data.append(None)
+        joint_data[vid] = col_data
+
+    # Senate-only columns
+    for vid in senate_only_vids:
+        s_vals = dict(zip(senate_matrix[slug_col].to_list(), senate_matrix[vid].to_list()))
+        col_data = []
+        for slug in all_slugs:
+            if slug in senate_to_house.values():
+                # Bridging legislator: look up their senate slug
+                s_slug = next(b["senate_slug"] for b in bridging if b["house_slug"] == slug)
+                col_data.append(s_vals.get(s_slug))
+            elif slug in senate_slug_set:
+                col_data.append(s_vals.get(slug))
+            else:
+                col_data.append(None)
+        joint_data[vid] = col_data
+
+    joint_matrix = pl.DataFrame(joint_data)
+
+    n_cols = len(joint_matrix.columns) - 1
+    print(
+        f"  Joint matrix: {joint_matrix.height} legislators x {n_cols} votes "
+        f"({len(matched_col_names)} matched, {len(house_only_vids)} house-only, "
+        f"{len(senate_only_vids)} senate-only)"
+    )
+
+    mapping_info = {
+        "matched_bills": matched_bills,
+        "bridging_legislators": bridging,
+        "house_only_vote_ids": house_only_vids,
+        "senate_only_vote_ids": senate_only_vids,
+        "matched_col_names": matched_col_names,
+        "senate_to_house": senate_to_house,
+    }
+
+    return joint_matrix, mapping_info
+
+
+def run_joint_pca_for_anchors(
+    joint_matrix: pl.DataFrame,
+    legislators: pl.DataFrame,
+) -> pl.DataFrame:
+    """Run PCA on matched-bill columns only for anchor selection.
+
+    Matched columns are dense (~98% fill). Row-mean impute the small amount
+    of missingness, run PCA, return DataFrame compatible with select_anchors().
+    """
+    from sklearn.decomposition import PCA
+
+    slug_col = "legislator_slug"
+    matched_cols = [c for c in joint_matrix.columns if c.startswith("matched_")]
+
+    if not matched_cols:
+        msg = "No matched columns found in joint matrix"
+        raise ValueError(msg)
+
+    # Extract matched-column data
+    slugs = joint_matrix[slug_col].to_list()
+    data = joint_matrix.select(matched_cols).to_numpy().astype(float)
+
+    # Row-mean impute
+    for i in range(data.shape[0]):
+        row = data[i]
+        nan_mask = np.isnan(row)
+        if nan_mask.any() and not nan_mask.all():
+            data[i, nan_mask] = np.nanmean(row)
+
+    # Standardize columns
+    col_means = np.nanmean(data, axis=0)
+    col_stds = np.nanstd(data, axis=0)
+    col_stds[col_stds == 0] = 1.0
+    data_std = (data - col_means) / col_stds
+
+    # PCA
+    pca = PCA(n_components=1, random_state=RANDOM_SEED)
+    scores = pca.fit_transform(data_std)
+
+    # Build output DataFrame
+    result = pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "PC1": scores[:, 0].tolist(),
+        }
+    )
+
+    # Join legislator metadata
+    meta = legislators.select("slug", "full_name", "party").unique(subset=["slug"])
+    result = result.join(meta, left_on="legislator_slug", right_on="slug", how="left")
+
+    print(f"  Joint PCA: {result.height} legislators, {len(matched_cols)} matched bills")
+    print(f"  PC1 range: [{result['PC1'].min():.3f}, {result['PC1'].max():.3f}]")
+
+    return result
+
+
+def unmerge_bridging_legislators(
+    joint_ideal_points: pl.DataFrame,
+    mapping_info: dict,
+    legislators: pl.DataFrame,
+) -> pl.DataFrame:
+    """Expand bridging legislators back to per-chamber slugs.
+
+    Each bridging legislator in the joint model has a single row (using their
+    House slug). This duplicates that row with the original Senate slug and
+    correct chamber metadata.
+    """
+    bridging = mapping_info["bridging_legislators"]
+    if not bridging:
+        return joint_ideal_points
+
+    house_to_senate = {b["house_slug"]: b["senate_slug"] for b in bridging}
+    bridging_house_slugs = set(house_to_senate.keys())
+
+    # Separate bridging from non-bridging rows
+    non_bridging = joint_ideal_points.filter(~pl.col("legislator_slug").is_in(bridging_house_slugs))
+
+    # Build expanded rows for bridging legislators
+    expanded_rows = []
+    for row in joint_ideal_points.filter(
+        pl.col("legislator_slug").is_in(bridging_house_slugs)
+    ).iter_rows(named=True):
+        # House version (keep as-is but ensure chamber is House)
+        house_row = dict(row)
+        house_row["chamber"] = "House"
+        expanded_rows.append(house_row)
+
+        # Senate version
+        senate_slug = house_to_senate[row["legislator_slug"]]
+        senate_row = dict(row)
+        senate_row["legislator_slug"] = senate_slug
+        senate_row["chamber"] = "Senate"
+        # Update district from legislators table
+        sen_meta = legislators.filter(pl.col("slug") == senate_slug)
+        if sen_meta.height > 0:
+            senate_row["district"] = sen_meta["district"][0]
+        expanded_rows.append(senate_row)
+
+    if expanded_rows:
+        expanded_df = pl.DataFrame(expanded_rows, schema=joint_ideal_points.schema)
+        result = pl.concat([non_bridging, expanded_df])
+    else:
+        result = non_bridging
+
+    print(
+        f"  Unmerged: {joint_ideal_points.height} → {result.height} rows "
+        f"({len(bridging)} bridging legislators duplicated)"
+    )
+    return result.sort("xi_mean", descending=True)
+
+
+def plot_joint_vs_chamber(
+    joint_unmerged: pl.DataFrame,
+    per_chamber_results: dict[str, dict],
+    mapping_info: dict,
+    out_dir: Path,
+) -> dict[str, float]:
+    """Scatter plot: joint ideal points (x) vs per-chamber ideal points (y).
+
+    One subplot per chamber. Color by party, highlight bridging legislators.
+    Annotate Pearson r.
+
+    Returns {chamber: pearson_r} dict.
+    """
+    bridging_slugs = set()
+    for b in mapping_info["bridging_legislators"]:
+        bridging_slugs.add(b["house_slug"])
+        bridging_slugs.add(b["senate_slug"])
+
+    chambers = [c for c in per_chamber_results if c != "Joint"]
+    n_chambers = len(chambers)
+    if n_chambers == 0:
+        return {}
+
+    fig, axes = plt.subplots(1, n_chambers, figsize=(8 * n_chambers, 8))
+    if n_chambers == 1:
+        axes = [axes]
+
+    correlations: dict[str, float] = {}
+
+    for ax, chamber in zip(axes, chambers):
+        chamber_ip = per_chamber_results[chamber]["ideal_points"]
+
+        # Merge joint and per-chamber on slug
+        merged = joint_unmerged.select("legislator_slug", "xi_mean", "party").join(
+            chamber_ip.select("legislator_slug", pl.col("xi_mean").alias("xi_chamber")),
+            on="legislator_slug",
+            how="inner",
+        )
+
+        if merged.height < 3:
+            correlations[chamber] = float("nan")
+            continue
+
+        joint_arr = merged["xi_mean"].to_numpy()
+        chamber_arr = merged["xi_chamber"].to_numpy()
+        pearson_r = float(np.corrcoef(joint_arr, chamber_arr)[0, 1])
+        correlations[chamber] = pearson_r
+
+        # Plot by party
+        for party, color in PARTY_COLORS.items():
+            subset = merged.filter(pl.col("party") == party)
+            is_bridge = subset["legislator_slug"].is_in(bridging_slugs)
+            regular = subset.filter(~is_bridge)
+            bridge = subset.filter(is_bridge)
+
+            if regular.height > 0:
+                ax.scatter(
+                    regular["xi_mean"].to_numpy(),
+                    regular["xi_chamber"].to_numpy(),
+                    c=color,
+                    s=40,
+                    alpha=0.7,
+                    edgecolors="black",
+                    linewidth=0.5,
+                    label=party,
+                )
+            if bridge.height > 0:
+                ax.scatter(
+                    bridge["xi_mean"].to_numpy(),
+                    bridge["xi_chamber"].to_numpy(),
+                    c=color,
+                    s=120,
+                    alpha=0.9,
+                    edgecolors="gold",
+                    linewidth=2,
+                    marker="D",
+                    label=f"{party} (bridging)",
+                )
+
+        # Identity line
+        lims = [
+            min(joint_arr.min(), chamber_arr.min()) - 0.3,
+            max(joint_arr.max(), chamber_arr.max()) + 0.3,
+        ]
+        ax.plot(lims, lims, "k--", alpha=0.3)
+        ax.set_xlabel("Joint Model Ideal Point")
+        ax.set_ylabel(f"{chamber} Model Ideal Point")
+        ax.set_title(f"{chamber}: Joint vs Per-Chamber (r = {pearson_r:.4f})")
+        ax.legend(fontsize=8)
+        ax.set_aspect("equal")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    fig.suptitle("Joint vs Per-Chamber Ideal Points", fontsize=14, y=1.02)
+    fig.tight_layout()
+    save_fig(fig, out_dir / "joint_vs_chamber.png")
+
+    for chamber, r in correlations.items():
+        print(f"  {chamber}: Joint vs per-chamber Pearson r = {r:.4f}")
+
+    return correlations
+
+
+def equate_chambers(
+    per_chamber_results: dict[str, dict],
+    mapping_info: dict,
+    legislators: pl.DataFrame,
+    out_dir: Path,
+) -> dict:
+    """Place House and Senate legislators on a common scale via test equating.
+
+    Uses a hybrid approach:
+    - **A (scale)** from mean/sigma on shared bill discrimination parameters:
+      A = SD(beta_senate) / SD(beta_house) over concordant shared bills.
+    - **B (location)** from bridging legislators who served in both chambers:
+      B = mean(xi_house) - A * mean(xi_senate) for bridging legislators.
+      Falls back to median difficulty if no bridging legislators exist.
+
+    Convention: House scale is the reference. Senate ideal points are
+    transformed to the House scale via xi_equated = A * xi_senate + B.
+
+    Returns dict with:
+      - equated_ideal_points: pl.DataFrame (all legislators on common scale)
+      - transformation: dict with A, B, n_usable_bills, method
+      - correlations: dict {chamber: pearson_r} comparing equated vs per-chamber
+    """
+    house_result = per_chamber_results["House"]
+    senate_result = per_chamber_results["Senate"]
+    house_bp = house_result["bill_params"]
+    senate_bp = senate_result["bill_params"]
+    house_ip = house_result["ideal_points"]
+    senate_ip = senate_result["ideal_points"]
+
+    matched_bills = mapping_info["matched_bills"]
+    bridging = mapping_info["bridging_legislators"]
+
+    # Match shared bill parameters from each chamber
+    h_beta = {}
+    for row in house_bp.iter_rows(named=True):
+        h_beta[row["vote_id"]] = row["beta_mean"]
+
+    s_beta = {}
+    for row in senate_bp.iter_rows(named=True):
+        s_beta[row["vote_id"]] = row["beta_mean"]
+
+    # Collect paired betas for concordant shared bills
+    paired_betas_h = []
+    paired_betas_s = []
+    for mb in matched_bills:
+        h_vid = mb["house_vote_id"]
+        s_vid = mb["senate_vote_id"]
+        if h_vid in h_beta and s_vid in s_beta:
+            bh = h_beta[h_vid]
+            bs = s_beta[s_vid]
+            if bh * bs > 0:  # same sign = concordant
+                paired_betas_h.append(bh)
+                paired_betas_s.append(bs)
+
+    n_usable = len(paired_betas_h)
+    print(f"  Shared bills with concordant beta: {n_usable} / {len(matched_bills)}")
+
+    if n_usable < 5:
+        print("  WARNING: Too few concordant shared bills for reliable equating")
+
+    bh_arr = np.array(paired_betas_h)
+    bs_arr = np.array(paired_betas_s)
+
+    # A (scale factor) from discrimination ratio: SD(beta_S) / SD(beta_H)
+    sd_bh = float(np.std(bh_arr))
+    sd_bs = float(np.std(bs_arr))
+
+    if sd_bh < 1e-10:
+        print("  WARNING: House beta SD near zero, falling back to A=1.0")
+        A = 1.0
+    else:
+        A = sd_bs / sd_bh
+
+    # B (location shift) from bridging legislators
+    # Each bridging legislator has per-chamber ideal points from the separate
+    # models. The direct relationship: xi_H = A * xi_S + B gives B directly.
+    h_slugs_to_xi = dict(zip(house_ip["legislator_slug"].to_list(), house_ip["xi_mean"].to_list()))
+    s_slugs_to_xi = dict(
+        zip(senate_ip["legislator_slug"].to_list(), senate_ip["xi_mean"].to_list())
+    )
+
+    bridge_h_xi = []
+    bridge_s_xi = []
+    for b in bridging:
+        h_xi = h_slugs_to_xi.get(b["house_slug"])
+        s_xi = s_slugs_to_xi.get(b["senate_slug"])
+        if h_xi is not None and s_xi is not None:
+            bridge_h_xi.append(h_xi)
+            bridge_s_xi.append(s_xi)
+            print(f"  Bridging: {b['full_name']:20s}  House xi={h_xi:+.3f}, Senate xi={s_xi:+.3f}")
+
+    if bridge_h_xi:
+        # B = mean(xi_H) - A * mean(xi_S)
+        B = float(np.mean(bridge_h_xi) - A * np.mean(bridge_s_xi))
+        b_method = "bridging_legislators"
+        print(f"  B from {len(bridge_h_xi)} bridging legislators")
+    else:
+        B = 0.0
+        b_method = "fallback_zero"
+        print("  WARNING: No bridging legislators found; B = 0.0")
+
+    print(f"  Equating: A = {A:.4f}, B = {B:.4f}")
+    print(f"  Interpretation: xi_equated = {A:.4f} * xi_senate + {B:.4f}")
+
+    # Transform Senate ideal points to House scale
+    house_ip_out = house_ip.clone()
+    senate_ip_out = senate_ip.clone()
+
+    senate_equated = senate_ip_out.with_columns(
+        (pl.col("xi_mean") * A + B).alias("xi_mean"),
+        (pl.col("xi_sd") * abs(A)).alias("xi_sd"),
+        (pl.col("xi_hdi_2.5") * A + B).alias("xi_hdi_2.5"),
+        (pl.col("xi_hdi_97.5") * A + B).alias("xi_hdi_97.5"),
+    )
+
+    # If A is negative, HDI bounds swap
+    if A < 0:
+        senate_equated = (
+            senate_equated.with_columns(
+                pl.col("xi_hdi_2.5").alias("_tmp_hi"),
+                pl.col("xi_hdi_97.5").alias("_tmp_lo"),
+            )
+            .with_columns(
+                pl.col("_tmp_lo").alias("xi_hdi_2.5"),
+                pl.col("_tmp_hi").alias("xi_hdi_97.5"),
+            )
+            .drop("_tmp_lo", "_tmp_hi")
+        )
+
+    # Combine
+    equated = pl.concat([house_ip_out, senate_equated]).sort("xi_mean", descending=True)
+
+    # Compute correlations: equated vs original per-chamber scores
+    correlations: dict[str, float] = {}
+    for chamber, orig_ip in [("House", house_ip), ("Senate", senate_ip)]:
+        merged = equated.select("legislator_slug", "xi_mean").join(
+            orig_ip.select("legislator_slug", pl.col("xi_mean").alias("xi_orig")),
+            on="legislator_slug",
+            how="inner",
+        )
+        if merged.height >= 3:
+            r = float(np.corrcoef(merged["xi_mean"].to_numpy(), merged["xi_orig"].to_numpy())[0, 1])
+            correlations[chamber] = r
+            print(f"  {chamber}: equated vs per-chamber r = {r:.4f}")
+
+    # Plot
+    _plot_equated_vs_chamber(equated, per_chamber_results, mapping_info, out_dir)
+
+    # Plot equated forest
+    plot_forest(equated, "Joint", out_dir)
+
+    return {
+        "equated_ideal_points": equated,
+        "transformation": {
+            "A": A,
+            "B": B,
+            "n_usable_bills": n_usable,
+            "n_total_shared": len(matched_bills),
+            "n_bridging": len(bridge_h_xi),
+            "b_method": b_method,
+            "method": "discrimination_ratio_plus_bridging",
+        },
+        "correlations": correlations,
+    }
+
+
+def _plot_equated_vs_chamber(
+    equated: pl.DataFrame,
+    per_chamber_results: dict[str, dict],
+    mapping_info: dict,
+    out_dir: Path,
+) -> None:
+    """Scatter plot: equated ideal points vs per-chamber ideal points."""
+    bridging_slugs = set()
+    for b in mapping_info["bridging_legislators"]:
+        bridging_slugs.add(b["house_slug"])
+        bridging_slugs.add(b["senate_slug"])
+
+    chambers = [c for c in per_chamber_results if c != "Joint"]
+    fig, axes = plt.subplots(1, len(chambers), figsize=(8 * len(chambers), 8))
+    if len(chambers) == 1:
+        axes = [axes]
+
+    for ax, chamber in zip(axes, chambers):
+        chamber_ip = per_chamber_results[chamber]["ideal_points"]
+        merged = equated.select("legislator_slug", "xi_mean", "party").join(
+            chamber_ip.select("legislator_slug", pl.col("xi_mean").alias("xi_chamber")),
+            on="legislator_slug",
+            how="inner",
+        )
+
+        if merged.height < 3:
+            continue
+
+        eq_arr = merged["xi_mean"].to_numpy()
+        ch_arr = merged["xi_chamber"].to_numpy()
+        r = float(np.corrcoef(eq_arr, ch_arr)[0, 1])
+
+        for party, color in PARTY_COLORS.items():
+            subset = merged.filter(pl.col("party") == party)
+            is_bridge = subset["legislator_slug"].is_in(bridging_slugs)
+            regular = subset.filter(~is_bridge)
+            bridge = subset.filter(is_bridge)
+
+            if regular.height > 0:
+                ax.scatter(
+                    regular["xi_mean"].to_numpy(),
+                    regular["xi_chamber"].to_numpy(),
+                    c=color,
+                    s=40,
+                    alpha=0.7,
+                    edgecolors="black",
+                    linewidth=0.5,
+                    label=party,
+                )
+            if bridge.height > 0:
+                ax.scatter(
+                    bridge["xi_mean"].to_numpy(),
+                    bridge["xi_chamber"].to_numpy(),
+                    c=color,
+                    s=120,
+                    alpha=0.9,
+                    edgecolors="gold",
+                    linewidth=2,
+                    marker="D",
+                    label=f"{party} (bridging)",
+                )
+
+        # Identity line
+        lims = [
+            min(eq_arr.min(), ch_arr.min()) - 0.3,
+            max(eq_arr.max(), ch_arr.max()) + 0.3,
+        ]
+        ax.plot(lims, lims, "k--", alpha=0.3)
+        ax.set_xlabel("Equated Ideal Point (House Scale)")
+        ax.set_ylabel(f"{chamber} Per-Chamber Ideal Point")
+        ax.set_title(f"{chamber}: Equated vs Per-Chamber (r = {r:.4f})")
+        ax.legend(fontsize=8)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    fig.suptitle(
+        "Test-Equated vs Per-Chamber Ideal Points (Mean/Sigma Method)",
+        fontsize=14,
+        y=1.02,
+    )
+    fig.tight_layout()
+    save_fig(fig, out_dir / "joint_vs_chamber.png")
 
 
 # ── Phase 2: Prepare IRT Data ───────────────────────────────────────────────
@@ -396,13 +1075,23 @@ def select_anchors(
 
 def build_and_sample(
     data: dict,
-    cons_idx: int,
-    lib_idx: int,
+    anchors: list[tuple[int, float]],
     n_samples: int,
     n_tune: int,
     n_chains: int,
+    target_accept: float = TARGET_ACCEPT,
 ) -> tuple[az.InferenceData, float]:
     """Build 2PL IRT model with anchor constraints and sample with NUTS.
+
+    Args:
+        data: IRT data dict from prepare_irt_data().
+        anchors: List of (legislator_index, fixed_value) pairs. Typically 2 for
+            per-chamber models [(cons_idx, +1.0), (lib_idx, -1.0)] or 4 for the
+            joint model (one conservative + one liberal from each chamber).
+        n_samples: MCMC posterior draws per chain.
+        n_tune: MCMC tuning steps (discarded).
+        n_chains: Number of independent MCMC chains.
+        target_accept: NUTS target acceptance probability.
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -411,6 +1100,8 @@ def build_and_sample(
     y = data["y"]
     n_leg = data["n_legislators"]
     n_votes = data["n_votes"]
+    n_anchors = len(anchors)
+    anchor_indices = {idx for idx, _ in anchors}
 
     coords = {
         "legislator": data["leg_slugs"],
@@ -420,16 +1111,15 @@ def build_and_sample(
 
     with pm.Model(coords=coords):
         # --- Legislator ideal points with anchors ---
-        # Free ideal points for non-anchored legislators
-        xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg - 2)
+        xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg - n_anchors)
 
         # Build full xi vector with anchors inserted at correct positions
         xi_raw = pt.zeros(n_leg)
-        xi_raw = pt.set_subtensor(xi_raw[cons_idx], 1.0)
-        xi_raw = pt.set_subtensor(xi_raw[lib_idx], -1.0)
+        for anchor_idx, anchor_val in anchors:
+            xi_raw = pt.set_subtensor(xi_raw[anchor_idx], anchor_val)
 
         # Fill free positions
-        free_positions = [i for i in range(n_leg) if i != cons_idx and i != lib_idx]
+        free_positions = [i for i in range(n_leg) if i not in anchor_indices]
         for k, pos in enumerate(free_positions):
             xi_raw = pt.set_subtensor(xi_raw[pos], xi_free[k])
 
@@ -448,13 +1138,14 @@ def build_and_sample(
 
         # --- Sample ---
         print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
-        print(f"  target_accept={TARGET_ACCEPT}, seed={RANDOM_SEED}")
+        print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
+        print(f"  Anchors: {n_anchors} fixed legislators")
         t0 = time.time()
         idata = pm.sample(
             draws=n_samples,
             tune=n_tune,
             chains=n_chains,
-            target_accept=TARGET_ACCEPT,
+            target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,
         )
@@ -1120,10 +1811,10 @@ def run_sensitivity(
         )
 
         # Sample
+        sens_anchors = [(cons_idx, 1.0), (lib_idx, -1.0)]
         sens_idata, sens_time = build_and_sample(
             sens_data,
-            cons_idx,
-            lib_idx,
+            sens_anchors,
             n_samples,
             n_tune,
             n_chains,
@@ -1298,10 +1989,10 @@ def main() -> None:
 
             # ── Phase 3: Build and sample ──
             print_header(f"PHASE 3: MCMC SAMPLING — {chamber}")
+            chamber_anchors = [(cons_idx, 1.0), (lib_idx, -1.0)]
             idata, sampling_time = build_and_sample(
                 data,
-                cons_idx,
-                lib_idx,
+                chamber_anchors,
                 args.n_samples,
                 args.n_tune,
                 args.n_chains,
@@ -1384,6 +2075,61 @@ def main() -> None:
                 "lib_slug": lib_slug,
             }
 
+        # ── Joint Cross-Chamber Equating ──
+        # A joint MCMC IRT model was attempted but does not converge: with 71
+        # shared bills and 169 legislators (0.42 bills/legislator), the posterior
+        # is under-identified despite 4 anchors and 4 chains (R-hat > 1.7).
+        # Instead, use classical test equating (mean/sigma method) on the shared
+        # bill discrimination parameters to link the per-chamber scales.
+        joint_equating: dict = {}
+        if not args.skip_joint and len(results) == 2:
+            print_header("JOINT MODEL — PHASE J1: IDENTIFY SHARED BILLS")
+            joint_matrix, mapping_info = build_joint_vote_matrix(
+                house_matrix,
+                senate_matrix,
+                rollcalls,
+                legislators,
+            )
+
+            print_header("JOINT MODEL — PHASE J2: TEST EQUATING (MEAN/SIGMA)")
+            joint_equating = equate_chambers(
+                results,
+                mapping_info,
+                legislators,
+                ctx.plots_dir,
+            )
+
+            # Store correlation info in per-chamber results for report
+            for chamber, r in joint_equating["correlations"].items():
+                if chamber in results:
+                    chamber_slugs = set(
+                        results[chamber]["ideal_points"]["legislator_slug"].to_list()
+                    )
+                    equated_slugs = set(
+                        joint_equating["equated_ideal_points"]["legislator_slug"].to_list()
+                    )
+                    results[chamber]["joint_correlation"] = {
+                        "pearson_r": r,
+                        "n_shared": len(chamber_slugs & equated_slugs),
+                    }
+
+            # Save outputs
+            print_header("JOINT MODEL — PHASE J3: SAVE OUTPUTS")
+            eq_ip = joint_equating["equated_ideal_points"]
+            eq_ip.write_parquet(ctx.data_dir / "ideal_points_joint_equated.parquet")
+            print("  Saved: ideal_points_joint_equated.parquet")
+
+            results["Joint"] = {
+                "ideal_points": eq_ip,
+                "equating": joint_equating,
+                "mapping_info": mapping_info,
+                "joint_correlations": joint_equating["correlations"],
+            }
+        elif args.skip_joint:
+            print_header("JOINT MODEL (SKIPPED)")
+        elif len(results) < 2:
+            print_header("JOINT MODEL (SKIPPED — need both chambers)")
+
         # ── Phase 10: Sensitivity analysis ──
         sensitivity_findings: dict = {}
         if not args.skip_sensitivity and results:
@@ -1430,6 +2176,8 @@ def main() -> None:
             },
         }
         for chamber, result in results.items():
+            if chamber == "Joint":
+                continue  # joint model has its own manifest section below
             ch = chamber.lower()
             manifest[f"{ch}_n_legislators"] = result["data"]["n_legislators"]
             manifest[f"{ch}_n_votes"] = result["data"]["n_votes"]
@@ -1453,6 +2201,22 @@ def main() -> None:
             manifest["ppc"] = ppc_serializable
         if sensitivity_findings:
             manifest["sensitivity"] = sensitivity_findings
+
+        if "Joint" in results:
+            joint_r = results["Joint"]
+            mi = joint_r.get("mapping_info", {})
+            eq = joint_r.get("equating", {})
+            manifest["joint_model"] = {
+                "method": "mean_sigma_equating",
+                "reference_scale": "House",
+                "n_matched_bills": len(mi.get("matched_bills", [])),
+                "n_bridging_legislators": len(mi.get("bridging_legislators", [])),
+                "bridging_legislators": [
+                    b["full_name"] for b in mi.get("bridging_legislators", [])
+                ],
+                "transformation": eq.get("transformation", {}),
+                "correlations": joint_r.get("joint_correlations", {}),
+            }
 
         save_filtering_manifest(manifest, ctx.run_dir)
 

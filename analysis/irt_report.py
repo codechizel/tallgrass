@@ -16,9 +16,15 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, make_gt
+    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
 except ModuleNotFoundError:
-    from report import FigureSection, ReportBuilder, TableSection, make_gt
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 
 TOP_DISCRIMINATING = 15  # Number of top/bottom discriminating votes to show
 
@@ -36,20 +42,50 @@ def build_irt_report(
     n_tune: int,
     n_chains: int,
 ) -> None:
-    """Build the full IRT HTML report by adding ~16 sections to the ReportBuilder."""
+    """Build the full IRT HTML report by adding sections to the ReportBuilder."""
+    # Model config + convergence
     for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
         _add_model_summary(report, result, chamber, n_samples, n_tune, n_chains)
         _add_convergence_table(report, result, chamber)
+    _add_convergence_interpretation(report)
+
+    # Ideal points
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
         _add_forest_figure(report, plots_dir, chamber)
         _add_ideal_point_table(report, result, chamber)
+    _add_ideal_point_interpretation(report)
+
+    # Discrimination
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
         _add_discrimination_figure(report, plots_dir, chamber)
         _add_top_discriminating_votes(report, result, chamber)
+    _add_discrimination_interpretation(report)
+
+    # Traces
+    for chamber in results:
+        if chamber == "Joint":
+            continue
         _add_trace_figure(report, plots_dir, chamber)
+    _add_trace_interpretation(report)
+
+    # PPC
+    for chamber in results:
+        if chamber == "Joint":
+            continue
         _add_ppc_figure(report, plots_dir, chamber)
+    _add_ppc_interpretation(report)
 
     # Cross-chamber sections
     if pca_comparisons:
         for chamber in results:
+            if chamber == "Joint":
+                continue
             _add_pca_comparison_figure(report, plots_dir, chamber)
         _add_pca_comparison_table(report, pca_comparisons)
 
@@ -62,7 +98,18 @@ def build_irt_report(
     if sensitivity_findings:
         _add_sensitivity_table(report, sensitivity_findings)
         for chamber in results:
+            if chamber == "Joint":
+                continue
             _add_sensitivity_figure(report, plots_dir, chamber)
+
+    # Joint model sections (test equating, not MCMC)
+    if "Joint" in results:
+        _add_joint_model_interpretation(report)
+        _add_equating_summary(report, results["Joint"])
+        _add_forest_figure(report, plots_dir, "Joint")
+        _add_ideal_point_table(report, results["Joint"], "Joint")
+        _add_joint_comparison_figure(report, plots_dir)
+        _add_joint_comparison_table(report, results)
 
     _add_analysis_parameters(report, n_samples, n_tune, n_chains)
     print(f"  Report: {len(report._sections)} sections added")
@@ -81,6 +128,15 @@ def _add_model_summary(
 ) -> None:
     """Table: Model summary (dimensions, priors, anchors, sampling time)."""
     data = result["data"]
+
+    # Anchor rows differ: per-chamber has 2 (cons + lib), joint has 4
+    if "anchor_slugs" in result:
+        anchor_labels = [f"Anchor {i + 1}" for i in range(len(result["anchor_slugs"]))]
+        anchor_values = result["anchor_slugs"]
+    else:
+        anchor_labels = ["Conservative Anchor", "Liberal Anchor"]
+        anchor_values = [result["cons_slug"], result["lib_slug"]]
+
     df = pl.DataFrame(
         {
             "Property": [
@@ -92,8 +148,7 @@ def _add_model_summary(
                 "Prior (xi)",
                 "Prior (alpha)",
                 "Prior (beta)",
-                "Conservative Anchor",
-                "Liberal Anchor",
+                *anchor_labels,
                 "MCMC Draws",
                 "Tuning Steps",
                 "Chains",
@@ -108,8 +163,7 @@ def _add_model_summary(
                 "Normal(0, 1) + anchors",
                 "Normal(0, 5)",
                 "Normal(0, 1)",
-                result["cons_slug"],
-                result["lib_slug"],
+                *anchor_values,
                 str(n_samples),
                 str(n_tune),
                 str(n_chains),
@@ -304,12 +358,16 @@ def _add_top_discriminating_votes(
     bp = result["bill_params"].with_columns(pl.col("beta_mean").abs().alias("abs_beta"))
 
     # Top conservative-Yea bills (highest positive beta)
-    top_pos = bp.filter(pl.col("beta_mean") > 0).sort("abs_beta", descending=True).head(
-        TOP_DISCRIMINATING
+    top_pos = (
+        bp.filter(pl.col("beta_mean") > 0)
+        .sort("abs_beta", descending=True)
+        .head(TOP_DISCRIMINATING)
     )
     # Top liberal-Yea bills (most negative beta, i.e. highest |beta| where beta < 0)
-    top_neg = bp.filter(pl.col("beta_mean") < 0).sort("abs_beta", descending=True).head(
-        TOP_DISCRIMINATING
+    top_neg = (
+        bp.filter(pl.col("beta_mean") < 0)
+        .sort("abs_beta", descending=True)
+        .head(TOP_DISCRIMINATING)
     )
     combined = pl.concat([top_pos, top_neg]).drop("abs_beta")
 
@@ -617,6 +675,310 @@ def _add_sensitivity_figure(
                 ),
             )
         )
+
+
+def _add_convergence_interpretation(report: ReportBuilder) -> None:
+    """Text block: How to interpret convergence diagnostics."""
+    report.add(
+        TextSection(
+            id="convergence-interpretation",
+            title="Interpreting Convergence Diagnostics",
+            html=(
+                "<p><strong>R-hat</strong> (potential scale reduction factor) compares "
+                "between-chain and within-chain variance. Values &lt; 1.01 indicate that "
+                "chains have converged to the same distribution. R-hat &gt; 1.01 means "
+                "chains disagree — increase tuning steps or check for multimodality.</p>"
+                "<p><strong>ESS</strong> (effective sample size) measures the number of "
+                "independent samples after accounting for autocorrelation. ESS &gt; 400 "
+                "is needed for reliable posterior summaries and HDIs. Low ESS means the "
+                "sampler is moving slowly through parameter space — increase draws or "
+                "reparameterize the model.</p>"
+                "<p><strong>Divergences</strong> are NUTS transitions where the numerical "
+                "integrator diverged from the true trajectory. A few (&lt; 10) are "
+                "tolerable; many indicate the posterior has sharp features the sampler "
+                "cannot navigate. Increase target_accept toward 0.99, or simplify "
+                "the model.</p>"
+                "<p><strong>E-BFMI</strong> (energy Bayesian fraction of missing "
+                "information) measures how well the sampler explores the posterior's "
+                "energy distribution. Values &gt; 0.3 are acceptable. Low E-BFMI "
+                "suggests the posterior has a funnel-shaped geometry — consider "
+                "reparameterization (e.g., non-centered parameterization).</p>"
+            ),
+        )
+    )
+
+
+def _add_ideal_point_interpretation(report: ReportBuilder) -> None:
+    """Text block: How to interpret ideal points."""
+    report.add(
+        TextSection(
+            id="ideal-point-interpretation",
+            title="Interpreting Ideal Points",
+            html=(
+                "<p>Each legislator's <strong>ideal point (xi)</strong> represents their "
+                "estimated position on a latent ideological spectrum. The scale is "
+                "anchored by two legislators fixed at +1 (conservative) and -1 (liberal), "
+                "so positive values indicate conservative positions and negative values "
+                "indicate liberal positions.</p>"
+                "<p>The <strong>95% HDI</strong> (highest density interval) is the "
+                "narrowest interval containing 95% of the posterior probability. "
+                "If two legislators' HDIs overlap, their positions are statistically "
+                "indistinguishable — you cannot reliably rank them.</p>"
+                "<p><strong>Wide intervals</strong> indicate uncertainty, typically "
+                "from few votes or inconsistent voting patterns. Legislators with "
+                "wide HDIs have low-confidence ideal point estimates.</p>"
+                "<p><strong>Anchored legislators</strong> have their ideal points "
+                "fixed (not estimated). They appear as point estimates with no "
+                "uncertainty. The model uses them to identify the scale's location, "
+                "spread, and direction.</p>"
+            ),
+        )
+    )
+
+
+def _add_discrimination_interpretation(report: ReportBuilder) -> None:
+    """Text block: How to interpret discrimination parameters."""
+    report.add(
+        TextSection(
+            id="discrimination-interpretation",
+            title="Interpreting Discrimination Parameters",
+            html=(
+                "<p>Each roll call has two IRT parameters:</p>"
+                "<ul>"
+                "<li><strong>Discrimination (beta)</strong>: How sharply the vote "
+                "separates legislators along the ideological spectrum. Higher |beta| = "
+                "more partisan/ideological. |beta| &gt; 1.5 is highly discriminating; "
+                "|beta| &lt; 0.5 is weakly discriminating.</li>"
+                "<li><strong>Difficulty (alpha)</strong>: Where on the spectrum the "
+                "vote 'flips' from likely Nay to likely Yea. High alpha = harder to "
+                "pass (requires more extreme position).</li>"
+                "</ul>"
+                "<p><strong>Sign of beta</strong>: Positive beta means conservatives "
+                "(high xi) are more likely to vote Yea. Negative beta means liberals "
+                "(low xi) are more likely to vote Yea. This is determined by the "
+                "anchor legislators — it is not arbitrary.</p>"
+                "<p>Bills with beta near zero are <strong>non-informative</strong> — "
+                "ideology does not predict the vote. These are typically procedural "
+                "or unanimous bills that survived the EDA filtering.</p>"
+            ),
+        )
+    )
+
+
+def _add_trace_interpretation(report: ReportBuilder) -> None:
+    """Text block: How to interpret trace plots."""
+    report.add(
+        TextSection(
+            id="trace-interpretation",
+            title="Interpreting Trace Plots",
+            html=(
+                "<p>Trace plots show the sampled values of selected ideal points "
+                "across MCMC iterations. Each color represents a different chain.</p>"
+                "<p><strong>Good traces</strong> look like 'fuzzy caterpillars' — "
+                "stationary, well-mixed, with chains overlapping. The posterior "
+                "density (left panel) should be smooth and unimodal.</p>"
+                "<p><strong>Bad signs</strong> to watch for:</p>"
+                "<ul>"
+                "<li><strong>Trending</strong>: Chains drifting up or down, indicating "
+                "the sampler has not converged.</li>"
+                "<li><strong>Stuck</strong>: Chains spending long periods at the same "
+                "value, indicating poor mixing.</li>"
+                "<li><strong>Multimodal</strong>: Chains visiting different regions, "
+                "suggesting the posterior has multiple modes.</li>"
+                "<li><strong>Chain disagreement</strong>: One chain exploring a different "
+                "region than the other — will show up as R-hat &gt; 1.01.</li>"
+                "</ul>"
+                "<p>If traces look problematic, increase tuning steps, increase "
+                "target_accept, or add more chains to diagnose the issue.</p>"
+            ),
+        )
+    )
+
+
+def _add_ppc_interpretation(report: ReportBuilder) -> None:
+    """Text block: How to interpret posterior predictive checks."""
+    report.add(
+        TextSection(
+            id="ppc-interpretation",
+            title="Interpreting Posterior Predictive Checks",
+            html=(
+                "<p>Posterior predictive checks (PPCs) assess whether the fitted model "
+                "can generate data that resembles the observed data. The model draws "
+                "parameter values from the posterior and simulates new datasets.</p>"
+                "<p>The <strong>Bayesian p-value</strong> is the fraction of replicated "
+                "datasets where the test statistic (e.g., overall Yea rate) equals or "
+                "exceeds the observed value. A well-calibrated model produces p-values "
+                "in [0.1, 0.9] — the observed data looks typical of what the model "
+                "generates.</p>"
+                "<ul>"
+                "<li>p near 0.5: Model fits perfectly for this statistic.</li>"
+                "<li>p &lt; 0.1 or p &gt; 0.9: The model consistently over- or "
+                "under-predicts this statistic — potential misfit.</li>"
+                "<li>p = 0.0 or p = 1.0: The model never generates data like the "
+                "observed — serious misfit for this statistic.</li>"
+                "</ul>"
+                "<p>PPCs are more informative than holdout accuracy because they test "
+                "the full posterior distribution, not just the posterior mean. The "
+                "holdout validation uses posterior means only and is documented as "
+                "in-sample prediction (the model saw all data during fitting).</p>"
+            ),
+        )
+    )
+
+
+def _add_joint_model_interpretation(report: ReportBuilder) -> None:
+    """Text block: How to interpret the cross-chamber equating."""
+    report.add(
+        TextSection(
+            id="joint-model-interpretation",
+            title="Interpreting Cross-Chamber Equating",
+            html=(
+                "<p>Per-chamber IRT models estimate ideal points on separate, "
+                "incomparable scales &mdash; a House score of +2.0 and a Senate "
+                "score of +2.0 do not mean the same thing. <strong>Test equating"
+                "</strong> places all legislators on a single common scale using "
+                "the House scale as the reference.</p>"
+                "<p><strong>How it works (mean/sigma method):</strong> Bills that "
+                "passed through both chambers receive IRT discrimination (beta) "
+                "and difficulty (alpha) estimates from each per-chamber model "
+                "independently. The ratio of discrimination standard deviations "
+                "across chambers gives the scale factor <em>A</em>, and the mean "
+                "difficulty difference gives the location shift <em>B</em>. Senate "
+                "ideal points are then transformed: xi_equated = A &times; "
+                "xi_senate + B. House ideal points remain unchanged.</p>"
+                "<p><strong>Why not a joint MCMC model?</strong> A full joint "
+                "IRT model was attempted but does not converge for this data. "
+                "With ~70 shared bills and ~170 legislators (0.42 bills per "
+                "legislator in the joint matrix), the posterior is severely "
+                "under-identified, producing R-hat &gt; 1.7 despite 4 anchors "
+                "and 4 chains. Test equating sidesteps this by using the "
+                "already-converged per-chamber estimates.</p>"
+                "<p><strong>Limitations:</strong></p>"
+                "<ul>"
+                "<li>Assumes shared bills have the same ideological content in "
+                "both chambers. If a bill is substantively amended between "
+                "chambers, the equating is weakened for that bill.</li>"
+                "<li>Senate uncertainty (HDI width) is scaled by |A| but the "
+                "correlation structure between legislators is not preserved "
+                "&mdash; these are transformed marginals, not a joint "
+                "posterior.</li>"
+                "<li>Per-chamber models remain primary for within-chamber "
+                "analyses. Equated scores are for cross-chamber comparison "
+                "only.</li>"
+                "</ul>"
+                "<p><strong>Validation:</strong> Equated ideal points for House "
+                "legislators should correlate perfectly (r = 1.0) with their "
+                "per-chamber scores (they are unchanged). Senate legislators "
+                "should show r &gt; 0.99 (only a linear transformation).</p>"
+            ),
+        )
+    )
+
+
+def _add_equating_summary(
+    report: ReportBuilder,
+    result: dict,
+) -> None:
+    """Table: Test equating transformation summary."""
+    eq = result.get("equating", {})
+    xform = eq.get("transformation", {})
+
+    df = pl.DataFrame(
+        {
+            "Property": [
+                "Method",
+                "Reference Scale",
+                "Shared Bills (concordant / total)",
+                "Scale Factor (A)",
+                "Location Shift (B)",
+                "Transformation",
+                "Total Legislators",
+            ],
+            "Value": [
+                "Mean/Sigma Test Equating",
+                "House",
+                f"{xform.get('n_usable_bills', '?')} / {xform.get('n_total_shared', '?')}",
+                f"{xform.get('A', 0):.4f}",
+                f"{xform.get('B', 0):.4f}",
+                f"xi_equated = {xform.get('A', 0):.4f} * xi_senate + {xform.get('B', 0):.4f}",
+                str(result["ideal_points"].height),
+            ],
+        }
+    )
+
+    html = make_gt(
+        df,
+        title="Cross-Chamber Equating Summary",
+        subtitle="Senate ideal points transformed to House scale",
+    )
+    report.add(
+        TableSection(
+            id="equating-summary",
+            title="Equating Summary",
+            html=html,
+        )
+    )
+
+
+def _add_joint_comparison_figure(report: ReportBuilder, plots_dir: Path) -> None:
+    """Figure: Equated vs per-chamber ideal points scatter."""
+    path = plots_dir / "joint_vs_chamber.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                "fig-joint-vs-chamber",
+                "Equated vs Per-Chamber Ideal Points",
+                path,
+                caption=(
+                    "Equated ideal points (x) vs per-chamber ideal points (y). "
+                    "House legislators are unchanged (identity line). Senate "
+                    "legislators show the linear transformation. "
+                    "Bridging legislators are highlighted with diamond markers."
+                ),
+            )
+        )
+
+
+def _add_joint_comparison_table(
+    report: ReportBuilder,
+    results: dict[str, dict],
+) -> None:
+    """Table: Correlation between equated and per-chamber ideal points."""
+    rows = []
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
+        corr = result.get("joint_correlation")
+        if corr is not None:
+            rows.append(
+                {
+                    "Chamber": chamber,
+                    "Shared Legislators": corr.get("n_shared", 0),
+                    "Pearson r": corr.get("pearson_r"),
+                }
+            )
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Equated vs Per-Chamber Correlation",
+        subtitle="Pearson r between equated and per-chamber ideal points",
+        number_formats={"Pearson r": ".4f"},
+        source_note=(
+            "House r = 1.0 expected (unchanged). Senate r > 0.99 expected "
+            "(linear transformation preserves rank order)."
+        ),
+    )
+    report.add(
+        TableSection(
+            id="joint-comparison",
+            title="Equated vs Per-Chamber Comparison",
+            html=html,
+        )
+    )
 
 
 def _add_analysis_parameters(

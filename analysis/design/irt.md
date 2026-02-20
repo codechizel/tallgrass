@@ -140,3 +140,66 @@
 - **HDI overlap = indistinguishable.** Two legislators whose 95% HDIs overlap cannot be reliably ranked. The forest plot visualizes this.
 - **Discrimination sign indicates direction.** Positive β = conservative position is Yea. Negative β = liberal position is Yea. |β| measures discriminating power. A bill with |β| > 1.5 is highly discriminating; |β| < 0.5 is weakly discriminating.
 - **The 1D model is a simplification.** Tyson's contrarianism on routine bills, Thompson's mild version of the same, and any other multi-dimensional pattern will be compressed into a single number. If a legislator's ideal point seems surprising, check whether they have unusual PC2 behavior (see `docs/analytic-flags.md`).
+
+## Cross-Chamber Equating
+
+### Motivation
+
+Per-chamber IRT models estimate ideal points on separate, incomparable scales. A House xi=+2.0 and a Senate xi=+2.0 do not mean the same thing because the models are fitted independently with different bill sets, different anchors, and different posterior geometries. To place all legislators on a common scale for cross-chamber comparisons, test equating is needed.
+
+### Why Not a Joint MCMC Model?
+
+A full joint IRT model was attempted: all legislators in a single 2PL model with shared bills providing linked IRT parameters and bridging legislators contributing votes from both chambers. This did not converge (R-hat > 1.7, ESS < 10) despite:
+- Shared-bills-only matrix (71 bills, 95.5% observed)
+- 4 anchors (one conservative + one liberal from each chamber)
+- 4 chains with target_accept=0.95
+
+The fundamental problem: 71 shared bills for 169 legislators (0.42 bills/legislator) is far too few for a joint MCMC IRT model. Many legislators vote identically on the shared bills, creating a degenerate posterior with insufficient information to distinguish 165 free ideal points.
+
+### Test Equating Approach
+
+Instead, we use **classical test equating** — a well-established psychometric method that transforms one scale to match another using shared items and/or common examinees.
+
+**A (scale factor)** from shared bill discrimination parameters:
+- For each of the ~71 shared bills, compare the beta (discrimination) from the House IRT model vs the Senate IRT model
+- Use only concordant bills (same sign of beta in both chambers)
+- A = SD(beta_senate) / SD(beta_house)
+
+**B (location shift)** from bridging legislators:
+- 3 legislators served in both chambers: Thompson, Hill, Miller
+- Each has a per-chamber ideal point from the separate IRT models
+- B = mean(xi_house) - A * mean(xi_senate) across bridging legislators
+
+**Transformation**: xi_equated = A × xi_senate + B (House scale is the reference; House ideal points are unchanged)
+
+### Bill Matching Algorithm
+
+For each bill_number appearing in both chambers' filtered matrices:
+1. Find all vote_ids in each chamber for that bill
+2. Prefer the vote_id with "Final Action" or "Emergency Final Action" motion
+3. If multiple, pick the latest chronologically (vote_id encodes timestamp)
+
+### 2025-26 Results
+
+- **A = 1.136**: Senate discrimination parameters have ~14% more spread than House
+- **B = -0.305**: Small leftward shift (Senate center is slightly more conservative than House center)
+- **51 concordant / 71 shared bills** used for A estimation
+- **3 bridging legislators** used for B estimation
+
+### Assumptions
+
+1. **Shared bills have the same ideological content in both chambers.** If a bill is substantially amended between chambers, the equating is weakened for that bill.
+2. **Bridging legislators have stable ideology across chambers.** A legislator who shifts position when moving from House to Senate would bias B.
+3. **Linear relationship between scales.** The transformation assumes a linear mapping; nonlinear distortions are not captured.
+
+### Limitations
+
+- Senate uncertainty (HDI width) is scaled by |A| but the correlation structure between legislators is not preserved — these are transformed marginals, not a joint posterior.
+- With only 3 bridging legislators, B has limited precision. A single outlier bridging legislator can shift the location substantially.
+- Per-chamber models remain primary for within-chamber analyses. Equated scores are for cross-chamber comparison only.
+
+### Validation
+
+- House equated vs per-chamber: r = 1.0 (unchanged by construction)
+- Senate equated vs per-chamber: r = 1.0 (linear transformation preserves rank order)
+- Bridging legislator positions should be consistent across chambers after equating

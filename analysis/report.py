@@ -92,10 +92,7 @@ class FigureSection:
 
     def render(self) -> str:
         parts = [f'<div class="figure-container" id="{self.id}">']
-        parts.append(
-            f'<img src="data:image/png;base64,{self.image_data}" '
-            f'alt="{self.title}" />'
-        )
+        parts.append(f'<img src="data:image/png;base64,{self.image_data}" alt="{self.title}" />')
         if self.caption:
             parts.append(f'<p class="caption">{self.caption}</p>')
         parts.append("</div>")
@@ -231,12 +228,14 @@ class ReportBuilder:
 
         for i, (title, section) in enumerate(self._sections, 1):
             toc_items.append({"number": i, "id": section.id, "title": title})
-            rendered_sections.append({
-                "number": i,
-                "id": section.id,
-                "title": title,
-                "content": section.render(),
-            })
+            rendered_sections.append(
+                {
+                    "number": i,
+                    "id": section.id,
+                    "title": title,
+                    "content": section.render(),
+                }
+            )
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         template = _get_template()

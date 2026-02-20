@@ -55,7 +55,7 @@ def build_clustering_report(
         for chamber in results:
             _add_gmm_model_selection_figure(report, plots_dir, chamber)
 
-    _add_model_selection_interpretation(report, results)
+    _add_model_selection_interpretation(report)
 
     for chamber, result in results.items():
         _add_cluster_assignments_table(report, result, chamber)
@@ -654,11 +654,17 @@ def _add_interpretation_intro(report: ReportBuilder) -> None:
                 "<p>This report presents the results of clustering analysis on Kansas "
                 "Legislature voting data. Clustering identifies discrete voting blocs "
                 "(factions) among legislators using multiple methods for robustness.</p>"
-                "<p><strong>Key finding:</strong> k=2 clusters emerged as optimal for both "
-                "chambers, corresponding exactly to the party split (all Republicans in one "
-                "cluster, all Democrats in the other). The expected k=3 structure "
-                "(conservative Rs, moderate Rs, Democrats) was not supported — the "
-                "moderate/conservative Republican distinction is continuous, not discrete.</p>"
+                "<p><strong>Three clustering methods</strong> are applied independently "
+                "to test whether the same structure emerges regardless of algorithm:</p>"
+                "<ul>"
+                "<li><strong>Hierarchical (Ward linkage)</strong> on Cohen's Kappa "
+                "pairwise agreement distance — agglomerative, no assumed number of "
+                "clusters.</li>"
+                "<li><strong>K-Means</strong> on IRT ideal points — centroid-based, "
+                "requires specifying k.</li>"
+                "<li><strong>GMM (Gaussian Mixture Model)</strong> on IRT ideal points "
+                "— probabilistic, selects k via BIC.</li>"
+                "</ul>"
                 "<p>The report is organized as: (1) data summary, (2) party loyalty metric, "
                 "(3) dendrograms, (4) model selection, (5) cluster assignments and "
                 "characterization, (6) cross-method validation, (7) within-party clustering "
@@ -671,28 +677,8 @@ def _add_interpretation_intro(report: ReportBuilder) -> None:
     )
 
 
-def _add_model_selection_interpretation(
-    report: ReportBuilder,
-    results: dict[str, dict],
-) -> None:
+def _add_model_selection_interpretation(report: ReportBuilder) -> None:
     """Text block: Interpreting model selection plots."""
-    # Build chamber-specific details
-    chamber_details = []
-    for chamber, result in results.items():
-        km = result.get("kmeans", {})
-        km_results = km.get("results", {})
-        sil_k2 = km_results.get(2, {}).get("silhouette_1d")
-        sil_k3 = km_results.get(3, {}).get("silhouette_1d")
-        if sil_k2 is not None and sil_k3 is not None:
-            drop = sil_k2 - sil_k3
-            chamber_details.append(
-                f"<li><strong>{chamber}:</strong> silhouette drops from "
-                f"{sil_k2:.2f} (k=2) to {sil_k3:.2f} (k=3) — a decrease of "
-                f"{drop:.2f}. This is a substantial drop, not a marginal one.</li>"
-            )
-
-    details_html = "<ul>" + "".join(chamber_details) + "</ul>" if chamber_details else ""
-
     report.add(
         TextSection(
             id="model-sel-interpretation",
@@ -710,15 +696,14 @@ def _add_model_selection_interpretation(
                 'within-cluster variance. A visible "elbow" suggests the right k, but '
                 "silhouette is the primary decision metric because it accounts for "
                 "between-cluster separation, not just within-cluster tightness.</p>"
-                f"{details_html}"
-                "<p>Forcing k=3 would split a continuous Republican distribution at an "
-                "arbitrary point, modeling noise rather than genuine factional boundaries. "
-                "The silhouette drop from k=2 to k=3 confirms this — it's not marginal.</p>"
+                "<p>If silhouette drops substantially from k=2 to k=3, this indicates "
+                "that forcing a third cluster splits a continuous distribution at an "
+                "arbitrary point rather than capturing a genuine factional boundary.</p>"
                 "<p><strong>GMM BIC</strong> selects the number of Gaussian components that "
-                "best fits the data distribution. BIC's k=4 reflects the distributional "
-                "shape (long right tail, bimodal D/R peaks) rather than discrete factions. "
-                "Silhouette and BIC measure different things; silhouette measures cluster "
-                "separation, while BIC measures generative model fit.</p>"
+                "best fits the data distribution. BIC may favor a higher k than silhouette "
+                "because it measures generative model fit (distributional shape) rather than "
+                "cluster separation. A long-tailed or multimodal distribution may need more "
+                "Gaussian components without implying more discrete factions.</p>"
             ),
         )
     )

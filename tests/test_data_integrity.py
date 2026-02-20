@@ -17,9 +17,7 @@ import pytest
 DATA_DIR = Path("data/ks_2025_26")
 HOUSE_SEATS = 125
 SENATE_SEATS = 40
-VALID_VOTE_CATEGORIES = {
-    "Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting"
-}
+VALID_VOTE_CATEGORIES = {"Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting"}
 VALID_CHAMBERS = {"House", "Senate"}
 VALID_PARTIES = {"Republican", "Democrat"}
 
@@ -52,26 +50,54 @@ class TestCSVStructure:
 
     def test_votes_columns(self, votes: pl.DataFrame) -> None:
         expected = {
-            "session", "bill_number", "bill_title", "vote_id", "vote_datetime",
-            "vote_date", "chamber", "motion", "legislator_name",
-            "legislator_slug", "vote",
+            "session",
+            "bill_number",
+            "bill_title",
+            "vote_id",
+            "vote_datetime",
+            "vote_date",
+            "chamber",
+            "motion",
+            "legislator_name",
+            "legislator_slug",
+            "vote",
         }
         assert set(votes.columns) == expected
 
     def test_rollcalls_columns(self, rollcalls: pl.DataFrame) -> None:
         expected = {
-            "session", "bill_number", "bill_title", "vote_id", "vote_url",
-            "vote_datetime", "vote_date", "chamber", "motion", "vote_type",
-            "result", "short_title", "sponsor", "yea_count", "nay_count",
-            "present_passing_count", "absent_not_voting_count",
-            "not_voting_count", "total_votes", "passed",
+            "session",
+            "bill_number",
+            "bill_title",
+            "vote_id",
+            "vote_url",
+            "vote_datetime",
+            "vote_date",
+            "chamber",
+            "motion",
+            "vote_type",
+            "result",
+            "short_title",
+            "sponsor",
+            "yea_count",
+            "nay_count",
+            "present_passing_count",
+            "absent_not_voting_count",
+            "not_voting_count",
+            "total_votes",
+            "passed",
         }
         assert set(rollcalls.columns) == expected
 
     def test_legislators_columns(self, legislators: pl.DataFrame) -> None:
         expected = {
-            "name", "full_name", "slug", "chamber", "party",
-            "district", "member_url",
+            "name",
+            "full_name",
+            "slug",
+            "chamber",
+            "party",
+            "district",
+            "member_url",
         }
         assert set(legislators.columns) == expected
 
@@ -109,18 +135,14 @@ class TestReferentialIntegrity:
         no_votes = leg_slugs - vote_slugs
         assert not no_votes, f"Legislators with zero votes: {no_votes}"
 
-    def test_all_vote_ids_in_rollcalls(
-        self, votes: pl.DataFrame, rollcalls: pl.DataFrame
-    ) -> None:
+    def test_all_vote_ids_in_rollcalls(self, votes: pl.DataFrame, rollcalls: pl.DataFrame) -> None:
         """Every vote_id in votes.csv must exist in rollcalls.csv."""
         vote_ids = set(votes["vote_id"].unique().to_list())
         rc_ids = set(rollcalls["vote_id"].to_list())
         orphans = vote_ids - rc_ids
         assert not orphans, f"Vote IDs not in rollcalls: {len(orphans)} orphans"
 
-    def test_all_rollcall_ids_in_votes(
-        self, votes: pl.DataFrame, rollcalls: pl.DataFrame
-    ) -> None:
+    def test_all_rollcall_ids_in_votes(self, votes: pl.DataFrame, rollcalls: pl.DataFrame) -> None:
         """Every vote_id in rollcalls.csv should have individual votes."""
         rc_ids = set(rollcalls["vote_id"].to_list())
         vote_ids = set(votes["vote_id"].unique().to_list())
@@ -175,9 +197,7 @@ class TestValueValidation:
 class TestTallyConsistency:
     """Verify that rollcall summary counts match individual vote details."""
 
-    def test_yea_counts_match(
-        self, votes: pl.DataFrame, rollcalls: pl.DataFrame
-    ) -> None:
+    def test_yea_counts_match(self, votes: pl.DataFrame, rollcalls: pl.DataFrame) -> None:
         """Yea count in rollcalls.csv must match count of 'Yea' votes."""
         detail = (
             votes.filter(pl.col("vote") == "Yea")
@@ -185,16 +205,10 @@ class TestTallyConsistency:
             .agg(pl.len().alias("detail_yea"))
         )
         merged = rollcalls.join(detail, on="vote_id", how="left").fill_null(0)
-        mismatches = merged.filter(
-            pl.col("yea_count") != pl.col("detail_yea")
-        )
-        assert mismatches.height == 0, (
-            f"{mismatches.height} rollcalls with yea count mismatch"
-        )
+        mismatches = merged.filter(pl.col("yea_count") != pl.col("detail_yea"))
+        assert mismatches.height == 0, f"{mismatches.height} rollcalls with yea count mismatch"
 
-    def test_nay_counts_match(
-        self, votes: pl.DataFrame, rollcalls: pl.DataFrame
-    ) -> None:
+    def test_nay_counts_match(self, votes: pl.DataFrame, rollcalls: pl.DataFrame) -> None:
         """Nay count in rollcalls.csv must match count of 'Nay' votes."""
         detail = (
             votes.filter(pl.col("vote") == "Nay")
@@ -202,12 +216,8 @@ class TestTallyConsistency:
             .agg(pl.len().alias("detail_nay"))
         )
         merged = rollcalls.join(detail, on="vote_id", how="left").fill_null(0)
-        mismatches = merged.filter(
-            pl.col("nay_count") != pl.col("detail_nay")
-        )
-        assert mismatches.height == 0, (
-            f"{mismatches.height} rollcalls with nay count mismatch"
-        )
+        mismatches = merged.filter(pl.col("nay_count") != pl.col("detail_nay"))
+        assert mismatches.height == 0, f"{mismatches.height} rollcalls with nay count mismatch"
 
     def test_total_votes_match_sum(self, rollcalls: pl.DataFrame) -> None:
         """total_votes should equal yea + nay + present + absent + not_voting."""
@@ -220,9 +230,7 @@ class TestTallyConsistency:
                 + pl.col("not_voting_count")
             ).alias("computed_total")
         )
-        mismatches = computed.filter(
-            pl.col("total_votes") != pl.col("computed_total")
-        )
+        mismatches = computed.filter(pl.col("total_votes") != pl.col("computed_total"))
         assert mismatches.height == 0, (
             f"{mismatches.height} rollcalls where total != sum of categories"
         )
@@ -234,9 +242,7 @@ class TestTallyConsistency:
 class TestChamberBounds:
     """Verify that vote counts don't exceed chamber seat counts."""
 
-    def test_no_rollcall_exceeds_chamber_size(
-        self, rollcalls: pl.DataFrame
-    ) -> None:
+    def test_no_rollcall_exceeds_chamber_size(self, rollcalls: pl.DataFrame) -> None:
         """No rollcall should have more total votes than seats in the chamber."""
         overcount = rollcalls.with_columns(
             pl.when(pl.col("chamber") == "Senate")
@@ -245,25 +251,15 @@ class TestChamberBounds:
             .alias("max_seats")
         ).filter(pl.col("total_votes") > pl.col("max_seats"))
 
-        assert overcount.height == 0, (
-            f"{overcount.height} rollcalls exceed chamber seat count"
-        )
+        assert overcount.height == 0, f"{overcount.height} rollcalls exceed chamber seat count"
 
     def test_chamber_slug_consistency(self, votes: pl.DataFrame) -> None:
         """sen_* slugs should only appear in Senate votes, rep_* in House."""
         cross_chamber = votes.filter(
-            (
-                pl.col("legislator_slug").str.starts_with("sen_")
-                & (pl.col("chamber") == "House")
-            )
-            | (
-                pl.col("legislator_slug").str.starts_with("rep_")
-                & (pl.col("chamber") == "Senate")
-            )
+            (pl.col("legislator_slug").str.starts_with("sen_") & (pl.col("chamber") == "House"))
+            | (pl.col("legislator_slug").str.starts_with("rep_") & (pl.col("chamber") == "Senate"))
         )
-        assert cross_chamber.height == 0, (
-            f"{cross_chamber.height} votes with chamber-slug mismatch"
-        )
+        assert cross_chamber.height == 0, f"{cross_chamber.height} votes with chamber-slug mismatch"
 
 
 # ── No Duplicate Votes ──────────────────────────────────────────────────────
@@ -274,14 +270,8 @@ class TestNoDuplicates:
 
     def test_no_duplicate_individual_votes(self, votes: pl.DataFrame) -> None:
         """Each (vote_id, legislator_slug) pair must be unique."""
-        dupes = (
-            votes.group_by("vote_id", "legislator_slug")
-            .agg(pl.len())
-            .filter(pl.col("len") > 1)
-        )
-        assert dupes.height == 0, (
-            f"{dupes.height} duplicate (vote_id, legislator_slug) pairs"
-        )
+        dupes = votes.group_by("vote_id", "legislator_slug").agg(pl.len()).filter(pl.col("len") > 1)
+        assert dupes.height == 0, f"{dupes.height} duplicate (vote_id, legislator_slug) pairs"
 
     def test_legislator_slugs_unique(self, legislators: pl.DataFrame) -> None:
         """Each slug in legislators.csv must be unique."""

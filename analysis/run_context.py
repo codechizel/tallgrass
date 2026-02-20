@@ -88,7 +88,7 @@ def _git_commit_hash() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
     return "unknown"
 
@@ -200,9 +200,7 @@ class RunContext:
             "analysis": self.analysis_name,
             "session": self.session,
             "run_date": self._today,
-            "timestamp_start": (
-                self._start_time.isoformat() if self._start_time else None
-            ),
+            "timestamp_start": (self._start_time.isoformat() if self._start_time else None),
             "timestamp_end": end_time.isoformat(),
             "git_commit": _git_commit_hash(),
             "python_version": sys.version,

@@ -166,11 +166,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-dir", default=None, help="Override data directory path")
     parser.add_argument("--eda-dir", default=None, help="Override EDA results directory")
     parser.add_argument(
-        "--n-components", type=int, default=DEFAULT_N_COMPONENTS,
+        "--n-components",
+        type=int,
+        default=DEFAULT_N_COMPONENTS,
         help="Number of PCA components to extract",
     )
     parser.add_argument(
-        "--skip-sensitivity", action="store_true",
+        "--skip-sensitivity",
+        action="store_true",
         help="Skip sensitivity analysis (faster, for debugging)",
     )
     return parser.parse_args()
@@ -245,7 +248,8 @@ def impute_vote_matrix(matrix: pl.DataFrame) -> tuple[np.ndarray, list[str], lis
 
 
 def fit_pca(
-    X: np.ndarray, n_components: int,
+    X: np.ndarray,
+    n_components: int,
 ) -> tuple[np.ndarray, np.ndarray, PCA, StandardScaler]:
     """Standardize and fit PCA. Returns (scores, loadings, pca, scaler)."""
     scaler = StandardScaler()
@@ -293,7 +297,7 @@ def build_scores_df(
     legislators: pl.DataFrame,
 ) -> pl.DataFrame:
     """Build a polars DataFrame of PC scores with legislator metadata."""
-    pc_cols = {f"PC{i+1}": scores[:, i].tolist() for i in range(n_components)}
+    pc_cols = {f"PC{i + 1}": scores[:, i].tolist() for i in range(n_components)}
     df = pl.DataFrame({"legislator_slug": slugs, **pc_cols})
 
     # Join legislator metadata
@@ -309,7 +313,7 @@ def build_loadings_df(
     rollcalls: pl.DataFrame,
 ) -> pl.DataFrame:
     """Build a polars DataFrame of PC loadings with rollcall metadata."""
-    pc_cols = {f"PC{i+1}": loadings[i, :].tolist() for i in range(n_components)}
+    pc_cols = {f"PC{i + 1}": loadings[i, :].tolist() for i in range(n_components)}
     df = pl.DataFrame({"vote_id": vote_ids, **pc_cols})
 
     # Join rollcall metadata
@@ -346,7 +350,9 @@ def run_pca_for_chamber(
     cumulative = np.cumsum(ev)
     print("\n  Explained variance:")
     for i in range(n_comp):
-        print(f"    PC{i+1}: {ev[i]:.4f} ({100*ev[i]:.1f}%)  cumulative: {100*cumulative[i]:.1f}%")
+        print(
+            f"    PC{i + 1}: {ev[i]:.4f} ({100 * ev[i]:.1f}%)  cumulative: {100 * cumulative[i]:.1f}%"
+        )
 
     scores_df = build_scores_df(scores, slugs, n_comp, legislators)
     loadings_df = build_loadings_df(loadings, vote_ids, n_comp, rollcalls)
@@ -386,10 +392,14 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
 
     # Panel 1: Individual explained variance
     axes[0].bar(
-        range(1, n + 1), ev, color="#4C72B0", edgecolor="black", alpha=0.9,
+        range(1, n + 1),
+        ev,
+        color="#4C72B0",
+        edgecolor="black",
+        alpha=0.9,
     )
     for i, v in enumerate(ev):
-        axes[0].text(i + 1, v + 0.005, f"{100*v:.1f}%", ha="center", fontsize=9)
+        axes[0].text(i + 1, v + 0.005, f"{100 * v:.1f}%", ha="center", fontsize=9)
     axes[0].set_xlabel("Principal Component")
     axes[0].set_ylabel("Explained Variance Ratio")
     axes[0].set_title(f"{chamber} — Individual Explained Variance")
@@ -400,7 +410,7 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
     # Panel 2: Cumulative explained variance
     axes[1].plot(range(1, n + 1), cumulative, "bo-", markersize=8)
     for i, v in enumerate(cumulative):
-        axes[1].text(i + 1, v + 0.02, f"{100*v:.1f}%", ha="center", fontsize=9)
+        axes[1].text(i + 1, v + 0.02, f"{100 * v:.1f}%", ha="center", fontsize=9)
     axes[1].axhline(0.9, color="red", linestyle="--", alpha=0.5, label="90% threshold")
     axes[1].set_xlabel("Number of Components")
     axes[1].set_ylabel("Cumulative Explained Variance")
@@ -416,7 +426,9 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
 
 
 def plot_ideological_map(
-    scores_df: pl.DataFrame, chamber: str, out_dir: Path,
+    scores_df: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
 ) -> None:
     """PC1 vs PC2 scatter plot, party-colored, with outlier labels."""
     fig, ax = plt.subplots(figsize=(12, 10))
@@ -428,7 +440,11 @@ def plot_ideological_map(
         ax.scatter(
             subset["PC1"].to_numpy(),
             subset["PC2"].to_numpy(),
-            c=color, s=60, alpha=0.7, edgecolors="black", linewidth=0.5,
+            c=color,
+            s=60,
+            alpha=0.7,
+            edgecolors="black",
+            linewidth=0.5,
             label=party,
         )
 
@@ -449,8 +465,11 @@ def plot_ideological_map(
             ax.annotate(
                 last_name,
                 (row["PC1"], row["PC2"]),
-                fontsize=7, ha="left", va="bottom",
-                xytext=(4, 4), textcoords="offset points",
+                fontsize=7,
+                ha="left",
+                va="bottom",
+                xytext=(4, 4),
+                textcoords="offset points",
             )
 
     ax.axhline(0, color="gray", linestyle="-", alpha=0.2)
@@ -458,10 +477,13 @@ def plot_ideological_map(
     ax.set_xlabel("PC1 (primary ideological dimension)")
     ax.set_ylabel("PC2 (secondary dimension)")
     ax.set_title(f"{chamber} — Ideological Map (PC1 vs PC2)")
-    ax.legend(handles=[
-        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
-        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
-    ], loc="best")
+    ax.legend(
+        handles=[
+            Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+            Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+        ],
+        loc="best",
+    )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
@@ -470,7 +492,9 @@ def plot_ideological_map(
 
 
 def plot_pc1_distribution(
-    scores_df: pl.DataFrame, chamber: str, out_dir: Path,
+    scores_df: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
 ) -> None:
     """Overlapping KDE of PC1 scores by party."""
     import seaborn as sns
@@ -514,14 +538,12 @@ def filter_vote_matrix_for_sensitivity(
     vote_cols = [c for c in full_matrix.columns if c != slug_col]
 
     # Restrict to chamber
-    chamber_vote_ids = set(
-        rollcalls.filter(pl.col("chamber") == chamber)["vote_id"].to_list()
-    )
+    chamber_vote_ids = set(rollcalls.filter(pl.col("chamber") == chamber)["vote_id"].to_list())
     prefix = "sen_" if chamber == "Senate" else "rep_"
     vote_cols = [c for c in vote_cols if c in chamber_vote_ids]
-    matrix = full_matrix.filter(
-        pl.col(slug_col).str.starts_with(prefix)
-    ).select([slug_col, *vote_cols])
+    matrix = full_matrix.filter(pl.col(slug_col).str.starts_with(prefix)).select(
+        [slug_col, *vote_cols]
+    )
 
     # Filter 1: Drop near-unanimous votes
     contested_cols = []
@@ -542,9 +564,9 @@ def filter_vote_matrix_for_sensitivity(
     # Filter 2: Drop low-participation legislators
     non_null_counts = filtered.select(
         slug_col,
-        pl.sum_horizontal(
-            *[pl.col(c).is_not_null().cast(pl.Int32) for c in contested_cols]
-        ).alias("n_votes"),
+        pl.sum_horizontal(*[pl.col(c).is_not_null().cast(pl.Int32) for c in contested_cols]).alias(
+            "n_votes"
+        ),
     )
     active_slugs = non_null_counts.filter(pl.col("n_votes") >= min_votes)[slug_col].to_list()
     filtered = filtered.filter(pl.col(slug_col).is_in(active_slugs))
@@ -570,7 +592,9 @@ def run_sensitivity(
     for chamber, default in default_results.items():
         print(f"\n  {chamber}:")
         sens_matrix = filter_vote_matrix_for_sensitivity(
-            full_matrix, rollcalls, chamber,
+            full_matrix,
+            rollcalls,
+            chamber,
             minority_threshold=SENSITIVITY_THRESHOLD,
             min_votes=MIN_VOTES,
         )
@@ -612,8 +636,7 @@ def run_sensitivity(
         print(f"    Shared legislators: {len(shared_slugs)}")
         print(f"    Pearson r: {correlation:.4f}")
         ev_str = ", ".join(
-            f"PC{i+1}={100*v:.1f}%"
-            for i, v in enumerate(pca.explained_variance_ratio_)
+            f"PC{i + 1}={100 * v:.1f}%" for i, v in enumerate(pca.explained_variance_ratio_)
         )
         print(f"    Sensitivity EV: {ev_str}")
 
@@ -636,7 +659,11 @@ def run_sensitivity(
 
         # Plot sensitivity comparison
         _plot_sensitivity_scatter(
-            default_arr, sens_arr, correlation, chamber, plots_dir,
+            default_arr,
+            sens_arr,
+            correlation,
+            chamber,
+            plots_dir,
         )
 
     return findings
@@ -651,8 +678,9 @@ def _plot_sensitivity_scatter(
 ) -> None:
     """Scatter plot comparing default and sensitivity PC1 scores."""
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.scatter(default_pc1, sens_pc1, c="#4C72B0", s=40, alpha=0.7, edgecolors="black",
-               linewidth=0.5)
+    ax.scatter(
+        default_pc1, sens_pc1, c="#4C72B0", s=40, alpha=0.7, edgecolors="black", linewidth=0.5
+    )
 
     # Identity line
     lims = [
@@ -661,8 +689,8 @@ def _plot_sensitivity_scatter(
     ]
     ax.plot(lims, lims, "r--", alpha=0.5, label="Identity line")
 
-    ax.set_xlabel(f"PC1 (default: {MINORITY_THRESHOLD*100:.1f}% threshold)")
-    ax.set_ylabel(f"PC1 (sensitivity: {SENSITIVITY_THRESHOLD*100:.0f}% threshold)")
+    ax.set_xlabel(f"PC1 (default: {MINORITY_THRESHOLD * 100:.1f}% threshold)")
+    ax.set_ylabel(f"PC1 (sensitivity: {SENSITIVITY_THRESHOLD * 100:.0f}% threshold)")
     ax.set_title(f"{chamber} — PC1 Sensitivity (r = {correlation:.4f})")
     ax.legend()
     ax.set_aspect("equal")
@@ -836,14 +864,16 @@ def main() -> None:
                 continue
 
             result = run_pca_for_chamber(
-                matrix, label, args.n_components, legislators, rollcalls,
+                matrix,
+                label,
+                args.n_components,
+                legislators,
+                rollcalls,
             )
             results[label] = result
 
             # Save parquet files
-            result["scores_df"].write_parquet(
-                ctx.data_dir / f"pc_scores_{label.lower()}.parquet"
-            )
+            result["scores_df"].write_parquet(ctx.data_dir / f"pc_scores_{label.lower()}.parquet")
             result["loadings_df"].write_parquet(
                 ctx.data_dir / f"pc_loadings_{label.lower()}.parquet"
             )
@@ -852,12 +882,14 @@ def main() -> None:
 
             # Collect explained variance for combined output
             for i, v in enumerate(result["explained_variance"]):
-                ev_rows.append({
-                    "chamber": label,
-                    "component": f"PC{i+1}",
-                    "explained_variance": v,
-                    "cumulative": float(np.cumsum(result["explained_variance"])[i]),
-                })
+                ev_rows.append(
+                    {
+                        "chamber": label,
+                        "component": f"PC{i + 1}",
+                        "explained_variance": v,
+                        "cumulative": float(np.cumsum(result["explained_variance"])[i]),
+                    }
+                )
 
         # Save combined explained variance
         if ev_rows:
@@ -876,8 +908,12 @@ def main() -> None:
         sensitivity_findings: dict = {}
         if not args.skip_sensitivity:
             sensitivity_findings = run_sensitivity(
-                full_matrix, results, rollcalls, legislators,
-                args.n_components, ctx.plots_dir,
+                full_matrix,
+                results,
+                rollcalls,
+                legislators,
+                args.n_components,
+                ctx.plots_dir,
             )
         else:
             print_header("SENSITIVITY ANALYSIS (SKIPPED)")
@@ -889,7 +925,9 @@ def main() -> None:
             if matrix.height < 3:
                 continue
             validation_results[label] = run_holdout_validation(
-                matrix, label, args.n_components,
+                matrix,
+                label,
+                args.n_components,
             )
 
         # ── Phase 6: Filtering manifest ──
