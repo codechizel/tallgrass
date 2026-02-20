@@ -38,6 +38,11 @@ try:
 except ModuleNotFoundError:
     from run_context import RunContext
 
+try:
+    from analysis.eda_report import build_eda_report
+except ModuleNotFoundError:
+    from eda_report import build_eda_report  # type: ignore[no-redef]
+
 # ── Primer ───────────────────────────────────────────────────────────────────
 # Written to results/<session>/eda/README.md by RunContext on each run.
 
@@ -1699,6 +1704,20 @@ def main() -> None:
         manifests["data_integrity"] = integrity_findings
         manifests["statistical_quality"] = stat_findings
         save_filtering_manifest(manifests, ctx.run_dir)
+
+        # ── 8. HTML report ──
+        print_header("HTML REPORT")
+        build_eda_report(
+            ctx.report,
+            votes=votes,
+            rollcalls=rollcalls,
+            legislators=legislators,
+            manifests=manifests,
+            integrity_findings=integrity_findings,
+            stat_findings=stat_findings,
+            participation=participation,
+            plots_dir=ctx.plots_dir,
+        )
 
         print_header("DONE")
         print(f"  All outputs in: {ctx.run_dir}")

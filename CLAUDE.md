@@ -146,6 +146,16 @@ uv add pymc arviz                                          # Phase 4 (Bayesian)
 uv add xgboost shap ruptures                               # Phase 6
 ```
 
+### HTML Report System
+
+Each analysis phase produces a self-contained HTML report (`{analysis}_report.html`) with SPSS/APA-style tables and embedded plots. Architecture:
+
+- `analysis/report.py` — Generic: section types (`TableSection`, `FigureSection`, `TextSection`), `ReportBuilder`, `make_gt()` helper, Jinja2 template + CSS.
+- `analysis/eda_report.py` — EDA-specific: `build_eda_report()` adds ~19 sections.
+- `RunContext` auto-writes the HTML in `finalize()` if sections were added.
+
+Tables use great_tables with polars DataFrames (no pandas conversion). Plots are base64-embedded PNGs. See ADR-0004 for rationale.
+
 ### Kansas-Specific Analysis Notes
 - Republican supermajority (~72%) means intra-party variation is more interesting than inter-party
 - Expect 3 natural clusters: conservative Republicans, moderate Republicans, Democrats

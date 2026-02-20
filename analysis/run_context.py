@@ -135,6 +135,9 @@ class RunContext:
         self._original_stdout: io.TextIOBase | None = None
         self._start_time: datetime | None = None
 
+        # Lazy-init report builder (avoids importing report.py at module level)
+        self.report = self._init_report()
+
     def __enter__(self) -> RunContext:
         self.setup()
         return self
@@ -146,6 +149,20 @@ class RunContext:
         exc_tb: TracebackType | None,
     ) -> None:
         self.finalize()
+
+    def _init_report(self) -> object:
+        """Initialize a ReportBuilder, or None if the report module isn't available."""
+        try:
+            try:
+                from analysis.report import ReportBuilder
+            except ModuleNotFoundError:
+                from report import ReportBuilder  # type: ignore[no-redef]
+            return ReportBuilder(
+                title=f"{self.analysis_name.upper()} Report",
+                session=self.session,
+            )
+        except ImportError:
+            return None
 
     def setup(self) -> None:
         """Create directories, write primer, and start log capture."""
@@ -194,6 +211,13 @@ class RunContext:
         info_path = self.run_dir / "run_info.json"
         with open(info_path, "w") as f:
             json.dump(run_info, f, indent=2, default=str)
+
+        # Write HTML report if sections were added
+        if self.report is not None and hasattr(self.report, "has_sections"):
+            if self.report.has_sections:
+                self.report.git_hash = run_info["git_commit"]
+                report_path = self.run_dir / f"{self.analysis_name}_report.html"
+                self.report.write(report_path)
 
         # Update latest symlink (relative so it's portable)
         latest = self._analysis_dir / "latest"

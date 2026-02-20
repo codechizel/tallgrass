@@ -1,0 +1,584 @@
+"""EDA-specific HTML report builder.
+
+Builds ~19 sections (11 tables + 8 figures) for the Exploratory Data Analysis
+report. Each section is a small function that slices/aggregates polars DataFrames
+and calls make_gt() or FigureSection.from_file().
+
+Usage (called from eda.py):
+    from analysis.eda_report import build_eda_report
+    build_eda_report(ctx.report, votes=votes, rollcalls=rollcalls, ...)
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import polars as pl
+
+try:
+    from analysis.report import FigureSection, ReportBuilder, TableSection, make_gt
+except ModuleNotFoundError:
+    from report import FigureSection, ReportBuilder, TableSection, make_gt
+
+
+def build_eda_report(
+    report: ReportBuilder,
+    *,
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+    manifests: dict,
+    integrity_findings: dict,
+    stat_findings: dict,
+    participation: pl.DataFrame,
+    plots_dir: Path,
+) -> None:
+    """Build the full EDA HTML report by adding ~19 sections to the ReportBuilder."""
+    _add_session_overview(report, votes, rollcalls, legislators)
+    _add_chamber_party_composition(report, legislators)
+    _add_vote_categories(report, votes)
+    _add_vote_type_figure(report, plots_dir)
+    _add_passage_rates(report, rollcalls)
+    _add_margin_figure(report, plots_dir)
+    _add_margin_stats(report, rollcalls)
+    _add_vote_alignment(report, votes, rollcalls, legislators)
+    _add_rice_cohesion(report, stat_findings)
+    _add_temporal_figure(report, plots_dir)
+    _add_party_breakdown_figure(report, plots_dir)
+    _add_participation_summary(report, participation)
+    _add_participation_figure(report, plots_dir, "House")
+    _add_participation_figure(report, plots_dir, "Senate")
+    _add_filtering_decisions(report, manifests)
+    _add_heatmap_figure(report, plots_dir, "House")
+    _add_heatmap_figure(report, plots_dir, "Senate")
+    _add_integrity_results(report, integrity_findings)
+    _add_analysis_parameters(report)
+    print(f"  Report: {len(report._sections)} sections added")
+
+
+# ── Private section builders ──────────────────────────────────────────────────
+
+
+def _add_session_overview(
+    report: ReportBuilder,
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+) -> None:
+    """Table 1: High-level session counts and date range."""
+    dates = rollcalls["vote_datetime"].sort()
+    date_min = str(dates.first())[:10] if dates.len() > 0 else "N/A"
+    date_max = str(dates.last())[:10] if dates.len() > 0 else "N/A"
+
+    df = pl.DataFrame({
+        "Metric": [
+            "Roll Calls",
+            "Unique Bills",
+            "Legislators",
+            "Individual Votes",
+            "First Vote",
+            "Last Vote",
+        ],
+        "Value": [
+            str(rollcalls.height),
+            str(rollcalls["bill_number"].n_unique()),
+            str(legislators.height),
+            f"{votes.height:,}",
+            date_min,
+            date_max,
+        ],
+    })
+    html = make_gt(df, title="Session Overview")
+    report.add(TableSection(id="session-overview", title="Session Overview", html=html))
+
+
+def _add_chamber_party_composition(
+    report: ReportBuilder, legislators: pl.DataFrame
+) -> None:
+    """Table 2: Chamber x Party crosstab with totals."""
+    cp = (
+        legislators.group_by("chamber", "party")
+        .agg(pl.len().alias("count"))
+        .sort("chamber", "party")
+    )
+    # Pivot to wide format: rows = chamber, columns = parties
+    wide = cp.pivot(on="party", index="chamber", values="count").fill_null(0)
+
+    # Add total column
+    party_cols = [c for c in wide.columns if c != "chamber"]
+    wide = wide.with_columns(
+        pl.sum_horizontal(*[pl.col(c) for c in party_cols]).alias("Total")
+    )
+
+    # Add total row
+    totals = {"chamber": "Total"}
+    for col in [*party_cols, "Total"]:
+        totals[col] = wide[col].sum()
+    wide = pl.concat([wide, pl.DataFrame([totals])], how="diagonal_relaxed")
+
+    html = make_gt(
+        wide,
+        title="Chamber x Party Composition",
+        column_labels={"chamber": "Chamber"},
+        source_note="Counts exceed constitutional seat limits when mid-session replacements occur.",
+    )
+    report.add(TableSection(
+        id="chamber-party", title="Chamber x Party Composition", html=html
+    ))
+
+
+def _add_vote_categories(report: ReportBuilder, votes: pl.DataFrame) -> None:
+    """Table 3: Vote category distribution with counts and cumulative %."""
+    vc = (
+        votes.group_by("vote")
+        .agg(pl.len().alias("count"))
+        .sort("count", descending=True)
+    )
+    total = votes.height
+    vc = vc.with_columns(
+        (pl.col("count") / total * 100).alias("pct"),
+    )
+    # Compute cumulative percentage
+    cum = []
+    running = 0.0
+    for row in vc.iter_rows(named=True):
+        running += row["pct"]
+        cum.append(running)
+    vc = vc.with_columns(pl.Series("cum_pct", cum))
+
+    html = make_gt(
+        vc,
+        title="Vote Category Distribution",
+        subtitle=f"N = {total:,} individual votes",
+        column_labels={
+            "vote": "Category",
+            "count": "Count",
+            "pct": "%",
+            "cum_pct": "Cumulative %",
+        },
+        number_formats={"count": ",.0f", "pct": ".1f", "cum_pct": ".1f"},
+    )
+    report.add(TableSection(
+        id="vote-categories", title="Vote Category Distribution", html=html
+    ))
+
+
+def _add_vote_type_figure(report: ReportBuilder, plots_dir: Path) -> None:
+    """Figure 1: Vote type distribution bar chart."""
+    path = plots_dir / "vote_type_distribution.png"
+    if path.exists():
+        report.add(FigureSection.from_file(
+            "fig-vote-types", "Vote Type Distribution", path,
+            caption="Horizontal bar chart of roll call vote types.",
+        ))
+
+
+def _add_passage_rates(report: ReportBuilder, rollcalls: pl.DataFrame) -> None:
+    """Table 5: Passage rates by vote type."""
+    has_result = rollcalls.filter(pl.col("passed").is_not_null())
+    rates = (
+        has_result.group_by("vote_type")
+        .agg(
+            pl.len().alias("total"),
+            (pl.col("passed") == True).sum().alias("passed"),  # noqa: E712
+        )
+        .sort("total", descending=True)
+        .with_columns(
+            (pl.col("passed") / pl.col("total") * 100).alias("pass_rate"),
+        )
+    )
+    html = make_gt(
+        rates,
+        title="Passage Rates by Vote Type",
+        subtitle=f"N = {has_result.height} roll calls with a result",
+        column_labels={
+            "vote_type": "Vote Type",
+            "total": "N",
+            "passed": "Passed",
+            "pass_rate": "Pass Rate (%)",
+        },
+        number_formats={"pass_rate": ".1f"},
+    )
+    report.add(TableSection(id="passage-rates", title="Passage Rates by Vote Type", html=html))
+
+
+def _add_margin_figure(report: ReportBuilder, plots_dir: Path) -> None:
+    """Figure 2: Vote margin distribution histogram."""
+    path = plots_dir / "vote_margin_distribution.png"
+    if path.exists():
+        report.add(FigureSection.from_file(
+            "fig-margins", "Vote Margin Distribution", path,
+            caption=(
+                "Histogram of Yea % per roll call. Dashed lines at 50% "
+                "(simple majority) and 66.7% (veto override threshold)."
+            ),
+        ))
+
+
+def _add_margin_stats(report: ReportBuilder, rollcalls: pl.DataFrame) -> None:
+    """Table 7: Descriptive statistics for vote margins by chamber."""
+    rc = rollcalls.with_columns(
+        (pl.col("yea_count") / pl.col("total_votes") * 100).alias("yea_pct")
+    )
+    rows = []
+    for chamber in ["House", "Senate", "Overall"]:
+        subset = rc if chamber == "Overall" else rc.filter(pl.col("chamber") == chamber)
+        if subset.height == 0:
+            continue
+        col = subset["yea_pct"]
+        rows.append({
+            "chamber": chamber,
+            "n": subset.height,
+            "mean": col.mean(),
+            "median": col.median(),
+            "std": col.std(),
+            "min": col.min(),
+            "max": col.max(),
+        })
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Vote Margin Descriptive Statistics",
+        subtitle="Yea % across roll calls",
+        column_labels={
+            "chamber": "Chamber",
+            "n": "N",
+            "mean": "Mean",
+            "median": "Median",
+            "std": "SD",
+            "min": "Min",
+            "max": "Max",
+        },
+        number_formats={
+            "mean": ".1f", "median": ".1f", "std": ".1f",
+            "min": ".1f", "max": ".1f",
+        },
+    )
+    report.add(TableSection(
+        id="margin-stats", title="Vote Margin Descriptive Statistics", html=html
+    ))
+
+
+def _add_vote_alignment(
+    report: ReportBuilder,
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+) -> None:
+    """Table 8: Vote alignment classification (bipartisan / party-line / mixed)."""
+    # Replicate the classify_party_line logic to get alignment counts
+    vote_with_party = votes.join(
+        legislators.select("slug", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
+    )
+    substantive = vote_with_party.filter(pl.col("vote").is_in(["Yea", "Nay"]))
+    party_agg = (
+        substantive.group_by("vote_id", "party")
+        .agg(
+            (pl.col("vote") == "Yea").sum().alias("yea"),
+            (pl.col("vote") == "Nay").sum().alias("nay"),
+        )
+        .with_columns(
+            (pl.col("yea") / (pl.col("yea") + pl.col("nay"))).alias("yea_rate")
+        )
+    )
+    pivoted = party_agg.pivot(on="party", index="vote_id", values="yea_rate")
+
+    r_col = "Republican" if "Republican" in pivoted.columns else None
+    d_col = "Democrat" if "Democrat" in pivoted.columns else None
+
+    if not (r_col and d_col):
+        return
+
+    classified = pivoted.with_columns(
+        pl.when(
+            ((pl.col(r_col) > 0.9) & (pl.col(d_col) > 0.9))
+            | ((pl.col(r_col) < 0.1) & (pl.col(d_col) < 0.1))
+        )
+        .then(pl.lit("Bipartisan"))
+        .when(
+            ((pl.col(r_col) > 0.9) & (pl.col(d_col) < 0.1))
+            | ((pl.col(r_col) < 0.1) & (pl.col(d_col) > 0.9))
+        )
+        .then(pl.lit("Party-Line"))
+        .otherwise(pl.lit("Mixed"))
+        .alias("alignment")
+    )
+
+    counts = (
+        classified.group_by("alignment")
+        .agg(pl.len().alias("count"))
+        .sort("count", descending=True)
+    )
+    total = counts["count"].sum()
+    counts = counts.with_columns(
+        (pl.col("count") / total * 100).alias("pct")
+    )
+
+    html = make_gt(
+        counts,
+        title="Vote Alignment Classification",
+        subtitle=(
+            "Bipartisan: both parties >90% same direction. "
+            "Party-line: >90% opposite directions."
+        ),
+        column_labels={"alignment": "Alignment", "count": "N", "pct": "%"},
+        number_formats={"pct": ".1f"},
+    )
+    report.add(TableSection(
+        id="vote-alignment", title="Vote Alignment Classification", html=html
+    ))
+
+
+def _add_rice_cohesion(report: ReportBuilder, stat_findings: dict) -> None:
+    """Table 9: Rice Cohesion Index summary by party."""
+    rice_data = stat_findings.get("rice_summary", [])
+    if not rice_data:
+        return
+
+    rows = []
+    for row in rice_data:
+        rows.append({
+            "party": row["party"],
+            "mean": row["mean"],
+            "std": row["std"],
+            "pct_perfect": (row["pct_perfect"] or 0) * 100,
+            "n": row["n_party_votes"],
+        })
+    df = pl.DataFrame(rows)
+
+    html = make_gt(
+        df,
+        title="Rice Cohesion Index by Party",
+        subtitle="0 = evenly split, 1 = perfect unity",
+        column_labels={
+            "party": "Party",
+            "mean": "Mean",
+            "std": "SD",
+            "pct_perfect": "Perfect Unity (%)",
+            "n": "N (party-votes)",
+        },
+        number_formats={"mean": ".3f", "std": ".3f", "pct_perfect": ".1f", "n": ",.0f"},
+    )
+    report.add(TableSection(id="rice-cohesion", title="Rice Cohesion Index by Party", html=html))
+
+
+def _add_temporal_figure(report: ReportBuilder, plots_dir: Path) -> None:
+    """Figure 3: Temporal activity plot."""
+    path = plots_dir / "temporal_activity.png"
+    if path.exists():
+        report.add(FigureSection.from_file(
+            "fig-temporal", "Temporal Activity", path,
+            caption="Monthly roll call counts by chamber. Expect bursts near session deadlines.",
+        ))
+
+
+def _add_party_breakdown_figure(report: ReportBuilder, plots_dir: Path) -> None:
+    """Figure 4: Party vote breakdown."""
+    path = plots_dir / "party_vote_breakdown.png"
+    if path.exists():
+        report.add(FigureSection.from_file(
+            "fig-party-breakdown", "Party Vote Breakdown", path,
+            caption="Vote category breakdown (Yea/Nay/Absent) by party.",
+        ))
+
+
+def _add_participation_summary(
+    report: ReportBuilder, participation: pl.DataFrame
+) -> None:
+    """Table 12: Participation rate summary statistics per chamber."""
+    rows = []
+    for chamber in ["House", "Senate", "Overall"]:
+        subset = (
+            participation if chamber == "Overall"
+            else participation.filter(pl.col("chamber") == chamber)
+        )
+        if subset.height == 0:
+            continue
+        col = subset["participation_rate"] * 100
+        rows.append({
+            "chamber": chamber,
+            "n": subset.height,
+            "mean": col.mean(),
+            "median": col.median(),
+            "std": col.std(),
+            "min": col.min(),
+            "max": col.max(),
+        })
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Participation Rate Summary",
+        subtitle="Substantive votes (Yea + Nay) / chamber roll calls",
+        column_labels={
+            "chamber": "Chamber",
+            "n": "N",
+            "mean": "Mean (%)",
+            "median": "Median (%)",
+            "std": "SD",
+            "min": "Min (%)",
+            "max": "Max (%)",
+        },
+        number_formats={
+            "mean": ".1f", "median": ".1f", "std": ".1f",
+            "min": ".1f", "max": ".1f",
+        },
+    )
+    report.add(TableSection(
+        id="participation-summary", title="Participation Rate Summary", html=html
+    ))
+
+
+def _add_participation_figure(
+    report: ReportBuilder, plots_dir: Path, chamber: str
+) -> None:
+    """Figure 5/6: Per-legislator participation rates by chamber."""
+    path = plots_dir / f"participation_rates_{chamber.lower()}.png"
+    if path.exists():
+        report.add(FigureSection.from_file(
+            f"fig-participation-{chamber.lower()}",
+            f"{chamber} Participation Rates",
+            path,
+            caption=f"Per-legislator participation rates for the {chamber}, colored by party.",
+        ))
+
+
+def _add_filtering_decisions(report: ReportBuilder, manifests: dict) -> None:
+    """Table 15: Filtering decisions summary (before/after/dropped per filter)."""
+    rows = []
+    for label in ["House", "Senate", "All"]:
+        m = manifests.get(label, {})
+        if not m:
+            continue
+        rows.append({
+            "scope": label,
+            "votes_before": m.get("votes_before", 0),
+            "votes_dropped": m.get("votes_dropped_unanimous", 0),
+            "votes_after": m.get("votes_after", 0),
+            "legislators_before": m.get("legislators_before", 0),
+            "legislators_dropped": m.get("legislators_dropped_low_participation", 0),
+            "legislators_after": m.get("legislators_after", 0),
+        })
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Filtering Decisions",
+        subtitle="Near-unanimous vote removal and low-participation legislator exclusion",
+        column_labels={
+            "scope": "Scope",
+            "votes_before": "Votes (Before)",
+            "votes_dropped": "Votes Dropped",
+            "votes_after": "Votes (After)",
+            "legislators_before": "Legislators (Before)",
+            "legislators_dropped": "Legislators Dropped",
+            "legislators_after": "Legislators (After)",
+        },
+        source_note=(
+            "Votes dropped: minority < 2.5%. "
+            "Legislators dropped: < 20 substantive votes."
+        ),
+    )
+    report.add(TableSection(
+        id="filtering-decisions", title="Filtering Decisions", html=html
+    ))
+
+
+def _add_heatmap_figure(
+    report: ReportBuilder, plots_dir: Path, chamber: str
+) -> None:
+    """Figure 7/8: Agreement heatmap for a chamber."""
+    path = plots_dir / f"agreement_heatmap_{chamber.lower()}.png"
+    if path.exists():
+        report.add(FigureSection.from_file(
+            f"fig-heatmap-{chamber.lower()}",
+            f"{chamber} Agreement Heatmap",
+            path,
+            caption=(
+                f"Pairwise raw agreement among {chamber} legislators on contested votes. "
+                "Ward linkage clustering. Red sidebar = Republican, Blue = Democrat."
+            ),
+        ))
+
+
+def _add_integrity_results(report: ReportBuilder, integrity_findings: dict) -> None:
+    """Table 18: Data integrity check results."""
+    rows = []
+    for item in integrity_findings.get("info", []):
+        rows.append({"status": "OK", "detail": item})
+    for item in integrity_findings.get("warnings", []):
+        rows.append({"status": "WARN", "detail": item})
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Data Integrity Results",
+        subtitle=f"{len(integrity_findings.get('warnings', []))} warnings, "
+                 f"{len(integrity_findings.get('info', []))} info",
+        column_labels={"status": "Status", "detail": "Detail"},
+    )
+    report.add(TableSection(
+        id="integrity-results", title="Data Integrity Results", html=html
+    ))
+
+
+def _add_analysis_parameters(report: ReportBuilder) -> None:
+    """Table 19: Analysis constants used in this run."""
+    # Import the constants from eda.py
+    try:
+        from analysis.eda import (
+            HOUSE_SEATS,
+            MIN_SHARED_VOTES,
+            MIN_VOTES,
+            MINORITY_THRESHOLD,
+            SENATE_SEATS,
+        )
+    except ModuleNotFoundError:
+        from eda import (  # type: ignore[no-redef]
+            HOUSE_SEATS,
+            MIN_SHARED_VOTES,
+            MIN_VOTES,
+            MINORITY_THRESHOLD,
+            SENATE_SEATS,
+        )
+
+    df = pl.DataFrame({
+        "Parameter": [
+            "Minority Threshold",
+            "Min Substantive Votes",
+            "Min Shared Votes (Agreement)",
+            "House Seats",
+            "Senate Seats",
+        ],
+        "Value": [
+            f"{MINORITY_THRESHOLD:.3f} ({MINORITY_THRESHOLD * 100:.1f}%)",
+            str(MIN_VOTES),
+            str(MIN_SHARED_VOTES),
+            str(HOUSE_SEATS),
+            str(SENATE_SEATS),
+        ],
+        "Description": [
+            "Drop votes where minority side < this fraction",
+            "Drop legislators with fewer substantive votes",
+            "Minimum shared votes for pairwise agreement",
+            "Constitutional House seat count",
+            "Constitutional Senate seat count",
+        ],
+    })
+    html = make_gt(
+        df,
+        title="Analysis Parameters",
+        source_note="Changing these values constitutes a sensitivity analysis.",
+    )
+    report.add(TableSection(
+        id="analysis-params", title="Analysis Parameters", html=html
+    ))
