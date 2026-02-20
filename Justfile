@@ -42,6 +42,14 @@ pca *args:
 irt *args:
     uv run python analysis/irt.py {{args}}
 
+# Run clustering analysis
+clustering *args:
+    uv run python analysis/clustering.py {{args}}
+
+# Run network analysis
+network *args:
+    uv run python analysis/network.py {{args}}
+
 # Full check (lint)
 check:
     just lint-check

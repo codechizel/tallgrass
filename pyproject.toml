@@ -30,6 +30,8 @@ dev = [
     "scikit-learn>=1.6",
     "pymc>=5.10",
     "arviz>=0.18",
+    "networkx>=3.6.1",
+    "python-louvain>=0.16",
 ]
 
 [build-system]

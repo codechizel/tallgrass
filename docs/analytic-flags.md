@@ -154,6 +154,71 @@ This is a living document — add entries as each analysis phase surfaces new fi
   - **Limitation:** B depends on only 3 bridging legislators. Thompson's large cross-chamber shift (House +2.43 → Senate +3.44) may reflect genuine ideology change or model noise.
 - **Status:** Resolved as of 2026-02-20 (test equating). Joint MCMC deferred to future work if more shared items become available.
 
+## Flagged Voting Patterns — Network
+
+### Community Detection Confirms Party as Dominant Structure
+
+- **Phase:** Network
+- **Observation:** Louvain community detection at default resolution (1.0) recovers exactly 2 communities for both chambers. NMI = 1.0 and ARI = 1.0 vs party labels in both House and Senate. Community assignments are identical to k-means k=2 clusters (NMI = 1.0, ARI = 1.0).
+- **Explanation:** At Kappa threshold 0.40 ("substantial" agreement), the party boundary is the dominant network structure. Within-party edge density is much higher than cross-party edge density. No misclassified legislators at any resolution that recovers 2 communities.
+- **Downstream:**
+  - **Prediction:** Community membership at default resolution adds no information beyond party. Higher-resolution communities (3+) may provide finer features.
+  - **Interpretation:** The convergence of community detection, clustering, and simple party labels confirms the overwhelming party-line voting pattern.
+
+### Zero Cross-Party Edges at κ=0.40
+
+- **Phase:** Network
+- **Observation:** Party assortativity = 1.0 in both chambers. At Kappa threshold 0.40, there are zero cross-party edges — the graph is two completely disconnected components (one per party). House has 4,604 edges, all within-party (94% of possible within-party edges). Senate has 495 edges, all within-party (91%).
+- **Explanation:** Kappa corrects for the 82% Yea base rate. After correction, no cross-party pair reaches "substantial" (0.40) agreement. The Senate's maximum cross-party Kappa is only 0.078 (Dietrich–Pettey). The House maximum is 0.369 (Schreiber–Tom Sawyer).
+- **Downstream:**
+  - Community detection at default resolution trivially recovers party labels (NMI=1.0, ARI=1.0) because it's finding disconnected components, not detecting subtle structure. This result does not add information beyond assortativity=1.0.
+  - Betweenness centrality is computed within each disconnected component. "High betweenness" means central within own party — not a bridge between parties. No legislator bridges R and D at this threshold.
+  - All centrality measures are within-party measures. They identify intra-party structural importance, not bipartisan connectors.
+
+### Rep. Mark Schreiber (R, House) — Most Bipartisan House Member
+
+- **Phase:** Network
+- **Observation:** Schreiber has the highest cross-party Kappa in the House: 0.369 with Tom Sawyer (D). All 10 House cross-party Kappa values above 0.30 involve Schreiber. IRT ideal point: +0.018 (essentially zero — the most centrist Republican). Party loyalty: 0.617 (low for House R).
+- **Explanation:** Schreiber votes more like Democrats than any other Republican. At threshold 0.30, his cross-party edges make the House network a single connected component (vs 2 components at 0.40). He is the only legislator whose Kappa with the opposing party reaches even "fair" agreement.
+- **Downstream:**
+  - **Prediction:** Schreiber is likely the hardest House Republican to predict. His near-zero IRT position and low loyalty suggest he votes on issue-specific rather than party-line grounds.
+  - **Interpretation:** In the Senate, the maximum cross-party Kappa is only 0.078 — the Senate is far more polarized than the House. The House has at least one genuine cross-party actor; the Senate does not.
+
+### Tyson and Thompson — Lower Within-Republican Edge Weights
+
+- **Phase:** Network
+- **Observation:** Tyson's mean within-R edge weight = 0.493; Thompson's = 0.513. R-R median = 0.665. Both are 0.15–0.17 below median. Crucially, Tyson has only 5 out of 31 possible R-R edges (16%), meaning her Kappa with 26 other Rs falls below 0.40. Thompson keeps 27/31 (87%).
+- **Explanation:** Tyson is genuinely isolated within her party — disconnected from 84% of Republican senators. Thompson is well-connected but with weaker-than-average edge weights. This quantifies the "Tyson paradox" in network terms: despite her extreme IRT position, Tyson's routine-bill dissent makes her pairwise agreement with most Rs only "fair" or below.
+- **Downstream:** Tyson's 5 edges make her nearly an isolate within the R component. Thompson's position is less extreme — weaker connections, but still integrated.
+
+### Within-Party Community Structure — Near Zero Modularity
+
+- **Phase:** Network
+- **Observation:** Within-party Louvain modularity: House R = 0.010, House D = 0.026, Senate R = 0.021, Senate D = -0.000. These are indistinguishable from random partitions.
+- **Explanation:** Within-party graphs are extremely dense (House R: 93.5% of possible edges, House D: 98.3%). Louvain cannot find meaningful community structure in a near-complete graph. The multi-resolution sweep shows a sharp jump from 2–3 communities to 35+ (House) or 10+ (Senate) at resolution 1.25, with no gradual emergence of subcaucuses. This confirms clustering's finding: within-party variation is continuous, not factional.
+- **Downstream:** Within-party community labels from network analysis should not be used as features — they are noise. Continue using continuous features (IRT, party loyalty) for within-party differentiation.
+
+### Veto Override Subnetwork — Kappa Undefined for Homogeneous Votes
+
+- **Phase:** Network
+- **Observation:** Override subnetwork: House 21 edges, Senate 2 edges (at κ=0.40). The near-zero edge count is a methodological artifact, not just a substantive finding.
+- **Explanation:** With 17 override votes per chamber and near-unanimous within-party voting, most legislator pairs vote identically on all shared overrides. Cohen's Kappa requires both classes (Yea and Nay) to compute — identical-vote pairs produce NaN (undefined Kappa), which maps to no edge. The ~7,100 sklearn warnings in the run log are from these NaN computations. The 21 House edges likely come from pairs where absences or rare defections produced enough variation for Kappa to be defined.
+- **Downstream:** Override network is too sparse for any graph analysis. Kappa is the wrong metric for near-unanimous vote subsets. If override behavior is needed for prediction, use raw Yea/Nay counts or a party-defection indicator, not pairwise Kappa.
+
+### High-Discrimination Subnetwork — Denser, Not More Informative
+
+- **Phase:** Network
+- **Observation:** High-disc network (|beta| > 1.5): House 4,763 edges (vs 4,604 full), Senate 537 (vs 495). More edges, not fewer.
+- **Explanation:** High-discrimination bills are the most partisan — everyone votes the party line. This makes within-party Kappa values higher (more agreement on the included bills), pushing more pairs above the 0.40 threshold. The high-disc subnetwork is an even denser version of the same party-dominated structure.
+- **Downstream:** Does not provide novel cross-party signal. Useful for confirming the full network is dominated by ideological agreement (not noise from unanimous votes), but the high-disc subnetwork is not a better input for finding bipartisan structure.
+
+### Threshold Sensitivity — Schreiber Transition at κ=0.30
+
+- **Phase:** Network
+- **Observation:** House has 1 component at κ=0.30 (connected graph), then 2 components at κ=0.40 (party split). Senate has 2 components at all thresholds (0.30–0.60). At κ=0.60, both chambers split further (House: 3 components, Senate: 3 components).
+- **Explanation:** The House 1→2 component transition between 0.30 and 0.40 is caused by Schreiber's cross-party edges (max κ=0.369 with Democrats). He is the sole link between parties at the lower threshold. The Senate never connects because its max cross-party κ is only 0.078.
+- **Downstream:** The 0.40 threshold is substantively meaningful — it's precisely the level where cross-party agreement vanishes. The choice of threshold is not arbitrary; it corresponds to a real phase transition in the data.
+
 ## Template
 
 ```
