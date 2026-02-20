@@ -80,6 +80,45 @@ This is a living document — add entries as each analysis phase surfaces new fi
 - **Interpretation:** High agreement confirms both methods recover the same 1D structure. The Senate's lower r=0.939 reflects two things: (1) IRT weights discriminating bills more heavily (inflating Tyson/Thompson), and (2) IRT handles sparse data (Miller) without imputation artifacts. See `analysis/design/tyson_paradox.md` for a detailed investigation of the largest PCA-IRT rank divergences.
 - **Downstream:** Use IRT ideal points (not PCA scores) as the primary input for clustering and network analysis. IRT provides uncertainty estimates and handles missing data properly. But be aware that IRT ideal points systematically inflate the ranking of contrarian legislators (Tyson, Thompson) relative to PCA.
 
+## Flagged Voting Patterns — Clustering
+
+### k=2 Optimal, k=3 Hypothesis Rejected
+
+- **Phase:** Clustering
+- **Observation:** Both hierarchical (Ward on Kappa) and k-means (on IRT) selected k=2 as optimal for both chambers. Silhouette at k=2 = 0.82 (House), 0.79 (Senate); at k=3 = 0.64 (House), 0.57 (Senate). GMM selected k=4 by BIC.
+- **Explanation:** The moderate/conservative Republican distinction is continuous, not discrete. The party boundary is the dominant clustering structure. With a ~72% Republican supermajority, intra-R variation is spread smoothly across the ideal-point spectrum. GMM's k=4 likely captures distributional shape (e.g., the long right tail) rather than genuine factions.
+- **Downstream:**
+  - **Network:** Community detection may find finer structure than k-means because it operates on pairwise agreement edges, not centroids. Test whether Louvain/modularity recovers 3+ communities.
+  - **Prediction:** Cluster labels at k=2 are equivalent to party and won't add predictive power. Consider party loyalty as a continuous feature instead.
+
+### Tyson and Thompson Cluster Assignments
+
+- **Phase:** Clustering
+- **Observation:** Tyson (xi=+4.17, loyalty=0.417) and Thompson (xi=+3.44, loyalty=0.472) both cluster with conservative Rs (Cluster 0) at k=2. They have the two lowest party loyalty scores in the Senate.
+- **Explanation:** Their extreme IRT positions dominate the 1D clustering — they're far from Democrats and firmly in the R cluster. The 2D (IRT x loyalty) scatter plot visually separates them from core party members despite same cluster assignment.
+- **Downstream:** The party loyalty metric successfully distinguishes "ideologically extreme" from "reliable caucus member." For network analysis, Tyson and Thompson may have lower within-cluster edge weights than typical Rs.
+
+### Miller and Hill Cluster Confidence
+
+- **Phase:** Clustering
+- **Observation:** Miller (xi=-2.19, loyalty=1.000) clusters with Democrats; Hill (xi=+1.44, loyalty=1.000) clusters with Republicans. Miller has perfect loyalty on his contested votes; Hill has widest HDI in Senate.
+- **Explanation:** Miller's sparse data (30/194 votes) produces wider IRT uncertainty, but his cluster assignment is unambiguous (firmly D). Hill's wide HDI (2.03) means his ideal point could range from moderate to solidly conservative, but he still clusters with Rs.
+- **Downstream:** Both assignments are stable across methods (ARI = 0.90+ across all pairs). No special handling needed.
+
+### Cross-Method Agreement — Very Strong
+
+- **Phase:** Clustering
+- **Observation:** Mean ARI = 0.958 (House), 0.935 (Senate) across hierarchical/k-means/GMM. Hierarchical and k-means are perfectly aligned (ARI = 1.0 for Senate).
+- **Explanation:** The 2-cluster structure is extremely robust. The high ARI despite different input spaces (Kappa distance vs IRT ideal points) and algorithms confirms the party split is the overwhelming signal.
+- **Downstream:** High confidence that any network community detection finding >2 groups represents genuinely finer structure, not algorithmic noise.
+
+### Veto Overrides — Strictly Party-Line
+
+- **Phase:** Clustering
+- **Observation:** 17 veto override votes per chamber. R cluster: 98% Yea (House), 98% Yea (Senate). D cluster: 1% Yea (House), 1% Yea (Senate). No cross-party coalition detected.
+- **Explanation:** Unlike Congress where veto overrides often produce bipartisan coalitions, Kansas overrides in the 2025-26 session are strictly partisan. The R supermajority can override unilaterally without D votes.
+- **Downstream:** Veto override subgroup adds no novel clustering structure. Network analysis may find override votes are among the most party-line (highest discrimination).
+
 ## Template
 
 ```

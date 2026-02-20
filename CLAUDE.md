@@ -122,6 +122,7 @@ Each analysis phase has a design document in `analysis/design/` recording the st
 - `analysis/design/eda.md` — Binary encoding, filtering thresholds, agreement metrics
 - `analysis/design/pca.md` — Imputation, standardization, sign convention, holdout design
 - `analysis/design/irt.md` — Priors (Normal(0,1) discrimination, anchors), MCMC settings, missing data handling
+- `analysis/design/clustering.md` — Three methods for robustness, party loyalty metric, k=2 finding
 
 ## Analytics
 
@@ -176,7 +177,7 @@ Each entry records what was observed, which phase found it, why it matters, and 
 
 ### Kansas-Specific Analysis Notes
 - Republican supermajority (~72%) means intra-party variation is more interesting than inter-party
-- Expect 3 natural clusters: conservative Republicans, moderate Republicans, Democrats
+- Clustering (2026-02-20) found k=2 optimal (party split); initial k=3 hypothesis rejected — intra-R variation is continuous
 - 34 veto override votes are analytically rich (cross-party coalitions, 2/3 threshold)
 - Beta-Binomial and Bayesian IRT are the recommended Bayesian starting points
 
