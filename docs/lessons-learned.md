@@ -117,3 +117,65 @@ Two legislators (Scott Hill and Silas Miller) appear in both chambers — they l
 **Validation**: Service windows were confirmed non-overlapping. No duplicate votes (same legislator + same rollcall) were found. The data is correct.
 
 **Lesson**: Always validate legislator counts against known chamber sizes. The Kansas House has **125** seats and the Senate has **40** seats — these are constitutional constants. Any count above those numbers signals mid-session turnover and requires verifying that service windows don't overlap (which would indicate a scraping bug). Downstream analysis must account for partial-session legislators: their participation rates will be low by design, and ideal point estimates will be less stable.
+
+---
+
+## Bug 4: "Not passed" Classified as Passed
+
+**Discovered during**: EDA report review (2026-02-19)
+
+**Symptom**: The EDA report showed 100% passage rate for Final Action votes. Manual inspection of the motion text revealed 4 rollcalls with "Not passed" or "Not  passed" (double space) in the motion, all incorrectly marked `passed=True`.
+
+**Root cause**: `_derive_passed()` checked the positive regex `\b(passed)\b` before the negative patterns. Since "Not passed" contains the word "passed", the positive match fired first and returned `True`.
+
+**Fix**: Reorder the checks — test failure patterns (`\b(not\s+passed|failed|rejected)\b`) first, then positive patterns.
+
+**Impact**: 4 rollcalls (1 Final Action, 3 Emergency Final Action) had `passed=True` when they should have been `False`. This corrupted passage rate statistics. All individual vote records for these rollcalls were unaffected (votes were correctly counted), only the rollcall-level `passed` boolean was wrong.
+
+**Lesson**: When regex-matching result text, always check negations first. String containment is not semantic — "not passed" *contains* "passed". This is a textbook order-of-evaluation bug.
+
+---
+
+## Bug 5: get_text(strip=True) Drops Spaces Around Inline Tags
+
+**Discovered during**: Scraper code review (2026-02-19)
+
+**Symptom**: 53 motions in the rollcalls CSV had mangled text like `"Amendment bySenator Franciscowas rejected"` instead of `"Amendment by Senator Francisco was rejected"`.
+
+**Root cause**: BeautifulSoup's `get_text(strip=True)` strips whitespace from each text node individually, then concatenates them **without any separator**. When an `<h3>` tag contains inline `<a>` elements (as Committee of the Whole amendment motions do), the spaces between text nodes and the `<a>` tag are lost:
+
+```html
+<h3>... Amendment by <a href="..."> Senator Francisco</a> was rejected ...</h3>
+```
+
+Text nodes: `"Amendment by "`, `" Senator Francisco"`, `" was rejected"` → after strip each → `"Amendment by"`, `"Senator Francisco"`, `"was rejected"` → concatenated → `"Amendment bySenator Franciscowas rejected"`.
+
+**Fix**: Use `get_text(separator=" ", strip=True)` which inserts a space between text nodes, then collapse multiple spaces with `" ".join(text.split())`. Extracted as a `_clean_text()` helper.
+
+**Impact**: All 53 affected motions were Committee of the Whole amendment votes. The mangling was cosmetic — vote_type and passed classification still worked because the prefix "Committee of the Whole" and keyword "rejected" were in the non-mangled parts. But the data was ugly and would cause issues for text-based searches.
+
+**Lesson**: `get_text(strip=True)` is almost never what you want for elements with inline children. Always use `separator=" "` when the element might contain `<a>`, `<span>`, `<em>`, or other inline tags.
+
+---
+
+## Gotcha: Legislative Day vs Wall Clock Time
+
+**Discovered during**: Scraper code review (2026-02-19)
+
+**Symptom**: 3 rollcalls have `vote_datetime` (from the vote_id timestamp) on March 18 but `vote_date` (from the h3 on the page) on March 17.
+
+**Root cause**: These are late-night House votes where the legislative session extended past midnight. The legislature considers it still the "March 17 session" even though the clock says March 18. The h3 date reflects the legislative day; the vote_id timestamp reflects the wall clock.
+
+**Not a bug** — both values are correct for their respective meanings. `vote_date` is the authoritative legislative day. `vote_datetime` is the precise wall clock time for ordering.
+
+**Lesson**: Legislative bodies operate on "legislative days" that don't always align with calendar days. When votes extend past midnight, the session date stays the same. Our data correctly preserves both values.
+
+---
+
+## Gotcha: Null bill_title on Amendment Vote Pages
+
+**Discovered during**: Scraper code review (2026-02-19)
+
+15 rollcalls (all Senate Committee of the Whole amendment votes) have null `bill_title` because their vote pages have no `<h4>` tag and the `<h2>` contains only `[`. These pages simply don't include the bill title — it's a quirk of how the KS Legislature website renders amendment-specific vote pages.
+
+`bill_number` is always present and can be used to look up the title from other rollcalls for the same bill. This is a cosmetic gap, not a data integrity issue.

@@ -27,6 +27,20 @@ from ks_vote_scraper.output import save_csvs
 from ks_vote_scraper.session import KSSession
 
 
+def _clean_text(element: BeautifulSoup) -> str:
+    """Extract text from a BeautifulSoup element, preserving spaces around inline tags.
+
+    get_text(strip=True) strips each text node then concatenates WITHOUT separators,
+    which drops spaces around inline elements like <a>.  For example, an <h3> containing
+    ``Amendment by <a>Senator Francisco</a> was rejected`` becomes the mangled
+    ``Amendment bySenator Franciscowas rejected``.
+
+    Using separator=" " inserts a space between text nodes, then we collapse any
+    resulting multiple spaces into one.
+    """
+    return " ".join(element.get_text(separator=" ", strip=True).split())
+
+
 class KSVoteScraper:
     """Scrapes Kansas Legislature roll call votes from kslegislature.gov."""
 
@@ -327,16 +341,16 @@ class KSVoteScraper:
         )
         if not title_heading:
             for h4 in soup.find_all("h4"):
-                text = h4.get_text(strip=True)
+                text = _clean_text(h4)
                 if text.startswith("AN ACT") or len(text) > 50:
                     bill_title = text
                     break
         else:
-            bill_title = title_heading.get_text(strip=True)
+            bill_title = _clean_text(title_heading)
 
         if not bill_title:
             for h4 in soup.find_all("h4"):
-                text = h4.get_text(strip=True)
+                text = _clean_text(h4)
                 if len(text) > 30 and not text.startswith(
                     ("SB", "HB", "On roll", "Yea", "Nay", "Senate", "House")
                 ):
@@ -344,12 +358,16 @@ class KSVoteScraper:
                     break
 
         # Extract vote description from <h3> (not h2)
+        # Must use _clean_text (separator=" ") because h3 tags can contain
+        # inline <a> elements for legislator names in Committee of the Whole
+        # motions.  get_text(strip=True) would drop spaces around the <a>,
+        # producing mangled text like "Amendment bySenator Franciscowas rejected".
         chamber = ""
         vote_date = ""
         motion = ""
 
         for h3 in soup.find_all("h3"):
-            text = h3.get_text(strip=True)
+            text = _clean_text(h3)
             match = re.match(
                 r"(Senate|House)\s*-\s*(.+?)\s*-\s*(\d{2}/\d{2}/\d{4})$",
                 text,
@@ -363,13 +381,13 @@ class KSVoteScraper:
         # Fallback: looser parse
         if not chamber:
             for h3 in soup.find_all("h3"):
-                text = h3.get_text(strip=True)
+                text = _clean_text(h3)
                 if text.startswith("Senate") or text.startswith("House"):
                     chamber = "Senate" if text.startswith("Senate") else "House"
                     date_match = re.search(r"(\d{2}/\d{2}/\d{4})", text)
                     if date_match:
                         vote_date = date_match.group(1)
-                    motion = text.replace(chamber, "").strip(" -")
+                    motion = text.replace(chamber, "", 1).strip(" -")
                     if vote_date:
                         motion = motion.replace(vote_date, "").strip(" -")
                     break
@@ -528,13 +546,15 @@ class KSVoteScraper:
         if not result:
             return None
         result_lower = result.lower()
-        if re.search(r"\b(passed|adopted|prevailed|concurred)\b", result_lower):
-            return True
-        if re.search(r"\b(failed|rejected)\b", result_lower):
+        # Check failure patterns FIRST — "not passed" contains "passed", so the
+        # positive regex would incorrectly match if checked first.
+        if re.search(r"\b(not\s+passed|failed|rejected)\b", result_lower):
             return False
         if "sustained" in result_lower:
             # "Veto sustained" means the bill failed
             return False
+        if re.search(r"\b(passed|adopted|prevailed|concurred)\b", result_lower):
+            return True
         return None
 
     # -- Step 4: Enrich legislator data ----------------------------------------
@@ -568,7 +588,7 @@ class KSVoteScraper:
             # Full name from <h1> containing "Senator" or "Representative"
             name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
             if name_h1:
-                full_name = name_h1.get_text(strip=True)
+                full_name = _clean_text(name_h1)
                 # Strip title prefix and leadership suffix
                 full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
                 full_name = re.sub(r"\s*-\s*(Senate|House)\s+.*$", "", full_name)
