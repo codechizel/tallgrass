@@ -179,3 +179,34 @@ Text nodes: `"Amendment by "`, `" Senator Francisco"`, `" was rejected"` → aft
 15 rollcalls (all Senate Committee of the Whole amendment votes) have null `bill_title` because their vote pages have no `<h4>` tag and the `<h2>` contains only `[`. These pages simply don't include the bill title — it's a quirk of how the KS Legislature website renders amendment-specific vote pages.
 
 `bill_number` is always present and can be used to look up the title from other rollcalls for the same bill. This is a cosmetic gap, not a data integrity issue.
+
+---
+
+## Lesson 6: Positive-Constrained β Prior Silences Half the Ideological Signal
+
+**Discovered during:** IRT audit (2026-02-20)
+
+**Symptom:** The IRT model's beta (discrimination) distribution was bimodal: a cluster at β ≈ 7 (party-line R-Yea bills) and a cluster at β ≈ 0.17 (all other contested bills). All 37 bills where Democrats voted Yea had β < 0.39 — the model treated them as uninformative noise.
+
+**Root cause:** The LogNormal(0.5, 0.5) prior constrains β > 0. With `P(Yea) = logit⁻¹(β·ξ - α)` and β > 0, the probability of voting Yea always increases with ξ (conservatism). Bills where Democrats vote Yea need β < 0 to be modeled correctly. The positive constraint makes this impossible, so the model assigns near-zero discrimination.
+
+The design doc incorrectly claimed "alpha handles directionality." Alpha shifts the probability curve up/down (threshold) but cannot flip its slope (direction). Only the sign of β controls direction.
+
+**Why the standard recommendation was wrong for us:** The LogNormal prior is a standard recommendation for IRT models using *soft identification* (priors only). Our model uses *hard anchors* (two legislators fixed at ξ = ±1), which already solve the sign-switching problem. The positive constraint was redundant and actively harmful — it solved a problem the anchors had already solved, at the cost of discarding 12.5% of bills.
+
+**Fix:** Switch to `pm.Normal("beta", mu=0, sigma=1)`. Experiment results (500/300 draws):
+
+| Metric | LogNormal(0.5,0.5) | Normal(0,1) |
+|---|---|---|
+| Holdout accuracy | 90.8% | **94.3%** (+3.5%) |
+| Holdout AUC-ROC | 0.954 | **0.979** |
+| D-Yea \|β\| mean | 0.186 | **2.384** |
+| ξ ESS min | 21 | **203** (10× better) |
+| Divergences | 0 | 0 |
+| PCA Pearson r | 0.950 | **0.972** |
+
+Zero sign-switching. Zero divergences. Better on every metric.
+
+**Lesson:** When using hard anchors in Bayesian IRT, an unconstrained Normal prior on discrimination is both simpler and better than a positive-constrained LogNormal. The anchors provide identification; the prior should provide regularization, not constraints. Don't blindly follow "standard" priors without checking whether their assumptions (soft identification) match your model (hard identification).
+
+**See also:** `analysis/design/beta_prior_investigation.md` for the full investigation, experiment protocol, and plots.

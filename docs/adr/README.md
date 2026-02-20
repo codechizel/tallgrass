@@ -33,6 +33,7 @@ What are the trade-offs?
 | [0003](0003-two-phase-fetch-parse.md) | Two-phase fetch/parse pattern | Accepted | 2026-02-19 |
 | [0004](0004-html-report-system.md) | HTML report system | Accepted | 2026-02-19 |
 | [0005](0005-pca-implementation-choices.md) | PCA implementation choices | Accepted | 2026-02-19 |
+| [0006](0006-irt-implementation-choices.md) | IRT implementation choices | Accepted | 2026-02-19 |
 
 ## Creating a New ADR
 

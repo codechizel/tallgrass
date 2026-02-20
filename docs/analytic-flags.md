@@ -39,6 +39,44 @@ This is a living document — add entries as each analysis phase surfaces new fi
 - **Interpretation:** This is not a traditional ideological dimension. It captures a tendency to vote against the chamber consensus on uncontroversial legislation. Tyson is the primary driver, Thompson secondary, with Miller's position artifactual.
 - **Downstream:** When interpreting Senate clustering results, the Tyson/Thompson pattern may create a spurious "cluster" that is really just two contrarian voters, not a substantive ideological faction. Consider whether PC2 should be downweighted or excluded in clustering inputs.
 
+### Sen. Silas Miller (D) — IRT Update
+
+- **Phase:** IRT
+- **Observation:** IRT ideal point xi=-0.892, HDI=[-1.341, -0.439], width=0.902 (13th widest of 42 senators). Despite having only 30/194 votes (15.5%), his HDI is not the widest — extreme conservative senators have wider intervals due to fewer discriminating bills at the tail.
+- **Explanation:** IRT handles Miller's sparse data natively (absences absent from likelihood, no imputation). His 30 observed votes are consistent enough to produce a reasonably constrained estimate. The PC2 artifact from PCA does not carry over — this is exactly the improvement IRT provides over PCA for sparse legislators.
+- **Downstream:**
+  - **Clustering:** HDI width of 0.902 means his ideal point is less certain than most Democrats. Consider weighting by 1/xi_sd or flagging his cluster assignment.
+  - **Bridging:** A joint cross-chamber IRT model could use his ~300+ House votes to tighten the Senate estimate further. Deferred to future enhancement.
+
+### Sen. Scott Hill (R)
+
+- **Phase:** IRT
+- **Observation:** Widest HDI in Senate: width=2.028 (xi=+1.329, HDI=[+0.398, +2.426]). Well-separated from the pack (next widest is 1.412).
+- **Explanation:** Likely low participation on contested votes or voting pattern that doesn't align cleanly with the 1D model. Warrants investigation.
+- **Downstream:** Cluster assignment is lowest-confidence in Senate. Flag in any ranking or comparison.
+
+### House ESS Warning
+
+- **Phase:** IRT
+- **Observation:** Minimum ESS for House ideal points is 214 (threshold: 400). All other diagnostics pass (R-hat < 1.01, 0 divergences, E-BFMI > 0.9).
+- **Explanation:** One or a few House ideal points have lower effective sample size, likely legislators at the extreme of the distribution where the sampler explores less efficiently. With 2 chains × 2000 draws, ESS=214 still provides reasonable posterior summaries but is suboptimal.
+- **Downstream:** If precise ranking of extreme legislators matters, re-run House with `--n-chains 4` to double ESS. For current purposes (forest plots, clustering inputs), ESS=214 is adequate.
+
+## Flagged Voting Patterns — IRT
+
+### Sensitivity Analysis: Highly Robust
+
+- **Phase:** IRT
+- **Observation:** Ideal points are extremely stable across minority thresholds. Pearson r between 2.5% and 10% runs: House r=0.9982, Senate r=0.9930.
+- **Interpretation:** The 1D ideological structure is not driven by borderline-contested votes. Removing them barely changes legislator positions. This validates the 2.5% default threshold.
+
+### PCA-IRT Agreement
+
+- **Phase:** IRT
+- **Observation:** Pearson r with PCA PC1: House r=0.9499, Senate r=0.9242. Both above 0.90, House just below the 0.95 "strong" threshold.
+- **Interpretation:** High agreement confirms both methods recover the same 1D structure. The slight reduction from 0.95 in House may reflect IRT's ability to weight discriminating bills differently (via beta parameters) rather than treating all votes equally like PCA. Senate's lower r=0.92 likely reflects IRT better handling the sparse data (Miller, etc.) that PCA imputes.
+- **Downstream:** Use IRT ideal points (not PCA scores) as the primary input for clustering and network analysis. IRT provides uncertainty estimates and handles missing data properly.
+
 ## Template
 
 ```

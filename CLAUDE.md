@@ -115,6 +115,14 @@ Session uses full years in results paths: `2025-2026` (not `2025-26` or `2025_26
 
 Significant technical decisions are documented in `docs/adr/`. See `docs/adr/README.md` for the full index and template.
 
+## Analysis Design Choices
+
+Each analysis phase has a design document in `analysis/design/` recording the statistical assumptions, priors, thresholds, and methodological choices that shape results and carry forward into downstream phases. **Read these before interpreting results or adding a new phase.** See `analysis/design/README.md` for the index.
+
+- `analysis/design/eda.md` — Binary encoding, filtering thresholds, agreement metrics
+- `analysis/design/pca.md` — Imputation, standardization, sign convention, holdout design
+- `analysis/design/irt.md` — Priors (LogNormal discrimination, anchors), MCMC settings, missing data handling
+
 ## Analytics
 
 The `Analytic_Methods/` directory contains 28 documents covering every analytical method applicable to our data. See `Analytic_Methods/00_overview.md` for the full index and recommended pipeline.

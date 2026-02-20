@@ -38,6 +38,10 @@ eda *args:
 pca *args:
     uv run python analysis/pca.py {{args}}
 
+# Run Bayesian IRT analysis
+irt *args:
+    uv run python analysis/irt.py {{args}}
+
 # Full check (lint)
 check:
     just lint-check
