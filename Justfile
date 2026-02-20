@@ -50,6 +50,10 @@ clustering *args:
 network *args:
     uv run python analysis/network.py {{args}}
 
+# Run prediction analysis
+prediction *args:
+    uv run python analysis/prediction.py {{args}}
+
 # Full check (lint)
 check:
     just lint-check

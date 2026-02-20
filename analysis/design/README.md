@@ -15,6 +15,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 3. IRT | [irt.md](irt.md) | Priors, anchor selection, missing data handling |
 | 4. Clustering | [clustering.md](clustering.md) | Three methods for robustness, party loyalty metric, Ward on Kappa |
 | 5. Network | [network.md](network.md) | Kappa threshold, Louvain multi-resolution, centrality measures, NaN = no edge |
+| 6. Prediction | [prediction.md](prediction.md) | XGBoost primary, skip cluster/community labels, IRT features dominate, 82% base rate |
 
 ## Investigations
 
