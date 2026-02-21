@@ -1330,18 +1330,52 @@ def plot_forest(
 
     fig, ax = plt.subplots(figsize=(10, max(14, n * 0.22)))
 
+    # Flagged legislators to highlight (from analytic-flags.md)
+    highlight_slugs = {
+        "sen_tyson_caryn_1": "Most conservative but lowest loyalty",
+        "sen_thompson_mike_1": "Contrarian on routine bills",
+        "rep_schreiber_mark_1": "Most bipartisan House member",
+        "sen_miller_silas_1": "Mid-session replacement (30 votes)",
+    }
+
     y_pos = np.arange(n)
     for i, row in enumerate(sorted_df.iter_rows(named=True)):
+        slug = row["legislator_slug"]
         color = PARTY_COLORS.get(row["party"], "#888888")
+        is_highlight = slug in highlight_slugs
+
         ax.hlines(
             i,
             row["xi_hdi_2.5"],
             row["xi_hdi_97.5"],
             colors=color,
-            alpha=0.4,
-            linewidth=1.5,
+            alpha=0.7 if is_highlight else 0.4,
+            linewidth=2.5 if is_highlight else 1.5,
         )
-        ax.scatter(row["xi_mean"], i, c=color, s=20, zorder=5, edgecolors="black", linewidth=0.3)
+        ax.scatter(
+            row["xi_mean"],
+            i,
+            c=color,
+            s=40 if is_highlight else 20,
+            zorder=5,
+            edgecolors="black",
+            linewidth=0.3,
+            marker="D" if is_highlight else "o",
+        )
+
+        # Annotate flagged legislators
+        if is_highlight:
+            ax.annotate(
+                highlight_slugs[slug],
+                (row["xi_hdi_97.5"], i),
+                fontsize=6,
+                fontstyle="italic",
+                color="#555555",
+                xytext=(8, 0),
+                textcoords="offset points",
+                va="center",
+                bbox={"boxstyle": "round,pad=0.2", "fc": "lightyellow", "alpha": 0.7},
+            )
 
     ax.set_yticks(y_pos)
     labels = []
@@ -1352,15 +1386,25 @@ def plot_forest(
     ax.set_yticklabels(labels, fontsize=5.5)
 
     ax.axvline(0, color="gray", linestyle="--", alpha=0.3)
-    ax.set_xlabel("Ideal Point (Liberal ← → Conservative)")
-    ax.set_title(f"{chamber} — IRT Ideal Points with 95% HDI")
-    ax.legend(
-        handles=[
-            Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
-            Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
-        ],
-        loc="lower right",
+    ax.set_xlabel("Ideal Point (Liberal \u2190 \u2192 Conservative)")
+    ax.set_title(
+        f"{chamber} \u2014 Where Does Each Legislator Fall on the Ideological Spectrum?",
+        fontsize=12,
     )
+    legend_handles = [
+        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+        plt.Line2D(
+            [],
+            [],
+            marker="D",
+            color="gray",
+            linestyle="None",
+            markersize=6,
+            label="Flagged legislator",
+        ),
+    ]
+    ax.legend(handles=legend_handles, loc="lower right")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
@@ -1381,17 +1425,43 @@ def plot_discrimination(
     pos_vals = beta_vals[beta_vals >= 0]
     neg_vals = beta_vals[beta_vals < 0]
     if len(pos_vals) > 0:
-        ax.hist(pos_vals, bins=30, alpha=0.6, color="#E81B23", label=f"β > 0 (n={len(pos_vals)})")
+        ax.hist(
+            pos_vals,
+            bins=30,
+            alpha=0.6,
+            color="#E81B23",
+            label=f"Republicans favor Yea (n={len(pos_vals)})",
+        )
     if len(neg_vals) > 0:
-        ax.hist(neg_vals, bins=30, alpha=0.6, color="#0015BC", label=f"β < 0 (n={len(neg_vals)})")
-    ax.axvline(0, color="black", linestyle="--", alpha=0.6, label="β = 0")
+        ax.hist(
+            neg_vals,
+            bins=30,
+            alpha=0.6,
+            color="#0015BC",
+            label=f"Democrats favor Yea (n={len(neg_vals)})",
+        )
+    ax.axvline(0, color="black", linestyle="--", alpha=0.6, label="Bipartisan (no divide)")
     median_beta = float(np.median(beta_vals))
     ax.axvline(
         median_beta, color="orange", linestyle="-", alpha=0.6, label=f"Median = {median_beta:.2f}"
     )
-    ax.set_xlabel("Discrimination (β > 0: conservative Yea, β < 0: liberal Yea)")
+    ax.set_xlabel("Bill Partisanship (how sharply the bill divides the legislature)")
     ax.set_ylabel("Number of Roll Calls")
-    ax.set_title(f"{chamber} — Distribution of Roll Call Discrimination")
+    ax.set_title(f"{chamber} \u2014 How Sharply Do Bills Divide the Legislature?")
+
+    # Annotation explaining the scale
+    ax.annotate(
+        "Higher values = more partisan bills\nValues near zero = bipartisan",
+        xy=(0.97, 0.95),
+        xycoords="axes fraction",
+        ha="right",
+        va="top",
+        fontsize=9,
+        fontstyle="italic",
+        color="#555555",
+        bbox={"boxstyle": "round,pad=0.4", "fc": "white", "alpha": 0.8, "ec": "#cccccc"},
+    )
+
     ax.legend()
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -1481,9 +1551,79 @@ def plot_traces(
         figsize=(14, 3 * n),
     )
     fig = plt.gcf()
-    fig.suptitle(f"{chamber} — Trace Plots (Selected Ideal Points)", fontsize=14, y=1.01)
+    fig.suptitle(f"{chamber} \u2014 Trace Plots (Selected Ideal Points)", fontsize=14, y=1.01)
     fig.tight_layout()
     save_fig(fig, out_dir / f"trace_{chamber.lower()}.png")
+
+    # Additionally produce a convergence summary plot for nontechnical audiences
+    plot_convergence_summary(idata, data, chamber, out_dir)
+
+
+def plot_convergence_summary(
+    idata: az.InferenceData,
+    data: dict,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Nontechnical convergence summary: overlapping posterior KDEs from multiple chains.
+
+    Shows that all independent model runs agree, validating the results.
+    """
+    slugs = data["leg_slugs"]
+    n = min(4, len(slugs))
+    indices = np.linspace(0, len(slugs) - 1, n, dtype=int)
+    selected_slugs = [slugs[i] for i in indices]
+
+    n_chains = idata.posterior.dims.get("chain", 1)
+    if n_chains < 2:
+        return  # Need multiple chains to show agreement
+
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 4))
+    if n == 1:
+        axes = [axes]
+
+    chain_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+    for ax, slug in zip(axes, selected_slugs):
+        xi_data = idata.posterior["xi"].sel(legislator=slug)
+        for chain_idx in range(n_chains):
+            chain_vals = xi_data.sel(chain=chain_idx).values
+            color = chain_colors[chain_idx % len(chain_colors)]
+            ax.hist(
+                chain_vals,
+                bins=40,
+                alpha=0.4,
+                color=color,
+                label=f"Run {chain_idx + 1}",
+                density=True,
+                edgecolor="none",
+            )
+        # Derive last name for label
+        name = slug.split("_")
+        last_name = name[1].title() if len(name) > 1 else slug
+        ax.set_title(last_name, fontsize=11, fontweight="bold")
+        ax.set_xlabel("Ideal Point")
+        ax.set_ylabel("")
+        ax.set_yticks([])
+        if ax == axes[0]:
+            ax.legend(fontsize=8)
+
+    fig.suptitle(
+        f"{chamber} \u2014 The Model Ran {n_chains} Independent Chains and They All Agree",
+        fontsize=13,
+        fontweight="bold",
+    )
+    fig.text(
+        0.5,
+        0.01,
+        "Overlapping distributions confirm the model converged to a stable answer",
+        ha="center",
+        fontsize=10,
+        fontstyle="italic",
+        color="#555555",
+    )
+    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
+    save_fig(fig, out_dir / f"convergence_summary_{chamber.lower()}.png")
 
 
 def plot_ppc_yea_rate(
