@@ -6,7 +6,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -47,7 +46,7 @@ class KSVoteScraper:
     def __init__(
         self,
         session: KSSession,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
         delay: float = REQUEST_DELAY,
     ):
         self.session = session
@@ -77,7 +76,7 @@ class KSVoteScraper:
 
     # -- HTTP helpers ----------------------------------------------------------
 
-    def _get(self, url: str) -> Optional[str]:
+    def _get(self, url: str) -> str | None:
         """Fetch a URL with retries, caching, and rate limiting."""
         # Check cache first (no rate limiting needed)
         cache_key = url.replace("/", "_").replace(":", "_").replace("?", "_")
@@ -110,12 +109,12 @@ class KSVoteScraper:
                     print(f"  Failed after {MAX_RETRIES} attempts: {url}: {e}")
                     return None
 
-    def _fetch_many(self, urls: list[str], desc: str = "Fetching") -> dict[str, Optional[str]]:
+    def _fetch_many(self, urls: list[str], desc: str = "Fetching") -> dict[str, str | None]:
         """Fetch multiple URLs concurrently using a thread pool.
 
         Returns a dict mapping each URL to its HTML content (or None on failure).
         """
-        results: dict[str, Optional[str]] = {}
+        results: dict[str, str | None] = {}
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_url = {executor.submit(self._get, url): url for url in urls}
             for future in tqdm(
@@ -541,7 +540,7 @@ class KSVoteScraper:
         return "", motion
 
     @staticmethod
-    def _derive_passed(result: str) -> Optional[bool]:
+    def _derive_passed(result: str) -> bool | None:
         """Derive passed boolean from result text."""
         if not result:
             return None

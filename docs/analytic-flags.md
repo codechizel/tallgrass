@@ -328,12 +328,48 @@ Results are internally consistent and match upstream phase expectations:
 
 XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal points are doing virtually all the work. This means the prediction phase validates the IRT model rather than discovering new predictive structure. The analytically interesting output is not the model performance (which is expected to be high) but the *residuals*: which legislators and which votes the model fails on. Those residuals point to the limits of 1D ideology as an explanatory framework.
 
+## Flagged Voting Patterns — Indices
+
+### CQ Unity vs Clustering Loyalty — Definitional Divergence
+
+- **Phase:** Indices
+- **Observation:** Tyson's CQ party unity = 0.917 (92nd percentile for Senate) vs clustering party loyalty = 0.417 (lowest in Senate). Schreiber: CQ unity = 0.615 (lowest House R) vs clustering loyalty = 0.617 (similar). The two metrics agree for centrists but diverge sharply for contrarians.
+- **Explanation:** CQ unity only counts "party votes" (majority-R opposes majority-D), which are the most partisan roll calls. On these high-stakes votes, even Tyson votes with her party 92% of the time. Clustering loyalty uses a 10% dissent threshold, capturing internal-party dissent on routine bills — where Tyson's contrarian pattern dominates. The metrics answer different questions: CQ asks "does she vote with Rs against Ds?" (yes); clustering asks "does she agree with the Rs who agree with each other?" (no).
+- **Downstream:** When presenting "party loyalty" to nontechnical audiences, always specify which definition is being used. CQ unity is the standard political science metric and should be primary; clustering loyalty is a complementary within-party measure. The Tyson divergence is a useful illustration of why the definition matters.
+
+### Schreiber — Top House Maverick (Strategic Defector)
+
+- **Phase:** Indices
+- **Observation:** Schreiber has the highest maverick rate in the House (0.385 unweighted, 0.541 weighted). His weighted maverick substantially exceeds his unweighted rate, placing him firmly above the 1:1 diagonal on the maverick landscape plot.
+- **Explanation:** Schreiber's defections are concentrated on close votes where his vote could change the outcome (weighted > unweighted = strategic). This is consistent with his near-zero IRT ideal point (+0.018) and maximum cross-party Kappa (0.369 with Tom Sawyer) from the network phase.
+- **Downstream:** Schreiber is the single most analytically interesting House member. He is the most centrist, most bipartisan, and most strategically independent Republican — and yet his votes are not the hardest to predict (not in bottom 10 for prediction accuracy). His pattern is consistent rather than erratic.
+
+### Dietrich — Top Senate Maverick
+
+- **Phase:** Indices
+- **Observation:** Sen. Brenda Dietrich has the highest Senate maverick rate (0.231 unweighted, 0.362 weighted). Like Schreiber, her weighted rate substantially exceeds unweighted, indicating strategic defections on close votes.
+- **Explanation:** Dietrich was not previously flagged in any upstream phase. Her IRT ideal point and clustering assignment should be checked — she may be a moderate R who escaped detection because she votes the party line on uncontested bills.
+- **Downstream:** Investigate Dietrich's IRT position and network centrality. She may be the Senate analogue of Schreiber.
+
+### Sensitivity Analysis — Perfect Stability
+
+- **Phase:** Indices
+- **Observation:** Spearman rho = 1.000 for both chambers when comparing party unity on all votes vs EDA-filtered votes. Maximum rank change = 0 for both.
+- **Explanation:** The EDA filter removes near-unanimous votes, but the CQ party vote definition already excludes those (they can't be "party votes" if both parties vote the same way). The set of party votes is identical whether or not near-unanimous votes are removed from the denominator.
+- **Downstream:** This confirms that the CQ party vote definition is robust to the EDA filter. No need to run sensitivity analysis on indices in future sessions — it will always be 1.0.
+
+### Veto Overrides — Near-Perfect Party Cohesion
+
+- **Phase:** Indices
+- **Observation:** Override Rice: House R=0.959, D=0.986; Senate R=0.966, D=0.974. Both parties show near-unanimous cohesion on override votes.
+- **Downstream:** Confirms the clustering finding that overrides are strictly party-line. The tiny deviations from 1.0 are from 1-2 absences or rare defections.
+
 ## Template
 
 ```
 ### [Legislator Name or Pattern]
 
-- **Phase:** [EDA | PCA | IRT | Clustering | Network | Prediction]
+- **Phase:** [EDA | PCA | IRT | Clustering | Network | Prediction | Indices]
 - **Observation:** What was seen in the data.
 - **Explanation:** Why it happened (if known).
 - **Downstream:** What to do about it in future phases.

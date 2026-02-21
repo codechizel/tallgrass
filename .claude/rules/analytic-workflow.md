@@ -34,6 +34,14 @@
 - **ETL (scraping) is separate from analysis.** Never modify scraper code to accommodate analysis needs. Instead, transform data in analysis scripts.
 - Analysis scripts read from `data/ks_{session}/` CSVs. Intermediate analysis artifacts go in a separate output directory.
 
+## Audience: Nontechnical Consumers
+- While the analysis pipeline uses advanced statistical methods, the final outputs will be consumed by a **nontechnical audience** (journalists, policymakers, engaged citizens).
+- Visualizations are the primary communication tool. Every plot should be **self-explanatory** to someone who has never taken a statistics course: clear titles, plain-English labels, annotations that explain what the viewer is seeing, and color choices that convey meaning intuitively (red=Republican, blue=Democrat).
+- Prefer concrete, narrative-friendly visualizations (ranked bar charts, annotated scatter plots, highlighted network diagrams) over abstract statistical plots (dendrograms, eigenvalue scree plots, posterior density traces).
+- When a plot shows an interesting finding (e.g., a bridge legislator, a maverick, a party split), **annotate it directly** — label the key actors, add callout boxes, draw attention to the pattern. The viewer should understand the story without reading a caption.
+- Tables should use plain-English column headers and include interpretive context (e.g., "higher = more independent from party" rather than just "maverick_score").
+- Reports should lead with the most accessible findings and build toward technical detail, not the reverse.
+
 ## Kansas-Specific Defaults
 - Always analyze chambers separately unless explicitly doing cross-chamber comparison.
 - Use Cohen's Kappa (not raw agreement) when thresholding similarity for networks or clustering.

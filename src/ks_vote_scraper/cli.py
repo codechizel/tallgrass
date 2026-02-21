@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ks_vote_scraper.config import BASE_URL, REQUEST_DELAY
 from ks_vote_scraper.scraper import KSVoteScraper
-from ks_vote_scraper.session import SPECIAL_SESSION_YEARS, KSSession
+from ks_vote_scraper.session import CURRENT_BIENNIUM_START, SPECIAL_SESSION_YEARS, KSSession
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -17,8 +17,8 @@ def main(argv: list[str] | None = None) -> None:
         "year",
         nargs="?",
         type=int,
-        default=2025,
-        help="Session start year, e.g. 2025, 2023, 2021 (default: 2025)",
+        default=CURRENT_BIENNIUM_START,
+        help=f"Session start year, e.g. 2025, 2023, 2021 (default: {CURRENT_BIENNIUM_START})",
     )
     parser.add_argument(
         "--special",
@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> None:
         print("Known Kansas Legislature sessions:")
         print()
         print("  Regular sessions:")
-        for start in range(2025, 2010, -2):
+        for start in range(CURRENT_BIENNIUM_START, 2010, -2):
             s = KSSession.from_year(start)
             print(f"    {s.label:10s}  {BASE_URL}{s.bills_path}")
         print()
