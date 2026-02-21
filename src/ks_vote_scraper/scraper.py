@@ -340,6 +340,7 @@ class KSVoteScraper:
         # Parse phase (sequential)
         vote_links = []
         bills_with_votes = 0
+        sponsors_backfilled = 0
 
         for bill_path in bill_urls:
             url = BASE_URL + bill_path
@@ -367,6 +368,17 @@ class KSVoteScraper:
             if found_votes:
                 bills_with_votes += 1
 
+            # Backfill sponsor from HTML when the API returned it empty
+            bill_code = re.sub(r"\s+", "", bill_number).lower()
+            meta = self.bill_metadata.get(bill_code)
+            if meta is not None and not meta.get("sponsor"):
+                sponsor = self._extract_sponsor(soup)
+                if sponsor:
+                    meta["sponsor"] = sponsor
+                    sponsors_backfilled += 1
+
+        if sponsors_backfilled:
+            print(f"  Backfilled {sponsors_backfilled} sponsors from bill page HTML")
         print(f"  Found {len(vote_links)} roll call votes across {bills_with_votes} bills")
         return vote_links
 
@@ -384,6 +396,40 @@ class KSVoteScraper:
         if match:
             return f"{match.group(1).upper()} {match.group(2)}"
         return bill_path
+
+    @staticmethod
+    def _extract_sponsor(soup: BeautifulSoup) -> str:
+        """Extract original sponsor from the bill page HTML.
+
+        The sponsor is in a portlet structure:
+          <div class="portlet-header">Original Sponsor</div>
+          <div class="portlet-content">
+            <ul><li><a>Senator Steffen</a></li></ul>
+          </div>
+
+        Falls back to empty string if not found.
+        """
+        header = soup.find(
+            lambda tag: (
+                tag.name == "div"
+                and "portlet-header" in (tag.get("class") or [])
+                and "Original Sponsor" in tag.get_text()
+            )
+        )
+        if not header:
+            return ""
+
+        content = header.find_next_sibling("div", class_="portlet-content")
+        if not content:
+            return ""
+
+        sponsors = []
+        for li in content.find_all("li"):
+            text = li.get_text(strip=True)
+            if text:
+                sponsors.append(text)
+
+        return "; ".join(sponsors)
 
     # -- Step 3: Parse each vote page -----------------------------------------
 
