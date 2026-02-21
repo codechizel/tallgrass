@@ -72,6 +72,24 @@ TOP_SHAP_FEATURES = 15
 TOP_SURPRISING_N = 20
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
 
+# Plain-English feature names for SHAP and feature importance plots (nontechnical audience)
+FEATURE_DISPLAY_NAMES: dict[str, str] = {
+    "xi_mean": "Legislator ideology",
+    "beta_mean": "Bill partisanship",
+    "alpha_mean": "Bill popularity",
+    "xi_sd": "Ideology uncertainty",
+    "xi_x_beta": "Ideology \u00d7 partisanship interaction",
+    "party_binary": "Party (R=1, D=0)",
+    "loyalty_rate": "Party loyalty",
+    "betweenness": "Network bridge score",
+    "eigenvector": "Network influence",
+    "pagerank": "Network importance",
+    "PC1": "Primary ideology (PCA)",
+    "PC2": "Secondary dimension (PCA)",
+    "day_of_session": "Day of session",
+    "is_veto_override": "Veto override vote",
+}
+
 PREDICTION_PRIMER = """\
 # Vote & Bill Passage Prediction
 
@@ -857,12 +875,14 @@ def find_surprising_bills(
     if wrong_mask.sum() == 0:
         return pl.DataFrame()
 
-    wrong_df = features_df.filter(pl.Series(wrong_mask)).select(
-        "vote_id", "bill_number", "passed_binary"
-    ).with_columns(
-        pl.Series("y_prob", y_prob[wrong_mask]),
-        pl.Series("predicted", y_pred[wrong_mask]),
-        pl.Series("confidence_error", confidence_error[wrong_mask]),
+    wrong_df = (
+        features_df.filter(pl.Series(wrong_mask))
+        .select("vote_id", "bill_number", "passed_binary")
+        .with_columns(
+            pl.Series("y_prob", y_prob[wrong_mask]),
+            pl.Series("predicted", y_pred[wrong_mask]),
+            pl.Series("confidence_error", confidence_error[wrong_mask]),
+        )
     )
 
     # Enrich with rollcall metadata
@@ -992,15 +1012,29 @@ def plot_model_comparison(
     save_fig(fig, out_path)
 
 
+def _rename_shap_features(shap_values: shap.Explanation) -> shap.Explanation:
+    """Return a copy of SHAP values with plain-English feature names."""
+    import copy
+
+    sv = copy.deepcopy(shap_values)
+    if sv.feature_names is not None:
+        sv.feature_names = [
+            FEATURE_DISPLAY_NAMES.get(f, f.replace("_", " ").replace("vt ", "Vote type: "))
+            for f in sv.feature_names
+        ]
+    return sv
+
+
 def plot_shap_summary(
     shap_values: shap.Explanation,
     chamber: str,
     out_path: Path,
 ) -> None:
-    """SHAP beeswarm plot."""
-    shap.plots.beeswarm(shap_values, max_display=TOP_SHAP_FEATURES, show=False, plot_size=(10, 8))
+    """SHAP beeswarm plot with plain-English feature names."""
+    sv = _rename_shap_features(shap_values)
+    shap.plots.beeswarm(sv, max_display=TOP_SHAP_FEATURES, show=False, plot_size=(10, 8))
     fig = plt.gcf()
-    fig.suptitle(f"{chamber} — SHAP Beeswarm (XGBoost)", fontsize=14, y=1.02)
+    fig.suptitle(f"{chamber} \u2014 What Predicts a Yea Vote?", fontsize=14, y=1.02)
     save_fig(fig, out_path)
 
 
@@ -1009,11 +1043,12 @@ def plot_shap_bar(
     chamber: str,
     out_path: Path,
 ) -> None:
-    """SHAP mean |SHAP| bar plot."""
-    shap.plots.bar(shap_values, max_display=TOP_SHAP_FEATURES, show=False)
+    """SHAP mean |SHAP| bar plot with plain-English feature names."""
+    sv = _rename_shap_features(shap_values)
+    shap.plots.bar(sv, max_display=TOP_SHAP_FEATURES, show=False)
     fig = plt.gcf()
     fig.suptitle(
-        f"{chamber} — Mean |SHAP| Feature Importance (XGBoost)",
+        f"{chamber} \u2014 What Predicts a Yea Vote? (Feature Importance)",
         fontsize=14,
         y=1.02,
     )
@@ -1026,9 +1061,17 @@ def plot_feature_importance(
     chamber: str,
     out_path: Path,
 ) -> None:
-    """XGBoost native feature importance (gain)."""
+    """XGBoost native feature importance (gain) with plain-English names."""
     importances = model.feature_importances_
     sorted_idx = np.argsort(importances)[-TOP_SHAP_FEATURES:]
+
+    display_names = [
+        FEATURE_DISPLAY_NAMES.get(
+            feature_names[i],
+            feature_names[i].replace("_", " ").replace("vt ", "Vote type: "),
+        )
+        for i in sorted_idx
+    ]
 
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.barh(
@@ -1039,9 +1082,9 @@ def plot_feature_importance(
         linewidth=0.5,
     )
     ax.set_yticks(range(len(sorted_idx)))
-    ax.set_yticklabels([feature_names[i] for i in sorted_idx], fontsize=10)
+    ax.set_yticklabels(display_names, fontsize=10)
     ax.set_xlabel("Feature Importance (Gain)", fontsize=12)
-    ax.set_title(f"{chamber} — XGBoost Native Feature Importance", fontsize=14)
+    ax.set_title(f"{chamber} \u2014 What Matters Most for Predicting Votes?", fontsize=14)
     ax.grid(True, axis="x", alpha=0.3)
 
     fig.tight_layout()
@@ -1071,21 +1114,25 @@ def plot_per_legislator_accuracy(
             linewidths=0.3,
         )
 
-    # Label bottom 5 by accuracy
+    # Label bottom 5 by accuracy with callout boxes
     bottom5 = leg_accuracy.sort("accuracy").head(5)
     for row in bottom5.iter_rows(named=True):
+        name = row.get("full_name", row["legislator_slug"])
+        last_name = name.split()[-1] if name else "?"
         ax.annotate(
-            row.get("full_name", row["legislator_slug"]),
+            last_name,
             (row["xi_mean"], row["accuracy"]),
-            fontsize=7,
-            alpha=0.8,
+            fontsize=8,
+            fontweight="bold",
             textcoords="offset points",
-            xytext=(5, -5),
+            xytext=(8, -8),
+            bbox={"boxstyle": "round,pad=0.3", "fc": "wheat", "alpha": 0.7},
+            arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 0.8},
         )
 
-    ax.set_xlabel("IRT Ideal Point (xi_mean)", fontsize=12)
+    ax.set_xlabel("Ideology (Liberal \u2190 \u2192 Conservative)", fontsize=12)
     ax.set_ylabel("Prediction Accuracy", fontsize=12)
-    ax.set_title(f"{chamber} — Per-Legislator Accuracy vs Ideology", fontsize=14)
+    ax.set_title(f"{chamber} \u2014 Some Legislators Are Harder to Predict", fontsize=14)
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
 
@@ -1149,13 +1196,27 @@ def plot_calibration_curve(
 
     ax.plot(prob_pred, prob_true, "o-", color="#FF9800", linewidth=2, label=model_name)
     ax.plot([0, 1], [0, 1], "k--", linewidth=1, alpha=0.5, label="Perfectly calibrated")
-    ax.set_xlabel("Mean Predicted Probability", fontsize=12)
-    ax.set_ylabel("Fraction of Positives", fontsize=12)
-    ax.set_title(f"{chamber} — {model_name} Calibration Curve", fontsize=13)
+    ax.set_xlabel("Model's Predicted Chance of Yea", fontsize=12)
+    ax.set_ylabel("Actual Yea Rate", fontsize=12)
+    ax.set_title(f"{chamber} \u2014 {model_name} Calibration Curve", fontsize=13)
     ax.legend(fontsize=10)
     ax.set_xlim([-0.01, 1.01])
     ax.set_ylim([-0.01, 1.01])
     ax.grid(True, alpha=0.3)
+
+    # Add annotation explaining what good calibration means
+    ax.annotate(
+        "When the model says 80% chance\nof Yea, it's right about 80%\nof the time",
+        xy=(0.8, 0.8),
+        xycoords="data",
+        xytext=(0.25, 0.85),
+        textcoords="data",
+        fontsize=9,
+        fontstyle="italic",
+        color="#555555",
+        bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "alpha": 0.8, "ec": "#cccccc"},
+        arrowprops={"arrowstyle": "->", "color": "#888888", "lw": 1.2},
+    )
 
     fig.tight_layout()
     save_fig(fig, out_path)
@@ -1216,8 +1277,10 @@ def plot_surprising_votes(
     labels = []
     for row in surprising_df.iter_rows(named=True):
         name = row.get("full_name", row.get("legislator_slug", "?"))
+        # Use last name only for conciseness
+        last_name = name.split()[-1] if name else "?"
         bill = row.get("bill_number", "?")
-        labels.append(f"{name}\n{bill}")
+        labels.append(f"{last_name}\n{bill}")
 
     y_pos = range(min(surprising_df.height, TOP_SURPRISING_N))
     errors = surprising_df["confidence_error"].head(TOP_SURPRISING_N).to_numpy()
@@ -1230,8 +1293,8 @@ def plot_surprising_votes(
     ax.barh(list(y_pos), errors, color=colors, edgecolor="black", linewidth=0.5, alpha=0.85)
     ax.set_yticks(list(y_pos))
     ax.set_yticklabels(labels[: len(y_pos)], fontsize=8)
-    ax.set_xlabel("Confidence Error (|P(Yea) - Actual|)", fontsize=12)
-    ax.set_title(f"{chamber} — Most Surprising Votes (XGBoost)", fontsize=14)
+    ax.set_xlabel("How Surprising (higher = more unexpected)", fontsize=12)
+    ax.set_title(f"{chamber} \u2014 The Votes Nobody Expected", fontsize=14)
     ax.invert_yaxis()
     ax.grid(True, axis="x", alpha=0.3)
 
