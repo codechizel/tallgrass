@@ -351,7 +351,8 @@ def run_pca_for_chamber(
     print("\n  Explained variance:")
     for i in range(n_comp):
         print(
-            f"    PC{i + 1}: {ev[i]:.4f} ({100 * ev[i]:.1f}%)  cumulative: {100 * cumulative[i]:.1f}%"
+            f"    PC{i + 1}: {ev[i]:.4f} ({100 * ev[i]:.1f}%)"
+            f"  cumulative: {100 * cumulative[i]:.1f}%"
         )
 
     scores_df = build_scores_df(scores, slugs, n_comp, legislators)
@@ -402,10 +403,24 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
         axes[0].text(i + 1, v + 0.005, f"{100 * v:.1f}%", ha="center", fontsize=9)
     axes[0].set_xlabel("Principal Component")
     axes[0].set_ylabel("Explained Variance Ratio")
-    axes[0].set_title(f"{chamber} — Individual Explained Variance")
+    axes[0].set_title(f"{chamber} \u2014 How Many Dimensions Does Kansas Politics Have?")
     axes[0].set_xticks(range(1, n + 1))
     axes[0].spines["top"].set_visible(False)
     axes[0].spines["right"].set_visible(False)
+
+    # Annotate the elbow (PC1 dominance)
+    if n >= 2 and ev[0] > 2 * ev[1]:
+        axes[0].annotate(
+            "The sharp drop means Kansas is\nessentially a one-dimensional\n"
+            "legislature \u2014 party affiliation\nexplains almost everything",
+            xy=(1.5, (ev[0] + ev[1]) / 2),
+            xytext=(3.0, ev[0] * 0.7),
+            fontsize=8,
+            fontstyle="italic",
+            color="#555555",
+            bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "alpha": 0.8, "ec": "#cccccc"},
+            arrowprops={"arrowstyle": "->", "color": "#888888", "lw": 1.2},
+        )
 
     # Panel 2: Cumulative explained variance
     axes[1].plot(range(1, n + 1), cumulative, "bo-", markersize=8)
@@ -414,7 +429,7 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
     axes[1].axhline(0.9, color="red", linestyle="--", alpha=0.5, label="90% threshold")
     axes[1].set_xlabel("Number of Components")
     axes[1].set_ylabel("Cumulative Explained Variance")
-    axes[1].set_title(f"{chamber} — Cumulative Variance Explained")
+    axes[1].set_title(f"{chamber} \u2014 Cumulative Variance Explained")
     axes[1].set_xticks(range(1, n + 1))
     axes[1].set_ylim(0, 1.05)
     axes[1].legend()
@@ -460,23 +475,50 @@ def plot_ideological_map(
                 continue
             labeled.add(slug)
             name = row.get("full_name", slug)
-            # Use last name for concise labels
             last_name = name.split()[-1] if name else slug
             ax.annotate(
                 last_name,
                 (row["PC1"], row["PC2"]),
-                fontsize=7,
+                fontsize=8,
+                fontweight="bold",
                 ha="left",
                 va="bottom",
-                xytext=(4, 4),
+                xytext=(6, 6),
                 textcoords="offset points",
+                bbox={"boxstyle": "round,pad=0.2", "fc": "wheat", "alpha": 0.7},
+                arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 0.8},
+            )
+
+    # Add callout box for extreme PC2 legislators (Tyson/Thompson in Senate)
+    if "PC2" in scores_df.columns:
+        pc2_min_idx = scores_df["PC2"].arg_min()
+        pc2_min_row = scores_df.row(pc2_min_idx, named=True)
+        pc2_min_val = pc2_min_row["PC2"]
+        # Only annotate if the extreme is notably far from the pack
+        pc2_std = float(scores_df["PC2"].std())
+        if pc2_std > 0 and abs(pc2_min_val) > 3 * pc2_std:
+            ax.annotate(
+                f"{pc2_min_row.get('full_name', '?').split()[-1]}: extreme contrarian\n"
+                f"(PC2 = {pc2_min_val:.1f}, 3\u00d7 more extreme\nthan next legislator)",
+                xy=(pc2_min_row["PC1"], pc2_min_val),
+                xytext=(pc2_min_row["PC1"] + 2, pc2_min_val + 3),
+                fontsize=8,
+                fontstyle="italic",
+                color="#555555",
+                bbox={
+                    "boxstyle": "round,pad=0.4",
+                    "fc": "lightyellow",
+                    "alpha": 0.8,
+                    "ec": "#cccccc",
+                },
+                arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.5},
             )
 
     ax.axhline(0, color="gray", linestyle="-", alpha=0.2)
     ax.axvline(0, color="gray", linestyle="-", alpha=0.2)
     ax.set_xlabel("PC1 (primary ideological dimension)")
-    ax.set_ylabel("PC2 (secondary dimension)")
-    ax.set_title(f"{chamber} — Ideological Map (PC1 vs PC2)")
+    ax.set_ylabel("PC2 (contrarianism \u2014 voting Nay on routine, near-unanimous bills)")
+    ax.set_title(f"{chamber} \u2014 The Ideological Landscape of the Kansas Legislature")
     ax.legend(
         handles=[
             Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
