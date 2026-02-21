@@ -55,8 +55,8 @@ All HTTP fetching uses a two-phase pattern: concurrent fetch via ThreadPoolExecu
 `_get()` returns a `FetchResult` (not raw HTML) and classifies errors for differentiated retry behavior:
 
 - **404** → `"permanent"`, max 2 attempts (one retry for transient routing guards)
-- **5xx** → `"transient"`, exponential backoff (`RETRY_DELAY * 2^attempt`)
-- **Timeout** → `"timeout"`, exponential backoff
+- **5xx** → `"transient"`, exponential backoff (`RETRY_DELAY * 2^attempt`) with jitter
+- **Timeout** → `"timeout"`, exponential backoff with jitter
 - **Connection error** → `"connection"`, fixed delay
 - **Other 4xx** → `"permanent"`, no retry
 - **HTTP 200 error page** → `"permanent"`, detected by HTML heuristics (short body, error `<title>`); JSON responses bypass this check
@@ -64,6 +64,17 @@ All HTTP fetching uses a two-phase pattern: concurrent fetch via ThreadPoolExecu
 All HTTP requests go through `_get()`, including the KLISS API call. This ensures consistent retries, rate limiting, caching, and error-page detection everywhere.
 
 Failed fetches and parse failures (e.g., 0 votes on a page) are recorded as `FetchFailure` with bill context (bill number, motion text, bill path) and written to a JSON failure manifest at the end of the run.
+
+### Retry Waves
+
+Per-URL retries handle isolated hiccups, but when the server buckles under sustained load (e.g., 55 simultaneous 5xx errors), all workers fail and retry in lockstep (thundering herd). Retry waves solve this at the `_fetch_many()` level:
+
+1. After the initial fetch pass, collect transient failures (5xx, timeout, connection)
+2. Wait `WAVE_COOLDOWN` (90s) for the server to recover
+3. Re-dispatch failed URLs with reduced load: `WAVE_WORKERS=2`, `WAVE_DELAY=0.5s`
+4. Repeat up to `RETRY_WAVES=3` times or until all transient failures resolve
+
+Jitter (`* (1 + random.uniform(0, 0.5))`) on per-URL backoff prevents thundering herd within each wave. See ADR-0009 for rationale.
 
 ## HTML Parsing Pitfalls (Hard-Won Lessons)
 

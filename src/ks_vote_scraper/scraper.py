@@ -1,6 +1,7 @@
 """Core scraper class for Kansas Legislature roll call votes."""
 
 import json
+import random
 import re
 import threading
 import time
@@ -21,7 +22,11 @@ from ks_vote_scraper.config import (
     REQUEST_DELAY,
     REQUEST_TIMEOUT,
     RETRY_DELAY,
+    RETRY_WAVES,
     USER_AGENT,
+    WAVE_COOLDOWN,
+    WAVE_DELAY,
+    WAVE_WORKERS,
 )
 from ks_vote_scraper.models import IndividualVote, RollCall
 from ks_vote_scraper.output import save_csvs
@@ -108,6 +113,7 @@ class KSVoteScraper:
         self.output_dir = output_dir or Path("data") / session.output_name
         self.cache_dir = self.output_dir / ".cache"
         self.delay = delay
+        self._normal_delay = delay
         self.http = requests.Session()
         self.http.headers.update({"User-Agent": USER_AGENT})
 
@@ -204,7 +210,7 @@ class KSVoteScraper:
                     retry_delay = RETRY_DELAY
                 elif last_status is not None and last_status >= 500:
                     last_error_type = "transient"
-                    retry_delay = RETRY_DELAY * (2**attempt)
+                    retry_delay = RETRY_DELAY * (2**attempt) * (1 + random.uniform(0, 0.5))
                 else:
                     # Other 4xx — don't retry
                     last_error_type = "permanent"
@@ -215,7 +221,7 @@ class KSVoteScraper:
                 last_error = str(e)
                 last_error_type = "timeout"
                 last_status = None
-                retry_delay = RETRY_DELAY * (2**attempt)
+                retry_delay = RETRY_DELAY * (2**attempt) * (1 + random.uniform(0, 0.5))
 
             except requests.ConnectionError as e:
                 last_error = str(e)
@@ -244,11 +250,23 @@ class KSVoteScraper:
             error_message=last_error,
         )
 
-    def _fetch_many(self, urls: list[str], desc: str = "Fetching") -> dict[str, FetchResult]:
+    def _fetch_many(
+        self,
+        urls: list[str],
+        desc: str = "Fetching",
+        max_waves: int = RETRY_WAVES,
+        wave_cooldown: float = WAVE_COOLDOWN,
+    ) -> dict[str, FetchResult]:
         """Fetch multiple URLs concurrently using a thread pool.
+
+        After the initial pass, transient failures (5xx, timeout, connection) are
+        retried in up to ``max_waves`` additional passes with reduced concurrency
+        and a cooldown between waves.  This lets the server recover from sustained
+        load without the thundering-herd effect of all workers retrying at once.
 
         Returns a dict mapping each URL to its FetchResult.
         """
+        # --- initial pass (full concurrency) ---
         results: dict[str, FetchResult] = {}
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_url = {executor.submit(self._get, url): url for url in urls}
@@ -260,6 +278,51 @@ class KSVoteScraper:
             ):
                 url = future_to_url[future]
                 results[url] = future.result()
+
+        # --- retry waves for transient failures ---
+        _RETRIABLE = {"transient", "timeout", "connection"}
+
+        for wave in range(1, max_waves + 1):
+            failed_urls = [
+                url for url, r in results.items() if not r.ok and r.error_type in _RETRIABLE
+            ]
+            if not failed_urls:
+                break
+
+            print(
+                f"\n  {len(failed_urls)} transient failure(s)"
+                f" — waiting {int(wave_cooldown)}s before retry wave {wave}/{max_waves}..."
+            )
+            time.sleep(wave_cooldown)
+
+            # Reduce concurrency and slow rate limit for the retry wave
+            self.delay = WAVE_DELAY
+            try:
+                with ThreadPoolExecutor(max_workers=WAVE_WORKERS) as executor:
+                    future_to_url = {executor.submit(self._get, url): url for url in failed_urls}
+                    for future in tqdm(
+                        as_completed(future_to_url),
+                        total=len(future_to_url),
+                        desc=f"Wave {wave}",
+                        unit="page",
+                    ):
+                        url = future_to_url[future]
+                        result = future.result()
+                        if result.ok or result.error_type not in _RETRIABLE:
+                            results[url] = result
+                        else:
+                            # Keep the latest failure info
+                            results[url] = result
+            finally:
+                self.delay = self._normal_delay
+
+        # Log final state
+        final_transient = sum(
+            1 for r in results.values() if not r.ok and r.error_type in _RETRIABLE
+        )
+        if final_transient:
+            print(f"  {final_transient} transient failure(s) remain after {max_waves} wave(s)")
+
         return results
 
     # -- Step 1: Get all bill URLs ---------------------------------------------

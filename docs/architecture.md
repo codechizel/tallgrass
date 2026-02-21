@@ -67,7 +67,13 @@ argparse entry point. Minimal — constructs KSSession and KSVoteScraper, calls 
 │  ThreadPoolExecutor │  MAX_WORKERS = 5
 │  (fetch phase)      │  Rate-limited via threading.Lock()
 └────────┬───────────┘
-         │ dict[url, html]
+         │ dict[url, FetchResult]
+         ▼
+┌────────────────────┐
+│  Retry waves        │  Up to 3 waves for transient failures
+│  (reduced load)     │  WAVE_WORKERS=2, WAVE_DELAY=0.5s, 90s cooldown
+└────────┬───────────┘
+         │ dict[url, FetchResult]  (failures overwritten by successes)
          ▼
 ┌────────────────────┐
 │  Sequential parse   │  Mutates shared state safely
@@ -75,7 +81,7 @@ argparse entry point. Minimal — constructs KSSession and KSVoteScraper, calls 
 └────────────────────┘
 ```
 
-Every multi-URL operation follows this two-phase pattern. The fetch phase only reads URLs and returns HTML. The parse phase runs single-threaded and is the only code that mutates `self.rollcalls`, `self.individual_votes`, or `self.legislators`.
+Every multi-URL operation follows this two-phase pattern. The fetch phase only reads URLs and returns HTML. If transient failures (5xx, timeout, connection) occur, `_fetch_many()` automatically retries them in up to 3 additional waves with reduced concurrency and a 90-second cooldown between waves — letting the server recover instead of hammering it. The parse phase runs single-threaded and is the only code that mutates `self.rollcalls`, `self.individual_votes`, or `self.legislators`.
 
 ## Caching
 

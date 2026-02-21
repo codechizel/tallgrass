@@ -232,6 +232,31 @@ Key design choices:
 
 ---
 
+## Design Decision: Retry Waves for Server Resilience
+
+**Added during**: Scraper resilience improvement (2026-02-21)
+
+**Problem**: A fresh scrape of 2025-26 failed on 55 of 882 vote pages — all transient 5xx errors clustered in a 3-second window. The per-URL retry logic (3 attempts, exponential backoff) works for isolated hiccups but can't handle a server that needs minutes to recover. All 5 workers fail simultaneously, retry simultaneously (thundering herd), exhaust their 3 attempts within ~35 seconds, and give up forever.
+
+**Solution**: `_fetch_many()` now runs up to 3 retry waves after the initial fetch pass. Each wave:
+1. Collects transient failures (error_type in `transient`, `timeout`, `connection`)
+2. Waits 90 seconds (`WAVE_COOLDOWN`) for the server to recover
+3. Re-dispatches only failed URLs with reduced load: 2 workers (`WAVE_WORKERS`) at 0.5s rate (`WAVE_DELAY`)
+4. Merges results — successes overwrite old failures
+5. Exits early if no transient failures remain
+
+Additionally, per-URL backoff in `_get()` now includes jitter (`* (1 + random.uniform(0, 0.5))`) for 5xx and timeout errors, spreading retry timing across workers to prevent thundering herd within a wave.
+
+Key design choices:
+- **Waves live inside `_fetch_many()`**: Callers don't change. The pipeline orchestration in `run()` is unaffected.
+- **`self.delay` is temporarily increased during waves**: Restored in a `finally` block. Safe because waves run sequentially and `_fetch_many()` is the only concurrent caller of `_get()`.
+- **Per-URL `MAX_RETRIES` unchanged at 3**: The waves provide longer-term resilience; per-URL retries handle within-wave hiccups.
+- **Constants in `config.py`**: `RETRY_WAVES=3`, `WAVE_COOLDOWN=90`, `WAVE_WORKERS=2`, `WAVE_DELAY=0.5`.
+
+**See also**: ADR-0009 for the full decision record.
+
+---
+
 ## Bug 7: Empty DataFrame Indexing in Party Loyalty Summary
 
 **Discovered during:** Clustering code review and test writing (2026-02-20)
