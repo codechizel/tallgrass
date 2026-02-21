@@ -680,7 +680,21 @@ def plot_elbow_silhouette(
         fontweight="bold",
     )
 
-    ax1.set_title(f"{chamber} — K-Means Model Selection (1D IRT)")
+    ax1.set_title(f"{chamber} \u2014 How Many Groups Exist in the Legislature?")
+
+    # Add annotation at k=2 if it's optimal
+    if optimal_k == 2:
+        ax1.annotate(
+            "The data strongly favors\nexactly 2 groups",
+            xy=(2, inertias[0]),
+            xytext=(4, inertias[0] * 0.8),
+            fontsize=9,
+            fontweight="bold",
+            color="#333333",
+            bbox={"boxstyle": "round,pad=0.3", "fc": "lightyellow", "alpha": 0.8},
+            arrowprops={"arrowstyle": "->", "color": "#888888", "lw": 1.2},
+        )
+
     ax1.set_xticks(ks)
     fig.tight_layout()
     save_fig(fig, out_dir / f"model_selection_{chamber.lower()}.png")
@@ -719,10 +733,28 @@ def plot_irt_clusters(
                 )
 
     ax.axhline(0, color="gray", alpha=0.2)
-    ax.set_xlabel("IRT Ideal Point (Liberal ← → Conservative)")
+    ax.set_xlabel("IRT Ideal Point (Liberal \u2190 \u2192 Conservative)")
     ax.set_ylabel("")
     ax.set_yticks([])
-    ax.set_title(f"{chamber} — K-Means Clusters (k={k}) on IRT Ideal Points")
+
+    # Use a descriptive title for k=2 (most common)
+    if k == 2:
+        ax.set_title(f"{chamber} \u2014 Two Groups \u2014 And They're Exactly the Two Parties")
+        ax.annotate(
+            "The data says there are exactly two groups\n"
+            "\u2014 and they match party labels perfectly",
+            xy=(0.5, 0.95),
+            xycoords="axes fraction",
+            ha="center",
+            va="top",
+            fontsize=9,
+            fontstyle="italic",
+            color="#555555",
+            bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "alpha": 0.8},
+        )
+    else:
+        ax.set_title(f"{chamber} \u2014 K-Means Clusters (k={k}) on IRT Ideal Points")
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
@@ -789,21 +821,46 @@ def plot_irt_loyalty_clusters(
                     linewidth=0.5,
                 )
 
-    # Annotate notable legislators (extreme IRT or low loyalty)
+    # Annotate notable legislators (extreme IRT or low loyalty) with callout boxes
     for i in range(merged.height):
         if loy_vals[i] < 0.7 or abs(xi_vals[i]) > 3.5:
+            last_name = names[i].split()[-1] if names[i] else "?"
             ax.annotate(
-                names[i],
+                last_name,
                 (xi_vals[i], loy_vals[i]),
-                fontsize=6,
-                alpha=0.7,
-                xytext=(5, 5),
+                fontsize=7,
+                fontweight="bold",
+                xytext=(8, -8),
                 textcoords="offset points",
+                bbox={"boxstyle": "round,pad=0.2", "fc": "wheat", "alpha": 0.7},
+                arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 0.6},
             )
 
-    ax.set_xlabel("IRT Ideal Point (Liberal ← → Conservative)")
-    ax.set_ylabel("Party Loyalty Rate")
-    ax.set_title(f"{chamber} — Ideology vs Party Loyalty (k={k})")
+    # Add callout for low-loyalty extremists (Tyson/Thompson pattern)
+    low_loyalty_extreme = [
+        i for i in range(merged.height) if loy_vals[i] < 0.5 and abs(xi_vals[i]) > 3.0
+    ]
+    if low_loyalty_extreme:
+        extremist_names = [names[i].split()[-1] for i in low_loyalty_extreme]
+        callout = (
+            f"{' and '.join(extremist_names)}: ideologically extreme\nbut unreliable caucus members"
+        )
+        # Place callout near the first extremist
+        idx = low_loyalty_extreme[0]
+        ax.annotate(
+            callout,
+            (xi_vals[idx], loy_vals[idx]),
+            xytext=(xi_vals[idx] - 2, loy_vals[idx] + 0.15),
+            fontsize=8,
+            fontstyle="italic",
+            color="#555555",
+            bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "alpha": 0.8, "ec": "#cccccc"},
+            arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.2},
+        )
+
+    ax.set_xlabel("IRT Ideal Point (Liberal \u2190 \u2192 Conservative)")
+    ax.set_ylabel("Party Loyalty (higher = more reliable caucus member)")
+    ax.set_title(f"{chamber} \u2014 Who Marches to Their Own Beat?")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
