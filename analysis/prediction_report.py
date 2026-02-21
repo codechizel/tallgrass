@@ -71,7 +71,7 @@ def build_prediction_report(
     for chamber in chambers:
         _add_feature_importance_figure(report, plots_dir, chamber)
 
-    _add_feature_importance_interpretation(report, results, chambers)
+    _add_feature_importance_interpretation(report)
 
     # Per-legislator
     for chamber in chambers:
@@ -83,7 +83,7 @@ def build_prediction_report(
     for chamber in chambers:
         _add_hardest_legislators_table(report, results[chamber], chamber)
 
-    _add_per_legislator_interpretation(report, results, chambers)
+    _add_per_legislator_interpretation(report)
 
     # Surprising votes
     for chamber in chambers:
@@ -103,10 +103,10 @@ def build_prediction_report(
         for chamber in chambers:
             _add_surprising_bills_table(report, results[chamber], chamber)
 
-        _add_passage_interpretation(report, results, chambers)
+        _add_passage_interpretation(report)
 
-    _add_downstream_findings(report, results, chambers)
-    _add_parameters_table(report, results, chambers)
+    _add_downstream_findings(report)
+    _add_parameters_table(report)
 
     print(f"  Report: {len(report._sections)} sections added")
 
@@ -404,8 +404,6 @@ def _add_feature_importance_figure(
 
 def _add_feature_importance_interpretation(
     report: ReportBuilder,
-    results: dict[str, dict],
-    chambers: list[str],
 ) -> None:
     html = """
     <p><strong>Feature Importance Interpretation:</strong></p>
@@ -522,8 +520,6 @@ def _add_hardest_legislators_table(
 
 def _add_per_legislator_interpretation(
     report: ReportBuilder,
-    results: dict[str, dict],
-    chambers: list[str],
 ) -> None:
     parts = ["<p><strong>Per-Legislator Interpretation:</strong></p><ul>"]
     parts.append(
@@ -712,8 +708,6 @@ def _add_surprising_bills_table(
 
 def _add_passage_interpretation(
     report: ReportBuilder,
-    results: dict[str, dict],
-    chambers: list[str],
 ) -> None:
     html = """
     <p><strong>Bill Passage Interpretation:</strong></p>
@@ -742,8 +736,6 @@ def _add_passage_interpretation(
 
 def _add_downstream_findings(
     report: ReportBuilder,
-    results: dict[str, dict],
-    chambers: list[str],
 ) -> None:
     parts = ["<p><strong>Downstream Findings and Implications:</strong></p><ul>"]
     parts.append(
@@ -781,13 +773,9 @@ def _add_downstream_findings(
 
 def _add_parameters_table(
     report: ReportBuilder,
-    results: dict[str, dict],
-    chambers: list[str],
 ) -> None:
     try:
         from analysis.prediction import (
-            MIN_VOTES,
-            MINORITY_THRESHOLD,
             N_ESTIMATORS_RF,
             N_ESTIMATORS_XGB,
             N_SPLITS,
@@ -800,8 +788,6 @@ def _add_parameters_table(
         )
     except ModuleNotFoundError:
         from prediction import (  # type: ignore[no-redef]
-            MIN_VOTES,
-            MINORITY_THRESHOLD,
             N_ESTIMATORS_RF,
             N_ESTIMATORS_XGB,
             N_SPLITS,
@@ -823,8 +809,6 @@ def _add_parameters_table(
         {"Parameter": "XGB_LEARNING_RATE", "Value": str(XGB_LEARNING_RATE)},
         {"Parameter": "TOP_SHAP_FEATURES", "Value": str(TOP_SHAP_FEATURES)},
         {"Parameter": "TOP_SURPRISING_N", "Value": str(TOP_SURPRISING_N)},
-        {"Parameter": "MINORITY_THRESHOLD", "Value": str(MINORITY_THRESHOLD)},
-        {"Parameter": "MIN_VOTES", "Value": str(MIN_VOTES)},
     ]
 
     df = pl.DataFrame(rows)

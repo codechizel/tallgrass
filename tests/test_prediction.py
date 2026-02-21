@@ -293,111 +293,61 @@ def synthetic_pc_scores() -> pl.DataFrame:
     return pl.DataFrame(rows)
 
 
+# ── Shared derived fixture ───────────────────────────────────────────────────
+
+
+@pytest.fixture
+def vote_features(
+    synthetic_votes,
+    synthetic_rollcalls,
+    synthetic_legislators,
+    synthetic_ideal_points,
+    synthetic_bill_params,
+    synthetic_party_loyalty,
+    synthetic_centrality,
+    synthetic_pc_scores,
+) -> pl.DataFrame:
+    """Pre-built vote-level feature matrix used by most tests."""
+    return build_vote_features(
+        synthetic_votes,
+        synthetic_rollcalls,
+        synthetic_legislators,
+        synthetic_ideal_points,
+        synthetic_bill_params,
+        synthetic_party_loyalty,
+        synthetic_centrality,
+        synthetic_pc_scores,
+        "House",
+    )
+
+
+@pytest.fixture
+def trained_models(vote_features) -> dict:
+    """Pre-trained vote models (all 3) used by downstream tests."""
+    return train_vote_models(vote_features, "House")
+
+
 # ── Tests: Build Vote Features ───────────────────────────────────────────────
 
 
 class TestBuildVoteFeatures:
-    def test_correct_shape(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        result = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
+    def test_correct_shape(self, vote_features):
         # Should have ~1000 rows (20 legislators × 50 votes, minus any dropped)
-        assert result.height > 500
-        assert result.height <= N_LEGISLATORS * N_ROLLCALLS
+        assert vote_features.height > 500
+        assert vote_features.height <= N_LEGISLATORS * N_ROLLCALLS
 
-    def test_no_nan_in_features(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        result = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
+    def test_no_nan_in_features(self, vote_features):
         # After drop_nulls, no NaN should remain in feature columns
         exclude = {"legislator_slug", "vote_id", "vote_binary"}
-        for col in result.columns:
+        for col in vote_features.columns:
             if col not in exclude:
-                assert result[col].null_count() == 0, f"NaN found in {col}"
+                assert vote_features[col].null_count() == 0, f"NaN found in {col}"
 
-    def test_correct_target_encoding(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        result = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        unique_targets = result["vote_binary"].unique().sort().to_list()
+    def test_correct_target_encoding(self, vote_features):
+        unique_targets = vote_features["vote_binary"].unique().sort().to_list()
         assert unique_targets == [0, 1]
 
-    def test_expected_columns_present(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        result = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
+    def test_expected_columns_present(self, vote_features):
         expected = {
             "party_binary",
             "xi_mean",
@@ -417,7 +367,7 @@ class TestBuildVoteFeatures:
             "legislator_slug",
             "vote_id",
         }
-        assert expected.issubset(set(result.columns))
+        assert expected.issubset(set(vote_features.columns))
 
 
 # ── Tests: Build Bill Features ───────────────────────────────────────────────
@@ -444,85 +394,19 @@ class TestBuildBillFeatures:
 
 
 class TestTrainVoteModels:
-    def test_returns_all_models(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        assert "Logistic Regression" in result["models"]
-        assert "XGBoost" in result["models"]
-        assert "Random Forest" in result["models"]
+    def test_returns_all_models(self, trained_models):
+        assert "Logistic Regression" in trained_models["models"]
+        assert "XGBoost" in trained_models["models"]
+        assert "Random Forest" in trained_models["models"]
 
-    def test_cv_results_have_expected_keys(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        assert len(result["cv_results"]) == 5  # N_SPLITS
-        fold0 = result["cv_results"][0]
+    def test_cv_results_have_expected_keys(self, trained_models):
+        assert len(trained_models["cv_results"]) == 5  # N_SPLITS
+        fold0 = trained_models["cv_results"][0]
         assert "XGBoost_accuracy" in fold0
         assert "XGBoost_auc" in fold0
 
-    def test_auc_above_random(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        cv_df = pl.DataFrame(result["cv_results"])
+    def test_auc_above_random(self, trained_models):
+        cv_df = pl.DataFrame(trained_models["cv_results"])
         xgb_auc_mean = cv_df["XGBoost_auc"].mean()
         assert xgb_auc_mean > 0.5
 
@@ -553,66 +437,21 @@ class TestTrainPassageModels:
 
 
 class TestPerLegislatorAccuracy:
-    def test_one_row_per_legislator(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        feature_cols = result["feature_names"]
-        xgb = result["models"]["XGBoost"]
+    def test_one_row_per_legislator(self, vote_features, trained_models, synthetic_ideal_points):
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
 
         leg_acc = compute_per_legislator_accuracy(
-            xgb, features, feature_cols, synthetic_ideal_points
+            xgb, vote_features, feature_cols, synthetic_ideal_points
         )
-        # Should have one row per legislator
-        assert leg_acc.height == features["legislator_slug"].n_unique()
+        assert leg_acc.height == vote_features["legislator_slug"].n_unique()
 
-    def test_accuracy_in_range(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        feature_cols = result["feature_names"]
-        xgb = result["models"]["XGBoost"]
+    def test_accuracy_in_range(self, vote_features, trained_models, synthetic_ideal_points):
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
 
         leg_acc = compute_per_legislator_accuracy(
-            xgb, features, feature_cols, synthetic_ideal_points
+            xgb, vote_features, feature_cols, synthetic_ideal_points
         )
         accuracies = leg_acc["accuracy"].to_numpy()
         assert all(0 <= a <= 1 for a in accuracies)
@@ -623,64 +462,24 @@ class TestPerLegislatorAccuracy:
 
 class TestSurprisingVotes:
     def test_returns_top_n(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
+        self, vote_features, trained_models, synthetic_rollcalls, synthetic_ideal_points
     ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        feature_cols = result["feature_names"]
-        xgb = result["models"]["XGBoost"]
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
 
         surprising = find_surprising_votes(
-            xgb, features, feature_cols, synthetic_rollcalls, synthetic_ideal_points, top_n=10
+            xgb, vote_features, feature_cols, synthetic_rollcalls, synthetic_ideal_points, top_n=10
         )
         assert surprising.height <= 10
 
     def test_has_expected_columns(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
+        self, vote_features, trained_models, synthetic_rollcalls, synthetic_ideal_points
     ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        feature_cols = result["feature_names"]
-        xgb = result["models"]["XGBoost"]
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
 
         surprising = find_surprising_votes(
-            xgb, features, feature_cols, synthetic_rollcalls, synthetic_ideal_points, top_n=10
+            xgb, vote_features, feature_cols, synthetic_rollcalls, synthetic_ideal_points, top_n=10
         )
         if surprising.height > 0:
             expected = {"confidence_error", "y_prob", "actual", "predicted"}
@@ -691,63 +490,19 @@ class TestSurprisingVotes:
 
 
 class TestSHAP:
-    def test_shap_values_shape(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        feature_cols = result["feature_names"]
-        xgb = result["models"]["XGBoost"]
+    def test_shap_values_shape(self, trained_models):
+        feature_cols = trained_models["feature_names"]
+        xgb = trained_models["models"]["XGBoost"]
 
-        X_sample = result["X_test"][:50]
+        X_sample = trained_models["X_test"][:50]
         shap_vals = compute_shap_values(xgb, X_sample, feature_cols)
         assert shap_vals.values.shape[0] == X_sample.shape[0]
         assert shap_vals.values.shape[1] == len(feature_cols)
 
-    def test_feature_names_present(
-        self,
-        synthetic_votes,
-        synthetic_rollcalls,
-        synthetic_legislators,
-        synthetic_ideal_points,
-        synthetic_bill_params,
-        synthetic_party_loyalty,
-        synthetic_centrality,
-        synthetic_pc_scores,
-    ):
-        features = build_vote_features(
-            synthetic_votes,
-            synthetic_rollcalls,
-            synthetic_legislators,
-            synthetic_ideal_points,
-            synthetic_bill_params,
-            synthetic_party_loyalty,
-            synthetic_centrality,
-            synthetic_pc_scores,
-            "House",
-        )
-        result = train_vote_models(features, "House")
-        feature_cols = result["feature_names"]
-        xgb = result["models"]["XGBoost"]
+    def test_feature_names_present(self, trained_models):
+        feature_cols = trained_models["feature_names"]
+        xgb = trained_models["models"]["XGBoost"]
 
-        X_sample = result["X_test"][:50]
+        X_sample = trained_models["X_test"][:50]
         shap_vals = compute_shap_values(xgb, X_sample, feature_cols)
         assert shap_vals.feature_names == feature_cols

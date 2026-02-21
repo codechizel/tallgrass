@@ -70,8 +70,6 @@ XGB_MAX_DEPTH = 6
 XGB_LEARNING_RATE = 0.1
 TOP_SHAP_FEATURES = 15
 TOP_SURPRISING_N = 20
-MINORITY_THRESHOLD = 0.025
-MIN_VOTES = 20
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
 
 PREDICTION_PRIMER = """\
@@ -398,19 +396,15 @@ def build_bill_features(
             .alias("passed_binary")
         )
 
-    # Join IRT bill params
-    bp = bill_params.select("vote_id", "alpha_mean", "beta_mean", "is_veto_override")
+    # Join IRT bill params (only beta and override — alpha excluded as target leakage)
+    bp = bill_params.select("vote_id", "beta_mean", "is_veto_override")
     rc = rc.join(bp, on="vote_id", how="left")
 
     # Compute derived features
-    # NOTE: margin excluded — it's derived from vote counts that determine passage
-    # (target leakage). alpha_mean also excluded — IRT difficulty is a near-proxy
-    # for the passage outcome it was estimated from.
+    # NOTE: margin and alpha_mean excluded — target leakage (see design/prediction.md).
+    # chamber_binary excluded — constant within per-chamber models (zero information).
     rc = rc.with_columns(
-        # Day of session
         _compute_day_of_session(rc["vote_date"]),
-        # Chamber binary (1=House, 0=Senate)
-        pl.when(pl.col("chamber") == "House").then(1).otherwise(0).alias("chamber_binary"),
     )
 
     # Extract bill prefix (SB, HB, SCR, HCR, etc.)
@@ -432,16 +426,10 @@ def build_bill_features(
             pl.when(pl.col("bill_prefix") == pfx).then(1).otherwise(0).alias(f"pfx_{pfx.lower()}")
         )
 
-    # Select feature columns
-    # NOTE: alpha_mean and margin excluded — alpha (IRT difficulty) is a near-proxy
-    # for passage outcome, and margin is derived from the vote counts that determine
-    # passage. Both constitute target leakage. beta (discrimination) is retained
-    # because it measures how partisan a bill is, not whether it passes.
     feature_cols = [
         "beta_mean",
         "is_veto_override",
         "day_of_session",
-        "chamber_binary",
     ]
     vt_cols = [c for c in rc.columns if c.startswith("vt_")]
     pfx_cols = [c for c in rc.columns if c.startswith("pfx_")]
@@ -679,8 +667,16 @@ def _temporal_split_eval(
     chamber: str,
 ) -> list[dict]:
     """Evaluate passage models with a temporal train/test split."""
-    # Sort by vote_date
-    sorted_df = features_df.sort("vote_date")
+    # Sort by actual date (string sorting on MM/DD/YYYY is wrong across years)
+    try:
+        sorted_df = features_df.with_columns(
+            pl.col("vote_date").str.to_date("%m/%d/%Y").alias("_sort_date")
+        )
+    except Exception:
+        sorted_df = features_df.with_columns(
+            pl.col("vote_date").str.to_date("%Y-%m-%d").alias("_sort_date")
+        )
+    sorted_df = sorted_df.sort("_sort_date").drop("_sort_date")
     n = sorted_df.height
     split_idx = int(n * 0.70)
 
@@ -848,7 +844,7 @@ def find_surprising_bills(
     rollcalls: pl.DataFrame,
     top_n: int = TOP_SURPRISING_N,
 ) -> pl.DataFrame:
-    """Find bills where passage prediction was most wrong."""
+    """Find bills where passage prediction was most confidently wrong."""
     X = features_df.select(feature_cols).to_numpy().astype(np.float64)
     y = features_df["passed_binary"].to_numpy()
     y_prob = model.predict_proba(X)[:, 1]
@@ -856,17 +852,24 @@ def find_surprising_bills(
 
     confidence_error = np.abs(y_prob - y.astype(float))
 
-    result_df = features_df.select("vote_id", "bill_number", "passed_binary").with_columns(
-        pl.Series("y_prob", y_prob),
-        pl.Series("predicted", y_pred),
-        pl.Series("confidence_error", confidence_error),
+    # Only look at wrong predictions (consistent with find_surprising_votes)
+    wrong_mask = y_pred != y
+    if wrong_mask.sum() == 0:
+        return pl.DataFrame()
+
+    wrong_df = features_df.filter(pl.Series(wrong_mask)).select(
+        "vote_id", "bill_number", "passed_binary"
+    ).with_columns(
+        pl.Series("y_prob", y_prob[wrong_mask]),
+        pl.Series("predicted", y_pred[wrong_mask]),
+        pl.Series("confidence_error", confidence_error[wrong_mask]),
     )
 
     # Enrich with rollcall metadata
     rc_meta = rollcalls.select("vote_id", "motion", "vote_type", "yea_count", "nay_count")
-    result_df = result_df.join(rc_meta, on="vote_id", how="left")
+    wrong_df = wrong_df.join(rc_meta, on="vote_id", how="left")
 
-    return result_df.sort("confidence_error", descending=True).head(top_n)
+    return wrong_df.sort("confidence_error", descending=True).head(top_n)
 
 
 # ── Phase 9: Plots ───────────────────────────────────────────────────────────
@@ -1587,11 +1590,10 @@ def main() -> None:
         print_header("FILTERING MANIFEST")
 
         manifest = {
-            "minority_threshold": MINORITY_THRESHOLD,
-            "min_votes": MIN_VOTES,
             "test_size": TEST_SIZE,
             "n_splits": N_SPLITS,
             "random_seed": RANDOM_SEED,
+            "note": "Minority/participation filtering done upstream in EDA/IRT",
             "chambers": {},
         }
 
