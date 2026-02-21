@@ -1286,7 +1286,11 @@ def plot_agreement_heatmap(
     )
     g.ax_heatmap.set_xticklabels(g.ax_heatmap.get_xticklabels(), fontsize=fontsize, rotation=90)
     g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), fontsize=fontsize)
-    g.fig.suptitle(f"{chamber} — Pairwise Agreement (Contested Votes)", y=1.01, fontsize=14)
+    g.fig.suptitle(
+        f"{chamber} \u2014 How Often Do Legislators Vote Together?",
+        y=1.01,
+        fontsize=14,
+    )
 
     # Party color legend
     from matplotlib.patches import Patch
@@ -1303,6 +1307,33 @@ def plot_agreement_heatmap(
         frameon=False,
         fontsize=9,
     )
+
+    # Annotate Schreiber if present (highest cross-party agreement in House)
+    if chamber == "House":
+        schreiber_idx = None
+        for i, lbl in enumerate(labels):
+            if "Schreiber" in lbl:
+                schreiber_idx = i
+                break
+        if schreiber_idx is not None:
+            # Find Schreiber's position in the reordered heatmap
+            reorder = g.dendrogram_row.reordered_ind
+            schreiber_pos = list(reorder).index(schreiber_idx)
+            g.ax_heatmap.annotate(
+                "Schreiber: highest\ncross-party agreement",
+                xy=(schreiber_pos, schreiber_pos),
+                xytext=(n * 0.15, n * 0.15),
+                fontsize=8,
+                fontstyle="italic",
+                color="#555555",
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "fc": "lightyellow",
+                    "alpha": 0.8,
+                    "ec": "#cccccc",
+                },
+                arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.2},
+            )
 
     path = out_dir / f"agreement_heatmap_{chamber.lower()}.png"
     g.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
