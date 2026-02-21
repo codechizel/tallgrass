@@ -37,7 +37,71 @@ Sections to include:
 
 Reuse existing plots where possible, add 2-3 new synthesis visualizations (e.g., a combined legislator dashboard scatter plot).
 
-### 2. UMAP/t-SNE Ideological Landscape
+### 2. Visualization Improvement Pass
+
+**Priority:** High — the nontechnical audience rule was added during Phase 7 (Indices). Phases 1-6 predate it and need retrofitting. Should be done before or alongside the Synthesis Report.
+
+The Indices phase is the gold standard: plain-English titles ("Who Are the Most Independent Legislators?"), annotated key actors, and report text that defines every metric before showing plots. The earlier phases have good HTML report prose but their plots are still analyst-facing. 112 total plots across 7 phases; roughly half need improvement.
+
+**Guiding principle:** If a finding is explained in the HTML report, it should also appear visually in at least one plot. If a legislator is flagged in `docs/analytic-flags.md`, they should have a visual highlight somewhere.
+
+#### Network Phase (highest priority — Peck example)
+
+The network phase computes betweenness centrality and identifies "bridge" legislators, but the visualizations don't make this legible to a nontechnical reader. The centrality scatter plot (betweenness vs eigenvector) shows Peck elevated on the Y axis, but nothing explains *what that means* or *how it was derived*.
+
+Specific improvements:
+- **Annotate bridge legislators** on the community network plot — red border/halo on high-betweenness nodes (Peck, Schreiber, Thompson), with callout text: "Peck connects otherwise-separate voting blocs"
+- **Add a "What is betweenness?" inset** — a simple 3-node diagram showing how removing a bridge legislator disconnects groups, next to the actual network plot
+- **Replace or supplement the centrality scatter** with a ranked bar chart: "Who Holds the Most Influence in the Network?" with plain-English annotation ("higher = more paths between other legislators run through this person")
+- **Highlight Schreiber's cross-party edges** — at kappa=0.30, he's the sole link between R and D. A before/after pair showing the network with and without Schreiber would be powerful
+- **Label the threshold sweep plot** with event markers: "At this threshold, the network splits into two parties" instead of just showing curves
+
+#### IRT Phase
+
+The forest plots and trace plots are standard statistical outputs but opaque to nontechnical readers.
+
+Specific improvements:
+- **Add a Tyson spotlight subplot**: side-by-side showing (left) her voting pattern on high-discrimination bills (100% conservative) vs low-discrimination bills (50% contrarian), (right) her position on the forest plot with a callout box explaining the paradox
+- **Replace or supplement trace plots** with a convergence summary panel — "The model ran 4 independent chains and they all agree" with a simple visual (overlapping distributions) instead of spaghetti lines
+- **Annotate the forest plot** — highlight Tyson, Thompson, Schreiber, Miller with color/icons and brief labels explaining why they're interesting
+- **Add plain-English title**: "Where Does Each Legislator Fall on the Ideological Spectrum?" instead of "IRT Ideal Points with 95% HDI"
+
+#### Prediction Phase
+
+SHAP beeswarm plots are cryptic for anyone who hasn't taken a machine learning course.
+
+Specific improvements:
+- **Replace SHAP beeswarm** with a simplified "What Predicts a Yea Vote?" bar chart showing top 5 features with plain-English labels (e.g., "How conservative the legislator is" instead of "xi_mean", "How partisan the bill is" instead of "beta_mean")
+- **Add a "Hardest to Predict" spotlight** — scatter plot highlighting the 5-10 legislators the model struggles with most, annotated with names and brief explanations ("Shallenburger — procedural role as VP of Senate", "Helgerson — most moderate Democrat")
+- **Simplify calibration plot** with annotation: "When the model says 80% chance of Yea, it's right about 80% of the time"
+
+#### PCA Phase
+
+PC2 is labeled "secondary dimension" with no interpretation on the plot itself.
+
+Specific improvements:
+- **Annotate PC2 axis**: "Contrarianism — legislators who vote Nay on routine, near-unanimous bills" directly on the ideological map
+- **Add callout for Tyson** (PC2 = -24.8, 3x more extreme than next senator) and Thompson (-8.0)
+- **Label the scree plot** with interpretation: "The sharp elbow means Kansas is essentially a one-dimensional legislature — party affiliation explains almost everything"
+
+#### Clustering Phase
+
+Dendrograms are hard to read; within-party subclusters lack interpretation.
+
+Specific improvements:
+- **Annotate the IRT-vs-loyalty scatter** with Tyson and Thompson's positions and a text box: "These two senators are ideologically extreme but unreliable caucus members"
+- **Add a "What k=2 means" annotation** on the main cluster plot: "The data says there are exactly two groups — and they match party labels perfectly"
+- **Simplify or replace dendrograms** with a more readable alternative for the report (the dendrogram can remain as supplementary)
+
+#### EDA Phase
+
+Mostly fine, but the heatmaps are dense and lack annotation.
+
+Specific improvements:
+- **Add name labels to heatmap axes** (currently just colored by party, no individual names visible)
+- **Annotate interesting patterns**: mark Schreiber's row/column as the highest cross-party agreement
+
+### 3. UMAP/t-SNE Ideological Landscape
 
 **Priority:** High — quick win, high visual impact for nontechnical audience.
 
@@ -50,7 +114,7 @@ Method documented in `Analytic_Methods/11_DIM_umap_tsne_visualization.md`. Non-l
 
 Estimated effort: small. `umap-learn` already in `pyproject.toml`.
 
-### 3. Beta-Binomial Party Loyalty (Bayesian)
+### 4. Beta-Binomial Party Loyalty (Bayesian)
 
 **Priority:** High — experimental code already exists.
 
@@ -62,7 +126,7 @@ Method documented in `Analytic_Methods/14_BAY_beta_binomial_party_loyalty.md`. E
 - Compare Bayesian loyalty posteriors to CQ unity point estimates
 - Especially useful for Miller (30 votes) and other sparse legislators
 
-### 4. Hierarchical Bayesian Legislator Model
+### 5. Hierarchical Bayesian Legislator Model
 
 **Priority:** High — the "Crown Jewel" from the methods overview.
 
@@ -74,7 +138,7 @@ Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`.
 - Partial pooling shrinks extreme estimates (Tyson, Miller) toward party mean — the statistically principled version of what CQ unity does informally
 - Uses PyMC (already installed for IRT)
 
-### 5. Cross-Session Scrape (2023-24)
+### 6. Cross-Session Scrape (2023-24)
 
 **Priority:** High — unlocks temporal analysis and honest out-of-sample validation.
 
@@ -82,7 +146,7 @@ Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`.
 - Produces a second set of 3 CSVs in `data/ks_2023/`
 - Enables: cross-session prediction validation, ideological drift tracking, multi-session index stacking
 
-### 6. Cross-Session Validation
+### 7. Cross-Session Validation
 
 **Priority:** High — the single biggest gap in current results.
 
@@ -91,7 +155,7 @@ Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`.
 - Stack indices across sessions: all parquets already include a `session` column
 - Compare IRT ideal points for returning legislators: did anyone shift?
 
-### 7. MCA (Multiple Correspondence Analysis)
+### 8. MCA (Multiple Correspondence Analysis)
 
 **Priority:** Medium — alternative view on the vote matrix.
 
@@ -102,7 +166,7 @@ Method documented in `Analytic_Methods/10_DIM_correspondence_analysis.md`. MCA t
 - `prince` library already in `pyproject.toml`
 - Compare MCA dimensions to PCA PC1/PC2 — if they agree, PCA's linear assumption is validated
 
-### 8. Time Series Analysis
+### 9. Time Series Analysis
 
 **Priority:** Medium — adds temporal depth to static snapshots.
 
@@ -113,7 +177,7 @@ Two methods documented but not yet implemented:
 
 Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
 
-### 9. NLP on Bill Text for Passage Prediction
+### 10. NLP on Bill Text for Passage Prediction
 
 **Priority:** Medium — the obvious missing feature for prediction.
 
@@ -124,7 +188,7 @@ Current bill passage prediction uses only structural features (beta, vote_type, 
 - Topic modeling to classify bills into policy areas
 - Would explain the "surprising" bills that structural features miss
 
-### 10. 2D Bayesian IRT Model
+### 11. 2D Bayesian IRT Model
 
 **Priority:** Medium — solves the Tyson paradox properly.
 
@@ -204,13 +268,13 @@ No formal tests exist. The pipeline is verified manually via spot-checks and dat
 | 07 | ENP | IDX | Completed (Indices) |
 | 08 | Maverick Scores | IDX | Completed (Indices) |
 | 09 | PCA | DIM | Completed (PCA) |
-| 10 | MCA / Correspondence Analysis | DIM | **Planned** — item #7 above |
-| 11 | UMAP / t-SNE | DIM | **Planned** — item #2 above |
+| 10 | MCA / Correspondence Analysis | DIM | **Planned** — item #8 above |
+| 11 | UMAP / t-SNE | DIM | **Planned** — item #3 above |
 | 12 | W-NOMINATE | DIM | Rejected (R-only) |
 | 13 | Optimal Classification | DIM | Rejected (R-only) |
-| 14 | Beta-Binomial Party Loyalty | BAY | **Experimental** — item #3 above |
+| 14 | Beta-Binomial Party Loyalty | BAY | **Experimental** — item #4 above |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
-| 16 | Hierarchical Bayesian Model | BAY | **Planned** — item #4 above |
+| 16 | Hierarchical Bayesian Model | BAY | **Planned** — item #5 above |
 | 17 | Posterior Predictive Checks | BAY | Partial (embedded in IRT) |
 | 18 | Hierarchical Clustering | CLU | Completed (Clustering) |
 | 19 | K-Means / GMM Clustering | CLU | Completed (Clustering) |
@@ -220,8 +284,8 @@ No formal tests exist. The pipeline is verified manually via spot-checks and dat
 | 23 | Community Detection | NET | Completed (Network) |
 | 24 | Vote Prediction | PRD | Completed (Prediction) |
 | 25 | SHAP Analysis | PRD | Completed (Prediction) |
-| 26 | Ideological Drift | TSA | **Planned** — item #8 above |
-| 27 | Changepoint Detection | TSA | **Planned** — item #8 above |
+| 26 | Ideological Drift | TSA | **Planned** — item #9 above |
+| 27 | Changepoint Detection | TSA | **Planned** — item #9 above |
 | 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
 
 **Score: 17 completed, 2 rejected, 6 planned, 1 experimental, 2 deferred, 1 partial = 29 total**
