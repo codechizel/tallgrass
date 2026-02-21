@@ -1,7 +1,6 @@
 """Data classes for vote records."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -44,4 +43,4 @@ class RollCall:
     absent_not_voting_count: int = 0
     not_voting_count: int = 0
     total_votes: int = 0
-    passed: Optional[bool] = None
+    passed: bool | None = None

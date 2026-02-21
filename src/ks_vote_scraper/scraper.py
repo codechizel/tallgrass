@@ -1,9 +1,11 @@
 """Core scraper class for Kansas Legislature roll call votes."""
 
+import json
 import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -40,6 +42,35 @@ def _clean_text(element: BeautifulSoup) -> str:
     return " ".join(element.get_text(separator=" ", strip=True).split())
 
 
+@dataclass(frozen=True)
+class FetchResult:
+    """Result of an HTTP fetch attempt."""
+
+    url: str
+    html: str | None
+    status_code: int | None = None
+    error_type: str | None = None  # permanent, transient, timeout, connection
+    error_message: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.html is not None
+
+
+@dataclass(frozen=True)
+class FetchFailure:
+    """Record of a failed vote page fetch with bill context."""
+
+    bill_number: str
+    vote_text: str
+    vote_url: str
+    bill_path: str
+    status_code: int | None
+    error_type: str
+    error_message: str
+    timestamp: str
+
+
 class KSVoteScraper:
     """Scrapes Kansas Legislature roll call votes from kslegislature.gov."""
 
@@ -69,6 +100,7 @@ class KSVoteScraper:
         self.rollcalls: list[RollCall] = []
         self.legislators: dict[str, dict] = {}  # slug -> info
         self.bill_metadata: dict[str, dict] = {}  # normalized code -> API data
+        self.failures: list[FetchFailure] = []
 
         # Ensure directories exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -76,15 +108,29 @@ class KSVoteScraper:
 
     # -- HTTP helpers ----------------------------------------------------------
 
-    def _get(self, url: str) -> str | None:
-        """Fetch a URL with retries, caching, and rate limiting."""
+    def _get(self, url: str) -> FetchResult:
+        """Fetch a URL with retries, caching, and rate limiting.
+
+        Retry strategy varies by error type:
+        - 404: max 2 attempts (one retry), no backoff
+        - 5xx: exponential backoff (5s, 10s, 20s)
+        - Timeout: exponential backoff
+        - Connection error: fixed 5s delay
+        """
         # Check cache first (no rate limiting needed)
         cache_key = url.replace("/", "_").replace(":", "_").replace("?", "_")
         cache_file = self.cache_dir / f"{cache_key[:200]}.html"
         if cache_file.exists():
-            return cache_file.read_text(encoding="utf-8")
+            return FetchResult(url=url, html=cache_file.read_text(encoding="utf-8"))
 
-        for attempt in range(MAX_RETRIES):
+        last_error = ""
+        last_status: int | None = None
+        last_error_type: str | None = None
+        max_attempts = MAX_RETRIES
+        retry_delay = RETRY_DELAY
+        attempt = 0
+
+        while attempt < max_attempts:
             try:
                 # Rate limit only actual network requests
                 with self._rate_lock:
@@ -100,21 +146,63 @@ class KSVoteScraper:
                     cache_file.write_text(html, encoding="utf-8")
                 except OSError:
                     pass  # cache write failure is non-fatal
-                return html
-            except requests.RequestException as e:
-                if attempt < MAX_RETRIES - 1:
-                    print(f"  Retry {attempt + 1}/{MAX_RETRIES} for {url}: {e}")
-                    time.sleep(RETRY_DELAY)
-                else:
-                    print(f"  Failed after {MAX_RETRIES} attempts: {url}: {e}")
-                    return None
+                return FetchResult(url=url, html=html)
 
-    def _fetch_many(self, urls: list[str], desc: str = "Fetching") -> dict[str, str | None]:
+            except requests.HTTPError as e:
+                last_status = e.response.status_code if e.response is not None else None
+                last_error = str(e)
+                if last_status == 404:
+                    last_error_type = "permanent"
+                    max_attempts = min(max_attempts, 2)
+                    retry_delay = RETRY_DELAY
+                elif last_status is not None and last_status >= 500:
+                    last_error_type = "transient"
+                    retry_delay = RETRY_DELAY * (2**attempt)
+                else:
+                    # Other 4xx — don't retry
+                    last_error_type = "permanent"
+                    print(f"  Failed: {url}: {e}")
+                    break
+
+            except requests.Timeout as e:
+                last_error = str(e)
+                last_error_type = "timeout"
+                last_status = None
+                retry_delay = RETRY_DELAY * (2**attempt)
+
+            except requests.ConnectionError as e:
+                last_error = str(e)
+                last_error_type = "connection"
+                last_status = None
+                retry_delay = RETRY_DELAY
+
+            except requests.RequestException as e:
+                last_error = str(e)
+                last_error_type = "connection"
+                last_status = None
+                retry_delay = RETRY_DELAY
+
+            attempt += 1
+            if attempt < max_attempts:
+                print(f"  Retry {attempt}/{max_attempts} for {url}: {last_error}")
+                time.sleep(retry_delay)
+            else:
+                print(f"  Failed after {max_attempts} attempts: {url}: {last_error}")
+
+        return FetchResult(
+            url=url,
+            html=None,
+            status_code=last_status,
+            error_type=last_error_type,
+            error_message=last_error,
+        )
+
+    def _fetch_many(self, urls: list[str], desc: str = "Fetching") -> dict[str, FetchResult]:
         """Fetch multiple URLs concurrently using a thread pool.
 
-        Returns a dict mapping each URL to its HTML content (or None on failure).
+        Returns a dict mapping each URL to its FetchResult.
         """
-        results: dict[str, str | None] = {}
+        results: dict[str, FetchResult] = {}
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_url = {executor.submit(self._get, url): url for url in urls}
             for future in tqdm(
@@ -148,10 +236,10 @@ class KSVoteScraper:
             ("House Bills", self.session.house_bills_path),
         ]:
             print(f"  Fetching {label}...")
-            html = self._get(BASE_URL + path)
-            if not html:
+            result = self._get(BASE_URL + path)
+            if not result.ok:
                 continue
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(result.html, "lxml")
 
             for link in soup.find_all("a", href=True):
                 href = link["href"]
@@ -247,7 +335,7 @@ class KSVoteScraper:
 
         # Fetch phase (concurrent)
         full_urls = [BASE_URL + path for path in bill_urls]
-        url_to_html = self._fetch_many(full_urls, desc="Scanning bills")
+        fetched = self._fetch_many(full_urls, desc="Scanning bills")
 
         # Parse phase (sequential)
         vote_links = []
@@ -255,11 +343,11 @@ class KSVoteScraper:
 
         for bill_path in bill_urls:
             url = BASE_URL + bill_path
-            html = url_to_html.get(url)
-            if not html:
+            result = fetched.get(url)
+            if not result or not result.ok:
                 continue
 
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(result.html, "lxml")
             bill_number = self._extract_bill_number(soup, bill_path)
 
             found_votes = False
@@ -307,14 +395,31 @@ class KSVoteScraper:
 
         # Fetch phase (concurrent)
         vote_urls = [vl["vote_url"] for vl in vote_links]
-        url_to_html = self._fetch_many(vote_urls, desc="Fetching votes")
+        fetched = self._fetch_many(vote_urls, desc="Fetching votes")
 
         # Parse phase (sequential — mutates self.rollcalls, self.individual_votes, etc.)
         for vl in tqdm(vote_links, desc="Parsing votes", unit="vote"):
-            html = url_to_html.get(vl["vote_url"])
-            if not html:
+            result = fetched.get(vl["vote_url"])
+            if not result or not result.ok:
+                if result and result.error_type:
+                    self.failures.append(
+                        FetchFailure(
+                            bill_number=vl["bill_number"],
+                            vote_text=vl.get("vote_text", ""),
+                            vote_url=vl["vote_url"],
+                            bill_path=vl.get("bill_path", ""),
+                            status_code=result.status_code,
+                            error_type=result.error_type,
+                            error_message=result.error_message or "",
+                            timestamp=datetime.now().isoformat(timespec="seconds"),
+                        )
+                    )
+                    print(
+                        f"  FAILED: {vl['bill_number']} - {vl.get('vote_text', '')}"
+                        f" ({result.error_type}: {result.error_message})"
+                    )
                 continue
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(result.html, "lxml")
             self._parse_vote_page(soup, vl)
 
         print(f"  Parsed {len(self.rollcalls)} roll calls")
@@ -569,7 +674,7 @@ class KSVoteScraper:
         urls_to_fetch = [u for u in urls_to_fetch if u]
 
         # Fetch phase (concurrent)
-        url_to_html = self._fetch_many(urls_to_fetch, desc="Legislators")
+        fetched = self._fetch_many(urls_to_fetch, desc="Legislators")
 
         # Parse phase (sequential)
         for slug in slugs_to_fetch:
@@ -578,11 +683,11 @@ class KSVoteScraper:
             if not url:
                 continue
 
-            html = url_to_html.get(url)
-            if not html:
+            result = fetched.get(url)
+            if not result or not result.ok:
                 continue
 
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(result.html, "lxml")
 
             # Full name from <h1> containing "Senator" or "Representative"
             name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
@@ -611,6 +716,58 @@ class KSVoteScraper:
                     info["party"] = "Democrat"
 
         print(f"  Enriched {len(slugs_to_fetch)} legislators")
+
+    # -- Failure reporting -----------------------------------------------------
+
+    def _save_failure_manifest(self, total_vote_pages: int) -> Path:
+        """Write a JSON manifest of all failed vote page fetches."""
+        manifest = {
+            "session": self.session.label,
+            "run_timestamp": datetime.now().isoformat(timespec="seconds"),
+            "total_vote_pages": total_vote_pages,
+            "successful": total_vote_pages - len(self.failures),
+            "failed_count": len(self.failures),
+            "failures": [
+                {
+                    "bill_number": f.bill_number,
+                    "vote_text": f.vote_text,
+                    "vote_url": f.vote_url,
+                    "bill_path": f.bill_path,
+                    "status_code": f.status_code,
+                    "error_type": f.error_type,
+                    "error_message": f.error_message,
+                    "timestamp": f.timestamp,
+                }
+                for f in self.failures
+            ],
+        }
+        manifest_path = self.output_dir / "failure_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        return manifest_path
+
+    def _print_failure_summary(self):
+        """Print a grouped summary of all failed vote page fetches."""
+        if not self.failures:
+            return
+
+        print("\n" + "!" * 60)
+        print(f"  WARNING: {len(self.failures)} vote page(s) failed to fetch")
+        print("!" * 60)
+
+        # Group by error_type
+        by_type: dict[str, list[FetchFailure]] = {}
+        for f in self.failures:
+            by_type.setdefault(f.error_type, []).append(f)
+
+        for error_type, failures in sorted(by_type.items()):
+            print(f"\n  {error_type} ({len(failures)}):")
+            for f in failures:
+                status = f"[HTTP {f.status_code}]" if f.status_code else f"[{f.error_type}]"
+                print(f"    {f.bill_number:10s} {f.vote_text:40s} {status}")
+
+        manifest_path = self.output_dir / "failure_manifest.json"
+        print(f"\n  Failure manifest: {manifest_path}")
+        print("  Failed pages are not cached — re-run to retry automatically.")
 
     # -- Main runner -----------------------------------------------------------
 
@@ -662,6 +819,9 @@ class KSVoteScraper:
         )
         step_times.append(("Save CSVs", time.time() - t))
 
+        if self.failures:
+            self._save_failure_manifest(len(vote_links))
+
         elapsed = time.time() - start
 
         print("\n" + "=" * 60)
@@ -686,6 +846,8 @@ class KSVoteScraper:
             f"  ks_{self.session.output_name}_legislators.csv"
             f"   - {len(self.legislators)} legislators"
         )
+
+        self._print_failure_summary()
 
     def clear_cache(self):
         """Remove cached HTML files to force fresh fetches."""
