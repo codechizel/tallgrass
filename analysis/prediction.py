@@ -895,7 +895,7 @@ def detect_hardest_legislators(
         results.append(
             HardestLegislator(
                 slug=row["legislator_slug"],
-                full_name=row.get("full_name", row["legislator_slug"]),
+                full_name=row.get("full_name") or row["legislator_slug"],
                 party=party,
                 xi_mean=float(xi) if xi is not None else 0.0,
                 accuracy=float(row["accuracy"]),
@@ -1226,8 +1226,9 @@ def plot_per_legislator_accuracy(
     # Label bottom 5 by accuracy with callout boxes
     bottom5 = leg_accuracy.sort("accuracy").head(5)
     for row in bottom5.iter_rows(named=True):
-        name = row.get("full_name", row["legislator_slug"])
-        last_name = name.split()[-1] if name else "?"
+        name = row.get("full_name") or row["legislator_slug"]
+        name_part = name.split(" - ")[0] if name else ""
+        last_name = name_part.split()[-1] if name_part else "?"
         ax.annotate(
             last_name,
             (row["xi_mean"], row["accuracy"]),
@@ -1321,15 +1322,6 @@ def plot_hardest_to_predict(
     )
 
     ax.set_xlabel("Prediction Accuracy", fontsize=12)
-    ax.set_title(
-        f"{chamber} \u2014 Which Legislators Does the Model Struggle With Most?\n"
-        "The model correctly predicts ~95% of all votes. These legislators are the exceptions.",
-        fontsize=14,
-        linespacing=1.6,
-    )
-    # Make subtitle portion smaller and italic via the second line
-    ax.title.set_fontsize(14)
-    # Use a two-line title instead — override with fig.suptitle for main + ax.set_title for sub
     ax.set_title(
         "The model correctly predicts ~95% of all votes. These legislators are the exceptions.",
         fontsize=9,
@@ -1486,9 +1478,10 @@ def plot_surprising_votes(
 
     labels = []
     for row in surprising_df.iter_rows(named=True):
-        name = row.get("full_name", row.get("legislator_slug", "?"))
-        # Use last name only for conciseness
-        last_name = name.split()[-1] if name else "?"
+        name = row.get("full_name") or row.get("legislator_slug") or "?"
+        # Strip leadership suffixes ("- Vice President of the Senate") before extracting last name
+        name_part = name.split(" - ")[0] if name else ""
+        last_name = name_part.split()[-1] if name_part else "?"
         bill = row.get("bill_number", "?")
         labels.append(f"{last_name}\n{bill}")
 

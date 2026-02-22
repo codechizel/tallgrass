@@ -64,7 +64,8 @@ All three prediction visualization improvements completed (2026-02-22):
 - **Conversational SHAP labels** — all 14 `FEATURE_DISPLAY_NAMES` rewritten for nontechnical audiences (e.g., "How conservative the legislator is" instead of "xi_mean", "Legislator–bill ideology match" instead of "Ideology × partisanship interaction"). Flows through SHAP beeswarm, SHAP bar, and XGBoost feature importance plots automatically via `_rename_shap_features()`.
 - **"Hardest to Predict" spotlight** — `detect_hardest_legislators()` pure-data function + `HardestLegislator` frozen dataclass. Horizontal dot chart (`plot_hardest_to_predict()`) showing bottom 8 legislators with party-colored dots, data-driven plain-English explanations (moderate, centrist for party, strongly partisan crossover, or doesn't fit 1D model), chamber median reference line, and callout box.
 - **Calibration plot annotation** — already done: "When the model says 80% chance of Yea, it's right about 80% of the time" (lightyellow callout box).
-- 6 new tests in `TestDetectHardestLegislators`, `HARDEST_N=8` added to design doc parameters table.
+- 14 tests in `TestDetectHardestLegislators` (6 original + 8 added in review pass covering null full_name, single-party, custom n, all explanation branches, null xi_mean, field correctness), `HARDEST_N=8` added to design doc parameters table.
+- **Bugfixes (review pass):** null `full_name` crash in `detect_hardest_legislators()` (`.get()` returns `None` not fallback when key exists with null value); dead code removal in `plot_hardest_to_predict()`; consistent leadership suffix stripping in `plot_per_legislator_accuracy()` and `plot_surprising_votes()`.
 
 #### PCA Phase
 
@@ -197,7 +198,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-488 tests exist across scraper (146) and analysis (342) modules. Coverage could be expanded:
+496 tests exist across scraper (146) and analysis (350) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

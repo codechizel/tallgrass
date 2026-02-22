@@ -734,3 +734,149 @@ class TestDetectHardestLegislators:
         hardest = detect_hardest_legislators(df, n=1)
         assert len(hardest) == 1
         assert "Moderate" in hardest[0].explanation or "Centrist" in hardest[0].explanation
+
+    def test_null_full_name_uses_slug(self):
+        """When full_name is null, slug is used instead (no crash)."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_mystery_1", "rep_r1_1", "rep_d1_1"],
+                "full_name": [None, "Strong R", "Strong D"],
+                "party": ["Republican", "Republican", "Democrat"],
+                "xi_mean": [1.0, 2.0, -2.0],
+                "accuracy": [0.70, 0.95, 0.95],
+                "n_votes": [50, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        assert len(hardest) == 1
+        assert hardest[0].full_name == "rep_mystery_1"
+        assert isinstance(hardest[0].full_name, str)
+
+    def test_single_party_no_crash(self):
+        """Only one party present — midpoint falls back to 0.0, no crash."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_r0_1", "rep_r1_1", "rep_r2_1"],
+                "full_name": ["Alice", "Bob", "Carol"],
+                "party": ["Republican", "Republican", "Republican"],
+                "xi_mean": [1.0, 1.5, 2.0],
+                "accuracy": [0.80, 0.90, 0.95],
+                "n_votes": [50, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=2)
+        assert len(hardest) == 2
+        for h in hardest:
+            assert isinstance(h.explanation, str)
+            assert len(h.explanation) > 0
+
+    def test_custom_n_parameter(self):
+        """Custom n limits output count."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": [f"rep_x{i}_1" for i in range(10)],
+                "full_name": [f"Legislator {i}" for i in range(10)],
+                "party": ["Republican"] * 5 + ["Democrat"] * 5,
+                "xi_mean": [2.0, 1.5, 1.0, 0.5, 0.1, -0.1, -0.5, -1.0, -1.5, -2.0],
+                "accuracy": [0.7 + i * 0.02 for i in range(10)],
+                "n_votes": [50] * 10,
+            }
+        )
+        hardest_3 = detect_hardest_legislators(df, n=3)
+        assert len(hardest_3) == 3
+        hardest_1 = detect_hardest_legislators(df, n=1)
+        assert len(hardest_1) == 1
+
+    def test_strongly_conservative_explanation(self):
+        """Republican with xi far above party median gets 'Strongly conservative' explanation."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_extreme_1", "rep_r1_1", "rep_r2_1", "rep_d1_1"],
+                "full_name": ["Extreme R", "Normal R1", "Normal R2", "Normal D"],
+                "party": ["Republican", "Republican", "Republican", "Democrat"],
+                "xi_mean": [4.0, 1.0, 1.2, -2.0],
+                "accuracy": [0.70, 0.95, 0.95, 0.95],
+                "n_votes": [50, 50, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        assert len(hardest) == 1
+        assert "conservative" in hardest[0].explanation.lower()
+
+    def test_strongly_liberal_explanation(self):
+        """Democrat with xi far below party median gets 'Strongly liberal' explanation."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_extreme_1", "rep_d1_1", "rep_d2_1", "rep_r1_1"],
+                "full_name": ["Extreme D", "Normal D1", "Normal D2", "Normal R"],
+                "party": ["Democrat", "Democrat", "Democrat", "Republican"],
+                "xi_mean": [-4.0, -1.0, -1.2, 2.0],
+                "accuracy": [0.70, 0.95, 0.95, 0.95],
+                "n_votes": [50, 50, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        assert len(hardest) == 1
+        assert "liberal" in hardest[0].explanation.lower()
+
+    def test_fallback_explanation(self):
+        """Legislator that doesn't match other categories gets fallback explanation."""
+        # Democrat with xi slightly above party median (not extreme, not centrist, not moderate)
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_odd_1", "rep_r1_1", "rep_d1_1"],
+                "full_name": ["Odd One", "Strong R", "Strong D"],
+                "party": ["Democrat", "Republican", "Democrat"],
+                "xi_mean": [-0.8, 2.0, -2.0],
+                "accuracy": [0.70, 0.95, 0.95],
+                "n_votes": [50, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        assert len(hardest) == 1
+        assert "doesn\u2019t fit" in hardest[0].explanation
+
+    def test_null_xi_mean_no_crash(self):
+        """When xi_mean is null, should not crash and should use 0.0 as default."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_null_xi_1", "rep_r1_1", "rep_d1_1"],
+                "full_name": ["Null Xi", "Strong R", "Strong D"],
+                "party": ["Republican", "Republican", "Democrat"],
+                "xi_mean": [None, 2.0, -2.0],
+                "accuracy": [0.70, 0.95, 0.95],
+                "n_votes": [50, 50, 50],
+            },
+            schema={
+                "legislator_slug": pl.Utf8,
+                "full_name": pl.Utf8,
+                "party": pl.Utf8,
+                "xi_mean": pl.Float64,
+                "accuracy": pl.Float64,
+                "n_votes": pl.Int64,
+            },
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        assert len(hardest) == 1
+        assert hardest[0].xi_mean == 0.0
+
+    def test_fields_populated_correctly(self):
+        """All HardestLegislator fields match input data."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_test_1", "rep_r1_1", "rep_d1_1"],
+                "full_name": ["Test Person", "Strong R", "Strong D"],
+                "party": ["Republican", "Republican", "Democrat"],
+                "xi_mean": [1.5, 2.0, -2.0],
+                "accuracy": [0.75, 0.95, 0.95],
+                "n_votes": [100, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        h = hardest[0]
+        assert h.slug == "rep_test_1"
+        assert h.full_name == "Test Person"
+        assert h.party == "Republican"
+        assert h.xi_mean == 1.5
+        assert h.accuracy == 0.75
+        assert h.n_votes == 100
