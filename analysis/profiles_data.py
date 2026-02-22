@@ -334,6 +334,11 @@ def find_defection_bills(
         how="left",
     )
 
+    # Ensure expected metadata columns exist (rollcalls may lack them)
+    for col_name in ("bill_number", "short_title", "motion"):
+        if col_name not in result.columns:
+            result = result.with_columns(pl.lit(None).cast(pl.Utf8).alias(col_name))
+
     return result.select(
         pl.col("bill_number").fill_null("Unknown"),
         pl.col("short_title").fill_null(""),

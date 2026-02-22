@@ -86,6 +86,8 @@ def senate_leg_df() -> pl.DataFrame:
         "loyalty_zscore": [1.0, 0.3, -1.2, -0.5, 0.5, 1.0],
         "PC1": [3.5, 2.0, 1.0, 0.5, -2.0, -3.0],
         "PC2": [0.0, 0.1, -0.3, 0.2, 0.0, -0.1],
+        "xi_mean_percentile": [1.0, 0.8, 0.6, 0.4, 0.17, 0.0],
+        "betweenness_percentile": [0.17, 0.33, 0.83, 0.67, 0.17, 0.0],
     })
 
 
@@ -334,6 +336,21 @@ class TestFindDefectionBills:
             "rep_a", votes_long, rollcalls, "Republican", party_slugs
         )
         assert result.height == 0
+
+    def test_handles_rollcalls_missing_columns(self, votes_long):
+        """Should not crash when rollcalls lacks metadata columns."""
+        # Rollcalls with only vote_id — no bill_number, short_title, or motion
+        minimal_rc = pl.DataFrame({
+            "vote_id": [f"v{i}" for i in range(10)],
+        })
+        party_slugs = ["rep_a", "rep_b", "rep_c", "rep_d", "rep_e", "rep_g"]
+        result = find_defection_bills(
+            "rep_g", votes_long, minimal_rc, "Republican", party_slugs
+        )
+        assert result.height > 0
+        assert "bill_number" in result.columns
+        assert "short_title" in result.columns
+        assert "motion" in result.columns
 
 
 # ── Tests: Find Voting Neighbors ─────────────────────────────────────────────

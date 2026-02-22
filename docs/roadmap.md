@@ -198,7 +198,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-481 tests exist across scraper (146) and analysis (335) modules. Coverage could be expanded:
+482 tests exist across scraper (146) and analysis (336) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
