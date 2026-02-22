@@ -1259,13 +1259,15 @@ def plot_hardest_to_predict(
     if not hardest:
         return
 
-    fig, ax = plt.subplots(figsize=(10, max(4, 0.6 * len(hardest) + 1.5)))
+    fig, ax = plt.subplots(figsize=(12, max(4, 0.6 * len(hardest) + 1.5)))
 
     labels = []
     accuracies = []
     colors = []
     for h in hardest:
-        last_name = h.full_name.split()[-1] if h.full_name else "?"
+        # Strip leadership suffixes ("- Vice President of the Senate") before extracting last name
+        name_part = h.full_name.split(" - ")[0] if h.full_name else ""
+        last_name = name_part.split()[-1] if name_part else "?"
         party_initial = h.party[0] if h.party else "?"
         labels.append(f"{last_name} ({party_initial})")
         accuracies.append(h.accuracy)
@@ -1307,33 +1309,44 @@ def plot_hardest_to_predict(
         linestyle="--",
         linewidth=1,
         zorder=1,
-        label=f"Chamber median ({chamber_median_accuracy:.1%})",
     )
-
-    # Callout box
-    ax.annotate(
-        "The model correctly predicts ~95% of all votes.\n"
-        "These legislators are the exceptions.",
-        xy=(0.02, 0.98),
-        xycoords="axes fraction",
-        fontsize=9,
-        fontstyle="italic",
-        color="#555555",
+    # Label the median line at the bottom of the plot
+    ax.text(
+        chamber_median_accuracy,
+        len(hardest) - 0.4,
+        f" Median: {chamber_median_accuracy:.1%}",
+        fontsize=8,
+        color="#888888",
         va="top",
-        bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "alpha": 0.8, "ec": "#cccccc"},
     )
 
     ax.set_xlabel("Prediction Accuracy", fontsize=12)
     ax.set_title(
+        f"{chamber} \u2014 Which Legislators Does the Model Struggle With Most?\n"
+        "The model correctly predicts ~95% of all votes. These legislators are the exceptions.",
+        fontsize=14,
+        linespacing=1.6,
+    )
+    # Make subtitle portion smaller and italic via the second line
+    ax.title.set_fontsize(14)
+    # Use a two-line title instead — override with fig.suptitle for main + ax.set_title for sub
+    ax.set_title(
+        "The model correctly predicts ~95% of all votes. These legislators are the exceptions.",
+        fontsize=9,
+        fontstyle="italic",
+        color="#555555",
+        pad=4,
+    )
+    fig.suptitle(
         f"{chamber} \u2014 Which Legislators Does the Model Struggle With Most?",
         fontsize=14,
+        y=0.99,
     )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.legend(fontsize=9, loc="lower right")
     ax.grid(True, axis="x", alpha=0.3)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 0.58, 0.96])
     save_fig(fig, out_path)
 
 
