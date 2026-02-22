@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib
@@ -84,23 +85,24 @@ XGB_LEARNING_RATE = 0.1
 TOP_SHAP_FEATURES = 15
 TOP_SURPRISING_N = 20
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+HARDEST_N = 8
 
 # Plain-English feature names for SHAP and feature importance plots (nontechnical audience)
 FEATURE_DISPLAY_NAMES: dict[str, str] = {
-    "xi_mean": "Legislator ideology",
-    "beta_mean": "Bill partisanship",
-    "alpha_mean": "Bill popularity",
-    "xi_sd": "Ideology uncertainty",
-    "xi_x_beta": "Ideology \u00d7 partisanship interaction",
-    "party_binary": "Party (R=1, D=0)",
-    "loyalty_rate": "Party loyalty",
-    "betweenness": "Network bridge score",
-    "eigenvector": "Network influence",
-    "pagerank": "Network importance",
-    "PC1": "Primary ideology (PCA)",
-    "PC2": "Secondary dimension (PCA)",
-    "day_of_session": "Day of session",
-    "is_veto_override": "Veto override vote",
+    "xi_mean": "How conservative the legislator is",
+    "beta_mean": "How partisan the bill is",
+    "alpha_mean": "How easy the bill is to pass",
+    "xi_sd": "How uncertain the ideology estimate is",
+    "xi_x_beta": "Legislator\u2013bill ideology match",
+    "party_binary": "Party (Republican or Democrat)",
+    "loyalty_rate": "How often they vote with their party",
+    "betweenness": "How much they bridge voting blocs",
+    "eigenvector": "How influential in the voting network",
+    "pagerank": "How central in the voting network",
+    "PC1": "Primary left\u2013right position",
+    "PC2": "Secondary voting dimension",
+    "day_of_session": "How far into the session",
+    "is_veto_override": "Whether it\u2019s a veto override vote",
 }
 
 PREDICTION_PRIMER = """\
@@ -825,6 +827,86 @@ def compute_per_legislator_accuracy(
     return leg_acc.sort("accuracy")
 
 
+@dataclass(frozen=True)
+class HardestLegislator:
+    """A legislator the model struggles to predict, with a plain-English explanation."""
+
+    slug: str
+    full_name: str
+    party: str
+    xi_mean: float
+    accuracy: float
+    n_votes: int
+    explanation: str
+
+
+def detect_hardest_legislators(
+    leg_accuracy: pl.DataFrame,
+    n: int = HARDEST_N,
+) -> list[HardestLegislator]:
+    """Identify the N legislators the model struggles with most.
+
+    Returns a list of HardestLegislator sorted by accuracy ascending (worst first).
+    Each entry includes a data-driven plain-English explanation based on IRT position.
+    """
+    if leg_accuracy.height == 0:
+        return []
+
+    bottom = leg_accuracy.sort("accuracy").head(n)
+    results: list[HardestLegislator] = []
+
+    # Compute cross-party midpoint for explanation logic
+    r_vals = leg_accuracy.filter(pl.col("party") == "Republican")["xi_mean"]
+    d_vals = leg_accuracy.filter(pl.col("party") == "Democrat")["xi_mean"]
+    if r_vals.len() > 0 and d_vals.len() > 0:
+        midpoint = (r_vals.min() + d_vals.max()) / 2
+    else:
+        midpoint = 0.0
+
+    # Compute party medians for "centrist for their party" logic
+    party_medians: dict[str, float] = {}
+    for party in ["Republican", "Democrat"]:
+        vals = leg_accuracy.filter(pl.col("party") == party)["xi_mean"]
+        if vals.len() > 0:
+            party_medians[party] = float(vals.median())
+
+    for row in bottom.iter_rows(named=True):
+        xi = row.get("xi_mean")
+        party = row.get("party", "Unknown")
+
+        if xi is not None and midpoint is not None and abs(xi - midpoint) < 0.5:
+            explanation = "Moderate \u2014 close to the boundary between parties"
+        elif xi is not None and party in party_medians:
+            median = party_medians[party]
+            # "Centrist for their party" = closer to midpoint than their party median
+            if abs(xi - midpoint) < abs(median - midpoint) * 0.7:
+                explanation = f"Centrist {party} \u2014 less ideologically committed than most"
+            elif party == "Republican" and xi > median:
+                explanation = (
+                    "Strongly conservative but occasionally crosses party lines"
+                )
+            elif party == "Democrat" and xi < median:
+                explanation = "Strongly liberal but occasionally crosses party lines"
+            else:
+                explanation = "Voting pattern doesn\u2019t fit the one-dimensional model"
+        else:
+            explanation = "Voting pattern doesn\u2019t fit the one-dimensional model"
+
+        results.append(
+            HardestLegislator(
+                slug=row["legislator_slug"],
+                full_name=row.get("full_name", row["legislator_slug"]),
+                party=party,
+                xi_mean=float(xi) if xi is not None else 0.0,
+                accuracy=float(row["accuracy"]),
+                n_votes=int(row["n_votes"]),
+                explanation=explanation,
+            )
+        )
+
+    return results
+
+
 # ── Phase 8: Surprising Votes / Bills ────────────────────────────────────────
 
 
@@ -1167,6 +1249,94 @@ def plot_per_legislator_accuracy(
     save_fig(fig, out_path)
 
 
+def plot_hardest_to_predict(
+    hardest: list[HardestLegislator],
+    chamber: str,
+    chamber_median_accuracy: float,
+    out_path: Path,
+) -> None:
+    """Horizontal dot chart spotlighting the legislators the model struggles with most."""
+    if not hardest:
+        return
+
+    fig, ax = plt.subplots(figsize=(10, max(4, 0.6 * len(hardest) + 1.5)))
+
+    labels = []
+    accuracies = []
+    colors = []
+    for h in hardest:
+        last_name = h.full_name.split()[-1] if h.full_name else "?"
+        party_initial = h.party[0] if h.party else "?"
+        labels.append(f"{last_name} ({party_initial})")
+        accuracies.append(h.accuracy)
+        colors.append(PARTY_COLORS.get(h.party, "#999999"))
+
+    y_pos = list(range(len(hardest)))
+
+    ax.scatter(
+        accuracies,
+        y_pos,
+        c=colors,
+        s=120,
+        edgecolors="black",
+        linewidths=0.8,
+        zorder=3,
+    )
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=10)
+    ax.invert_yaxis()
+
+    # Annotate each dot with its explanation
+    for i, h in enumerate(hardest):
+        ax.annotate(
+            h.explanation,
+            (accuracies[i], i),
+            textcoords="offset points",
+            xytext=(12, 0),
+            fontsize=8,
+            fontstyle="italic",
+            color="#666666",
+            va="center",
+        )
+
+    # Vertical dashed line at chamber median
+    ax.axvline(
+        chamber_median_accuracy,
+        color="#888888",
+        linestyle="--",
+        linewidth=1,
+        zorder=1,
+        label=f"Chamber median ({chamber_median_accuracy:.1%})",
+    )
+
+    # Callout box
+    ax.annotate(
+        "The model correctly predicts ~95% of all votes.\n"
+        "These legislators are the exceptions.",
+        xy=(0.02, 0.98),
+        xycoords="axes fraction",
+        fontsize=9,
+        fontstyle="italic",
+        color="#555555",
+        va="top",
+        bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "alpha": 0.8, "ec": "#cccccc"},
+    )
+
+    ax.set_xlabel("Prediction Accuracy", fontsize=12)
+    ax.set_title(
+        f"{chamber} \u2014 Which Legislators Does the Model Struggle With Most?",
+        fontsize=14,
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.legend(fontsize=9, loc="lower right")
+    ax.grid(True, axis="x", alpha=0.3)
+
+    fig.tight_layout()
+    save_fig(fig, out_path)
+
+
 def plot_confusion_matrix(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -1483,6 +1653,12 @@ def main() -> None:
                 name = row.get("full_name", row["legislator_slug"])
                 print(f"    {name}: {row['accuracy']:.3f} ({row['n_correct']}/{row['n_votes']})")
 
+            hardest = detect_hardest_legislators(leg_accuracy)
+            chamber_median_accuracy = float(leg_accuracy["accuracy"].median())
+            print(f"  Hardest to predict: {len(hardest)} legislators")
+            for h in hardest:
+                print(f"    {h.full_name}: {h.accuracy:.3f} — {h.explanation}")
+
             # ── Phase 8: Surprising Votes ───────────────────────────────
             print_header(f"PHASE 8: SURPRISING VOTES — {chamber.upper()}")
 
@@ -1559,6 +1735,13 @@ def main() -> None:
                 ctx.plots_dir / f"per_legislator_accuracy_{chamber.lower()}.png",
             )
 
+            plot_hardest_to_predict(
+                hardest,
+                chamber,
+                chamber_median_accuracy,
+                ctx.plots_dir / f"hardest_to_predict_{chamber.lower()}.png",
+            )
+
             plot_surprising_votes(
                 surprising,
                 chamber,
@@ -1572,6 +1755,8 @@ def main() -> None:
                 "holdout": holdout_df,
                 "shap_values": shap_values,
                 "leg_accuracy": leg_accuracy,
+                "hardest": hardest,
+                "chamber_median_accuracy": chamber_median_accuracy,
                 "surprising_votes": surprising,
             }
 

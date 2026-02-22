@@ -82,6 +82,9 @@ def build_prediction_report(
         _add_per_legislator_figure(report, plots_dir, chamber)
 
     for chamber in chambers:
+        _add_hardest_to_predict_figure(report, plots_dir, chamber)
+
+    for chamber in chambers:
         _add_hardest_legislators_table(report, results[chamber], chamber)
 
     _add_per_legislator_interpretation(report)
@@ -491,6 +494,24 @@ def _add_per_legislator_figure(report: ReportBuilder, plots_dir: Path, chamber: 
                 path,
                 caption=(
                     "Each dot is one legislator. X = IRT ideal point, Y = prediction accuracy."
+                ),
+            )
+        )
+
+
+def _add_hardest_to_predict_figure(
+    report: ReportBuilder, plots_dir: Path, chamber: str
+) -> None:
+    path = plots_dir / f"hardest_to_predict_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"hardest-to-predict-{chamber.lower()}",
+                f"{chamber} Hardest-to-Predict Legislators (Spotlight)",
+                path,
+                caption=(
+                    "Legislators the model struggles with most, "
+                    "with a plain-English explanation for each."
                 ),
             )
         )

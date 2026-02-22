@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after full pipeline re-run and cross-biennium portability refactor)
+**Last updated:** 2026-02-22 (after prediction visualization improvement pass)
 
 ---
 
@@ -58,14 +58,13 @@ All four IRT visualization improvements completed (2026-02-22):
 - **Bugfix** — fixed Python 2 `except` syntax in `run_context.py` line 100
 - 8 new tests (4 `TestDetectForestHighlights`, 4 `TestFindParadoxLegislator`), 458 total passing
 
-#### Prediction Phase
+#### Prediction Phase — DONE
 
-SHAP beeswarm plots are cryptic for anyone who hasn't taken a machine learning course. Report narrative text is now generic (no hardcoded names; 2026-02-22 portability refactor).
-
-Remaining visualization improvements:
-- **Replace SHAP beeswarm** with a simplified "What Predicts a Yea Vote?" bar chart showing top 5 features with plain-English labels (e.g., "How conservative the legislator is" instead of "xi_mean", "How partisan the bill is" instead of "beta_mean")
-- **Add a "Hardest to Predict" spotlight** — scatter plot highlighting the 5-10 legislators the model struggles with most, annotated with data-driven names and brief explanations
-- **Simplify calibration plot** with annotation: "When the model says 80% chance of Yea, it's right about 80% of the time"
+All three prediction visualization improvements completed (2026-02-22):
+- **Conversational SHAP labels** — all 14 `FEATURE_DISPLAY_NAMES` rewritten for nontechnical audiences (e.g., "How conservative the legislator is" instead of "xi_mean", "Legislator–bill ideology match" instead of "Ideology × partisanship interaction"). Flows through SHAP beeswarm, SHAP bar, and XGBoost feature importance plots automatically via `_rename_shap_features()`.
+- **"Hardest to Predict" spotlight** — `detect_hardest_legislators()` pure-data function + `HardestLegislator` frozen dataclass. Horizontal dot chart (`plot_hardest_to_predict()`) showing bottom 8 legislators with party-colored dots, data-driven plain-English explanations (moderate, centrist for party, strongly partisan crossover, or doesn't fit 1D model), chamber median reference line, and callout box.
+- **Calibration plot annotation** — already done: "When the model says 80% chance of Yea, it's right about 80% of the time" (lightyellow callout box).
+- 6 new tests in `TestDetectHardestLegislators`, `HARDEST_N=8` added to design doc parameters table.
 
 #### PCA Phase
 
@@ -198,7 +197,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-482 tests exist across scraper (146) and analysis (336) modules. Coverage could be expanded:
+488 tests exist across scraper (146) and analysis (342) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

@@ -26,6 +26,7 @@
 | `XGB_LEARNING_RATE` | 0.1 | Standard; slower learning with 200 trees | `prediction.py:54` |
 | `TOP_SHAP_FEATURES` | 15 | Features to show in SHAP plots; ~20 total features | `prediction.py:55` |
 | `TOP_SURPRISING_N` | 20 | Most surprising votes/bills to report per chamber | `prediction.py:56` |
+| `HARDEST_N` | 8 | Legislators to spotlight in hardest-to-predict chart | `prediction.py:87` |
 | `MINORITY_THRESHOLD` | 0.025 | Inherited from EDA; filter near-unanimous votes | `prediction.py:57` |
 | `MIN_VOTES` | 20 | Inherited from EDA; minimum votes per legislator | `prediction.py:58` |
 

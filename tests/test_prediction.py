@@ -13,10 +13,12 @@ import pytest
 
 from analysis.nlp_features import fit_topic_features
 from analysis.prediction import (
+    HARDEST_N,
     build_bill_features,
     build_vote_features,
     compute_per_legislator_accuracy,
     compute_shap_values,
+    detect_hardest_legislators,
     find_surprising_votes,
     train_passage_models,
     train_vote_models,
@@ -635,3 +637,100 @@ class TestBuildBillFeaturesWithTopics:
         # Verify topic columns are in the feature list
         topic_feature_names = [f for f in result["feature_names"] if f.startswith("topic_")]
         assert len(topic_feature_names) > 0
+
+
+# ── Tests: Detect Hardest Legislators ────────────────────────────────────────
+
+
+class TestDetectHardestLegislators:
+    """Tests for detect_hardest_legislators().
+
+    Run: uv run pytest tests/test_prediction.py::TestDetectHardestLegislators -v
+    """
+
+    def test_returns_correct_count(self, vote_features, trained_models, synthetic_ideal_points):
+        """Returns up to HARDEST_N legislators."""
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
+        leg_acc = compute_per_legislator_accuracy(
+            xgb, vote_features, feature_cols, synthetic_ideal_points
+        )
+        hardest = detect_hardest_legislators(leg_acc)
+        assert len(hardest) <= HARDEST_N
+        assert len(hardest) > 0
+
+    def test_sorted_by_accuracy_ascending(
+        self, vote_features, trained_models, synthetic_ideal_points
+    ):
+        """Results are sorted worst-first (ascending accuracy)."""
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
+        leg_acc = compute_per_legislator_accuracy(
+            xgb, vote_features, feature_cols, synthetic_ideal_points
+        )
+        hardest = detect_hardest_legislators(leg_acc)
+        accuracies = [h.accuracy for h in hardest]
+        assert accuracies == sorted(accuracies)
+
+    def test_explanation_not_empty(self, vote_features, trained_models, synthetic_ideal_points):
+        """Every result has a non-empty explanation string."""
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
+        leg_acc = compute_per_legislator_accuracy(
+            xgb, vote_features, feature_cols, synthetic_ideal_points
+        )
+        hardest = detect_hardest_legislators(leg_acc)
+        for h in hardest:
+            assert isinstance(h.explanation, str)
+            assert len(h.explanation) > 0
+
+    def test_frozen_dataclass(self, vote_features, trained_models, synthetic_ideal_points):
+        """HardestLegislator is immutable."""
+        xgb = trained_models["models"]["XGBoost"]
+        feature_cols = trained_models["feature_names"]
+        leg_acc = compute_per_legislator_accuracy(
+            xgb, vote_features, feature_cols, synthetic_ideal_points
+        )
+        hardest = detect_hardest_legislators(leg_acc)
+        assert len(hardest) > 0
+        with pytest.raises(AttributeError):
+            hardest[0].accuracy = 0.99  # type: ignore[misc]
+
+    def test_empty_dataframe_returns_empty(self):
+        """Empty input DataFrame returns empty list."""
+        empty_df = pl.DataFrame(
+            {
+                "legislator_slug": [],
+                "full_name": [],
+                "party": [],
+                "xi_mean": [],
+                "accuracy": [],
+                "n_votes": [],
+            },
+            schema={
+                "legislator_slug": pl.Utf8,
+                "full_name": pl.Utf8,
+                "party": pl.Utf8,
+                "xi_mean": pl.Float64,
+                "accuracy": pl.Float64,
+                "n_votes": pl.Int64,
+            },
+        )
+        hardest = detect_hardest_legislators(empty_df)
+        assert hardest == []
+
+    def test_moderate_gets_centrist_explanation(self):
+        """A legislator with xi_mean near 0 (cross-party midpoint) gets moderate explanation."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_moderate_1", "rep_r1_1", "rep_d1_1"],
+                "full_name": ["Moderate Joe", "Strong R", "Strong D"],
+                "party": ["Republican", "Republican", "Democrat"],
+                "xi_mean": [0.1, 2.0, -2.0],
+                "accuracy": [0.70, 0.95, 0.95],
+                "n_votes": [50, 50, 50],
+            }
+        )
+        hardest = detect_hardest_legislators(df, n=1)
+        assert len(hardest) == 1
+        assert "Moderate" in hardest[0].explanation or "Centrist" in hardest[0].explanation
