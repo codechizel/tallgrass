@@ -72,6 +72,17 @@
 
 **Threshold:** 1.5 matches the IRT design doc's recommendation. Approximately 20-30% of bills exceed this threshold.
 
+### Extreme edge weight analysis: Data-driven
+
+**Decision:** Identify the most ideologically extreme majority-party legislators by `|xi_mean|` and compare their intra-party edge weights to the party median. Replaces a prior hardcoded check on two specific senators.
+
+**Why:** The original `check_tyson_thompson_edge_weights()` hard-coded two Senate slugs. The analysis concept — "do the most extreme majority-party members have weaker within-party connections?" — is session-independent and should work on any biennium. `check_extreme_edge_weights()` dynamically selects the `top_n` (default 2) majority-party legislators with the highest absolute IRT ideal point. It runs for both chambers, not just Senate.
+
+**Parameters:**
+- `top_n=2` — Number of extreme legislators to analyze. Keeps the output focused while surfacing the most prominent outliers.
+- Majority party determined by node count in the graph (handles any party composition).
+- Reports per-legislator mean/median/min intra-party edge weight and gap vs party median.
+
 ### Bipartite network: Skipped
 
 **Decision:** Do not build a bipartite (legislator × bill) network.
@@ -89,3 +100,5 @@
 - Network visualization provides an intuitive complement to IRT number lines
 - Community structure at multiple resolutions shows the hierarchy of legislative coalitions
 - Edge weight distributions reveal how within-party and cross-party agreement differ quantitatively
+- Bridge legislator annotations (red ring, betweenness centrality ranking bar chart) make structural importance visually accessible to nontechnical audiences
+- Threshold sweep plots include stability zone shading and default threshold line so readers can see how robust findings are without understanding the methodology

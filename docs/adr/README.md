@@ -37,6 +37,7 @@ What are the trade-offs?
 | [0007](0007-clustering-implementation-choices.md) | Clustering implementation choices | Accepted | 2026-02-20 |
 | [0008](0008-data-driven-synthesis-detection.md) | Data-driven synthesis detection | Accepted | 2026-02-21 |
 | [0009](0009-retry-waves-for-transient-failures.md) | Retry waves for transient failures | Accepted | 2026-02-21 |
+| [0010](0010-data-driven-network-edge-analysis.md) | Data-driven network edge weight analysis | Accepted | 2026-02-21 |
 
 ## Creating a New ADR
 

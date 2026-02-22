@@ -184,11 +184,12 @@ This is a living document — add entries as each analysis phase surfaces new fi
   - **Prediction:** Schreiber is likely the hardest House Republican to predict. His near-zero IRT position and low loyalty suggest he votes on issue-specific rather than party-line grounds.
   - **Interpretation:** In the Senate, the maximum cross-party Kappa is only 0.078 — the Senate is far more polarized than the House. The House has at least one genuine cross-party actor; the Senate does not.
 
-### Tyson and Thompson — Lower Within-Republican Edge Weights
+### Most Extreme Majority-Party Legislators — Lower Within-Party Edge Weights
 
 - **Phase:** Network
-- **Observation:** Tyson's mean within-R edge weight = 0.493; Thompson's = 0.513. R-R median = 0.665. Both are 0.15–0.17 below median. Crucially, Tyson has only 5 out of 31 possible R-R edges (16%), meaning her Kappa with 26 other Rs falls below 0.40. Thompson keeps 27/31 (87%).
+- **Observation:** In 2025-26 Senate, Tyson's mean within-R edge weight = 0.493; Thompson's = 0.513. R-R median = 0.665. Both are 0.15–0.17 below median. Crucially, Tyson has only 5 out of 31 possible R-R edges (16%), meaning her Kappa with 26 other Rs falls below 0.40. Thompson keeps 27/31 (87%).
 - **Explanation:** Tyson is genuinely isolated within her party — disconnected from 84% of Republican senators. Thompson is well-connected but with weaker-than-average edge weights. This quantifies the "Tyson paradox" in network terms: despite her extreme IRT position, Tyson's routine-bill dissent makes her pairwise agreement with most Rs only "fair" or below.
+- **Implementation:** As of v2026.02.21.3, this analysis is computed by `check_extreme_edge_weights()` — a data-driven function that dynamically selects the `top_n` most ideologically extreme majority-party legislators by `|xi_mean|`. It runs for both chambers, not just Senate, and will detect different legislators in future bienniums. See ADR-0010.
 - **Downstream:** Tyson's 5 edges make her nearly an isolate within the R component. Thompson's position is less extreme — weaker connections, but still integrated.
 
 ### Within-Party Community Structure — Near Zero Modularity
