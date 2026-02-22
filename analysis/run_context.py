@@ -5,6 +5,7 @@ Every analysis script (EDA, PCA, IRT, etc.) uses RunContext to get:
   - Automatic console log capture (run_log.txt)
   - Run metadata (run_info.json): git hash, timestamp, parameters
   - A `latest` symlink pointing to the most recent run
+  - A convenience report symlink in the session root (e.g. eda_report.html → eda/latest/...)
 
 Usage:
     with RunContext(
@@ -221,6 +222,17 @@ class RunContext:
                 self.report.git_hash = run_info["git_commit"]
                 report_path = self.run_dir / f"{self.analysis_name}_report.html"
                 self.report.write(report_path)
+
+                # Create convenience symlink in session root
+                session_root = self._analysis_dir.parent
+                report_link = session_root / f"{self.analysis_name}_report.html"
+                if report_link.is_symlink() or report_link.exists():
+                    report_link.unlink()
+                report_link.symlink_to(
+                    Path(self.analysis_name)
+                    / "latest"
+                    / f"{self.analysis_name}_report.html"
+                )
 
         # Update latest symlink (relative so it's portable)
         latest = self._analysis_dir / "latest"

@@ -129,6 +129,10 @@ Analysis outputs go in `results/` (gitignored), organized by session, analysis t
 ```
 results/
   91st_2025-2026/
+    eda_report.html → eda/latest/eda_report.html      ← Convenience symlinks
+    pca_report.html → pca/latest/pca_report.html
+    ...
+    synthesis_report.html → synthesis/latest/...
     eda/
       2026-02-19/
         plots/                  ← PNGs
