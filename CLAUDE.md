@@ -245,6 +245,10 @@ uv run ruff check src/       # lint clean
 - `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip (~10 tests)
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 
+### Analysis Infrastructure Test Files
+- `tests/test_run_context.py` — TeeStream, session normalization, RunContext lifecycle (~26 tests)
+- `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt (~36 tests)
+
 ### Manual Verification
 - Run scraper with `--clear-cache`, check that `vote_date`, `chamber`, `motion`, `bill_title` are populated
 - Check legislators CSV: party distribution includes both Republican and Democrat
