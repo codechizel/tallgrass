@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib
@@ -440,6 +441,51 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
     save_fig(fig, out_dir / f"scree_{chamber.lower()}.png")
 
 
+@dataclass(frozen=True)
+class ExtremePC2Legislator:
+    """A legislator with an extreme PC2 score (>3σ from median)."""
+
+    slug: str
+    full_name: str
+    party: str
+    pc1: float
+    pc2: float
+    pc2_std: float
+
+
+def detect_extreme_pc2(scores_df: pl.DataFrame) -> ExtremePC2Legislator | None:
+    """Detect the most extreme PC2 legislator if >3σ from the pack.
+
+    Returns None if no legislator exceeds the 3σ threshold.
+    """
+    if "PC2" not in scores_df.columns or scores_df.height < 2:
+        return None
+
+    pc2_std = float(scores_df["PC2"].std())
+    if pc2_std <= 0:
+        return None
+
+    pc2_min_idx = scores_df["PC2"].arg_min()
+    row = scores_df.row(pc2_min_idx, named=True)
+    pc2_min_val = row["PC2"]
+
+    if abs(pc2_min_val) <= 3 * pc2_std:
+        return None
+
+    slug = row["legislator_slug"]
+    raw_name = row.get("full_name") or slug
+    full_name = raw_name.split(" - ")[0].strip()
+
+    return ExtremePC2Legislator(
+        slug=slug,
+        full_name=full_name,
+        party=row.get("party") or "Unknown",
+        pc1=float(row["PC1"]),
+        pc2=float(pc2_min_val),
+        pc2_std=pc2_std,
+    )
+
+
 def plot_ideological_map(
     scores_df: pl.DataFrame,
     chamber: str,
@@ -474,7 +520,8 @@ def plot_ideological_map(
             if slug in labeled:
                 continue
             labeled.add(slug)
-            name = row.get("full_name", slug)
+            raw_name = row.get("full_name") or slug
+            name = raw_name.split(" - ")[0].strip()
             last_name = name.split()[-1] if name else slug
             ax.annotate(
                 last_name,
@@ -489,30 +536,26 @@ def plot_ideological_map(
                 arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 0.8},
             )
 
-    # Add callout box for extreme PC2 legislators (Tyson/Thompson in Senate)
-    if "PC2" in scores_df.columns:
-        pc2_min_idx = scores_df["PC2"].arg_min()
-        pc2_min_row = scores_df.row(pc2_min_idx, named=True)
-        pc2_min_val = pc2_min_row["PC2"]
-        # Only annotate if the extreme is notably far from the pack
-        pc2_std = float(scores_df["PC2"].std())
-        if pc2_std > 0 and abs(pc2_min_val) > 3 * pc2_std:
-            ax.annotate(
-                f"{pc2_min_row.get('full_name', '?').split()[-1]}: extreme contrarian\n"
-                f"(PC2 = {pc2_min_val:.1f}, 3\u00d7 more extreme\nthan next legislator)",
-                xy=(pc2_min_row["PC1"], pc2_min_val),
-                xytext=(pc2_min_row["PC1"] + 2, pc2_min_val + 3),
-                fontsize=8,
-                fontstyle="italic",
-                color="#555555",
-                bbox={
-                    "boxstyle": "round,pad=0.4",
-                    "fc": "lightyellow",
-                    "alpha": 0.8,
-                    "ec": "#cccccc",
-                },
-                arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.5},
-            )
+    # Add callout box for extreme PC2 legislator (data-driven detection)
+    extreme = detect_extreme_pc2(scores_df)
+    if extreme is not None:
+        last = extreme.full_name.split()[-1]
+        ax.annotate(
+            f"{last}: extreme contrarian\n"
+            f"(PC2 = {extreme.pc2:.1f}, 3\u00d7 more extreme\nthan next legislator)",
+            xy=(extreme.pc1, extreme.pc2),
+            xytext=(extreme.pc1 + 2, extreme.pc2 + 3),
+            fontsize=8,
+            fontstyle="italic",
+            color="#555555",
+            bbox={
+                "boxstyle": "round,pad=0.4",
+                "fc": "lightyellow",
+                "alpha": 0.8,
+                "ec": "#cccccc",
+            },
+            arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.5},
+        )
 
     ax.axhline(0, color="gray", linestyle="-", alpha=0.2)
     ax.axvline(0, color="gray", linestyle="-", alpha=0.2)

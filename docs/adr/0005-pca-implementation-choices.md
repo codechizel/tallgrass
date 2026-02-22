@@ -29,6 +29,8 @@ PCA is the mandatory second analysis phase (after EDA) per the analytic workflow
 
 5. **Orient PC1 so Republicans are positive.** Compare mean PC1 scores for each party; flip sign if Republicans are negative. This is the standard convention in the legislative scaling literature (NOMINATE uses positive = conservative).
 
+6. **Data-driven PC2 extreme detection.** The `detect_extreme_pc2()` pure-data function + `ExtremePC2Legislator` frozen dataclass detect the most extreme PC2 legislator if >3σ from the pack. This follows the same extract-to-pure-function pattern established in synthesis (ADR-0008: `detect_chamber_maverick()`), prediction (`detect_hardest_legislators()`), and IRT (`_detect_forest_highlights()`). The detection logic was previously inline in `plot_ideological_map()` and untestable.
+
 ## Consequences
 
 **Benefits:**
@@ -37,6 +39,7 @@ PCA is the mandatory second analysis phase (after EDA) per the analytic workflow
 - Duplicated filter logic ensures PCA is a standalone module. No hidden coupling to EDA internals.
 - Sensitivity analysis (r = 0.999 on real data) confirms that threshold choice barely matters — results are robust.
 - Holdout validation (93% accuracy, 0.97 AUC-ROC) proves PCA captures genuine structure, not just base rate.
+- `detect_extreme_pc2()` is testable independently, null-safe (handles `full_name=None`), and strips leadership suffixes. No hardcoded legislator names.
 
 **Trade-offs:**
 - Row-mean imputation is not the most principled method. If a legislator was absent specifically on contentious votes, their imputed values are biased toward their easy-vote average. IRT handles this properly.

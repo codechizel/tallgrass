@@ -24,6 +24,7 @@
 | `MIN_VOTES` | 20 | Inherited from EDA. | `pca.py:154` |
 | `HOLDOUT_FRACTION` | 0.20 | Random 20% of non-null cells masked for holdout validation. | `pca.py:155` |
 | `HOLDOUT_SEED` | 42 | NumPy random seed for reproducible holdout selection. | `pca.py:156` |
+| PC2 extreme threshold | 3σ | `detect_extreme_pc2()` flags the min-PC2 legislator only if `|PC2| > 3 × std(PC2)`. | `pca.py:detect_extreme_pc2()` |
 
 ## Methodological Choices
 

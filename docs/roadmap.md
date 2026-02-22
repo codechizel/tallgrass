@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after prediction visualization improvement pass)
+**Last updated:** 2026-02-22 (after PCA bug fixes and visualization improvement pass)
 
 ---
 
@@ -67,14 +67,14 @@ All three prediction visualization improvements completed (2026-02-22):
 - 14 tests in `TestDetectHardestLegislators` (6 original + 8 added in review pass covering null full_name, single-party, custom n, all explanation branches, null xi_mean, field correctness), `HARDEST_N=8` added to design doc parameters table.
 - **Bugfixes (review pass):** null `full_name` crash in `detect_hardest_legislators()` (`.get()` returns `None` not fallback when key exists with null value); dead code removal in `plot_hardest_to_predict()`; consistent leadership suffix stripping in `plot_per_legislator_accuracy()` and `plot_surprising_votes()`.
 
-#### PCA Phase
+#### PCA Phase — DONE
 
-PC2 is labeled "secondary dimension" with no interpretation on the plot itself.
-
-Specific improvements:
-- **Annotate PC2 axis**: "Contrarianism — legislators who vote Nay on routine, near-unanimous bills" directly on the ideological map
-- **Add data-driven callout for extreme PC2 legislators** (whoever has most extreme PC2 score, detected dynamically — currently Tyson at -24.8)
-- **Label the scree plot** with interpretation: "The sharp elbow means Kansas is essentially a one-dimensional legislature — party affiliation explains almost everything"
+All three PCA visualization improvements completed (2026-02-22):
+- **Scree plot elbow annotation** — "The sharp drop means Kansas is essentially a one-dimensional legislature — party affiliation explains almost everything" (lightyellow callout with arrow)
+- **PC2 axis label** — "contrarianism — voting Nay on routine, near-unanimous bills" on ideological map Y axis
+- **Data-driven extreme PC2 callout** — `detect_extreme_pc2()` pure-data function + `ExtremePC2Legislator` frozen dataclass; detects >3σ outlier dynamically (Tyson at -24.8 in Senate, Parshall at -22.5 in House)
+- **Bugfixes:** null `full_name` crash in outlier labels and extreme PC2 callout (`.get()` returns `None` not fallback when key exists with null value); leadership suffix stripping in outlier labels
+- 6 new tests in `TestDetectExtremePC2`
 
 #### Clustering Phase
 
@@ -198,7 +198,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-496 tests exist across scraper (146) and analysis (350) modules. Coverage could be expanded:
+502 tests exist across scraper (146) and analysis (356) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
