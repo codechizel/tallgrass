@@ -229,8 +229,21 @@ Each entry records what was observed, which phase found it, why it matters, and 
 
 ## Testing
 
-No test suite yet. Verify manually:
-- `uv run ruff check src/` — lint clean
+```bash
+just test                    # run all tests
+just test-scraper            # scraper tests only (session, pure, html, models)
+uv run pytest tests/ -v      # pytest directly
+uv run ruff check src/       # lint clean
+```
+
+### Scraper Test Files
+- `tests/conftest.py` — shared KSSession fixtures (current, historical, special)
+- `tests/test_session.py` — session URL resolution, biennium logic (~30 tests)
+- `tests/test_scraper_pure.py` — pure functions: bill codes, datetime parsing, result derivation (~35 tests)
+- `tests/test_scraper_html.py` — HTML parsing with inline BeautifulSoup fixtures (~25 tests)
+- `tests/test_models.py` — dataclass construction and immutability (~6 tests)
+
+### Manual Verification
 - Run scraper with `--clear-cache`, check that `vote_date`, `chamber`, `motion`, `bill_title` are populated
 - Check legislators CSV: party distribution includes both Republican and Democrat
 - Spot-check SB 1: should show Senate, Emergency Final Action, Passed as amended

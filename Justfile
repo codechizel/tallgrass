@@ -58,6 +58,14 @@ prediction *args:
 synthesis *args:
     uv run python analysis/synthesis.py {{args}}
 
+# Run all tests
+test *args:
+    uv run pytest tests/ {{args}} -v
+
+# Run scraper tests only
+test-scraper *args:
+    uv run pytest tests/test_session.py tests/test_scraper_pure.py tests/test_scraper_html.py tests/test_models.py {{args}} -v
+
 # Full check (lint)
 check:
     just lint-check
