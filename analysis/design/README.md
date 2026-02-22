@@ -18,6 +18,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 6. Prediction | [prediction.md](prediction.md) | XGBoost primary, skip cluster/community labels, IRT features dominate, NLP topic features (NMF on short_title), 82% base rate |
 | 7. Indices | [indices.md](indices.md) | CQ-standard party votes, Rice on all votes, weighted maverick by chamber margin |
 | 8. Synthesis | [synthesis.md](synthesis.md) | Data-driven detection thresholds, graceful degradation, template narratives |
+| 9. Profiles | [profiles.md](profiles.md) | Per-legislator deep-dives: 0-1 scorecard metrics, bill discrimination tiers, defection sorting, agreement vs Kappa |
 | 2b. UMAP | [umap.md](umap.md) | Cosine metric, n_neighbors default, Procrustes sensitivity, Spearman validation |
 
 ## Investigations

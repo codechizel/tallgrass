@@ -211,6 +211,8 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/nlp_features.py` — NLP: TF-IDF + NMF topic modeling on bill `short_title` text. Pure data logic (no I/O). `TopicModel` frozen dataclass, `fit_topic_features()`, `get_topic_display_names()`, `plot_topic_words()`. See ADR-0012.
 - `analysis/synthesis_detect.py` — Detection: pure data logic that identifies notable legislators (mavericks, bridge-builders, metric paradoxes) from upstream DataFrames. Returns frozen dataclasses with pre-formatted titles and subtitles.
 - `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 8 phases, joins into unified legislator DataFrames, runs data-driven detection, produces 29-32 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
+- `analysis/profiles_data.py` — Profiles data logic: `ProfileTarget`/`BillTypeBreakdown` dataclasses, `gather_profile_targets()`, `build_scorecard()`, `compute_bill_type_breakdown()`, `find_defection_bills()`, `find_voting_neighbors()`, `find_legislator_surprising_votes()`.
+- `analysis/profiles.py` + `analysis/profiles_report.py` — Profiles: deep-dive per-legislator reports with scorecard, bill-type breakdown, defection analysis, voting neighbors, surprising votes. 5 plots per legislator. Reuses `load_all_upstream()`/`build_legislator_df()` from synthesis.
 - `RunContext` auto-writes the HTML in `finalize()` if sections were added.
 
 Tables use great_tables with polars DataFrames (no pandas conversion). Plots are base64-embedded PNGs. See ADR-0004 for rationale.
@@ -256,6 +258,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_umap_viz.py` — imputation, orientation, embedding construction, Procrustes, validation correlations (~21 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names, TopicModel dataclass (~16 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration (~22 tests)
+- `tests/test_profiles.py` — profile target selection, scorecard, bill-type breakdown, defections, voting neighbors, surprising votes (~23 tests)
 
 ### Manual Verification
 - Run scraper with `--clear-cache`, check that `vote_date`, `chamber`, `motion`, `bill_title` are populated
