@@ -27,9 +27,12 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from types import TracebackType
+from zoneinfo import ZoneInfo
+
+_CT = ZoneInfo("America/Chicago")
 
 
 class _TeeStream:
@@ -94,7 +97,7 @@ def _git_commit_hash() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
     return "unknown"
 
@@ -127,7 +130,7 @@ class RunContext:
         self.params = params or {}
 
         root = results_root or Path("results")
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(_CT).strftime("%Y-%m-%d")
 
         self.run_dir = root / self.session / analysis_name / today
         self.plots_dir = self.run_dir / "plots"
@@ -185,7 +188,7 @@ class RunContext:
         self._original_stdout = sys.stdout
         self._tee = _TeeStream(sys.stdout)
         sys.stdout = self._tee  # type: ignore[assignment]
-        self._start_time = datetime.now(timezone.utc)
+        self._start_time = datetime.now(_CT)
 
     def finalize(self) -> None:
         """Write run_info.json, run_log.txt, and update latest symlink."""
@@ -201,7 +204,7 @@ class RunContext:
         log_path.write_text(log_text, encoding="utf-8")
 
         # Write run info
-        end_time = datetime.now(timezone.utc)
+        end_time = datetime.now(_CT)
         run_info = {
             "analysis": self.analysis_name,
             "session": self.session,
@@ -229,9 +232,7 @@ class RunContext:
                 if report_link.is_symlink() or report_link.exists():
                     report_link.unlink()
                 report_link.symlink_to(
-                    Path(self.analysis_name)
-                    / "latest"
-                    / f"{self.analysis_name}_report.html"
+                    Path(self.analysis_name) / "latest" / f"{self.analysis_name}_report.html"
                 )
 
         # Update latest symlink (relative so it's portable)

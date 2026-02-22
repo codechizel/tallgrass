@@ -26,8 +26,9 @@ import base64
 import io
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from jinja2 import Environment
 
@@ -237,7 +238,7 @@ class ReportBuilder:
                 }
             )
 
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        now = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M %Z")
         template = _get_template()
         return template.render(
             title=self.title,

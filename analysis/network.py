@@ -51,6 +51,7 @@ except ModuleNotFoundError:
 
 KAPPA_THRESHOLD_DEFAULT = 0.40
 KAPPA_THRESHOLD_SENSITIVITY = [0.30, 0.40, 0.50, 0.60]
+CROSS_PARTY_BRIDGE_THRESHOLD = 0.30
 LOUVAIN_RESOLUTIONS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
 HIGH_DISC_THRESHOLD = 1.5
 TOP_BRIDGE_N = 15
@@ -1092,6 +1093,7 @@ def plot_network_layout(
     out_path: Path,
     pos: dict | None = None,
     label_top_n: int = TOP_LABEL_N,
+    subtitle: str | None = None,
 ) -> dict:
     """Plot network with nodes colored by party or IRT gradient.
 
@@ -1218,6 +1220,17 @@ def plot_network_layout(
     ax.set_title(f"{chamber} — {title}", fontsize=14, fontweight="bold")
     ax.axis("off")
 
+    if subtitle:
+        fig.text(
+            0.5,
+            0.96,
+            subtitle,
+            ha="center",
+            fontsize=10,
+            fontstyle="italic",
+            color="#555555",
+        )
+
     fig.text(
         0.5,
         0.01,
@@ -1227,7 +1240,7 @@ def plot_network_layout(
         fontstyle="italic",
         color="#555555",
     )
-    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.tight_layout(rect=(0, 0.03, 1, 0.95 if subtitle else 1))
 
     save_fig(fig, out_path)
     return pos
@@ -1469,6 +1482,23 @@ def plot_centrality_ranking(
     save_fig(fig, out_dir / f"centrality_ranking_{chamber.lower()}.png")
 
 
+def _community_label(comm_id: int, composition: pl.DataFrame | None) -> str:
+    """Return a plain-English label for a community based on its party composition."""
+    if composition is None:
+        return f"Community {comm_id}"
+    row = composition.filter(pl.col("community") == comm_id)
+    if row.height == 0:
+        return f"Community {comm_id}"
+    pct_r = row["pct_republican"][0]
+    n = row["n_legislators"][0]
+    if pct_r >= 80:
+        return f"Mostly Republican ({pct_r:.0f}%, n={n})"
+    if pct_r <= 20:
+        pct_d = 100 - pct_r
+        return f"Mostly Democrat ({pct_d:.0f}% D, n={n})"
+    return f"Mixed ({pct_r:.0f}% R, n={n})"
+
+
 def plot_community_network(
     G: nx.Graph,
     partition: dict[str, int],
@@ -1476,6 +1506,7 @@ def plot_community_network(
     resolution: float,
     out_path: Path,
     pos: dict | None = None,
+    community_composition: pl.DataFrame | None = None,
 ) -> None:
     """Side-by-side: party colors vs community colors, with bridge highlights."""
     if G.number_of_nodes() == 0:
@@ -1589,7 +1620,10 @@ def plot_community_network(
             )
 
     legend_elements = [
-        Patch(facecolor=cmap(i / max(n_communities - 1, 1)), label=f"Community {i}")
+        Patch(
+            facecolor=cmap(i / max(n_communities - 1, 1)),
+            label=_community_label(i, community_composition),
+        )
         for i in range(n_communities)
     ]
     # Add red halo legend entry
@@ -1701,22 +1735,29 @@ def plot_threshold_sweep(
             stable_start = thresholds[best_run_start]
             stable_end = thresholds[best_run_start + best_run_len - 1]
 
+    # Detect further fragmentation: first threshold where n_components > 2
+    frag_threshold = None
+    for i, c in enumerate(components):
+        if c > 2:
+            frag_threshold = thresholds[i]
+            break
+
     metrics = [
-        ("n_edges", "Number of Connections"),
-        ("density", "Network Density"),
-        ("n_components", "Number of Separate Groups"),
-        ("modularity", "How Clustered (Modularity)"),
+        ("n_edges", "How Many Connections Remain?"),
+        ("density", "How Dense Is the Network?"),
+        ("n_components", "When Does the Network Split?"),
+        ("modularity", "How Clustered Are the Groups?"),
     ]
 
     for ax, (col, label) in zip(axes.flatten(), metrics):
         vals = sweep_df[col].to_list()
         ax.plot(thresholds, vals, "o-", color="#333333", linewidth=2, markersize=6)
         ax.set_xlabel("Agreement Threshold (\u03ba)", fontsize=10)
-        ax.set_ylabel(label, fontsize=10)
+        ax.set_ylabel(label.split("?")[0].split()[-1] if "?" in label else label, fontsize=10)
         ax.set_title(label, fontsize=11, fontweight="bold")
         ax.grid(True, alpha=0.3)
 
-        # Stability zone shading
+        # Stability zone shading (all panels)
         if stable_start is not None and stable_end is not None:
             ax.axvspan(stable_start, stable_end, alpha=0.12, color="green", zorder=0)
             if col == "n_components":
@@ -1731,7 +1772,7 @@ def plot_threshold_sweep(
                     alpha=0.8,
                 )
 
-        # Default threshold line
+        # Default threshold line (all panels)
         ax.axvline(
             KAPPA_THRESHOLD_DEFAULT,
             color="#0015BC",
@@ -1739,17 +1780,16 @@ def plot_threshold_sweep(
             alpha=0.5,
             linewidth=1.2,
         )
-        if col == "n_edges":
-            ax.annotate(
-                f"Default threshold (\u03ba={KAPPA_THRESHOLD_DEFAULT:.2f})",
-                (KAPPA_THRESHOLD_DEFAULT, max(vals) * 0.9),
-                fontsize=7,
-                color="#0015BC",
-                ha="center",
-                bbox={"boxstyle": "round,pad=0.2", "fc": "white", "alpha": 0.8},
-            )
+        ax.annotate(
+            f"Default (κ={KAPPA_THRESHOLD_DEFAULT:.2f})",
+            (KAPPA_THRESHOLD_DEFAULT, max(vals) * 0.92),
+            fontsize=6,
+            color="#0015BC",
+            ha="center",
+            bbox={"boxstyle": "round,pad=0.15", "fc": "white", "alpha": 0.8},
+        )
 
-        # Add vertical line at party split threshold
+        # Party split threshold (all panels)
         if split_threshold is not None:
             ax.axvline(
                 split_threshold,
@@ -1767,6 +1807,34 @@ def plot_threshold_sweep(
                     color="#E81B23",
                     ha="center",
                     bbox={"boxstyle": "round,pad=0.3", "fc": "white", "alpha": 0.8},
+                )
+            else:
+                ax.annotate(
+                    "Party split",
+                    (split_threshold, max(vals) * 0.7),
+                    fontsize=6,
+                    color="#E81B23",
+                    ha="center",
+                    bbox={"boxstyle": "round,pad=0.15", "fc": "white", "alpha": 0.8},
+                )
+
+        # Further fragmentation marker (all panels)
+        if frag_threshold is not None:
+            ax.axvline(
+                frag_threshold,
+                color="#FF8C00",
+                linestyle=":",
+                alpha=0.6,
+                linewidth=1.2,
+            )
+            if col == "n_components":
+                ax.annotate(
+                    "Further\nfragmentation",
+                    (frag_threshold, max(vals) * 0.45),
+                    fontsize=7,
+                    color="#FF8C00",
+                    ha="center",
+                    bbox={"boxstyle": "round,pad=0.2", "fc": "white", "alpha": 0.8},
                 )
 
     fig.suptitle(
@@ -1892,9 +1960,36 @@ def plot_edge_weight_distribution(
 
     ax.set_xlabel("Kappa (Edge Weight)", fontsize=11)
     ax.set_ylabel("Count", fontsize=11)
-    ax.set_title(f"{chamber} \u2014 Edge Weight Distribution", fontsize=13, fontweight="bold")
+    ax.set_title(
+        f"{chamber} \u2014 How Strong Are Voting Connections?", fontsize=13, fontweight="bold"
+    )
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
+
+    # Cross-party gap annotation
+    if cross:
+        max_cross = max(cross)
+        ax.annotate(
+            f"Strongest cross-party: \u03ba={max_cross:.3f}",
+            (max_cross, 0),
+            xytext=(max_cross, ax.get_ylim()[1] * 0.5),
+            fontsize=8,
+            ha="center",
+            arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 1.2},
+            bbox={"boxstyle": "round,pad=0.3", "fc": "lightyellow", "alpha": 0.85, "ec": "#cccccc"},
+        )
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No cross-party edges at this threshold",
+            transform=ax.transAxes,
+            fontsize=10,
+            fontstyle="italic",
+            color="#999999",
+            ha="center",
+            va="center",
+        )
 
     # Interpretation text box
     ax.text(
@@ -1912,6 +2007,223 @@ def plot_edge_weight_distribution(
     )
 
     save_fig(fig, out_path)
+
+
+def find_cross_party_bridge(
+    kappa_df: pl.DataFrame,
+    ideal_points: pl.DataFrame,
+    threshold: float = CROSS_PARTY_BRIDGE_THRESHOLD,
+) -> tuple[nx.Graph, str | None]:
+    """Find the legislator with the most cross-party edges at a low threshold.
+
+    Returns (graph, slug_of_bridge) or (graph, None) if no cross-party edges exist.
+    Pure logic — no matplotlib dependency.
+    """
+    G = build_kappa_network(kappa_df, ideal_points, threshold=threshold)
+
+    # Count cross-party edges per legislator
+    cross_party_counts: dict[str, int] = {}
+    for u, v in G.edges():
+        pu = G.nodes[u].get("party", "Unknown")
+        pv = G.nodes[v].get("party", "Unknown")
+        if pu != pv:
+            cross_party_counts[u] = cross_party_counts.get(u, 0) + 1
+            cross_party_counts[v] = cross_party_counts.get(v, 0) + 1
+
+    if not cross_party_counts:
+        return G, None
+
+    bridge_slug = max(cross_party_counts, key=cross_party_counts.get)  # type: ignore[arg-type]
+    return G, bridge_slug
+
+
+def plot_cross_party_bridge(
+    kappa_df: pl.DataFrame,
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_path: Path,
+    threshold: float = CROSS_PARTY_BRIDGE_THRESHOLD,
+) -> dict | None:
+    """Plot before/after network showing the effect of removing the top cross-party bridge.
+
+    Left panel: full network at the low threshold with bridge's cross-party edges highlighted.
+    Right panel: same network with bridge removed, showing disconnection.
+    Returns metadata dict or None if no cross-party bridge exists.
+    """
+    G, bridge_slug = find_cross_party_bridge(kappa_df, ideal_points, threshold)
+    if bridge_slug is None:
+        print(f"  No cross-party bridge at κ={threshold} for {chamber} — skipping")
+        return None
+
+    bridge_name = G.nodes[bridge_slug].get("full_name", bridge_slug)
+    bridge_party = G.nodes[bridge_slug].get("party", "Unknown")
+
+    # Count cross-party edges for this bridge
+    cross_edges = []
+    for neighbor in G.neighbors(bridge_slug):
+        if G.nodes[neighbor].get("party", "Unknown") != bridge_party:
+            cross_edges.append((bridge_slug, neighbor))
+
+    # Check if removal disconnects
+    n_components_before = nx.number_connected_components(G)
+    G_removed = G.copy()
+    G_removed.remove_node(bridge_slug)
+    n_components_after = nx.number_connected_components(G_removed)
+    removal_disconnects = n_components_after > n_components_before
+
+    # Compute layout on full graph
+    pos = _compute_layout(G)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(22, 10))
+    nodes = list(G.nodes())
+
+    # ── Left panel: full network with bridge highlighted ──
+    node_colors_left = [PARTY_COLORS.get(G.nodes[n].get("party", ""), "#999999") for n in nodes]
+
+    # Draw all edges light
+    nx.draw_networkx_edges(G, pos, ax=ax1, alpha=0.1, edge_color="#888888")
+
+    # Draw bridge's cross-party edges thick and gold
+    if cross_edges:
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            edgelist=cross_edges,
+            ax=ax1,
+            width=3.0,
+            edge_color="#FFD700",
+            alpha=0.9,
+        )
+
+    # Draw non-bridge nodes
+    non_bridge = [n for n in nodes if n != bridge_slug]
+    nx.draw_networkx_nodes(
+        G,
+        pos,
+        nodelist=non_bridge,
+        ax=ax1,
+        node_color=[node_colors_left[nodes.index(n)] for n in non_bridge],
+        node_size=80,
+        alpha=0.85,
+        edgecolors="white",
+        linewidths=0.5,
+    )
+
+    # Draw bridge node with gold halo
+    nx.draw_networkx_nodes(
+        G,
+        pos,
+        nodelist=[bridge_slug],
+        ax=ax1,
+        node_color=[PARTY_COLORS.get(bridge_party, "#999999")],
+        node_size=200,
+        alpha=0.95,
+        edgecolors="#FFD700",
+        linewidths=3.0,
+    )
+    # Callout for bridge
+    last_name = bridge_name.split()[-1]
+    ax1.annotate(
+        f"{last_name}\n({len(cross_edges)} cross-party edges)",
+        pos[bridge_slug],
+        fontsize=9,
+        fontweight="bold",
+        ha="center",
+        va="bottom",
+        xytext=(0, 15),
+        textcoords="offset points",
+        bbox={"boxstyle": "round,pad=0.3", "fc": "#FFD700", "alpha": 0.85, "ec": "#B8860B"},
+        arrowprops={"arrowstyle": "->", "color": "#B8860B", "lw": 1.5},
+    )
+
+    ax1.set_title(
+        f"{chamber} — With {last_name} (κ={threshold})",
+        fontsize=13,
+        fontweight="bold",
+    )
+    ax1.axis("off")
+
+    legend_left = [
+        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+        Patch(facecolor="#FFD700", edgecolor="#B8860B", linewidth=2, label="Cross-party bridge"),
+    ]
+    ax1.legend(handles=legend_left, loc="upper left", fontsize=9)
+
+    # ── Right panel: network with bridge removed ──
+    nodes_right = [n for n in nodes if n != bridge_slug]
+    node_colors_right = [
+        PARTY_COLORS.get(G.nodes[n].get("party", ""), "#999999") for n in nodes_right
+    ]
+
+    # Use same positions (minus the removed node)
+    pos_right = {n: pos[n] for n in nodes_right}
+
+    nx.draw_networkx_edges(G_removed, pos_right, ax=ax2, alpha=0.1, edge_color="#888888")
+    nx.draw_networkx_nodes(
+        G_removed,
+        pos_right,
+        nodelist=nodes_right,
+        ax=ax2,
+        node_color=node_colors_right,
+        node_size=80,
+        alpha=0.85,
+        edgecolors="white",
+        linewidths=0.5,
+    )
+
+    # Show where bridge was with a faint X
+    ax2.plot(
+        pos[bridge_slug][0],
+        pos[bridge_slug][1],
+        "x",
+        color="#999999",
+        markersize=15,
+        markeredgewidth=2,
+        alpha=0.5,
+    )
+
+    if removal_disconnects:
+        status = f"Network splits into {n_components_after} groups"
+    else:
+        status = "Network remains connected (alternative paths exist)"
+
+    ax2.set_title(
+        f"{chamber} — Without {last_name}\n({status})",
+        fontsize=13,
+        fontweight="bold",
+    )
+    ax2.axis("off")
+
+    fig.suptitle(
+        "What Happens When You Remove the Cross-Party Bridge?",
+        fontsize=15,
+        fontweight="bold",
+    )
+    fig.text(
+        0.5,
+        0.01,
+        f"At κ={threshold}, {bridge_name} is the top cross-party connector. "
+        + (
+            "Remove them and the network splits."
+            if removal_disconnects
+            else "Alternative connections prevent a full split."
+        ),
+        ha="center",
+        fontsize=10,
+        fontstyle="italic",
+        color="#555555",
+    )
+    fig.tight_layout(rect=(0, 0.03, 1, 0.97))
+
+    save_fig(fig, out_path)
+
+    return {
+        "bridge_slug": bridge_slug,
+        "bridge_name": bridge_name,
+        "n_cross_party_edges": len(cross_edges),
+        "removal_disconnects": removal_disconnects,
+    }
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -2202,11 +2514,13 @@ def main() -> None:
             print_header(f"PHASE 10: PLOTS — {chamber}")
 
             # Network layout (party colors)
+            n_nodes = G.number_of_nodes()
+            n_edges = G.number_of_edges()
             pos = plot_network_layout(
                 G,
                 "party",
                 chamber,
-                "Co-Voting Network (Party Colors)",
+                f"Who Votes With Whom? ({n_nodes} legislators, {n_edges} connections)",
                 ctx.plots_dir / f"network_party_{chamber.lower()}.png",
             )
             # Network layout (IRT gradient)
@@ -2214,7 +2528,7 @@ def main() -> None:
                 G,
                 "xi_mean",
                 chamber,
-                "Co-Voting Network (IRT Gradient)",
+                "Ideology Gradient on the Same Network",
                 ctx.plots_dir / f"network_irt_{chamber.lower()}.png",
                 pos=pos,
             )
@@ -2264,6 +2578,7 @@ def main() -> None:
                     chamber_results.get("best_resolution", 1.0),
                     ctx.plots_dir / f"community_network_{chamber.lower()}.png",
                     pos=pos,
+                    community_composition=chamber_results.get("community_composition"),
                 )
 
             # Threshold sweep
@@ -2272,6 +2587,16 @@ def main() -> None:
                 chamber,
                 ctx.plots_dir / f"threshold_sweep_{chamber.lower()}.png",
             )
+
+            # Cross-party bridge before/after
+            bridge_result = plot_cross_party_bridge(
+                kappa,
+                irt_ip,
+                chamber,
+                ctx.plots_dir / f"cross_party_bridge_{chamber.lower()}.png",
+            )
+            if bridge_result:
+                chamber_results["cross_party_bridge"] = bridge_result
 
             # High-disc network
             if chamber_results.get("high_disc_graph") is not None:
@@ -2368,6 +2693,8 @@ def main() -> None:
                 }
                 if ee.get("legislators"):
                     manifest[f"{ch}_extreme_edge_weights"]["legislators"] = ee["legislators"]
+            if r.get("cross_party_bridge"):
+                manifest[f"{ch}_cross_party_bridge"] = r["cross_party_bridge"]
 
         manifest_path = ctx.run_dir / "filtering_manifest.json"
         with open(manifest_path, "w") as f:

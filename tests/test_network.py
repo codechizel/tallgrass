@@ -13,12 +13,14 @@ import pytest
 
 from analysis.network import (
     KAPPA_THRESHOLD_DEFAULT,
+    _community_label,
     build_kappa_network,
     build_within_party_network,
     compare_communities_to_party,
     compute_centralities,
     compute_network_summary,
     detect_communities_multi_resolution,
+    find_cross_party_bridge,
     run_threshold_sweep,
 )
 
@@ -398,3 +400,140 @@ class TestThresholdSweep:
         sweep = run_threshold_sweep(synthetic_kappa, synthetic_ideal_points, [0.10, 0.90])
         edges = sweep["n_edges"].to_list()
         assert edges[0] >= edges[1]
+
+
+# ── Fixture: Kappa with cross-party bridge ─────────────────────────────────
+
+
+@pytest.fixture
+def synthetic_kappa_with_bridge(synthetic_slugs: list[str]) -> pl.DataFrame:
+    """8x8 Kappa matrix like synthetic_kappa but with one R-D pair at 0.35.
+
+    rep_r4_1 (index 3) ↔ rep_d1_1 (index 4) has κ=0.35, making rep_r4_1
+    the cross-party bridge at threshold 0.30.
+    """
+    n = len(synthetic_slugs)
+    mat = np.eye(n)
+
+    # R-R block (indices 0-3): high agreement
+    for i in range(4):
+        for j in range(i + 1, 4):
+            val = 0.75 + 0.05 * (i + j) / 5
+            mat[i, j] = val
+            mat[j, i] = val
+
+    # D-D block (indices 4-7): high agreement
+    for i in range(4, 8):
+        for j in range(i + 1, 8):
+            val = 0.70 + 0.05 * (i + j) / 10
+            mat[i, j] = val
+            mat[j, i] = val
+
+    # Cross-party: low agreement (below 0.30)
+    for i in range(4):
+        for j in range(4, 8):
+            val = 0.15 + 0.02 * (i + j) / 10
+            mat[i, j] = val
+            mat[j, i] = val
+
+    # Override one cross-party pair: rep_r4_1 (3) ↔ rep_d1_1 (4) = 0.35
+    mat[3, 4] = 0.35
+    mat[4, 3] = 0.35
+
+    data: dict[str, list] = {"legislator_slug": synthetic_slugs}
+    for col_idx, slug in enumerate(synthetic_slugs):
+        data[slug] = mat[:, col_idx].tolist()
+
+    return pl.DataFrame(data)
+
+
+# ── TestFindCrossPartyBridge ───────────────────────────────────────────────
+
+
+class TestFindCrossPartyBridge:
+    """Tests for find_cross_party_bridge().
+
+    Run: uv run pytest tests/test_network.py::TestFindCrossPartyBridge -v
+    """
+
+    def test_finds_bridge_at_low_threshold(
+        self,
+        synthetic_kappa_with_bridge: pl.DataFrame,
+        synthetic_ideal_points: pl.DataFrame,
+    ) -> None:
+        """At κ=0.30, rep_r4_1 should be the cross-party bridge."""
+        G, bridge_slug = find_cross_party_bridge(
+            synthetic_kappa_with_bridge, synthetic_ideal_points, threshold=0.30
+        )
+        assert bridge_slug == "rep_r4_1"
+
+    def test_no_bridge_at_high_threshold(
+        self,
+        synthetic_kappa_with_bridge: pl.DataFrame,
+        synthetic_ideal_points: pl.DataFrame,
+    ) -> None:
+        """At κ=0.40, the cross-party edge (0.35) is below threshold → no bridge."""
+        G, bridge_slug = find_cross_party_bridge(
+            synthetic_kappa_with_bridge, synthetic_ideal_points, threshold=0.40
+        )
+        assert bridge_slug is None
+
+    def test_removal_changes_components(
+        self,
+        synthetic_kappa_with_bridge: pl.DataFrame,
+        synthetic_ideal_points: pl.DataFrame,
+    ) -> None:
+        """Removing the bridge should increase the component count."""
+        G, bridge_slug = find_cross_party_bridge(
+            synthetic_kappa_with_bridge, synthetic_ideal_points, threshold=0.30
+        )
+        assert bridge_slug is not None
+        n_before = nx.number_connected_components(G)
+        G_removed = G.copy()
+        G_removed.remove_node(bridge_slug)
+        n_after = nx.number_connected_components(G_removed)
+        assert n_after > n_before
+
+
+# ── TestCommunityLabel ─────────────────────────────────────────────────────
+
+
+class TestCommunityLabel:
+    """Tests for _community_label() helper.
+
+    Run: uv run pytest tests/test_network.py::TestCommunityLabel -v
+    """
+
+    def test_high_republican_label(self) -> None:
+        """>=80% Republican → 'Mostly Republican'."""
+        comp = pl.DataFrame({"community": [0], "pct_republican": [96.0], "n_legislators": [87]})
+        label = _community_label(0, comp)
+        assert "Mostly Republican" in label
+        assert "96%" in label
+        assert "n=87" in label
+
+    def test_high_democrat_label(self) -> None:
+        """<=20% Republican → 'Mostly Democrat'."""
+        comp = pl.DataFrame({"community": [0], "pct_republican": [5.0], "n_legislators": [25]})
+        label = _community_label(0, comp)
+        assert "Mostly Democrat" in label
+        assert "95%" in label
+        assert "n=25" in label
+
+    def test_mixed_label(self) -> None:
+        """50% Republican → 'Mixed'."""
+        comp = pl.DataFrame({"community": [0], "pct_republican": [50.0], "n_legislators": [28]})
+        label = _community_label(0, comp)
+        assert "Mixed" in label
+        assert "50%" in label
+
+    def test_missing_community_fallback(self) -> None:
+        """Unknown community ID → 'Community N'."""
+        comp = pl.DataFrame({"community": [0], "pct_republican": [96.0], "n_legislators": [87]})
+        label = _community_label(5, comp)
+        assert label == "Community 5"
+
+    def test_none_composition_fallback(self) -> None:
+        """None composition → 'Community N'."""
+        label = _community_label(3, None)
+        assert label == "Community 3"

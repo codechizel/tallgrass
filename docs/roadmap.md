@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after NLP bill text features for Prediction)
+**Last updated:** 2026-02-22 (after Network visualization improvement pass)
 
 ---
 
@@ -33,16 +33,18 @@ The Indices phase is the gold standard: plain-English titles ("Who Are the Most 
 
 **Guiding principle:** If a finding is explained in the HTML report, it should also appear visually in at least one plot. If a legislator is flagged in `docs/analytic-flags.md`, they should have a visual highlight somewhere.
 
-#### Network Phase (highest priority — Peck example)
+#### Network Phase — DONE
 
-The network phase computes betweenness centrality and identifies "bridge" legislators, but the visualizations don't make this legible to a nontechnical reader. The centrality scatter plot (betweenness vs eigenvector) shows Peck elevated on the Y axis, but nothing explains *what that means* or *how it was derived*.
-
-Specific improvements:
-- **Annotate bridge legislators** on the community network plot — red border/halo on high-betweenness nodes (Peck, Schreiber, Thompson), with callout text: "Peck connects otherwise-separate voting blocs"
-- **Add a "What is betweenness?" inset** — a simple 3-node diagram showing how removing a bridge legislator disconnects groups, next to the actual network plot
-- **Replace or supplement the centrality scatter** with a ranked bar chart: "Who Holds the Most Influence in the Network?" with plain-English annotation ("higher = more paths between other legislators run through this person")
-- **Highlight Schreiber's cross-party edges** — at kappa=0.30, he's the sole link between R and D. A before/after pair showing the network with and without Schreiber would be powerful
-- **Label the threshold sweep plot** with event markers: "At this threshold, the network splits into two parties" instead of just showing curves
+All five network visualization improvements completed (2026-02-22):
+- **Bridge annotations** — red halos + yellow callout labels on high-betweenness nodes (already existed)
+- **"What is betweenness?" inset** — 3-node diagram on centrality scatter (already existed)
+- **Ranked bar chart** — "Who Holds the Most Influence?" with plain-English annotation (already existed)
+- **Cross-party bridge before/after** — data-driven `find_cross_party_bridge()` + `plot_cross_party_bridge()` showing network with and without top cross-party connector at κ=0.30
+- **Threshold sweep event markers** — default threshold + party split annotations on all 4 panels (was only on 1 each), plus "further fragmentation" marker, narrative panel titles
+- **Community composition labels** — "Mostly Republican (96%, n=87)" instead of "Community 0"
+- **Edge weight cross-party gap** — arrow annotation on strongest cross-party κ value, narrative title
+- **Network layout narrative titles** — "Who Votes With Whom? (N legislators, N connections)" + subtitle support
+- 8 new tests (3 `TestFindCrossPartyBridge`, 5 `TestCommunityLabel`), 450 total passing
 
 #### IRT Phase
 
@@ -195,7 +197,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-442 tests exist across scraper (146) and analysis (296) modules. Coverage could be expanded:
+450 tests exist across scraper (146) and analysis (304) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

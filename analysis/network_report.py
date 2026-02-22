@@ -94,6 +94,10 @@ def build_network_report(
 
     _add_community_interpretation(report)
 
+    # Cross-party bridge
+    for chamber in chambers:
+        _add_cross_party_bridge_figure(report, plots_dir, chamber, results[chamber])
+
     # Within-party
     for chamber in chambers:
         _add_within_party_communities(report, results[chamber], chamber)
@@ -218,7 +222,8 @@ def _add_edge_weight_figure(report: ReportBuilder, plots_dir: Path, chamber: str
                 caption=(
                     f"Distribution of edge weights (Kappa) for {chamber}, separated by "
                     "within-party (R-R, D-D) and cross-party edges. "
-                    "Blue dashed line marks the default threshold."
+                    "Blue dashed line marks the default threshold. "
+                    "Arrow annotation shows the strongest cross-party connection."
                 ),
             )
         )
@@ -690,7 +695,8 @@ def _add_community_network_figure(
                 path,
                 caption=(
                     f"Side-by-side: party coloring (left) vs Louvain community coloring "
-                    f"(right) for {chamber}."
+                    f"(right) for {chamber}. Community labels show party composition "
+                    "(e.g., Mostly Republican, Mostly Democrat, or Mixed)."
                 ),
             )
         )
@@ -713,6 +719,41 @@ def _add_community_interpretation(report: ReportBuilder) -> None:
     report.add(
         TextSection(
             id="community-interpretation", title="Community Detection Interpretation", html=html
+        )
+    )
+
+
+def _add_cross_party_bridge_figure(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+    result: dict,
+) -> None:
+    bridge = result.get("cross_party_bridge")
+    path = plots_dir / f"cross_party_bridge_{chamber.lower()}.png"
+    if not path.exists() or bridge is None:
+        return
+
+    name = bridge["bridge_name"]
+    n_edges = bridge["n_cross_party_edges"]
+    disconnects = bridge["removal_disconnects"]
+
+    if disconnects:
+        effect = "removing them splits the network into separate party clusters"
+    else:
+        effect = "alternative paths prevent a complete split"
+
+    report.add(
+        FigureSection.from_file(
+            f"fig-cross-party-bridge-{chamber.lower()}",
+            f"{chamber} Cross-Party Bridge",
+            path,
+            caption=(
+                f"{name} has {n_edges} cross-party edge{'s' if n_edges != 1 else ''} "
+                f"at the low Kappa threshold; {effect}. "
+                "Left panel shows the full network with cross-party edges highlighted in gold. "
+                "Right panel shows the network with this bridge legislator removed."
+            ),
         )
     )
 
