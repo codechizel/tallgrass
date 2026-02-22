@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after Network visualization improvement pass)
+**Last updated:** 2026-02-22 (after IRT visualization improvement pass)
 
 ---
 
@@ -44,17 +44,17 @@ All five network visualization improvements completed (2026-02-22):
 - **Community composition labels** — "Mostly Republican (96%, n=87)" instead of "Community 0"
 - **Edge weight cross-party gap** — arrow annotation on strongest cross-party κ value, narrative title
 - **Network layout narrative titles** — "Who Votes With Whom? (N legislators, N connections)" + subtitle support
-- 8 new tests (3 `TestFindCrossPartyBridge`, 5 `TestCommunityLabel`), 450 total passing
+- 8 new tests (3 `TestFindCrossPartyBridge`, 5 `TestCommunityLabel`)
 
-#### IRT Phase
+#### IRT Phase — DONE
 
-The forest plots and trace plots are standard statistical outputs but opaque to nontechnical readers.
-
-Specific improvements:
-- **Add a Tyson spotlight subplot**: side-by-side showing (left) her voting pattern on high-discrimination bills (100% conservative) vs low-discrimination bills (50% contrarian), (right) her position on the forest plot with a callout box explaining the paradox
-- **Replace or supplement trace plots** with a convergence summary panel — "The model ran 4 independent chains and they all agree" with a simple visual (overlapping distributions) instead of spaghetti lines
-- **Annotate the forest plot** — highlight Tyson, Thompson, Schreiber, Miller with color/icons and brief labels explaining why they're interesting
-- **Add plain-English title**: "Where Does Each Legislator Fall on the Ideological Spectrum?" instead of "IRT Ideal Points with 95% HDI"
+All four IRT visualization improvements completed (2026-02-22):
+- **Paradox spotlight subplot** — `find_paradox_legislator()` detects ideologically extreme but contrarian legislators data-driven; `plot_paradox_spotlight()` produces two-panel figure (grouped bar chart of Yea rates by bill type + simplified forest plot with callout)
+- **Convergence summary panel** — already existed: "The model ran N chains and they all agree" (done previously)
+- **Data-driven forest highlights** — `_detect_forest_highlights()` replaces hardcoded slug annotations; detects most extreme, widest HDI, most moderate, capped at 5
+- **Plain-English title** — already existed: "Where Does Each Legislator Fall on the Ideological Spectrum?" (done previously)
+- **Bugfix** — fixed Python 2 `except` syntax in `run_context.py` line 100
+- 8 new tests (4 `TestDetectForestHighlights`, 4 `TestFindParadoxLegislator`), 458 total passing
 
 #### Prediction Phase
 
@@ -197,7 +197,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-450 tests exist across scraper (146) and analysis (304) modules. Coverage could be expanded:
+458 tests exist across scraper (146) and analysis (312) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

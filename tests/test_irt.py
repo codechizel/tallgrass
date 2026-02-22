@@ -22,8 +22,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from analysis.irt import (
     HOLDOUT_FRACTION,
     HOLDOUT_SEED,
+    PARADOX_YEA_GAP,
+    _detect_forest_highlights,
     build_joint_vote_matrix,
     filter_vote_matrix_for_sensitivity,
+    find_paradox_legislator,
     prepare_irt_data,
     select_anchors,
     unmerge_bridging_legislators,
@@ -820,3 +823,253 @@ class TestUnmergeBridgingLegislators:
 
         result = unmerge_bridging_legislators(ideal_points, info, legislators)
         assert result.height == 2
+
+
+# ── _detect_forest_highlights tests ──────────────────────────────────────────
+
+
+class TestDetectForestHighlights:
+    """Test data-driven detection of notable legislators for forest plot annotation."""
+
+    @pytest.fixture
+    def highlights_ideal_points(self) -> pl.DataFrame:
+        """10 legislators with varying xi_mean and xi_sd."""
+        return pl.DataFrame(
+            {
+                "legislator_slug": [f"rep_{chr(97+i)}_{chr(97+i)}_1" for i in range(10)],
+                "xi_mean": [3.0, 2.0, 1.5, 1.0, 0.5, 0.1, -0.5, -1.0, -1.5, -2.5],
+                "xi_sd": [0.15, 0.12, 0.10, 0.10, 0.10, 0.10, 0.10, 0.12, 0.10, 0.50],
+                "xi_hdi_2.5": [2.7, 1.8, 1.3, 0.8, 0.3, -0.1, -0.7, -1.2, -1.7, -3.5],
+                "xi_hdi_97.5": [3.3, 2.2, 1.7, 1.2, 0.7, 0.3, -0.3, -0.8, -1.3, -1.5],
+                "full_name": [f"{chr(65+i)} {chr(65+i)}" for i in range(10)],
+                "party": ["Republican"] * 6 + ["Democrat"] * 4,
+                "district": list(range(1, 11)),
+                "chamber": ["House"] * 10,
+            }
+        )
+
+    def test_detects_most_extreme(self, highlights_ideal_points: pl.DataFrame) -> None:
+        """Legislator with highest |xi_mean| should be highlighted."""
+        result = _detect_forest_highlights(highlights_ideal_points, "House")
+        # rep_a_a_1 has xi_mean=3.0, the most extreme
+        assert "rep_a_a_1" in result
+        assert "Most conservative" in result["rep_a_a_1"]
+
+    def test_detects_widest_hdi(self, highlights_ideal_points: pl.DataFrame) -> None:
+        """Legislator with xi_sd > 2x median should be highlighted."""
+        result = _detect_forest_highlights(highlights_ideal_points, "House")
+        # rep_j_j_1 has xi_sd=0.50, median is ~0.10, so 0.50 > 2*0.10
+        assert "rep_j_j_1" in result
+        assert "uncertainty" in result["rep_j_j_1"].lower()
+
+    def test_max_five_highlights(self) -> None:
+        """Should never return more than 5 highlights."""
+        # Create 20 legislators where many would trigger highlights
+        df = pl.DataFrame(
+            {
+                "legislator_slug": [f"rep_{i}_x_1" for i in range(20)],
+                "xi_mean": [float(i) for i in range(20)],
+                "xi_sd": [0.5 * (i + 1) for i in range(20)],
+                "xi_hdi_2.5": [float(i - 1) for i in range(20)],
+                "xi_hdi_97.5": [float(i + 1) for i in range(20)],
+                "full_name": [f"Leg {i}" for i in range(20)],
+                "party": ["Republican"] * 10 + ["Democrat"] * 10,
+                "district": list(range(1, 21)),
+                "chamber": ["House"] * 20,
+            }
+        )
+        result = _detect_forest_highlights(df, "House")
+        assert len(result) <= 5
+
+    def test_empty_for_small_df(self) -> None:
+        """With fewer than 3 legislators, should return empty dict."""
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_a_a_1", "rep_b_b_1"],
+                "xi_mean": [1.0, -1.0],
+                "xi_sd": [0.1, 0.1],
+                "xi_hdi_2.5": [0.8, -1.2],
+                "xi_hdi_97.5": [1.2, -0.8],
+                "full_name": ["A A", "B B"],
+                "party": ["Republican", "Democrat"],
+                "district": [1, 2],
+                "chamber": ["House"] * 2,
+            }
+        )
+        result = _detect_forest_highlights(df, "House")
+        assert result == {}
+
+
+# ── find_paradox_legislator tests ────────────────────────────────────────────
+
+
+class TestFindParadoxLegislator:
+    """Test detection of ideologically extreme but contrarian legislators."""
+
+    @pytest.fixture
+    def paradox_ideal_points(self) -> pl.DataFrame:
+        """6 legislators: 4 R, 2 D. rep_a is most extreme R."""
+        return pl.DataFrame(
+            {
+                "legislator_slug": [
+                    "rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_d_d_1",
+                    "rep_e_e_1", "rep_f_f_1",
+                ],
+                "xi_mean": [3.0, 2.0, 1.5, 1.0, -1.0, -2.0],
+                "xi_sd": [0.1] * 6,
+                "xi_hdi_2.5": [2.8, 1.8, 1.3, 0.8, -1.2, -2.2],
+                "xi_hdi_97.5": [3.2, 2.2, 1.7, 1.2, -0.8, -1.8],
+                "full_name": ["A A", "B B", "C C", "D D", "E E", "F F"],
+                "party": ["Republican"] * 4 + ["Democrat"] * 2,
+                "district": list(range(1, 7)),
+                "chamber": ["House"] * 6,
+            }
+        )
+
+    @pytest.fixture
+    def paradox_bill_params(self) -> pl.DataFrame:
+        """8 bills: 4 high-disc, 4 low-disc."""
+        return pl.DataFrame(
+            {
+                "vote_id": [f"v{i}" for i in range(1, 9)],
+                "beta_mean": [2.0, 2.5, -2.0, 1.8, 0.3, 0.2, -0.1, 0.4],
+                "alpha_mean": [0.0] * 8,
+            }
+        )
+
+    @pytest.fixture
+    def paradox_data_with_gap(self) -> dict:
+        """Raw vote data where rep_a votes differently on high-disc vs low-disc bills.
+
+        rep_a votes Yea on all 4 high-disc bills but Nay on 3 of 4 low-disc bills.
+        Other Rs vote consistently Yea on all bills.
+        """
+        slugs = [
+            "rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_d_d_1",
+            "rep_e_e_1", "rep_f_f_1",
+        ]
+        vote_ids = [f"v{i}" for i in range(1, 9)]
+
+        # Build vote matrix:
+        # Rows: 6 legislators, Cols: 8 votes
+        # rep_a: high-disc=[1,1,1,1], low-disc=[0,0,0,1]
+        # others: all 1s (Yea) on everything
+        votes = {
+            "rep_a_a_1":  [1, 1, 1, 1, 0, 0, 0, 1],
+            "rep_b_b_1":  [1, 1, 1, 1, 1, 1, 1, 1],
+            "rep_c_c_1":  [1, 1, 1, 1, 1, 1, 1, 1],
+            "rep_d_d_1":  [1, 1, 1, 1, 1, 1, 1, 1],
+            "rep_e_e_1":  [0, 0, 0, 0, 1, 1, 1, 0],
+            "rep_f_f_1":  [0, 0, 0, 0, 1, 1, 1, 0],
+        }
+
+        leg_idx_list = []
+        vote_idx_list = []
+        y_list = []
+        for s_idx, slug in enumerate(slugs):
+            for v_idx, vote in enumerate(votes[slug]):
+                leg_idx_list.append(s_idx)
+                vote_idx_list.append(v_idx)
+                y_list.append(vote)
+
+        return {
+            "leg_slugs": slugs,
+            "vote_ids": vote_ids,
+            "leg_idx": np.array(leg_idx_list, dtype=np.int64),
+            "vote_idx": np.array(vote_idx_list, dtype=np.int64),
+            "y": np.array(y_list, dtype=np.int64),
+            "n_legislators": len(slugs),
+            "n_votes": len(vote_ids),
+            "n_obs": len(y_list),
+        }
+
+    def test_finds_paradox_when_gap_exists(
+        self,
+        paradox_ideal_points: pl.DataFrame,
+        paradox_bill_params: pl.DataFrame,
+        paradox_data_with_gap: dict,
+    ) -> None:
+        """Should return dict with correct slug when high/low-disc Yea rate gap > threshold."""
+        result = find_paradox_legislator(
+            paradox_ideal_points, paradox_bill_params, paradox_data_with_gap,
+        )
+        assert result is not None
+        assert result["slug"] == "rep_a_a_1"
+        assert result["gap"] > PARADOX_YEA_GAP
+
+    def test_no_paradox_when_consistent(
+        self,
+        paradox_ideal_points: pl.DataFrame,
+        paradox_bill_params: pl.DataFrame,
+    ) -> None:
+        """Should return None when the most extreme legislator votes consistently."""
+        # All Yea on everything — no gap
+        slugs = paradox_ideal_points["legislator_slug"].to_list()
+        vote_ids = paradox_bill_params["vote_id"].to_list()
+        leg_idx_list = []
+        vote_idx_list = []
+        y_list = []
+        for s_idx in range(len(slugs)):
+            for v_idx in range(len(vote_ids)):
+                leg_idx_list.append(s_idx)
+                vote_idx_list.append(v_idx)
+                y_list.append(1)
+
+        data = {
+            "leg_slugs": slugs,
+            "vote_ids": vote_ids,
+            "leg_idx": np.array(leg_idx_list, dtype=np.int64),
+            "vote_idx": np.array(vote_idx_list, dtype=np.int64),
+            "y": np.array(y_list, dtype=np.int64),
+            "n_legislators": len(slugs),
+            "n_votes": len(vote_ids),
+            "n_obs": len(y_list),
+        }
+        result = find_paradox_legislator(paradox_ideal_points, paradox_bill_params, data)
+        assert result is None
+
+    def test_returns_none_for_small_n(
+        self,
+        paradox_ideal_points: pl.DataFrame,
+    ) -> None:
+        """Should return None when fewer than PARADOX_MIN_BILLS high-disc or low-disc bills."""
+        # Only 2 bills total — not enough
+        bill_params = pl.DataFrame(
+            {
+                "vote_id": ["v1", "v2"],
+                "beta_mean": [2.0, 0.3],
+                "alpha_mean": [0.0, 0.0],
+            }
+        )
+        slugs = paradox_ideal_points["legislator_slug"].to_list()
+        data = {
+            "leg_slugs": slugs,
+            "vote_ids": ["v1", "v2"],
+            "leg_idx": np.array([0, 0, 1, 1], dtype=np.int64),
+            "vote_idx": np.array([0, 1, 0, 1], dtype=np.int64),
+            "y": np.array([1, 0, 1, 1], dtype=np.int64),
+            "n_legislators": len(slugs),
+            "n_votes": 2,
+            "n_obs": 4,
+        }
+        result = find_paradox_legislator(paradox_ideal_points, bill_params, data)
+        assert result is None
+
+    def test_paradox_info_has_required_keys(
+        self,
+        paradox_ideal_points: pl.DataFrame,
+        paradox_bill_params: pl.DataFrame,
+        paradox_data_with_gap: dict,
+    ) -> None:
+        """Returned dict should have all expected keys."""
+        result = find_paradox_legislator(
+            paradox_ideal_points, paradox_bill_params, paradox_data_with_gap,
+        )
+        assert result is not None
+        expected_keys = {
+            "slug", "full_name", "party", "xi_mean",
+            "high_disc_yea_rate", "low_disc_yea_rate",
+            "party_high_disc_yea_rate", "party_low_disc_yea_rate",
+            "n_high_disc", "n_low_disc", "gap",
+        }
+        assert set(result.keys()) == expected_keys

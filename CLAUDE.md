@@ -252,6 +252,7 @@ uv run ruff check src/       # lint clean
 ### Analysis Infrastructure Test Files
 - `tests/test_run_context.py` — TeeStream, session normalization, RunContext lifecycle (~26 tests)
 - `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt (~36 tests)
+- `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity filter, joint model, forest highlights, paradox detection (~45 tests)
 - `tests/test_umap_viz.py` — imputation, orientation, embedding construction, Procrustes, validation correlations (~21 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names, TopicModel dataclass (~16 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration (~22 tests)

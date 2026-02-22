@@ -1318,31 +1318,127 @@ def extract_bill_parameters(
 
 # ── Phase 6: Plots ──────────────────────────────────────────────────────────
 
+# Discrimination thresholds for paradox detection
+HIGH_DISC_THRESHOLD = 1.5
+LOW_DISC_THRESHOLD = 0.5
+PARADOX_YEA_GAP = 0.20
+PARADOX_MIN_BILLS = 3
+MAX_HIGHLIGHTS = 5
+
+
+def _detect_forest_highlights(
+    ideal_points: pl.DataFrame,
+    chamber: str,
+) -> dict[str, str]:
+    """Detect notable legislators for forest plot annotation (data-driven).
+
+    Returns {slug: annotation_text} for up to MAX_HIGHLIGHTS legislators.
+    Returns empty dict if fewer than 3 legislators in the DataFrame.
+    """
+    if ideal_points.height < 3:
+        return {}
+
+    highlights: dict[str, str] = {}
+
+    # 1. Most extreme (top 1 by |xi_mean|)
+    extreme = ideal_points.with_columns(
+        pl.col("xi_mean").abs().alias("_abs_xi")
+    ).sort("_abs_xi", descending=True).row(0, named=True)
+    direction = "conservative" if extreme["xi_mean"] > 0 else "liberal"
+    highlights[extreme["legislator_slug"]] = f"Most {direction} in the {chamber}"
+
+    # 2. Widest HDI (top 1 by xi_sd) — only if xi_sd > 2× median
+    median_sd = ideal_points["xi_sd"].median()
+    widest = ideal_points.sort("xi_sd", descending=True).row(0, named=True)
+    if widest["xi_sd"] > 2 * median_sd:
+        slug = widest["legislator_slug"]
+        if slug not in highlights:
+            highlights[slug] = "Highest uncertainty (wide HDI)"
+
+    # 3. Most moderate (xi_mean closest to 0) — only if clearly between parties
+    has_parties = (
+        ideal_points.filter(pl.col("party") == "Republican").height > 0
+        and ideal_points.filter(pl.col("party") == "Democrat").height > 0
+    )
+    if has_parties:
+        r_min_xi = (
+            ideal_points.filter(pl.col("party") == "Republican")
+            .sort("xi_mean")
+            .row(0, named=True)
+        )
+        d_max_xi = (
+            ideal_points.filter(pl.col("party") == "Democrat")
+            .sort("xi_mean", descending=True)
+            .row(0, named=True)
+        )
+        # Pick whichever is closer to 0 and between parties
+        r_candidate = r_min_xi if r_min_xi["xi_mean"] > d_max_xi["xi_mean"] else None
+        d_candidate = d_max_xi if d_max_xi["xi_mean"] < r_min_xi["xi_mean"] else None
+
+        moderate = None
+        if r_candidate and d_candidate:
+            if abs(r_candidate["xi_mean"]) < abs(d_candidate["xi_mean"]):
+                moderate = r_candidate
+            else:
+                moderate = d_candidate
+        elif r_candidate:
+            moderate = r_candidate
+        elif d_candidate:
+            moderate = d_candidate
+
+        if moderate and moderate["legislator_slug"] not in highlights:
+            highlights[moderate["legislator_slug"]] = (
+                f"Most moderate {moderate['party']} member"
+            )
+
+    # 4. Widest HDI runner-up (2nd widest) — only if also > 2× median and different from #2
+    if ideal_points.height >= 2:
+        second_widest = ideal_points.sort("xi_sd", descending=True).row(1, named=True)
+        if (
+            second_widest["xi_sd"] > 2 * median_sd
+            and second_widest["legislator_slug"] not in highlights
+        ):
+            highlights[second_widest["legislator_slug"]] = (
+                "High uncertainty (wide HDI)"
+            )
+
+    # Cap at MAX_HIGHLIGHTS
+    if len(highlights) > MAX_HIGHLIGHTS:
+        highlights = dict(list(highlights.items())[:MAX_HIGHLIGHTS])
+
+    # If fewer than 2 highlights, return empty (not worth cluttering)
+    if len(highlights) < 2:
+        return {}
+
+    return highlights
+
 
 def plot_forest(
     ideal_points: pl.DataFrame,
     chamber: str,
     out_dir: Path,
+    highlights: dict[str, str] | None = None,
 ) -> None:
-    """Forest plot: ideal points with 95% HDI, party-colored, sorted by xi_mean."""
+    """Forest plot: ideal points with 95% HDI, party-colored, sorted by xi_mean.
+
+    Args:
+        highlights: Optional dict of {slug: annotation_text}. If None, detects
+            highlights automatically via _detect_forest_highlights().
+    """
     sorted_df = ideal_points.sort("xi_mean")
     n = sorted_df.height
 
     fig, ax = plt.subplots(figsize=(10, max(14, n * 0.22)))
 
-    # Flagged legislators to highlight (from analytic-flags.md)
-    highlight_slugs = {
-        "sen_tyson_caryn_1": "Most conservative but lowest loyalty",
-        "sen_thompson_mike_1": "Contrarian on routine bills",
-        "rep_schreiber_mark_1": "Most bipartisan House member",
-        "sen_miller_silas_1": "Mid-session replacement (30 votes)",
-    }
+    # Data-driven highlights (or caller-provided override)
+    if highlights is None:
+        highlights = _detect_forest_highlights(ideal_points, chamber)
 
     y_pos = np.arange(n)
     for i, row in enumerate(sorted_df.iter_rows(named=True)):
         slug = row["legislator_slug"]
         color = PARTY_COLORS.get(row["party"], "#888888")
-        is_highlight = slug in highlight_slugs
+        is_highlight = slug in highlights
 
         ax.hlines(
             i,
@@ -1366,7 +1462,7 @@ def plot_forest(
         # Annotate flagged legislators
         if is_highlight:
             ax.annotate(
-                highlight_slugs[slug],
+                highlights[slug],
                 (row["xi_hdi_97.5"], i),
                 fontsize=6,
                 fontstyle="italic",
@@ -1410,6 +1506,251 @@ def plot_forest(
 
     fig.tight_layout()
     save_fig(fig, out_dir / f"forest_{chamber.lower()}.png")
+
+
+def find_paradox_legislator(
+    ideal_points: pl.DataFrame,
+    bill_params: pl.DataFrame,
+    data: dict,
+) -> dict | None:
+    """Find a legislator who is ideologically extreme but contrarian on routine bills.
+
+    Within the majority party, finds the legislator with the highest |xi_mean|,
+    then checks whether their Yea rate differs between high-discrimination
+    (partisan) and low-discrimination (routine) bills.
+
+    Returns a metadata dict if a paradox is found (gap > PARADOX_YEA_GAP),
+    or None if no paradox exists.
+    """
+    # Determine majority party
+    party_counts = ideal_points.group_by("party").len().sort("len", descending=True)
+    if party_counts.height == 0:
+        return None
+    majority_party = party_counts.row(0, named=True)["party"]
+
+    # Find most extreme in majority party
+    majority = ideal_points.filter(pl.col("party") == majority_party)
+    if majority.height == 0:
+        return None
+    candidate = (
+        majority.with_columns(pl.col("xi_mean").abs().alias("_abs_xi"))
+        .sort("_abs_xi", descending=True)
+        .row(0, named=True)
+    )
+    slug = candidate["legislator_slug"]
+
+    # Split bills by discrimination
+    high_disc_votes = bill_params.filter(
+        pl.col("beta_mean").abs() > HIGH_DISC_THRESHOLD
+    )["vote_id"].to_list()
+    low_disc_votes = bill_params.filter(
+        pl.col("beta_mean").abs() < LOW_DISC_THRESHOLD
+    )["vote_id"].to_list()
+
+    if len(high_disc_votes) < PARADOX_MIN_BILLS or len(low_disc_votes) < PARADOX_MIN_BILLS:
+        return None
+
+    # Compute Yea rates from raw data
+    leg_slugs = data["leg_slugs"]
+    vote_ids = data["vote_ids"]
+    leg_idx_arr = data["leg_idx"]
+    vote_idx_arr = data["vote_idx"]
+    y_arr = data["y"]
+
+    if slug not in leg_slugs:
+        return None
+    slug_idx = leg_slugs.index(slug)
+
+    high_disc_idxs = {vote_ids.index(v) for v in high_disc_votes if v in vote_ids}
+    low_disc_idxs = {vote_ids.index(v) for v in low_disc_votes if v in vote_ids}
+
+    # Filter to this legislator's votes
+    mask = leg_idx_arr == slug_idx
+    leg_vote_idxs = vote_idx_arr[mask]
+    leg_votes = y_arr[mask]
+
+    high_mask = np.isin(leg_vote_idxs, list(high_disc_idxs))
+    low_mask = np.isin(leg_vote_idxs, list(low_disc_idxs))
+
+    n_high = high_mask.sum()
+    n_low = low_mask.sum()
+
+    if n_high < PARADOX_MIN_BILLS or n_low < PARADOX_MIN_BILLS:
+        return None
+
+    high_yea_rate = float(leg_votes[high_mask].mean())
+    low_yea_rate = float(leg_votes[low_mask].mean())
+
+    # Also compute party average for comparison
+    majority_slugs = majority["legislator_slug"].to_list()
+    majority_idxs = [leg_slugs.index(s) for s in majority_slugs if s in leg_slugs]
+    party_mask = np.isin(leg_idx_arr, majority_idxs)
+
+    party_high_mask = party_mask & np.isin(vote_idx_arr, list(high_disc_idxs))
+    party_low_mask = party_mask & np.isin(vote_idx_arr, list(low_disc_idxs))
+
+    party_high_yea = float(y_arr[party_high_mask].mean()) if party_high_mask.sum() > 0 else 0.0
+    party_low_yea = float(y_arr[party_low_mask].mean()) if party_low_mask.sum() > 0 else 0.0
+
+    gap = abs(high_yea_rate - low_yea_rate)
+    if gap < PARADOX_YEA_GAP:
+        return None
+
+    return {
+        "slug": slug,
+        "full_name": candidate["full_name"],
+        "party": candidate["party"],
+        "xi_mean": candidate["xi_mean"],
+        "high_disc_yea_rate": high_yea_rate,
+        "low_disc_yea_rate": low_yea_rate,
+        "party_high_disc_yea_rate": party_high_yea,
+        "party_low_disc_yea_rate": party_low_yea,
+        "n_high_disc": int(n_high),
+        "n_low_disc": int(n_low),
+        "gap": gap,
+    }
+
+
+def plot_paradox_spotlight(
+    paradox: dict,
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Two-panel figure showing a legislator's paradoxical voting behavior.
+
+    Left panel: grouped bar chart comparing Yea rates on partisan vs routine bills.
+    Right panel: simplified forest plot with the paradox legislator highlighted.
+    """
+    name = paradox["full_name"]
+    last_name = name.split()[-1] if name else "Unknown"
+    party = paradox["party"]
+    party_color = PARTY_COLORS.get(party, "#888888")
+    direction = "conservative" if paradox["xi_mean"] > 0 else "liberal"
+
+    fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(16, 8), width_ratios=[1, 1.2])
+
+    # ── Left panel: grouped bar chart ──
+    categories = ["Highly Partisan\nBills", "Routine\nBills"]
+    name_rates = [paradox["high_disc_yea_rate"], paradox["low_disc_yea_rate"]]
+    party_rates = [paradox["party_high_disc_yea_rate"], paradox["party_low_disc_yea_rate"]]
+
+    x = np.arange(len(categories))
+    width = 0.3
+
+    bars1 = ax_left.bar(
+        x - width / 2, name_rates, width,
+        label=last_name, color=party_color, edgecolor="black", linewidth=0.5,
+    )
+    bars2 = ax_left.bar(
+        x + width / 2, party_rates, width,
+        label=f"{party} average", color="#CCCCCC", edgecolor="black", linewidth=0.5,
+    )
+
+    # Add value labels on bars
+    for bar in bars1:
+        ax_left.text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
+            f"{bar.get_height():.0%}", ha="center", va="bottom", fontsize=10, fontweight="bold",
+        )
+    for bar in bars2:
+        ax_left.text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
+            f"{bar.get_height():.0%}", ha="center", va="bottom", fontsize=10, color="#666666",
+        )
+
+    ax_left.set_ylim(0, 1.15)
+    ax_left.set_xticks(x)
+    ax_left.set_xticklabels(categories, fontsize=11)
+    ax_left.set_ylabel("Yea Vote Rate", fontsize=11)
+    ax_left.set_title(f"How {last_name} Votes Differently by Bill Type", fontsize=12)
+    ax_left.legend(loc="upper right", fontsize=10)
+    ax_left.spines["top"].set_visible(False)
+    ax_left.spines["right"].set_visible(False)
+
+    # Annotation callout
+    low_pct = f"{paradox['low_disc_yea_rate']:.0%}"
+    party_low_pct = f"{paradox['party_low_disc_yea_rate']:.0%}"
+    ax_left.text(
+        0.5, -0.12,
+        f"{last_name} votes Yea on {low_pct} of routine bills, vs. the {party}\n"
+        f"average of {party_low_pct} ({paradox['n_high_disc']} partisan, "
+        f"{paradox['n_low_disc']} routine bills).",
+        transform=ax_left.transAxes, fontsize=9, ha="center", va="top",
+        style="italic", color="#555555",
+    )
+
+    # ── Right panel: simplified forest plot (majority party only) ──
+    majority = ideal_points.filter(pl.col("party") == party).sort("xi_mean")
+    n = majority.height
+
+    for i, row in enumerate(majority.iter_rows(named=True)):
+        slug = row["legislator_slug"]
+        is_paradox = slug == paradox["slug"]
+
+        ax_right.hlines(
+            i, row["xi_hdi_2.5"], row["xi_hdi_97.5"],
+            colors=party_color,
+            alpha=0.9 if is_paradox else 0.3,
+            linewidth=3.0 if is_paradox else 1.0,
+        )
+        ax_right.scatter(
+            row["xi_mean"], i,
+            c=party_color if not is_paradox else "gold",
+            s=80 if is_paradox else 15,
+            zorder=5,
+            edgecolors="black",
+            linewidth=1.0 if is_paradox else 0.2,
+            marker="D" if is_paradox else "o",
+        )
+
+    # Annotate the paradox legislator
+    paradox_row = majority.filter(
+        pl.col("legislator_slug") == paradox["slug"]
+    )
+    if paradox_row.height > 0:
+        pr = paradox_row.row(0, named=True)
+        # Find position in sorted list
+        sorted_slugs = majority.sort("xi_mean")["legislator_slug"].to_list()
+        y_idx = sorted_slugs.index(paradox["slug"])
+
+        ax_right.annotate(
+            f"Most {direction} by IRT,\nyet contrarian on routine bills",
+            (pr["xi_hdi_97.5"], y_idx),
+            fontsize=8, fontstyle="italic", color="#333333",
+            xytext=(12, 0), textcoords="offset points", va="center",
+            bbox={"boxstyle": "round,pad=0.4", "fc": "lightyellow", "ec": "#CCCCCC", "alpha": 0.9},
+            arrowprops={"arrowstyle": "->", "color": "#999999"},
+        )
+
+    # Y-axis labels (party members only)
+    labels = []
+    for row in majority.iter_rows(named=True):
+        nm = row.get("full_name", row["legislator_slug"])
+        labels.append(nm)
+    ax_right.set_yticks(np.arange(n))
+    ax_right.set_yticklabels(labels, fontsize=5.5 if n > 30 else 7)
+    ax_right.axvline(0, color="gray", linestyle="--", alpha=0.3)
+    ax_right.set_xlabel("Ideal Point (Liberal \u2190 \u2192 Conservative)")
+    ax_right.set_title(
+        f"Where {last_name} Sits on the {party} Spectrum", fontsize=12,
+    )
+    ax_right.spines["top"].set_visible(False)
+    ax_right.spines["right"].set_visible(False)
+
+    fig.suptitle(
+        f"The {last_name} Paradox: Extreme Ideology, Unreliable Loyalty",
+        fontsize=14, fontweight="bold", y=1.02,
+    )
+    fig.text(
+        0.5, -0.04,
+        f"This legislator is the most ideologically extreme {party} in the {chamber},\n"
+        f"but defects from the party line on routine, near-unanimous bills.",
+        ha="center", fontsize=10, style="italic", color="#555555",
+    )
+
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"paradox_spotlight_{chamber.lower()}.png")
 
 
 def plot_discrimination(
@@ -2174,6 +2515,18 @@ def main() -> None:
             # ── Phase 6: Plots ──
             print_header(f"PHASE 6: PLOTS — {chamber}")
             plot_forest(ideal_points, chamber, ctx.plots_dir)
+
+            # Paradox spotlight
+            paradox = find_paradox_legislator(ideal_points, bill_params, data)
+            if paradox:
+                print(f"  Paradox detected: {paradox['full_name']} "
+                      f"(gap={paradox['gap']:.0%})")
+                plot_paradox_spotlight(
+                    paradox, ideal_points, chamber, ctx.plots_dir,
+                )
+            else:
+                print("  No paradox legislator detected")
+
             plot_discrimination(bill_params, chamber, ctx.plots_dir)
             plot_irt_vs_pca(ideal_points, pca_scores, chamber, ctx.plots_dir)
             plot_traces(idata, data, chamber, ctx.plots_dir)
@@ -2211,6 +2564,7 @@ def main() -> None:
                 "sampling_time": sampling_time,
                 "cons_slug": cons_slug,
                 "lib_slug": lib_slug,
+                "paradox": paradox,
             }
 
         # ── Joint Cross-Chamber Equating ──

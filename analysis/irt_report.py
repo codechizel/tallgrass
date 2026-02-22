@@ -56,6 +56,7 @@ def build_irt_report(
         if chamber == "Joint":
             continue
         _add_forest_figure(report, plots_dir, chamber)
+        _add_paradox_spotlight_figure(report, plots_dir, chamber, result)
         _add_ideal_point_table(report, result, chamber)
     _add_ideal_point_interpretation(report)
 
@@ -271,10 +272,48 @@ def _add_forest_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> 
                 path,
                 caption=(
                     f"Legislator ideal points with 95% HDI ({chamber}). "
-                    "Red = Republican, Blue = Democrat. Positive = conservative."
+                    "Red = Republican, Blue = Democrat. Positive = conservative. "
+                    "Flagged legislators detected automatically based on "
+                    "statistical outlier criteria."
                 ),
             )
         )
+
+
+def _add_paradox_spotlight_figure(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+    result: dict,
+) -> None:
+    """Figure: Paradox spotlight (side-by-side voting pattern + forest position)."""
+    paradox = result.get("paradox")
+    if paradox is None:
+        return
+
+    path = plots_dir / f"paradox_spotlight_{chamber.lower()}.png"
+    if not path.exists():
+        return
+
+    name = paradox["full_name"]
+    direction = "conservative" if paradox["xi_mean"] > 0 else "liberal"
+    low_pct = f"{paradox['low_disc_yea_rate']:.0%}"
+    party_low_pct = f"{paradox['party_low_disc_yea_rate']:.0%}"
+
+    report.add(
+        FigureSection.from_file(
+            f"fig-paradox-{chamber.lower()}",
+            f"{chamber} Paradox Spotlight: {name}",
+            path,
+            caption=(
+                f"{name} is the most {direction} legislator by IRT in the {chamber}, "
+                f"yet votes Yea on only {low_pct} of routine bills "
+                f"(vs. the party average of {party_low_pct}). "
+                f"({paradox['n_high_disc']} partisan bills, "
+                f"{paradox['n_low_disc']} routine bills.)"
+            ),
+        )
+    )
 
 
 def _add_ideal_point_table(
