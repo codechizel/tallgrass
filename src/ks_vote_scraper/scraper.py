@@ -862,7 +862,7 @@ class KSVoteScraper:
                 full_name = _clean_text(name_h1)
                 # Strip title prefix and leadership suffix
                 full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
-                full_name = re.sub(r"\s*-\s*(Senate|House)\s+.*$", "", full_name)
+                full_name = re.sub(r"\s+-\s+.*$", "", full_name)
                 info["full_name"] = full_name
             else:
                 info["full_name"] = info.get("name", "")
