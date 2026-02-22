@@ -302,10 +302,7 @@ def find_defection_bills(
         pl.col("vote_binary").mean().alias("party_yea_pct"),
     )
     party_agg = party_agg.with_columns(
-        pl.when(pl.col("party_yea_pct") > 0.5)
-        .then(1)
-        .otherwise(0)
-        .alias("party_majority_vote"),
+        pl.when(pl.col("party_yea_pct") > 0.5).then(1).otherwise(0).alias("party_majority_vote"),
     )
 
     # Join target votes with party majority
@@ -393,9 +390,7 @@ def find_voting_neighbors(
     chamber_votes = votes_long.filter(pl.col("legislator_slug").is_in(chamber_slugs))
 
     # Pivot to wide
-    matrix = chamber_votes.pivot(
-        on="legislator_slug", index="vote_id", values="vote_binary"
-    )
+    matrix = chamber_votes.pivot(on="legislator_slug", index="vote_id", values="vote_binary")
 
     if slug not in matrix.columns:
         return None
@@ -426,12 +421,14 @@ def find_voting_neighbors(
         agreement = (t == o).mean()
 
         info = name_lookup.get(other_slug, {})
-        agreements.append({
-            "slug": other_slug,
-            "full_name": info.get("full_name", other_slug),
-            "party": info.get("party", "Unknown"),
-            "agreement": float(agreement),
-        })
+        agreements.append(
+            {
+                "slug": other_slug,
+                "full_name": info.get("full_name", other_slug),
+                "party": info.get("party", "Unknown"),
+                "agreement": float(agreement),
+            }
+        )
 
     if not agreements:
         return None

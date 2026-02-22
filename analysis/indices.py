@@ -281,19 +281,14 @@ def compute_party_majority_positions(
     total_voters, majority_position, yea_pct.
     """
     # Filter to chamber
-    chamber_vote_ids = set(
-        rollcalls.filter(pl.col("chamber") == chamber)["vote_id"].to_list()
-    )
+    chamber_vote_ids = set(rollcalls.filter(pl.col("chamber") == chamber)["vote_id"].to_list())
 
     # Join votes with legislator party
     vote_party = votes.join(
         legislators.select(pl.col("slug").alias("legislator_slug"), "party"),
         on="legislator_slug",
         how="left",
-    ).filter(
-        pl.col("vote_id").is_in(chamber_vote_ids)
-        & pl.col("vote").is_in(["Yea", "Nay"])
-    )
+    ).filter(pl.col("vote_id").is_in(chamber_vote_ids) & pl.col("vote").is_in(["Yea", "Nay"]))
 
     # Group by vote_id and party
     party_counts = (
@@ -332,27 +327,21 @@ def identify_party_votes(
     positions, margins, closeness weight.
     """
     # Pivot to get R and D side-by-side per vote
-    r_counts = (
-        party_counts.filter(pl.col("party") == "Republican")
-        .select(
-            "vote_id",
-            pl.col("yea_count").alias("r_yea"),
-            pl.col("nay_count").alias("r_nay"),
-            pl.col("total_voters").alias("r_total"),
-            pl.col("majority_position").alias("r_majority"),
-            pl.col("yea_pct").alias("r_yea_pct"),
-        )
+    r_counts = party_counts.filter(pl.col("party") == "Republican").select(
+        "vote_id",
+        pl.col("yea_count").alias("r_yea"),
+        pl.col("nay_count").alias("r_nay"),
+        pl.col("total_voters").alias("r_total"),
+        pl.col("majority_position").alias("r_majority"),
+        pl.col("yea_pct").alias("r_yea_pct"),
     )
-    d_counts = (
-        party_counts.filter(pl.col("party") == "Democrat")
-        .select(
-            "vote_id",
-            pl.col("yea_count").alias("d_yea"),
-            pl.col("nay_count").alias("d_nay"),
-            pl.col("total_voters").alias("d_total"),
-            pl.col("majority_position").alias("d_majority"),
-            pl.col("yea_pct").alias("d_yea_pct"),
-        )
+    d_counts = party_counts.filter(pl.col("party") == "Democrat").select(
+        "vote_id",
+        pl.col("yea_count").alias("d_yea"),
+        pl.col("nay_count").alias("d_nay"),
+        pl.col("total_voters").alias("d_total"),
+        pl.col("majority_position").alias("d_majority"),
+        pl.col("yea_pct").alias("d_yea_pct"),
     )
 
     combined = r_counts.join(d_counts, on="vote_id", how="full", coalesce=True)
@@ -367,21 +356,26 @@ def identify_party_votes(
     )
 
     # Chamber-level margin and closeness weight
-    combined = combined.with_columns(
-        (pl.col("r_yea").fill_null(0) + pl.col("d_yea").fill_null(0)).alias("total_yea"),
-        (pl.col("r_nay").fill_null(0) + pl.col("d_nay").fill_null(0)).alias("total_nay"),
-    ).with_columns(
-        (pl.col("total_yea") + pl.col("total_nay")).alias("total_voting"),
-    ).with_columns(
-        (
-            (pl.col("total_yea").cast(pl.Int64) - pl.col("total_nay").cast(pl.Int64)).abs()
-            / pl.col("total_voting").cast(pl.Float64)
-        ).alias("chamber_margin"),
-    ).with_columns(
-        (
-            1.0 / pl.max_horizontal(pl.col("chamber_margin"), pl.lit(MAVERICK_WEIGHT_FLOOR))
-        ).alias("closeness_weight"),
-        pl.lit(session).alias("session"),
+    combined = (
+        combined.with_columns(
+            (pl.col("r_yea").fill_null(0) + pl.col("d_yea").fill_null(0)).alias("total_yea"),
+            (pl.col("r_nay").fill_null(0) + pl.col("d_nay").fill_null(0)).alias("total_nay"),
+        )
+        .with_columns(
+            (pl.col("total_yea") + pl.col("total_nay")).alias("total_voting"),
+        )
+        .with_columns(
+            (
+                (pl.col("total_yea").cast(pl.Int64) - pl.col("total_nay").cast(pl.Int64)).abs()
+                / pl.col("total_voting").cast(pl.Float64)
+            ).alias("chamber_margin"),
+        )
+        .with_columns(
+            (
+                1.0 / pl.max_horizontal(pl.col("chamber_margin"), pl.lit(MAVERICK_WEIGHT_FLOOR))
+            ).alias("closeness_weight"),
+            pl.lit(session).alias("session"),
+        )
     )
 
     # Join vote type and date from rollcalls
@@ -423,9 +417,7 @@ def compute_rice_summary(rice_df: pl.DataFrame, chamber: str) -> dict[str, dict]
     """Compute summary statistics per party."""
     summary: dict[str, dict] = {}
     for party in ["Republican", "Democrat"]:
-        party_rice = rice_df.filter(
-            (pl.col("party") == party) & pl.col("rice_index").is_not_null()
-        )
+        party_rice = rice_df.filter((pl.col("party") == party) & pl.col("rice_index").is_not_null())
         if party_rice.height == 0:
             continue
         vals = party_rice["rice_index"]
@@ -515,9 +507,9 @@ def plot_rice_distribution(
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
 
     for ax, party in zip(axes, ["Republican", "Democrat"]):
-        vals = rice_df.filter(
-            (pl.col("party") == party) & pl.col("rice_index").is_not_null()
-        )["rice_index"].to_numpy()
+        vals = rice_df.filter((pl.col("party") == party) & pl.col("rice_index").is_not_null())[
+            "rice_index"
+        ].to_numpy()
 
         if len(vals) == 0:
             continue
@@ -559,12 +551,9 @@ def plot_rice_over_time(
     fig, ax = plt.subplots(figsize=(14, 5))
 
     for party in ["Republican", "Democrat"]:
-        party_rice = (
-            rice_df.filter(
-                (pl.col("party") == party) & pl.col("rice_index").is_not_null()
-            )
-            .sort("vote_date", "vote_id")
-        )
+        party_rice = rice_df.filter(
+            (pl.col("party") == party) & pl.col("rice_index").is_not_null()
+        ).sort("vote_date", "vote_id")
         if party_rice.height < ROLLING_WINDOW:
             continue
 
@@ -696,13 +685,9 @@ def compute_unity_and_maverick(
     d_majority = dict(zip(pv["vote_id"].to_list(), pv["d_majority"].to_list()))
     closeness = dict(zip(pv["vote_id"].to_list(), pv["closeness_weight"].to_list()))
 
-    leg_party = dict(
-        zip(legislators["slug"].to_list(), legislators["party"].to_list())
-    )
+    leg_party = dict(zip(legislators["slug"].to_list(), legislators["party"].to_list()))
 
-    indiv = votes.filter(
-        pl.col("vote_id").is_in(pv_ids) & pl.col("vote").is_in(["Yea", "Nay"])
-    )
+    indiv = votes.filter(pl.col("vote_id").is_in(pv_ids) & pl.col("vote").is_in(["Yea", "Nay"]))
 
     # Single pass: accumulate per-legislator stats and defection vote IDs
     leg_data: dict[str, dict] = {}
@@ -797,23 +782,36 @@ def compute_unity_and_maverick(
 
     # Join metadata
     combined_df = combined_df.join(
-        legislators.select(
-            pl.col("slug").alias("legislator_slug"), "full_name", "district"
-        ),
+        legislators.select(pl.col("slug").alias("legislator_slug"), "full_name", "district"),
         on="legislator_slug",
         how="left",
     ).with_columns(pl.lit(session).alias("session"))
 
     # Split into unity and maverick views
     unity_df = combined_df.select(
-        "legislator_slug", "party", "votes_with_party", "party_votes_present",
-        "unity_score", "maverick_rate", "session", "full_name", "district",
+        "legislator_slug",
+        "party",
+        "votes_with_party",
+        "party_votes_present",
+        "unity_score",
+        "maverick_rate",
+        "session",
+        "full_name",
+        "district",
     ).sort("unity_score")
 
     maverick_df = combined_df.select(
-        "legislator_slug", "party", "unity_score", "maverick_rate",
-        "weighted_maverick", "n_party_votes", "n_defections", "loyalty_zscore",
-        "full_name", "district", "session",
+        "legislator_slug",
+        "party",
+        "unity_score",
+        "maverick_rate",
+        "weighted_maverick",
+        "n_party_votes",
+        "n_defections",
+        "loyalty_zscore",
+        "full_name",
+        "district",
+        "session",
     )
 
     # Print summary
@@ -821,9 +819,7 @@ def compute_unity_and_maverick(
         f"  {chamber}: {unity_df.height} legislators with unity scores "
         f"(mean={float(unity_df['unity_score'].mean()):.3f})"
     )
-    print(
-        f"  {chamber}: mean maverick rate = {float(maverick_df['maverick_rate'].mean()):.3f}"
-    )
+    print(f"  {chamber}: mean maverick rate = {float(maverick_df['maverick_rate'].mean()):.3f}")
     top_mav = maverick_df.sort("maverick_rate", descending=True).head(5)
     for row in top_mav.iter_rows(named=True):
         print(
@@ -956,15 +952,10 @@ def compute_enp_per_vote(
         legislators.select(pl.col("slug").alias("legislator_slug"), "party"),
         on="legislator_slug",
         how="left",
-    ).filter(
-        pl.col("vote_id").is_in(chamber_vote_ids)
-        & pl.col("vote").is_in(["Yea", "Nay"])
-    )
+    ).filter(pl.col("vote_id").is_in(chamber_vote_ids) & pl.col("vote").is_in(["Yea", "Nay"]))
 
     # Count (party, vote_direction) blocs per vote
-    blocs = vote_party.group_by("vote_id", "party", "vote").agg(
-        pl.len().alias("bloc_size")
-    )
+    blocs = vote_party.group_by("vote_id", "party", "vote").agg(pl.len().alias("bloc_size"))
 
     # Compute total voters per vote
     vote_totals = blocs.group_by("vote_id").agg(
@@ -1143,7 +1134,7 @@ def compute_co_defection_matrix(
     rows = []
     for i, sa in enumerate(slugs_list):
         sa_defections = defection_sets.get(sa, set())
-        for sb in slugs_list[i + 1:]:
+        for sb in slugs_list[i + 1 :]:
             shared = len(sa_defections & defection_sets.get(sb, set()))
             if shared >= CO_DEFECTION_MIN:
                 rows.append(
@@ -1325,8 +1316,7 @@ def analyze_veto_override_indices(
 ) -> dict:
     """Compute Rice and unity specifically for veto override votes."""
     override_rollcalls = rollcalls.filter(
-        pl.col("motion").str.to_lowercase().str.contains("veto")
-        & (pl.col("chamber") == chamber)
+        pl.col("motion").str.to_lowercase().str.contains("veto") & (pl.col("chamber") == chamber)
     )
     n_overrides = override_rollcalls.height
     if n_overrides < 2:
@@ -1346,9 +1336,9 @@ def analyze_veto_override_indices(
 
     override_rice: dict[str, float] = {}
     for party in ["Republican", "Democrat"]:
-        vals = rice_data.filter(
-            (pl.col("party") == party) & pl.col("rice_index").is_not_null()
-        )["rice_index"]
+        vals = rice_data.filter((pl.col("party") == party) & pl.col("rice_index").is_not_null())[
+            "rice_index"
+        ]
         if vals.len() > 0:
             override_rice[party] = float(vals.mean())
             print(f"    {party} override Rice: {override_rice[party]:.3f}")
@@ -1473,8 +1463,7 @@ def plot_unity_vs_irt(
     ax.set_xlabel("IRT Ideal Point (Liberal <-- --> Conservative)")
     ax.set_ylabel("Party Unity Score (CQ standard)")
     ax.set_title(
-        f"{chamber} — Does Ideology Predict Party Loyalty?\n"
-        f"Spearman rho = {rho:.3f}",
+        f"{chamber} — Does Ideology Predict Party Loyalty?\nSpearman rho = {rho:.3f}",
         fontsize=14,
         fontweight="bold",
     )
@@ -1513,9 +1502,7 @@ def run_sensitivity_analysis(
     filtered_vote_ids = set(c for c in filtered_vm.columns if c != "legislator_slug")
 
     # Filter rollcalls to only EDA-filtered votes
-    filtered_rollcalls = rollcalls.filter(
-        pl.col("vote_id").is_in(filtered_vote_ids)
-    )
+    filtered_rollcalls = rollcalls.filter(pl.col("vote_id").is_in(filtered_vote_ids))
 
     print(
         f"  {chamber}: Recomputing on {filtered_rollcalls.height} EDA-filtered votes "
@@ -1523,9 +1510,7 @@ def run_sensitivity_analysis(
     )
 
     # Recompute party votes and unity on filtered data
-    filtered_pc = compute_party_majority_positions(
-        votes, filtered_rollcalls, legislators, chamber
-    )
+    filtered_pc = compute_party_majority_positions(votes, filtered_rollcalls, legislators, chamber)
     filtered_pv = identify_party_votes(filtered_pc, filtered_rollcalls, chamber, session)
     n_party_votes_filtered = filtered_pv.filter(pl.col("is_party_vote")).height
     print(f"    Party votes (filtered): {n_party_votes_filtered}")
@@ -1622,9 +1607,7 @@ def main() -> None:
         Path(args.network_dir) if args.network_dir else results_root / "network" / "latest"
     )
     clustering_dir = (
-        Path(args.clustering_dir)
-        if args.clustering_dir
-        else results_root / "clustering" / "latest"
+        Path(args.clustering_dir) if args.clustering_dir else results_root / "clustering" / "latest"
     )
     eda_dir = Path(args.eda_dir) if args.eda_dir else results_root / "eda" / "latest"
 
@@ -1663,12 +1646,8 @@ def main() -> None:
 
             # ── Phase 2: Party Vote Identification ──
             print_header(f"PHASE 2: PARTY VOTE IDENTIFICATION — {chamber}")
-            party_counts = compute_party_majority_positions(
-                votes, rollcalls, legislators, chamber
-            )
-            party_votes_df = identify_party_votes(
-                party_counts, rollcalls, chamber, args.session
-            )
+            party_counts = compute_party_majority_positions(votes, rollcalls, legislators, chamber)
+            party_votes_df = identify_party_votes(party_counts, rollcalls, chamber, args.session)
             n_party_votes = party_votes_df.filter(pl.col("is_party_vote")).height
             n_total = party_votes_df.height
             print(
@@ -1677,9 +1656,7 @@ def main() -> None:
             )
 
             # Save
-            party_votes_df.write_parquet(
-                ctx.data_dir / f"party_votes_{chamber.lower()}.parquet"
-            )
+            party_votes_df.write_parquet(ctx.data_dir / f"party_votes_{chamber.lower()}.parquet")
             chamber_results["party_votes"] = party_votes_df
             chamber_results["n_party_votes"] = n_party_votes
             chamber_results["n_total_votes"] = n_total
@@ -1693,9 +1670,7 @@ def main() -> None:
 
             rice_df.write_parquet(ctx.data_dir / f"rice_index_{chamber.lower()}.parquet")
             if fractured.height > 0:
-                fractured.write_parquet(
-                    ctx.data_dir / f"fractured_votes_{chamber.lower()}.parquet"
-                )
+                fractured.write_parquet(ctx.data_dir / f"fractured_votes_{chamber.lower()}.parquet")
 
             chamber_results["rice_df"] = rice_df
             chamber_results["rice_summary"] = rice_summary
@@ -1713,9 +1688,7 @@ def main() -> None:
                 votes, party_votes_df, legislators, chamber, args.session
             )
             if unity_df.height > 0:
-                unity_df.write_parquet(
-                    ctx.data_dir / f"party_unity_{chamber.lower()}.parquet"
-                )
+                unity_df.write_parquet(ctx.data_dir / f"party_unity_{chamber.lower()}.parquet")
                 plot_party_unity_ranking(unity_df, chamber, ctx.plots_dir)
 
             co_defection = None
@@ -1741,9 +1714,7 @@ def main() -> None:
             # ── Phase 5: ENP ──
             print_header(f"PHASE 5: EFFECTIVE NUMBER OF PARTIES — {chamber}")
             enp_seats = compute_enp_seats(legislators, chamber, args.session)
-            enp_votes = compute_enp_per_vote(
-                votes, rollcalls, legislators, chamber, args.session
-            )
+            enp_votes = compute_enp_per_vote(votes, rollcalls, legislators, chamber, args.session)
 
             if enp_votes.height > 0:
                 enp_votes.write_parquet(ctx.data_dir / f"enp_{chamber.lower()}.parquet")
@@ -1755,17 +1726,13 @@ def main() -> None:
 
             # ── Phase 7: Veto Override Subgroup ──
             print_header(f"PHASE 7: VETO OVERRIDE INDICES — {chamber}")
-            override_results = analyze_veto_override_indices(
-                votes, rollcalls, legislators, chamber
-            )
+            override_results = analyze_veto_override_indices(votes, rollcalls, legislators, chamber)
             chamber_results["veto_overrides"] = override_results
 
             # ── Phase 8: Cross-Referencing ──
             if not args.skip_cross_ref:
                 print_header(f"PHASE 8: CROSS-REFERENCING — {chamber}")
-                upstream = load_upstream_optional(
-                    irt_dir, network_dir, clustering_dir, chamber
-                )
+                upstream = load_upstream_optional(irt_dir, network_dir, clustering_dir, chamber)
                 cross_ref = cross_reference_upstream(
                     unity_df, maverick_df, upstream, chamber, ctx.plots_dir
                 )
@@ -1778,8 +1745,7 @@ def main() -> None:
             if not args.skip_sensitivity:
                 print_header(f"PHASE 9: SENSITIVITY ANALYSIS — {chamber}")
                 sensitivity = run_sensitivity_analysis(
-                    votes, rollcalls, legislators, eda_dir,
-                    unity_df, chamber, args.session
+                    votes, rollcalls, legislators, eda_dir, unity_df, chamber, args.session
                 )
                 chamber_results["sensitivity"] = sensitivity
             else:

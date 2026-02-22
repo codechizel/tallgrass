@@ -181,7 +181,7 @@ def plot_enhanced_scorecard(
     ax.barh(y_pos, [1.0] * len(metrics), color=light_color, alpha=0.2, height=0.55, zorder=0)
 
     # Bars for legislator values
-    bars = ax.barh(y_pos, values, color=party_color, alpha=0.8, height=0.55, edgecolor="white")
+    ax.barh(y_pos, values, color=party_color, alpha=0.8, height=0.55, edgecolor="white")
 
     # Party average markers
     for i, avg in enumerate(party_avgs):
@@ -196,13 +196,25 @@ def plot_enhanced_scorecard(
         formatted = f"{val:{fmt}}"
         if val > 0.85:
             ax.text(
-                val - 0.02, i, formatted,
-                va="center", ha="right", fontsize=11, fontweight="bold", color="white",
+                val - 0.02,
+                i,
+                formatted,
+                va="center",
+                ha="right",
+                fontsize=11,
+                fontweight="bold",
+                color="white",
             )
         else:
             ax.text(
-                val + 0.02, i, formatted,
-                va="center", ha="left", fontsize=11, fontweight="bold", color="#333333",
+                val + 0.02,
+                i,
+                formatted,
+                va="center",
+                ha="left",
+                fontsize=11,
+                fontweight="bold",
+                color="#333333",
             )
 
     ax.set_yticks(y_pos)
@@ -212,15 +224,21 @@ def plot_enhanced_scorecard(
 
     ax.set_title(
         f"{target.title} — At a Glance",
-        fontsize=14, fontweight="bold", pad=12,
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
     )
 
     # Legend
     ax.text(
-        0.98, 0.02,
+        0.98,
+        0.02,
         "Gray marker = party average",
-        transform=ax.transAxes, fontsize=9, fontstyle="italic",
-        color="#555555", ha="right",
+        transform=ax.transAxes,
+        fontsize=9,
+        fontstyle="italic",
+        color="#555555",
+        ha="right",
         bbox={"boxstyle": "round,pad=0.3", "facecolor": "#f0f0f0", "edgecolor": "#cccccc"},
     )
 
@@ -256,23 +274,37 @@ def plot_bill_type_bars(
     x = np.arange(len(categories))
     width = 0.35
 
-    bars1 = ax.bar(x - width / 2, legislator_vals, width, label=target.full_name,
-                   color=party_color, alpha=0.85)
-    bars2 = ax.bar(x + width / 2, party_vals, width, label=f"{target.party} Average",
-                   color="#999999", alpha=0.6)
+    bars1 = ax.bar(
+        x - width / 2, legislator_vals, width, label=target.full_name, color=party_color, alpha=0.85
+    )
+    bars2 = ax.bar(
+        x + width / 2,
+        party_vals,
+        width,
+        label=f"{target.party} Average",
+        color="#999999",
+        alpha=0.6,
+    )
 
     # Value labels
     for bar in list(bars1) + list(bars2):
         height = bar.get_height()
         ax.text(
-            bar.get_x() + bar.get_width() / 2, height + 0.01,
-            f"{height:.0%}", ha="center", va="bottom", fontsize=10, fontweight="bold",
+            bar.get_x() + bar.get_width() / 2,
+            height + 0.01,
+            f"{height:.0%}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
         )
 
     ax.set_ylabel("Yea Rate", fontsize=12, fontweight="bold")
     ax.set_title(
         f"How {target.full_name} Votes by Bill Type",
-        fontsize=14, fontweight="bold", pad=12,
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
     )
     ax.set_xticks(x)
     ax.set_xticklabels(categories, fontsize=11)
@@ -285,11 +317,15 @@ def plot_bill_type_bars(
         is_less = breakdown.high_disc_yea_rate < breakdown.party_high_disc_yea_rate
         direction = "less" if is_less else "more"
         ax.text(
-            0.5, 0.02,
+            0.5,
+            0.02,
             f"{target.full_name.split()[-1]} votes Yea {gap:.0%} {direction} often "
             "than their party on partisan bills",
-            transform=ax.transAxes, fontsize=9, fontstyle="italic",
-            color="#555555", ha="center",
+            transform=ax.transAxes,
+            fontsize=9,
+            fontstyle="italic",
+            color="#555555",
+            ha="center",
             bbox={"boxstyle": "round,pad=0.4", "facecolor": "#f0f0f0", "edgecolor": "#cccccc"},
         )
 
@@ -346,11 +382,25 @@ def plot_position_in_context(
             row = party_df.row(i, named=True)
             lo = row.get("xi_hdi_2.5", xi_means[i])
             hi = row.get("xi_hdi_97.5", xi_means[i])
-            ax.hlines(i, lo, hi, color=party_color if not is_target else "#B8860B",
-                      linewidth=1.5 if is_target else 0.8, zorder=zorder - 1)
+            ax.hlines(
+                i,
+                lo,
+                hi,
+                color=party_color if not is_target else "#B8860B",
+                linewidth=1.5 if is_target else 0.8,
+                zorder=zorder - 1,
+            )
 
-        ax.scatter(xi_means[i], i, c=color, s=size, marker=marker,
-                   edgecolors=party_color, linewidth=1.5, zorder=zorder)
+        ax.scatter(
+            xi_means[i],
+            i,
+            c=color,
+            s=size,
+            marker=marker,
+            edgecolors=party_color,
+            linewidth=1.5,
+            zorder=zorder,
+        )
 
     ax.set_yticks(y_pos)
     ax.set_yticklabels(names, fontsize=8)
@@ -358,7 +408,9 @@ def plot_position_in_context(
     ax.set_xlabel("IRT Ideology (Liberal <-> Conservative)", fontsize=11, fontweight="bold")
     ax.set_title(
         f"Where {target.full_name} Stands Among {target.party}s ({target.chamber.title()})",
-        fontsize=13, fontweight="bold", pad=12,
+        fontsize=13,
+        fontweight="bold",
+        pad=12,
     )
 
     ax.spines["top"].set_visible(False)
@@ -392,15 +444,23 @@ def plot_defection_chart(
     y_pos = np.arange(len(bills))
 
     # Bars: party yea %
-    ax.barh(y_pos, party_pcts, color="#cccccc", alpha=0.7, height=0.5,
-            edgecolor="white", label="Party Yea %")
+    ax.barh(
+        y_pos,
+        party_pcts,
+        color="#cccccc",
+        alpha=0.7,
+        height=0.5,
+        edgecolor="white",
+        label="Party Yea %",
+    )
 
     # Legislator vote markers
     party_color = PARTY_COLORS.get(target.party, "#666666")
     for i, vote in enumerate(leg_votes):
         x = 1.0 if vote == "Yea" else 0.0
-        ax.scatter(x, i, c=party_color, s=100, marker="D", edgecolors="white",
-                   linewidth=1.5, zorder=5)
+        ax.scatter(
+            x, i, c=party_color, s=100, marker="D", edgecolors="white", linewidth=1.5, zorder=5
+        )
 
     ax.set_yticks(y_pos)
     ax.set_yticklabels(bills, fontsize=9)
@@ -410,14 +470,21 @@ def plot_defection_chart(
 
     ax.set_title(
         f"Key Votes Where {target.full_name} Broke Ranks",
-        fontsize=13, fontweight="bold", pad=12,
+        fontsize=13,
+        fontweight="bold",
+        pad=12,
     )
 
     ax.text(
-        0.98, 0.98,
+        0.98,
+        0.98,
         f"Diamond = {target.full_name.split()[-1]}'s vote",
-        transform=ax.transAxes, fontsize=8, fontstyle="italic",
-        color="#555555", ha="right", va="top",
+        transform=ax.transAxes,
+        fontsize=8,
+        fontstyle="italic",
+        color="#555555",
+        ha="right",
+        va="top",
         bbox={"boxstyle": "round,pad=0.3", "facecolor": "#f0f0f0", "edgecolor": "#cccccc"},
     )
 
@@ -488,7 +555,9 @@ def plot_neighbor_chart(
 
     fig.suptitle(
         f"Who Does {target.full_name} Vote Like?",
-        fontsize=14, fontweight="bold", y=1.02,
+        fontsize=14,
+        fontweight="bold",
+        y=1.02,
     )
     fig.tight_layout()
 
@@ -598,9 +667,9 @@ def main() -> None:
             chamber_votes = votes_long.filter(pl.col("chamber") == chamber)
 
             # Party slugs for comparison
-            party_slugs = (
-                chamber_df.filter(pl.col("party") == target.party)["legislator_slug"].to_list()
-            )
+            party_slugs = chamber_df.filter(pl.col("party") == target.party)[
+                "legislator_slug"
+            ].to_list()
 
             # Scorecard
             scorecard = build_scorecard(chamber_df, target.slug)

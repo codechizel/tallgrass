@@ -1591,9 +1591,7 @@ def main() -> None:
 
                 # Attach vote_id for joining
                 topic_df = topic_df.with_columns(chamber_rc["vote_id"])
-                topic_df.write_parquet(
-                    ctx.data_dir / f"topic_features_{chamber.lower()}.parquet"
-                )
+                topic_df.write_parquet(ctx.data_dir / f"topic_features_{chamber.lower()}.parquet")
                 print(
                     f"    Topics: {topic_model.n_topics}, "
                     f"Vocab: {topic_model.vocabulary_size}, "

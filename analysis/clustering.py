@@ -1906,13 +1906,23 @@ def main() -> None:
             plot_cluster_composition(summary, chamber, ctx.plots_dir)
             plot_cluster_box(irt_ip, primary_labels, primary_k, chamber, ctx.plots_dir)
 
-            # Flag specific legislators
-            flagged_slugs = [
-                "sen_tyson_caryn_1",
-                "sen_thompson_mike_1",
-                "sen_miller_silas_1",
-                "sen_hill_scott_1",
-            ]
+            # Flag notable legislators from data: lowest loyalty + highest uncertainty
+            ip_with_loy = irt_ip.join(
+                loyalty.select("legislator_slug", "loyalty_rate"),
+                on="legislator_slug",
+                how="left",
+            )
+            majority = ip_with_loy.group_by("party").len().sort("len", descending=True)["party"][0]
+            low_loy = (
+                ip_with_loy.filter(
+                    pl.col("party") == majority, pl.col("loyalty_rate").is_not_null()
+                )
+                .sort("loyalty_rate")
+                .head(2)["legislator_slug"]
+                .to_list()
+            )
+            high_sd = irt_ip.sort("xi_sd", descending=True).head(2)["legislator_slug"].to_list()
+            flagged_slugs = list(dict.fromkeys(low_loy + high_sd))
             ip_slugs = irt_ip["legislator_slug"].to_list()
             flagged = []
             for fs in flagged_slugs:

@@ -1308,32 +1308,44 @@ def plot_agreement_heatmap(
         fontsize=9,
     )
 
-    # Annotate Schreiber if present (highest cross-party agreement in House)
-    if chamber == "House":
-        schreiber_idx = None
-        for i, lbl in enumerate(labels):
-            if "Schreiber" in lbl:
-                schreiber_idx = i
-                break
-        if schreiber_idx is not None:
-            # Find Schreiber's position in the reordered heatmap
-            reorder = g.dendrogram_row.reordered_ind
-            schreiber_pos = list(reorder).index(schreiber_idx)
-            g.ax_heatmap.annotate(
-                "Schreiber: highest\ncross-party agreement",
-                xy=(schreiber_pos, schreiber_pos),
-                xytext=(n * 0.15, n * 0.15),
-                fontsize=8,
-                fontstyle="italic",
-                color="#555555",
-                bbox={
-                    "boxstyle": "round,pad=0.3",
-                    "fc": "lightyellow",
-                    "alpha": 0.8,
-                    "ec": "#cccccc",
-                },
-                arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.2},
-            )
+    # Annotate the majority-party legislator with highest cross-party agreement
+    # Determine majority party
+    from collections import Counter
+
+    party_counts = Counter(parties)
+    majority_party = max(party_counts, key=party_counts.get)
+    minority_party = [p for p in party_counts if p != majority_party]
+    if minority_party:
+        minority_party = minority_party[0]
+        # For each majority-party legislator, compute mean agreement with minority-party members
+        maj_indices = [i for i, p in enumerate(parties) if p == majority_party]
+        min_indices = [i for i, p in enumerate(parties) if p == minority_party]
+        if maj_indices and min_indices:
+            best_idx, best_avg = None, -1.0
+            for mi in maj_indices:
+                avg = float(np.mean([agreement_clean[mi, oi] for oi in min_indices]))
+                if avg > best_avg:
+                    best_avg = avg
+                    best_idx = mi
+            if best_idx is not None:
+                reorder = g.dendrogram_row.reordered_ind
+                best_pos = list(reorder).index(best_idx)
+                best_name = labels[best_idx].split()[-1]  # last name
+                g.ax_heatmap.annotate(
+                    f"{best_name}: highest\ncross-party agreement",
+                    xy=(best_pos, best_pos),
+                    xytext=(n * 0.15, n * 0.15),
+                    fontsize=8,
+                    fontstyle="italic",
+                    color="#555555",
+                    bbox={
+                        "boxstyle": "round,pad=0.3",
+                        "fc": "lightyellow",
+                        "alpha": 0.8,
+                        "ec": "#cccccc",
+                    },
+                    arrowprops={"arrowstyle": "->", "color": "#E81B23", "lw": 1.2},
+                )
 
     path = out_dir / f"agreement_heatmap_{chamber.lower()}.png"
     g.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")

@@ -430,7 +430,7 @@ def _add_feature_importance_interpretation(
     <li><strong>alpha_mean (bill difficulty)</strong> captures how easy or hard a bill is to
     pass. Easy bills (negative alpha) have more predictable Yea votes.</li>
     <li><strong>loyalty_rate</strong> captures party discipline. Low-loyalty legislators
-    (Tyson, Schreiber) are harder to predict.</li>
+    are harder to predict.</li>
     <li>If <strong>party_binary</strong> ranks below IRT features, it confirms that IRT
     subsumes the party signal — the model has learned a more nuanced representation than
     simple party affiliation.</li>
@@ -538,7 +538,7 @@ def _add_per_legislator_interpretation(
     parts.append(
         "<li>Legislators with <strong>low accuracy</strong> tend to fall into two categories: "
         "(1) moderates near the center of the ideological spectrum whose votes are genuinely "
-        "uncertain, and (2) contrarians like Tyson who vote against their party on routine "
+        "uncertain, and (2) contrarians who vote against their party on routine "
         "bills despite being ideologically extreme.</li>"
     )
     parts.append(
@@ -547,8 +547,8 @@ def _add_per_legislator_interpretation(
         "center are hardest.</li>"
     )
     parts.append(
-        "<li>Legislators flagged in upstream phases (Tyson, Thompson, Schreiber, Miller) are "
-        "expected to appear in the hardest-to-predict list.</li>"
+        "<li>Legislators flagged in upstream phases (contrarians, bipartisan bridge-builders, "
+        "sparse-vote members) are expected to appear in the hardest-to-predict list.</li>"
     )
     parts.append("</ul>")
 
@@ -844,14 +844,14 @@ def _add_downstream_findings(
     )
     parts.append(
         "<li><strong>Per-legislator accuracy patterns:</strong> Legislators flagged in upstream "
-        "phases (Tyson as contrarian, Schreiber as most bipartisan, Miller as sparse) should "
+        "phases (contrarians, bipartisan bridge-builders, sparse-vote members) should "
         "appear in the hardest-to-predict list, validating those flags.</li>"
     )
     parts.append(
-        "<li><strong>Model limitations:</strong> The 1D IRT model compresses Tyson's "
-        "two-dimensional behavior (extreme on partisan votes, contrarian on routine votes) "
+        "<li><strong>Model limitations:</strong> The 1D IRT model compresses multi-dimensional "
+        "behavior (extreme on partisan votes, contrarian on routine votes) "
         "into a single axis. A 2D model or issue-specific features could improve predictions "
-        "for legislators like Tyson and Thompson.</li>"
+        "for legislators with paradoxical voting patterns.</li>"
     )
     parts.append("</ul>")
 

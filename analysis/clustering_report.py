@@ -450,18 +450,15 @@ def _add_flagged_legislators(
     rows = []
     for chamber, result in results.items():
         for entry in result.get("flagged_legislators", []):
-            note = ""
-            slug = entry["legislator_slug"]
-            if "tyson" in slug:
-                note = "Extreme IRT from contrarian pattern; check loyalty rate"
-            elif "thompson" in slug:
-                note = "Milder version of Tyson contrarian pattern"
-            elif "miller" in slug:
-                note = "Sparse data (30/194 votes); low-confidence cluster"
-            elif "hill" in slug:
-                note = "Widest HDI in Senate; lowest-confidence cluster"
-
             loy_val = entry.get("loyalty_rate")
+
+            # Generate data-driven note from the entry's metrics
+            note_parts = []
+            if loy_val is not None and loy_val < 0.75:
+                note_parts.append(f"Low loyalty ({loy_val:.0%}); possible contrarian pattern")
+            if entry["xi_sd"] > 0.35:
+                note_parts.append(f"Wide credible interval (SD={entry['xi_sd']:.2f})")
+            note = "; ".join(note_parts)
             rows.append(
                 {
                     "Chamber": chamber,

@@ -631,6 +631,7 @@ def plot_metric_paradox(
 def plot_pipeline_summary(
     manifests: dict,
     plots_dir: Path,
+    session: str = "",
 ) -> Path:
     """Pipeline summary infographic: five boxes connected by arrows."""
     eda = manifests.get("eda", {})
@@ -654,7 +655,10 @@ def plot_pipeline_summary(
     k_optimal = 2  # From clustering
 
     boxes = [
-        {"label": f"{total_votes}\nRoll Calls", "sub": "All recorded votes\nin 2025-2026"},
+        {
+            "label": f"{total_votes}\nRoll Calls",
+            "sub": f"All recorded votes\nin {session}" if session else "All recorded votes",
+        },
         {"label": f"{contested}\nContested", "sub": "After removing\nnear-unanimous votes"},
         {"label": f"{party_votes}\nParty Votes", "sub": "Where parties\nformally disagree"},
         {"label": f"k = {k_optimal}\nClusters", "sub": "Party is the only\nstable grouping"},
@@ -714,7 +718,7 @@ def plot_pipeline_summary(
             )
 
     ax.set_title(
-        "From 882 Votes to One Number: 0.98",
+        f"From {total_votes} Votes to One Number: {best_auc:.2f}",
         fontsize=16,
         fontweight="bold",
         pad=20,
@@ -787,7 +791,7 @@ def main() -> None:
         print("\nGenerating new plots...")
 
         # Pipeline summary
-        plot_pipeline_summary(manifests, ctx.plots_dir)
+        plot_pipeline_summary(manifests, ctx.plots_dir, session=ctx.session)
 
         # Dashboard scatters — pass dynamic annotation slugs
         for chamber in ("house", "senate"):
@@ -847,7 +851,7 @@ def main() -> None:
 
         # ── Build Report ─────────────────────────────────────────────────
         print("\nBuilding synthesis report...")
-        ctx.report.title = "Kansas Legislature 2025-2026 — Synthesis Report"
+        ctx.report.title = f"Kansas Legislature {ctx.session} — Synthesis Report"
 
         build_synthesis_report(
             ctx.report,

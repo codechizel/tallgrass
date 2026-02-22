@@ -370,7 +370,8 @@ def _add_temporal_figure(report: ReportBuilder, plots_dir: Path) -> None:
                 "fig-temporal",
                 "Temporal Activity",
                 path,
-                caption="Monthly roll call counts by chamber. Expect bursts near session deadlines.",
+                caption="Monthly roll call counts by chamber. "
+                "Expect bursts near session deadlines.",
             )
         )
 

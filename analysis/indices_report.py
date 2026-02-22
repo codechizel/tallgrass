@@ -894,9 +894,7 @@ def _add_veto_override_table(
                     "N Override Votes": veto["n_overrides"],
                     "Party": party,
                     "Mean Override Rice": rice_val,
-                    "Note": "Near-perfect = strictly party-line"
-                    if rice_val > 0.95
-                    else "",
+                    "Note": "Near-perfect = strictly party-line" if rice_val > 0.95 else "",
                 }
             )
 
