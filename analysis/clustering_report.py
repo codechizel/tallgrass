@@ -49,6 +49,15 @@ def build_clustering_report(
         _add_dendrogram_figure(report, plots_dir, chamber)
 
     for chamber in results:
+        _add_voting_blocs_figure(report, plots_dir, chamber)
+
+    for chamber in results:
+        _add_polar_dendrogram_figure(report, plots_dir, chamber)
+
+    for chamber in results:
+        _add_icicle_figure(report, plots_dir, chamber)
+
+    for chamber in results:
         _add_model_selection_figure(report, plots_dir, chamber)
 
     if not skip_gmm:
@@ -178,6 +187,57 @@ def _add_dendrogram_figure(report: ReportBuilder, plots_dir: Path, chamber: str)
                 caption=(
                     f"Hierarchical clustering dendrogram ({chamber}) using Ward linkage "
                     "on Kappa distance. Leaf labels colored by party."
+                ),
+            )
+        )
+
+
+def _add_voting_blocs_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"voting_blocs_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-voting-blocs-{chamber.lower()}",
+                f"{chamber} Voting Blocs",
+                path,
+                caption=(
+                    f"Legislators ordered by voting similarity ({chamber}), "
+                    "colored by party. X-axis = IRT ideal point. Legislators "
+                    "near each other vote together most often."
+                ),
+            )
+        )
+
+
+def _add_polar_dendrogram_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"polar_dendrogram_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-polar-dendro-{chamber.lower()}",
+                f"{chamber} Voting Similarity Tree (Circular)",
+                path,
+                caption=(
+                    f"Circular dendrogram ({chamber}): leaves around the perimeter, "
+                    "branches connect inward at merge distance. "
+                    "Leaf labels colored by party."
+                ),
+            )
+        )
+
+
+def _add_icicle_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"icicle_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-icicle-{chamber.lower()}",
+                f"{chamber} Hierarchical Voting Blocs (Icicle)",
+                path,
+                caption=(
+                    f"Icicle chart ({chamber}): top-down view of the cluster hierarchy. "
+                    "Width = number of legislators in each group. Height = merge distance "
+                    "(dissimilarity). Color = majority party in each subtree."
                 ),
             )
         )

@@ -34,6 +34,7 @@ from scipy.cluster.hierarchy import (
     cophenet,
     cut_tree,
     dendrogram,
+    leaves_list,
     linkage,
 )
 from scipy.spatial.distance import squareform
@@ -206,6 +207,48 @@ WITHIN_PARTY_MIN_SIZE = 15
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _build_display_labels(full_names: list[str]) -> dict[str, str]:
+    """Build a mapping from full_name → short display label for plot annotations.
+
+    Handles two problems:
+      1. Leadership suffixes like " - Vice President of the Senate" are stripped
+         before extracting the last name.
+      2. Duplicate last names (e.g., two Claeys, two Smith) get disambiguated
+         with a first-name initial (e.g., "J.R. Claeys" vs "Jo. Claeys").
+    """
+    from collections import Counter
+
+    def _clean_name(name: str) -> str:
+        """Strip leadership suffix: 'Tim Shallenburger - Vice President...' → 'Tim Shallenburger'"""
+        return name.split(" - ")[0]
+
+    def _last_name(clean: str) -> str:
+        return clean.split()[-1] if clean else "?"
+
+    # First pass: count last names to detect duplicates
+    cleaned = {name: _clean_name(name) for name in full_names}
+    last_names = {name: _last_name(c) for name, c in cleaned.items()}
+    last_counts = Counter(last_names.values())
+
+    # Second pass: build labels, disambiguating duplicates with first name
+    labels: dict[str, str] = {}
+    for name in full_names:
+        clean = cleaned[name]
+        last = last_names[name]
+        if last_counts[last] > 1:
+            # Include first name for disambiguation
+            parts = clean.split()
+            first = parts[0] if parts else ""
+            # Abbreviate first name if long: "Joseph" → "Jo.", "J.R." stays as-is
+            if len(first) > 3 and "." not in first:
+                first = first[:2] + "."
+            labels[name] = f"{first} {last}"
+        else:
+            labels[name] = last
+
+    return labels
 
 
 def parse_args() -> argparse.Namespace:
@@ -568,6 +611,420 @@ def plot_dendrogram(
     ax.legend(handles=legend_handles, loc="best")
     fig.tight_layout()
     save_fig(fig, out_dir / f"dendrogram_{chamber.lower()}.png")
+
+
+def plot_voting_blocs(
+    Z: np.ndarray,
+    slugs: list[str],
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Sorted dot plot: legislators ordered by dendrogram leaf order, colored by party.
+
+    X-axis = IRT ideal point, y-axis = position in hierarchical leaf order.
+    Reveals voting blocs more readably than a dendrogram, especially for the House.
+    """
+    leaf_order = leaves_list(Z)
+
+    party_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["party"].to_list(),
+        )
+    )
+    name_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["full_name"].to_list(),
+        )
+    )
+    ip_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["xi_mean"].to_list(),
+        )
+    )
+
+    # Build ordered lists from leaf order
+    ordered_slugs = [slugs[i] for i in leaf_order]
+    ordered_xi = [ip_map.get(s, 0.0) for s in ordered_slugs]
+    ordered_parties = [party_map.get(s, "Unknown") for s in ordered_slugs]
+    ordered_names = [name_map.get(s, s) for s in ordered_slugs]
+
+    # Build display labels (handles leadership suffixes + duplicate last names)
+    all_names = ideal_points["full_name"].to_list()
+    display_labels = _build_display_labels(all_names)
+
+    n = len(ordered_slugs)
+    fig, ax = plt.subplots(figsize=(10, max(8, n * 0.12)))
+
+    for i in range(n):
+        color = PARTY_COLORS.get(ordered_parties[i], "#888888")
+        ax.scatter(ordered_xi[i], i, c=color, s=30, edgecolors="black", linewidth=0.3, zorder=2)
+
+    # Vertical dashed line at ideological center
+    ax.axvline(0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.5)
+
+    # Find the biggest gap in the leaf order by party — draw a horizontal separator
+    party_seq = [1 if p == "Republican" else 0 for p in ordered_parties]
+    max_gap_pos = 0
+    max_gap_size = 0
+    for i in range(1, n):
+        if party_seq[i] != party_seq[i - 1]:
+            # Count consecutive same-party on each side
+            gap_size = 1
+            max_gap_pos = i
+            max_gap_size = max(max_gap_size, gap_size)
+    if max_gap_pos > 0:
+        ax.axhline(
+            max_gap_pos - 0.5, color="#888888", linestyle="-", linewidth=1.0, alpha=0.4, zorder=1
+        )
+
+    # Label notable outliers — legislators at IRT extremes within each party
+    xi_arr = np.array(ordered_xi)
+    for i in range(n):
+        is_extreme = abs(ordered_xi[i]) > np.percentile(np.abs(xi_arr), 95)
+        if is_extreme:
+            label = display_labels.get(ordered_names[i], ordered_names[i].split()[-1])
+            ax.annotate(
+                label,
+                (ordered_xi[i], i),
+                fontsize=6,
+                fontweight="bold",
+                xytext=(8, 0),
+                textcoords="offset points",
+                va="center",
+                bbox={"boxstyle": "round,pad=0.2", "fc": "wheat", "alpha": 0.7},
+            )
+
+    ax.set_xlabel("IRT Ideal Point (Liberal \u2190 \u2192 Conservative)")
+    ax.set_ylabel("Position in Voting Similarity Order")
+    ax.set_yticks([])
+    ax.set_title(f"{chamber} \u2014 Voting Blocs (who clusters together)")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+
+    legend_handles = [
+        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+    ]
+    ax.legend(handles=legend_handles, loc="best", fontsize=8)
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"voting_blocs_{chamber.lower()}.png")
+
+
+def plot_polar_dendrogram(
+    Z: np.ndarray,
+    slugs: list[str],
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Circular dendrogram: leaves around a circle, branches connect inward.
+
+    More compact than a linear dendrogram and readable even for large chambers.
+    """
+    party_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["party"].to_list(),
+        )
+    )
+    name_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["full_name"].to_list(),
+        )
+    )
+
+    # Build display labels (handles leadership suffixes + duplicate last names)
+    all_names = ideal_points["full_name"].to_list()
+    display_labels = _build_display_labels(all_names)
+
+    # Get dendrogram coordinates without plotting
+    ddata = dendrogram(Z, no_plot=True)
+    icoord = np.array(ddata["icoord"])
+    dcoord = np.array(ddata["dcoord"])
+    leaves = ddata["leaves"]
+
+    n_leaves = len(leaves)
+    max_dist = Z[:, 2].max()
+
+    fig_size = max(14, n_leaves * 0.18)
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size), subplot_kw={"projection": "polar"})
+
+    # Map rectangular dendrogram x-coords to angle [0, 2*pi)
+    # ddata x-coords are 5, 15, 25, ... (step 10) for leaves
+    x_min = icoord.min()
+    x_max = icoord.max()
+    x_range = x_max - x_min if x_max > x_min else 1.0
+
+    def x_to_angle(x: float) -> float:
+        return 2 * np.pi * (x - x_min) / x_range
+
+    # Map y-coords (merge distance) to radius: leaves at outer edge, root at center
+    outer_r = 1.0
+    inner_r = 0.2
+
+    def y_to_radius(y: float) -> float:
+        if max_dist == 0:
+            return outer_r
+        return outer_r - (y / max_dist) * (outer_r - inner_r)
+
+    # Draw branches
+    for i in range(len(icoord)):
+        xs = icoord[i]
+        ys = dcoord[i]
+        # Each U-shaped branch has 4 points: (x0,y0)-(x0,y1)-(x3,y1)-(x3,y3)
+        # In polar: draw two radial segments and one arc
+        a0 = x_to_angle(xs[0])
+        a1 = x_to_angle(xs[1])
+        a2 = x_to_angle(xs[2])
+        a3 = x_to_angle(xs[3])
+        r0 = y_to_radius(ys[0])
+        r1 = y_to_radius(ys[1])
+        r3 = y_to_radius(ys[3])
+
+        # Left vertical: (a0, r0) -> (a0, r1)
+        ax.plot([a0, a0], [r0, r1], color="#555555", linewidth=0.5, alpha=0.6)
+        # Horizontal arc: (a0, r1) -> (a3, r1)
+        arc_angles = np.linspace(a1, a2, 30)
+        arc_radii = np.full_like(arc_angles, r1)
+        ax.plot(arc_angles, arc_radii, color="#555555", linewidth=0.5, alpha=0.6)
+        # Right vertical: (a3, r1) -> (a3, r3)
+        ax.plot([a3, a3], [r1, r3], color="#555555", linewidth=0.5, alpha=0.6)
+
+    # Draw leaf dots and labels
+    # The actual leaf x positions from ddata
+    leaf_positions = sorted(
+        [(5 + 10 * i, leaves[i]) for i in range(n_leaves)], key=lambda t: t[0]
+    )
+
+    # Compute leaf angles
+    leaf_angles: list[float] = []
+    for x_pos, _leaf_idx in leaf_positions:
+        leaf_angles.append(x_to_angle(x_pos))
+
+    # Detect crowded labels and stagger them radially.
+    # When two adjacent labels are angularly close, the rotated text overlaps
+    # even after nudging. Instead, place crowded labels at an outer radius so
+    # they sit in a different "lane" from their neighbors.
+    even_sep = 2 * np.pi / n_leaves
+    label_radii: list[float] = []
+    r_inner_label = outer_r + 0.05
+    r_outer_label = outer_r + 0.18
+    for i in range(len(leaf_angles)):
+        if i == 0:
+            label_radii.append(r_inner_label)
+            continue
+        gap = leaf_angles[i] - leaf_angles[i - 1]
+        # If this label is closer than 80% of even spacing to the previous,
+        # AND the previous was at the inner radius, push this one out
+        if gap < even_sep * 0.8 and label_radii[i - 1] == r_inner_label:
+            label_radii.append(r_outer_label)
+        else:
+            label_radii.append(r_inner_label)
+
+    fontsize = max(5, min(7, 350 / n_leaves))
+
+    for idx, (_x_pos, leaf_idx) in enumerate(leaf_positions):
+        angle = leaf_angles[idx]
+        slug = slugs[leaf_idx]
+        party = party_map.get(slug, "Unknown")
+        color = PARTY_COLORS.get(party, "#888888")
+        name = name_map.get(slug, slug)
+        label = display_labels.get(name, name.split()[-1])
+
+        # Leaf dot
+        ax.scatter(
+            angle, outer_r, c=color, s=15, edgecolors="black", linewidth=0.3, zorder=3
+        )
+
+        # Label at staggered radius
+        r_label = label_radii[idx]
+        rotation = np.degrees(angle) - 90
+        ha = "left"
+        if 90 < np.degrees(angle) < 270:
+            rotation += 180
+            ha = "right"
+        ax.text(
+            angle,
+            r_label,
+            label,
+            fontsize=fontsize,
+            rotation=rotation,
+            ha=ha,
+            va="center",
+            color=color,
+        )
+
+    ax.set_ylim(0, outer_r + 0.45)
+    ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_title(f"{chamber} \u2014 Voting Similarity Tree", pad=30, fontsize=14)
+    ax.spines["polar"].set_visible(False)
+
+    legend_handles = [
+        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+    ]
+    ax.legend(handles=legend_handles, loc="lower right", bbox_to_anchor=(1.15, 0), fontsize=8)
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"polar_dendrogram_{chamber.lower()}.png")
+
+
+def plot_icicle(
+    Z: np.ndarray,
+    slugs: list[str],
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Icicle (flame) chart: top-down rectangular hierarchy of voting blocs.
+
+    Each merge is a horizontal span proportional to its child count.
+    Y-axis = merge distance (top = most distant), bottom row = individual legislators.
+    Colored by majority party in each subtree.
+    """
+    party_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["party"].to_list(),
+        )
+    )
+    name_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["full_name"].to_list(),
+        )
+    )
+
+    n = len(slugs)
+    leaf_order = leaves_list(Z)
+
+    # Build display labels (handles leadership suffixes + duplicate last names)
+    all_names = ideal_points["full_name"].to_list()
+    display_labels = _build_display_labels(all_names)
+
+    # Build subtree info: for each node (leaf or internal), track its
+    # position span in the leaf order and its majority party
+    # Leaf nodes: 0..n-1, internal nodes: n..2n-2
+    node_left: dict[int, float] = {}
+    node_right: dict[int, float] = {}
+    node_party_counts: dict[int, dict[str, int]] = {}
+    node_height: dict[int, float] = {}
+
+    # Position of each leaf in the leaf order
+    leaf_pos = {leaf_id: pos for pos, leaf_id in enumerate(leaf_order)}
+
+    # Initialize leaf nodes
+    for i in range(n):
+        pos = leaf_pos[i]
+        node_left[i] = pos - 0.4
+        node_right[i] = pos + 0.4
+        node_height[i] = 0.0
+        party = party_map.get(slugs[i], "Unknown")
+        node_party_counts[i] = {party: 1}
+
+    # Process internal nodes from the linkage matrix
+    for idx in range(len(Z)):
+        node_id = n + idx
+        left_child = int(Z[idx, 0])
+        right_child = int(Z[idx, 1])
+        merge_dist = float(Z[idx, 2])
+
+        node_left[node_id] = min(node_left[left_child], node_left[right_child])
+        node_right[node_id] = max(node_right[left_child], node_right[right_child])
+        node_height[node_id] = merge_dist
+
+        # Merge party counts
+        counts: dict[str, int] = {}
+        for party, c in node_party_counts[left_child].items():
+            counts[party] = counts.get(party, 0) + c
+        for party, c in node_party_counts[right_child].items():
+            counts[party] = counts.get(party, 0) + c
+        node_party_counts[node_id] = counts
+
+    max_dist = Z[:, 2].max() if len(Z) > 0 else 1.0
+    fig_width = max(14, n * 0.15)
+    fig_height = max(8, fig_width * 0.5)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # Draw rectangles for internal nodes
+    for idx in range(len(Z)):
+        node_id = n + idx
+        left_child = int(Z[idx, 0])
+        right_child = int(Z[idx, 1])
+
+        x_left = node_left[node_id]
+        x_right = node_right[node_id]
+        y_bottom = node_height[node_id]
+
+        # Height extends up to parent's merge distance (or max for root)
+        # Find parent height
+        parent_height = max_dist * 1.05
+        for pidx in range(idx + 1, len(Z)):
+            if int(Z[pidx, 0]) == node_id or int(Z[pidx, 1]) == node_id:
+                parent_height = float(Z[pidx, 2])
+                break
+
+        # Determine color by majority party
+        counts = node_party_counts[node_id]
+        majority = max(counts, key=counts.get)
+        color = PARTY_COLORS.get(majority, "#888888")
+
+        rect = plt.Rectangle(
+            (x_left, y_bottom),
+            x_right - x_left,
+            parent_height - y_bottom,
+            facecolor=color,
+            edgecolor="white",
+            linewidth=0.5,
+            alpha=0.5,
+        )
+        ax.add_patch(rect)
+
+    # Draw bottom row: individual legislators
+    fontsize = max(4, min(7, 500 / n))
+    for i in range(n):
+        leaf_id = leaf_order[i]
+        slug = slugs[leaf_id]
+        party = party_map.get(slug, "Unknown")
+        color = PARTY_COLORS.get(party, "#888888")
+        name = name_map.get(slug, slug)
+        label = display_labels.get(name, name.split()[-1])
+
+        ax.scatter(i, 0, c=color, s=20, edgecolors="black", linewidth=0.3, zorder=3)
+        ax.text(
+            i,
+            -max_dist * 0.03,
+            label,
+            fontsize=fontsize,
+            rotation=90,
+            ha="center",
+            va="top",
+            color=color,
+        )
+
+    ax.set_xlim(-1, n)
+    ax.set_ylim(-max_dist * 0.15, max_dist * 1.1)
+    ax.set_ylabel("Merge Distance (Kappa)")
+    ax.set_xlabel("")
+    ax.set_xticks([])
+    ax.set_title(f"{chamber} \u2014 Hierarchical Voting Blocs")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+
+    legend_handles = [
+        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+    ]
+    ax.legend(handles=legend_handles, loc="upper right", fontsize=8)
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"icicle_{chamber.lower()}.png")
 
 
 # ── Phase 4: K-Means on IRT ─────────────────────────────────────────────────
@@ -1773,6 +2230,9 @@ def main() -> None:
             print(f"  Saved: hierarchical_assignments_{chamber.lower()}.parquet")
 
             plot_dendrogram(Z, slugs, irt_ip, chamber, ctx.plots_dir)
+            plot_voting_blocs(Z, slugs, irt_ip, chamber, ctx.plots_dir)
+            plot_polar_dendrogram(Z, slugs, irt_ip, chamber, ctx.plots_dir)
+            plot_icicle(Z, slugs, irt_ip, chamber, ctx.plots_dir)
 
             chamber_results["hierarchical"] = {
                 "Z": Z,

@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after PCA bug fixes and visualization improvement pass)
+**Last updated:** 2026-02-22 (after clustering viz overhaul and EDA heatmap sizing fix)
 
 ---
 
@@ -76,21 +76,19 @@ All three PCA visualization improvements completed (2026-02-22):
 - **Bugfixes:** null `full_name` crash in outlier labels and extreme PC2 callout (`.get()` returns `None` not fallback when key exists with null value); leadership suffix stripping in outlier labels
 - 6 new tests in `TestDetectExtremePC2`
 
-#### Clustering Phase
+#### Clustering Phase — DONE
 
-Dendrograms are hard to read; within-party subclusters lack interpretation. Notable-legislator annotations and report notes are now data-driven (2026-02-22 portability refactor).
+All clustering visualization improvements completed (2026-02-22):
+- **Three dendrogram alternatives**: voting blocs (sorted dot plot), polar dendrogram (circular tree with radial label staggering), icicle chart (flame chart with majority-party coloring). Original dendrograms kept as supplementary figures. See ADR-0014.
+- **Centralized name extraction**: `_build_display_labels()` helper strips leadership suffixes ("Vice President of the Senate" → "Shallenburger") and disambiguates duplicate last names with first-name prefix ("Jo. Claeys" vs "J.R. Claeys").
+- **Report integration**: all 3 new plot types added to clustering report with `path.exists()` guards.
+- Notable-legislator annotations and report notes are data-driven (2026-02-22 portability refactor).
 
-Remaining visualization improvements:
-- **Annotate the IRT-vs-loyalty scatter** with a text box for data-driven low-loyalty extremists: "These senators are ideologically extreme but unreliable caucus members"
-- **Add a "What k=2 means" annotation** on the main cluster plot: "The data says there are exactly two groups — and they match party labels perfectly"
-- **Simplify or replace dendrograms** with a more readable alternative for the report (the dendrogram can remain as supplementary)
+#### EDA Phase — DONE
 
-#### EDA Phase — PARTIAL
-
-Name labels on heatmap axes already exist. Cross-party annotation is now data-driven (2026-02-22 portability refactor): finds the majority-party legislator with highest mean agreement with the minority party, no hardcoded names.
-
-Remaining:
-- **Add name labels to heatmap axes** (currently just colored by party, no individual names visible)
+All EDA visualization improvements completed (2026-02-22):
+- **Heatmap sizing fix**: `size = max(8, n * 0.19)` and `fontsize = max(4, min(7, 500 / n))` — House heatmap now 24.7" with 4pt labels (up from 15.6"/3pt). Senate unchanged.
+- Name labels on heatmap axes already exist. Cross-party annotation is now data-driven (2026-02-22 portability refactor).
 
 ### 2. Beta-Binomial Party Loyalty (Bayesian)
 
@@ -220,7 +218,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 |------|------|---------|
 | Update `CURRENT_BIENNIUM_START` | 2027 | Change from 2025 to 2027 in `session.py` |
 | Add special sessions | As needed | Add year to `SPECIAL_SESSION_YEARS` in `session.py` |
-| Fix Shallenburger suffix | Next scraper touch | "Vice President of the Senate" not in leadership suffix strip pattern |
+| ~~Fix Shallenburger suffix~~ | ~~Done~~ | Fixed in analysis via `_build_display_labels()` — strips " - " suffixes before name extraction (ADR-0014). Scraper stores the raw name; analysis handles display. |
 
 ---
 

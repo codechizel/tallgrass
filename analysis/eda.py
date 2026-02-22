@@ -1265,8 +1265,8 @@ def plot_agreement_heatmap(
 
     # Scale figure size and font to the number of legislators
     n = len(slugs)
-    size = max(8, n * 0.12)
-    fontsize = max(3, min(7, 400 / n))
+    size = max(8, n * 0.19)
+    fontsize = max(4, min(7, 500 / n))
 
     g = sns.clustermap(
         df,

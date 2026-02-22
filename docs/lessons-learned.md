@@ -257,6 +257,35 @@ Key design choices:
 
 ---
 
+## Bug 8: `.split()[-1]` Name Extraction Fails on Leadership Suffixes
+
+**Discovered during:** Clustering visualization improvement (2026-02-22)
+
+**Symptom:** The voting blocs and polar dendrogram plots showed "Senate" as a senator's name instead of "Shallenburger". Two senators both appeared as just "Claeys" with no disambiguation.
+
+**Root cause:** Throughout the analysis codebase, legislator display names were extracted from `full_name` using `full_name.split()[-1]`. This pattern fails on legislators with leadership suffixes stored in the scraper data:
+
+| full_name | `.split()[-1]` | Correct |
+|-----------|----------------|---------|
+| Tim Shallenburger - Vice President of the Senate | **Senate** | Shallenburger |
+| Ty Masterson - President of the Senate | **Senate** | Masterson |
+| Daniel Hawkins - Speaker of the House | **House** | Hawkins |
+| Blake Carpenter - Speaker Pro Tem | **Tem** | Carpenter |
+
+Additionally, duplicate last names (Joseph Claeys / J.R. Claeys in the Senate; two each of Carpenter, Williams, Smith, Ruiz in the House) were not disambiguated.
+
+**Fix:** Added `_build_display_labels()` helper in `clustering.py` that:
+1. Strips leadership suffixes by splitting on `" - "` and taking the first part
+2. Extracts last name from the cleaned name
+3. Detects duplicate last names via `Counter`
+4. Disambiguates with abbreviated first-name prefix (e.g., "Jo. Claeys" vs "J.R. Claeys")
+
+**Impact:** 30+ occurrences of `.split()[-1]` exist across the analysis codebase (prediction, profiles, synthesis, etc.). The clustering fix is localized; other modules still use the raw pattern but are protected by joining on `legislator_slug` (not display names). A shared utility would prevent this bug class entirely.
+
+**Lesson:** Never assume `full_name.split()[-1]` produces a last name. Leadership suffixes, hyphenated names, and name suffixes (Jr., III) all break this pattern. Always strip known suffix patterns before extracting names, and always check for duplicate last names when building display labels.
+
+---
+
 ## Bug 7: Empty DataFrame Indexing in Party Loyalty Summary
 
 **Discovered during:** Clustering code review and test writing (2026-02-20)

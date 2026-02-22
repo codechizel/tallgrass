@@ -13,7 +13,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 1. EDA | [eda.md](eda.md) | Binary encoding, filtering thresholds, chamber separation |
 | 2. PCA | [pca.md](pca.md) | Imputation method, scaling, PC1 sign convention |
 | 3. IRT | [irt.md](irt.md) | Priors, anchor selection, missing data handling |
-| 4. Clustering | [clustering.md](clustering.md) | Three methods for robustness, party loyalty metric, Ward on Kappa |
+| 4. Clustering | [clustering.md](clustering.md) | Three methods for robustness, party loyalty metric, Ward on Kappa, 3 dendrogram alternatives |
 | 5. Network | [network.md](network.md) | Kappa threshold, Louvain multi-resolution, centrality measures, NaN = no edge |
 | 6. Prediction | [prediction.md](prediction.md) | XGBoost primary, skip cluster/community labels, IRT features dominate, NLP topic features (NMF on short_title), 82% base rate |
 | 7. Indices | [indices.md](indices.md) | CQ-standard party votes, Rice on all votes, weighted maverick by chamber margin |

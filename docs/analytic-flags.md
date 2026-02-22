@@ -257,12 +257,13 @@ This is a living document — add entries as each analysis phase surfaces new fi
 - **Explanation:** The initial near-perfect results were driven by alpha_mean (IRT difficulty — a near-proxy for passage outcome) and margin (derived from vote counts that determine passage). With honest features, the model has limited signal: beta captures how partisan a bill is, vote type and bill prefix capture procedural structure, but none directly encode "will this pass." The remaining signal likely comes from beta — highly discriminating (partisan) bills have more predictable outcomes.
 - **Downstream:** Bill passage prediction from pre-vote features alone is a genuinely hard problem. The Senate temporal split of 1.000 is still a small-N artifact (59 test bills, ~7 failures). Cross-session validation would provide more honest estimates. Adding bill text features (NLP on titles/descriptions) could help.
 
-### Shallenburger Name Not Stripped
+### Shallenburger Name Not Stripped — Resolved
 
-- **Phase:** Prediction (data quality)
-- **Observation:** `full_name` = "Tim Shallenburger - Vice President of the Senate" in per-legislator output. The scraper's leadership suffix stripping did not catch this variant.
-- **Explanation:** The scraper strips suffixes like "House Minority Caucus Chair" but may not have "Vice President of the Senate" in its pattern list.
-- **Downstream:** Minor cosmetic issue. Does not affect analysis (joining is on `legislator_slug`, not name). Should be fixed in the scraper for clean reporting.
+- **Phase:** Prediction (data quality), resolved in Clustering (visualization)
+- **Observation:** `full_name` = "Tim Shallenburger - Vice President of the Senate" in per-legislator output. The scraper stores the raw name with leadership suffix.
+- **Explanation:** The scraper strips suffixes like "House Minority Caucus Chair" from the member page `<h1>` but "Vice President of the Senate" is in a different format. Four legislators are affected: Shallenburger, Masterson, Hawkins, Carpenter.
+- **Resolution:** Fixed in analysis via `_build_display_labels()` in clustering.py (2026-02-22). Strips " - " suffixes before name extraction. Also disambiguates duplicate last names (two Claeys senators, two Carpenters in House). See Bug 8 in `docs/lessons-learned.md` and ADR-0014.
+- **Downstream:** The fix is local to clustering.py. Other modules (prediction, profiles) still use `.split(" - ")[0].split()[-1]` inline. A shared utility would prevent recurrence.
 
 ### IRT Anchor Legislators — 100% Prediction Accuracy (Trivially)
 

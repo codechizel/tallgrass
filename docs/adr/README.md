@@ -41,6 +41,7 @@ What are the trade-offs?
 | [0011](0011-umap-implementation-choices.md) | UMAP implementation choices | Accepted | 2026-02-22 |
 | [0012](0012-nlp-bill-text-features-for-prediction.md) | NLP bill text features for prediction | Accepted | 2026-02-22 |
 | [0013](0013-legislator-profile-deep-dives.md) | Legislator profile deep-dives | Accepted | 2026-02-22 |
+| [0014](0014-clustering-visualization-overhaul.md) | Clustering visualization overhaul | Accepted | 2026-02-22 |
 
 ## Creating a New ADR
 

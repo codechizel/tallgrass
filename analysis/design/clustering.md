@@ -144,6 +144,43 @@ The initial hypothesis predicted k=3 (conservative Rs, moderate Rs, Democrats). 
 
 For downstream analysis, continuous features (IRT ideal points, party loyalty rates) will be more informative than within-party cluster labels. Network analysis may reveal community structure through pairwise agreement patterns rather than centroid-based clustering.
 
+## Visualization Choices (2026-02-22)
+
+### Problem: Dendrograms are unreadable for nontechnical audiences
+
+The standard rectangular dendrogram is the default output of hierarchical clustering, but it presents two problems:
+- **House (130 members):** truncated to 12 nodes showing only cluster sizes like "(52)" — conveys no information about individual legislators.
+- **Senate (42 members):** tall and dense, requiring statistical training to interpret branch heights and leaf ordering.
+
+The project's analytic workflow rules prefer "concrete, narrative-friendly visualizations (ranked bar charts, annotated scatter plots) over abstract statistical plots (dendrograms)."
+
+### Solution: Three alternative visualizations
+
+All three alternatives use the same Ward linkage matrix `Z` and IRT ideal points as the dendrograms. The original dendrograms are preserved as supplementary figures.
+
+| Visualization | Best for | Weakness |
+|---------------|----------|----------|
+| **Voting Blocs** (sorted dot plot) | Nontechnical audiences; shows who clusters near whom on the ideological spectrum | Loses hierarchical merge information |
+| **Polar Dendrogram** (circular tree) | Compact visual of full tree structure; striking for presentations | Labels crowd at 130+ members; uses radial staggering (alternating inner/outer lanes) for collision avoidance |
+| **Icicle Chart** (flame chart) | Shows hierarchical structure without dendrogram literacy; merge distance as vertical position | Large horizontal space needed for leaf labels |
+
+### Name extraction: `_build_display_labels()`
+
+All three visualizations (and the original dendrograms) need display labels derived from `full_name`. The helper function centralizes name extraction to avoid the `.split()[-1]` bug (see Bug 8 in `docs/lessons-learned.md`):
+
+1. Strip leadership suffixes: split on `" - "`, take first part
+2. Extract last name from cleaned name
+3. Detect duplicates via `Counter`
+4. Disambiguate with abbreviated first-name prefix (e.g., "Jo. Claeys" vs "J.R. Claeys")
+
+### Polar dendrogram: radial staggering
+
+Adjacent labels in the circular layout can overlap when angular separation is small. The staggering heuristic places labels at alternating radial distances:
+- If the gap to the previous label is < 80% of the even spacing, use the outer lane
+- Otherwise, use the inner lane
+
+This is empirical and may need tuning for sessions with very different legislator counts.
+
 ## Downstream Implications
 
 ### For Network Analysis (Phase 6)
