@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after IRT visualization improvement pass)
+**Last updated:** 2026-02-22 (after full pipeline re-run and cross-biennium portability refactor)
 
 ---
 
@@ -21,6 +21,7 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | 6+ | NLP Bill Text Features | 2026-02-22 | NMF topics on short_title; House temporal AUC 0.90→0.96, Senate 0.86→0.96 |
 | — | Synthesis Report | 2026-02-22 | 32-section narrative HTML; joins all 8 phases into one deliverable |
 | — | Legislator Profiles | 2026-02-22 | Per-legislator deep-dives: scorecard, bill-type breakdown, defections, neighbors, surprising votes |
+| — | Cross-Biennium Portability | 2026-02-22 | Removed all hardcoded legislator names from general phases; full pipeline re-run validated |
 
 ---
 
@@ -59,11 +60,11 @@ All four IRT visualization improvements completed (2026-02-22):
 
 #### Prediction Phase
 
-SHAP beeswarm plots are cryptic for anyone who hasn't taken a machine learning course.
+SHAP beeswarm plots are cryptic for anyone who hasn't taken a machine learning course. Report narrative text is now generic (no hardcoded names; 2026-02-22 portability refactor).
 
-Specific improvements:
+Remaining visualization improvements:
 - **Replace SHAP beeswarm** with a simplified "What Predicts a Yea Vote?" bar chart showing top 5 features with plain-English labels (e.g., "How conservative the legislator is" instead of "xi_mean", "How partisan the bill is" instead of "beta_mean")
-- **Add a "Hardest to Predict" spotlight** — scatter plot highlighting the 5-10 legislators the model struggles with most, annotated with names and brief explanations ("Shallenburger — procedural role as VP of Senate", "Helgerson — most moderate Democrat")
+- **Add a "Hardest to Predict" spotlight** — scatter plot highlighting the 5-10 legislators the model struggles with most, annotated with data-driven names and brief explanations
 - **Simplify calibration plot** with annotation: "When the model says 80% chance of Yea, it's right about 80% of the time"
 
 #### PCA Phase
@@ -72,25 +73,24 @@ PC2 is labeled "secondary dimension" with no interpretation on the plot itself.
 
 Specific improvements:
 - **Annotate PC2 axis**: "Contrarianism — legislators who vote Nay on routine, near-unanimous bills" directly on the ideological map
-- **Add callout for Tyson** (PC2 = -24.8, 3x more extreme than next senator) and Thompson (-8.0)
+- **Add data-driven callout for extreme PC2 legislators** (whoever has most extreme PC2 score, detected dynamically — currently Tyson at -24.8)
 - **Label the scree plot** with interpretation: "The sharp elbow means Kansas is essentially a one-dimensional legislature — party affiliation explains almost everything"
 
 #### Clustering Phase
 
-Dendrograms are hard to read; within-party subclusters lack interpretation.
+Dendrograms are hard to read; within-party subclusters lack interpretation. Notable-legislator annotations and report notes are now data-driven (2026-02-22 portability refactor).
 
-Specific improvements:
-- **Annotate the IRT-vs-loyalty scatter** with Tyson and Thompson's positions and a text box: "These two senators are ideologically extreme but unreliable caucus members"
+Remaining visualization improvements:
+- **Annotate the IRT-vs-loyalty scatter** with a text box for data-driven low-loyalty extremists: "These senators are ideologically extreme but unreliable caucus members"
 - **Add a "What k=2 means" annotation** on the main cluster plot: "The data says there are exactly two groups — and they match party labels perfectly"
 - **Simplify or replace dendrograms** with a more readable alternative for the report (the dendrogram can remain as supplementary)
 
-#### EDA Phase
+#### EDA Phase — PARTIAL
 
-Mostly fine, but the heatmaps are dense and lack annotation.
+Name labels on heatmap axes already exist. Cross-party annotation is now data-driven (2026-02-22 portability refactor): finds the majority-party legislator with highest mean agreement with the minority party, no hardcoded names.
 
-Specific improvements:
+Remaining:
 - **Add name labels to heatmap axes** (currently just colored by party, no individual names visible)
-- **Annotate interesting patterns**: mark Schreiber's row/column as the highest cross-party agreement
 
 ### 2. Beta-Binomial Party Loyalty (Bayesian)
 
