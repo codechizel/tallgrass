@@ -2,7 +2,7 @@
 
 ## Assumptions
 
-1. **All 7 upstream phases have been run.** Synthesis reads parquets from IRT, Indices, Network, Clustering, Prediction, PCA, and EDA. Missing phases produce warnings but the report still generates with available data.
+1. **All 8 upstream phases have been run.** Synthesis reads parquets from IRT, Indices, Network, Clustering, Prediction, PCA, EDA, and UMAP. Missing phases produce warnings but the report still generates with available data.
 
 2. **IRT ideal points are the base table.** The unified legislator DataFrame is built by LEFT JOINing all other phase outputs onto IRT ideal points. If IRT hasn't been run, synthesis fails.
 
@@ -48,7 +48,7 @@
 
 ### 5. Graceful degradation
 
-**Decision:** Every detection function returns `None` when no suitable candidate is found. Report sections handle `None` by showing brief explanatory text ("no significant metric paradox detected") or by skipping the section entirely (profile cards). The report's section count varies from 27-30 depending on what is detected.
+**Decision:** Every detection function returns `None` when no suitable candidate is found. Report sections handle `None` by showing brief explanatory text ("no significant metric paradox detected") or by skipping the section entirely (profile cards). The report's section count varies from 29-32 depending on what is detected.
 
 ## Downstream Implications
 

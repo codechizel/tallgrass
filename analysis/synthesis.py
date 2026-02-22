@@ -1,8 +1,8 @@
 """
 Kansas Legislature — Synthesis Report
 
-Combines results from all 7 analysis phases (EDA, PCA, IRT, Clustering, Network,
-Prediction, Indices) into a single narrative-driven HTML report for nontechnical
+Combines results from all 8 analysis phases (EDA, PCA, IRT, Clustering, Network,
+Prediction, Indices, UMAP) into a single narrative-driven HTML report for nontechnical
 audiences: journalists, policymakers, citizens.
 
 Reads from upstream parquets and manifests; does not recompute anything from raw CSVs.
@@ -55,7 +55,7 @@ SYNTHESIS_PRIMER = """\
 ## Purpose
 
 Narrative summary of Kansas Legislature voting patterns, combining findings
-from seven analysis phases into a single deliverable for nontechnical audiences.
+from eight analysis phases into a single deliverable for nontechnical audiences.
 
 ## Method
 
@@ -66,12 +66,12 @@ metric paradoxes) are detected from data, not hardcoded.
 
 ## Inputs
 
-Parquet files from: IRT, Indices, Network, Clustering, Prediction, PCA, EDA.
+Parquet files from: IRT, Indices, Network, Clustering, Prediction, PCA, EDA, UMAP.
 Filtering manifests from each phase for headline statistics.
 
 ## Outputs
 
-- `synthesis_report.html` — Self-contained narrative report (27-30 sections)
+- `synthesis_report.html` — Self-contained narrative report (29-32 sections)
 - `plots/` — New PNGs: 2 dashboard scatters, 2-3 profile cards (data-driven),
   0-1 paradox visualizations, 1 pipeline summary
 - `data/` — Unified legislator DataFrames per chamber (parquet)
@@ -99,7 +99,7 @@ statistical training.
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
 PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0"}
 
-UPSTREAM_PHASES = ["eda", "pca", "irt", "clustering", "network", "prediction", "indices"]
+UPSTREAM_PHASES = ["eda", "pca", "irt", "clustering", "network", "prediction", "indices", "umap"]
 
 
 # ── Data Loading ─────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ def _read_manifest(path: Path) -> dict:
 
 
 def load_all_upstream(results_base: Path) -> dict:
-    """Read all parquets and manifests from the 7 upstream phases.
+    """Read all parquets and manifests from the 8 upstream phases.
 
     Returns a dict with keys: manifests, and per-chamber parquet DataFrames.
     """
@@ -172,6 +172,10 @@ def load_all_upstream(results_base: Path) -> dict:
                 df = _read_parquet_safe(data_dir / f"pc_scores_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["pca"] = df
+            elif phase == "umap":
+                df = _read_parquet_safe(data_dir / f"umap_embedding_{chamber}.parquet")
+                if df is not None:
+                    upstream[chamber]["umap"] = df
 
         # Track upstream plot paths
         upstream["plots"][phase] = plots_dir
@@ -241,6 +245,15 @@ def build_legislator_df(upstream: dict, chamber: str) -> pl.DataFrame:
     if pca is not None:
         df = df.join(
             pca.select("legislator_slug", "PC1", "PC2"),
+            on="legislator_slug",
+            how="left",
+        )
+
+    # UMAP coordinates
+    umap = upstream[chamber].get("umap")
+    if umap is not None:
+        df = df.join(
+            umap.select("legislator_slug", "UMAP1", "UMAP2"),
             on="legislator_slug",
             how="left",
         )
@@ -820,6 +833,8 @@ def main() -> None:
             "discrimination_house": "irt/discrimination_house.png",
             "maverick_landscape_senate": "indices/maverick_landscape_senate.png",
             "per_legislator_accuracy_senate": "prediction/per_legislator_accuracy_senate.png",
+            "umap_landscape_house": "umap/umap_landscape_house.png",
+            "umap_landscape_senate": "umap/umap_landscape_senate.png",
         }
         for key, rel_path in plot_map.items():
             phase = rel_path.split("/")[0]

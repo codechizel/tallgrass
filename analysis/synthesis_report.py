@@ -1,7 +1,7 @@
 """
 Synthesis report builder — narrative-driven sections.
 
-Assembles findings from all 7 analysis phases into a single HTML report
+Assembles findings from all 8 analysis phases into a single HTML report
 written for nontechnical audiences. Called by synthesis.py.
 """
 
@@ -37,6 +37,9 @@ def build_synthesis_report(
     _add_party_line_narrative(report, manifests)
     # 4. clusters
     _add_clusters_figure(report, upstream_plots)
+    # 4a-4b. UMAP landscape (house, senate)
+    _add_umap_landscape(report, upstream_plots, "house")
+    _add_umap_landscape(report, upstream_plots, "senate")
     # 5-6. network house/senate
     _add_network_figure(report, upstream_plots, "house")
     _add_network_figure(report, upstream_plots, "senate")
@@ -164,11 +167,12 @@ def _add_intro(report: object, manifests: dict, notables: dict) -> None:
                 "This report distills those votes into a clear picture of how Kansas "
                 "legislators actually vote — who follows the party, who breaks ranks, "
                 "and what patterns emerge.</p>"
-                "<p>We applied seven different analytical methods to this data: "
+                "<p>We applied eight different analytical methods to this data: "
                 "exploratory analysis, dimensionality reduction (PCA), Bayesian ideal "
                 "point estimation (IRT), clustering, network analysis, predictive "
-                "modeling, and classical political science indices. Each method asks a "
-                "different question, but they all converge on the same answers.</p>"
+                "modeling, classical political science indices, and UMAP ideological "
+                "mapping. Each method asks a different question, but they all converge "
+                "on the same answers.</p>"
                 "<p><strong>Headline findings:</strong></p>"
                 "<ol>"
                 "<li><strong>Party is everything.</strong> Every method — clustering, "
@@ -768,12 +772,12 @@ def _add_methodology_note(report: object, session: str) -> None:
             id="methodology",
             title="How We Did This",
             html=(
-                "<p>This report synthesizes seven independent analyses of roll call votes "
+                "<p>This report synthesizes eight independent analyses of roll call votes "
                 f"from the Kansas Legislature's {session} session. The raw data — every "
                 "recorded Yea, Nay, and absence — was scraped from "
                 "<a href='https://kslegislature.gov'>kslegislature.gov</a> and stored as "
                 "structured CSV files.</p>"
-                "<p>The seven phases, each documented in its own technical report:</p>"
+                "<p>The eight phases, each documented in its own technical report:</p>"
                 "<ol>"
                 "<li><strong>Exploratory Data Analysis (EDA)</strong> — Filtering, missing data, "
                 "vote distributions, unanimous-vote removal</li>"
@@ -789,6 +793,8 @@ def _add_methodology_note(report: object, session: str) -> None:
                 "individual votes and identify surprising outcomes</li>"
                 "<li><strong>Classical Indices</strong> — Rice Index, CQ-standard party unity, "
                 "maverick scores, Effective Number of Parties</li>"
+                "<li><strong>UMAP</strong> — Nonlinear dimensionality reduction that maps "
+                "legislators onto a 2D ideological landscape based on voting similarity</li>"
                 "</ol>"
                 "<p>Key methodological choices: near-unanimous votes (minority &lt; 2.5%) are "
                 "excluded because they carry no ideological signal. Legislators with fewer than "
@@ -820,6 +826,28 @@ def _add_clusters_figure(report: object, upstream_plots: dict) -> None:
                 ),
             )
         )
+
+
+def _add_umap_landscape(report: object, upstream_plots: dict, chamber: str) -> None:
+    """UMAP ideological landscape (reused from Phase 2b)."""
+    key = f"umap_landscape_{chamber}"
+    path = upstream_plots.get(key)
+    if path is None or not path.exists():
+        return
+    report.add(
+        FigureSection.from_file(
+            f"umap-landscape-{chamber}",
+            f"{chamber.title()} Ideological Map",
+            path,
+            caption=(
+                f"A map of voting behavior in the {chamber.title()}. "
+                "Each dot is a legislator. Nearby legislators vote alike; "
+                "distant legislators vote differently. Red = Republican, "
+                "Blue = Democrat. Cross-party outliers (if any) are labeled "
+                "with imputation artifact warnings."
+            ),
+        )
+    )
 
 
 def _add_agreement_figure(report: object, upstream_plots: dict, chamber: str) -> None:
@@ -951,6 +979,8 @@ def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
         "maverick_rate",
         "betweenness",
         "accuracy",
+        "UMAP1",
+        "UMAP2",
     ]
     for col in optional_cols:
         if col in combined.columns:
@@ -973,6 +1003,8 @@ def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
             "maverick_rate": "Maverick Rate",
             "betweenness": "Betweenness",
             "accuracy": "Pred. Accuracy",
+            "UMAP1": "UMAP 1",
+            "UMAP2": "UMAP 2",
         },
         number_formats={
             "xi_mean": ".2f",
@@ -981,6 +1013,8 @@ def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
             "maverick_rate": ".3f",
             "betweenness": ".4f",
             "accuracy": ".3f",
+            "UMAP1": ".3f",
+            "UMAP2": ".3f",
         },
         source_note=(
             "IRT Ideology: Bayesian ideal point (negative = liberal, positive = conservative). "

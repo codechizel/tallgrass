@@ -208,7 +208,7 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/eda_report.py` — EDA-specific: `build_eda_report()` adds ~19 sections.
 - `analysis/umap_viz.py` + `analysis/umap_report.py` — UMAP: nonlinear dimensionality reduction on vote matrix (cosine metric, n_neighbors=15). Produces ideological landscape plots, validates against PCA/IRT via Spearman, Procrustes sensitivity sweep.
 - `analysis/synthesis_detect.py` — Detection: pure data logic that identifies notable legislators (mavericks, bridge-builders, metric paradoxes) from upstream DataFrames. Returns frozen dataclasses with pre-formatted titles and subtitles.
-- `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 7 phases, joins into unified legislator DataFrames, runs data-driven detection, produces 27-30 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
+- `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 8 phases, joins into unified legislator DataFrames, runs data-driven detection, produces 29-32 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
 - `RunContext` auto-writes the HTML in `finalize()` if sections were added.
 
 Tables use great_tables with polars DataFrames (no pandas conversion). Plots are base64-embedded PNGs. See ADR-0004 for rationale.
