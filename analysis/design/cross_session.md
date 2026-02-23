@@ -118,22 +118,24 @@ Compare ideology distributions (xi_mean) across cohorts:
 
 ~15-20 section HTML report targeting a nontechnical audience. The "who moved?" scatter plot is the signature visualization.
 
-### Sections (planned)
+### Sections (implemented)
+
+Per-chamber sections repeat for each chamber (House, Senate):
 
 1. **Overview** — What this analysis does, data summary, overlap statistics
-2. **Legislator Matching Summary** — How many matched, chamber switches, party switches
-3. **Ideology Shift Scatter** (per chamber) — 2023 xi vs 2025 xi, colored by party, annotated movers
-4. **Biggest Movers** (per chamber) — Ranked bar chart of |delta_xi|, colored by direction
-5. **Ideology Shift Distribution** — Histogram of delta_xi for returning legislators
-6. **Turnover Impact** (per chamber) — Density plots comparing departing, returning, new cohorts
-7. **Party Loyalty Stability** (per chamber) — Unity score scatter across sessions
-8. **Maverick Stability** (per chamber) — Weighted maverick scatter across sessions
-9. **Network Influence Stability** (per chamber) — Betweenness scatter across sessions
-10. **Metric Stability Summary** — Table of Pearson/Spearman correlations for all metrics
-11. **Cross-Session Prediction AUC** (per chamber) — Bar chart: within-session vs cross-session
-12. **Feature Importance Comparison** (per chamber) — Side-by-side SHAP bar charts
-13. **Detection Validation** — Table comparing flagged legislators across sessions
-14. **Methodology Notes** — Alignment method, limitations, assumptions
+2. **Matching Summary** — Returning legislators by chamber (table)
+3. **Ideology Shift Scatter** (per chamber) — Previous xi vs current xi, colored by party, annotated movers
+4. **Biggest Movers Figure** (per chamber) — Horizontal bar chart of |delta_xi|, colored by direction
+5. **Biggest Movers Table** (per chamber) — Detailed table of significant movers with shift metrics
+6. **Shift Distribution** (per chamber) — Histogram of delta_xi with significance threshold lines
+7. **Turnover Impact** (per chamber) — KDE plots comparing departing, returning, new cohorts
+8. **Metric Stability** (per chamber) — Table of Pearson/Spearman correlations for 8 metrics
+9. **Detection Validation** — Table comparing flagged mavericks, bridges, paradoxes across sessions
+10. **Methodology Notes** — Alignment coefficients, thresholds, matching method, references
+
+Future sections (behind `--skip-prediction`):
+- Cross-Session Prediction AUC (per chamber) — Bar chart: within-session vs cross-session
+- Feature Importance Comparison (per chamber) — Side-by-side SHAP bar charts
 
 ## Downstream Implications
 

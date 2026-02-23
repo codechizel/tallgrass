@@ -2,26 +2,26 @@
 
 **ADR:** `docs/adr/0019-cross-session-validation.md`
 **Design doc:** `analysis/design/cross_session.md`
-**Target:** 5 new files, 3 updated files
+**Target:** 4 new files, 3 updated files
 
 ---
 
-## Files to Create
+## Files Created
 
-| File | Purpose | Lines (est.) |
-|------|---------|-------------|
-| `analysis/cross_session_data.py` | Pure data logic: matching, alignment, comparison metrics | ~250 |
-| `analysis/cross_session.py` | CLI, orchestration, plot functions | ~500 |
-| `analysis/cross_session_report.py` | HTML report builder (~15-20 sections) | ~250 |
-| `tests/test_cross_session.py` | Tests for data logic + integration | ~350 |
+| File | Purpose | Lines | Status |
+|------|---------|-------|--------|
+| `analysis/cross_session_data.py` | Pure data logic: matching, alignment, comparison metrics | ~415 | Done |
+| `analysis/cross_session.py` | CLI, orchestration, plot functions | ~600 | Done |
+| `analysis/cross_session_report.py` | HTML report builder (~15 sections) | ~380 | Done |
+| `tests/test_cross_session.py` | Tests for data logic (42 tests) | ~400 | Done |
 
-## Files to Update
+## Files Updated
 
-| File | Change |
-|------|--------|
-| `Justfile` | Add `cross-session` recipe |
-| `docs/roadmap.md` | Move cross-session from "Next Up" to "In Progress" |
-| `CLAUDE.md` | Add cross-session to analysis architecture section |
+| File | Change | Status |
+|------|--------|--------|
+| `Justfile` | Add `cross-session` recipe | Done |
+| `docs/roadmap.md` | Move cross-session to "In Progress" | Done |
+| `CLAUDE.md` | Add cross-session to analysis architecture section | Done |
 
 ---
 
@@ -313,17 +313,17 @@ Update roadmap: move cross-session from "Next Up" to "In Progress".
 
 ## Implementation Order
 
-| Order | What | Depends On | Est. Effort |
-|-------|------|-----------|-------------|
-| 1 | `cross_session_data.py` + tests | Nothing (pure logic) | Medium |
-| 2 | Plot functions in `cross_session.py` | Step 1 | Medium |
-| 3 | `cross_session_report.py` | Steps 1-2 | Light |
-| 4 | CLI orchestration in `cross_session.py` | Steps 1-3 | Medium |
-| 5 | Cross-session prediction logic | Steps 1, 4 | Medium |
-| 6 | Detection validation | Steps 1, 4 | Light |
-| 7 | Justfile + doc updates | Steps 1-6 | Light |
+| Order | What | Depends On | Status |
+|-------|------|-----------|--------|
+| 1 | `cross_session_data.py` + tests | Nothing (pure logic) | Done (v2026.02.22.27) |
+| 2 | Plot functions in `cross_session.py` | Step 1 | Done (v2026.02.22.28) |
+| 3 | `cross_session_report.py` | Steps 1-2 | Done (v2026.02.22.28) |
+| 4 | CLI orchestration in `cross_session.py` | Steps 1-3 | Done (v2026.02.22.28) |
+| 5 | Cross-session prediction logic | Steps 1, 4 | Remaining (behind `--skip-prediction`) |
+| 6 | Detection validation | Steps 1, 4 | Done (v2026.02.22.28) |
+| 7 | Justfile + doc updates | Steps 1-6 | Done (v2026.02.22.28) |
 
-Steps 1 and 2 can be partially parallelized (plot functions only depend on the data layer's return types, not the implementation). Step 5 (prediction) is the most complex and can be deferred via `--skip-prediction` if needed.
+Step 5 (prediction transfer) is the only remaining work. It is deferred behind `--skip-prediction` and can be added independently.
 
 ---
 
