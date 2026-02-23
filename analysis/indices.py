@@ -1598,9 +1598,9 @@ def main() -> None:
     if args.data_dir:
         data_dir = Path(args.data_dir)
     else:
-        data_dir = Path("data") / ks.output_name
+        data_dir = ks.data_dir
 
-    results_root = Path("results") / ks.output_name
+    results_root = ks.results_dir
 
     irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "irt" / "latest"
     network_dir = (

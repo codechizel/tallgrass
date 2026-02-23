@@ -110,7 +110,7 @@ class KSVoteScraper:
         delay: float = REQUEST_DELAY,
     ):
         self.session = session
-        self.output_dir = output_dir or Path("data") / session.output_name
+        self.output_dir = output_dir or session.data_dir
         self.cache_dir = self.output_dir / ".cache"
         self.delay = delay
         self._normal_delay = delay

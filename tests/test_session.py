@@ -200,10 +200,10 @@ class TestDataDirForSession:
     """Static method that converts CLI strings to data directory Paths."""
 
     def test_current(self):
-        assert KSSession.data_dir_for_session("2025-26") == Path("data/91st_2025-2026")
+        assert KSSession.data_dir_for_session("2025-26") == Path("data/kansas/91st_2025-2026")
 
     def test_historical(self):
-        assert KSSession.data_dir_for_session("2023-24") == Path("data/90th_2023-2024")
+        assert KSSession.data_dir_for_session("2023-24") == Path("data/kansas/90th_2023-2024")
 
     def test_special(self):
-        assert KSSession.data_dir_for_session("2024", special=True) == Path("data/2024s")
+        assert KSSession.data_dir_for_session("2024", special=True) == Path("data/kansas/2024s")

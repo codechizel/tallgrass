@@ -1,7 +1,7 @@
 """
 Data integrity tests for scraped Kansas Legislature CSVs.
 
-These tests run against the REAL data in data/91st_2025-2026/ and verify
+These tests run against the REAL data in data/kansas/91st_2025-2026/ and verify
 structural correctness. They catch scraping bugs, not analysis logic.
 
 Run: uv run pytest tests/test_data_integrity.py -v
@@ -17,7 +17,7 @@ from ks_vote_scraper.session import KSSession
 # ── Constants ────────────────────────────────────────────────────────────────
 
 _SESSION = KSSession.from_year(2025)
-DATA_DIR = Path("data") / _SESSION.output_name
+DATA_DIR = _SESSION.data_dir
 _PREFIX = _SESSION.output_name
 HOUSE_SEATS = 125
 SENATE_SEATS = 40

@@ -2239,9 +2239,9 @@ def main() -> None:
     if args.data_dir:
         data_dir = Path(args.data_dir)
     else:
-        data_dir = Path("data") / ks.output_name
+        data_dir = ks.data_dir
 
-    results_root = Path("results") / ks.output_name
+    results_root = ks.results_dir
 
     if args.eda_dir:
         eda_dir = Path(args.eda_dir)

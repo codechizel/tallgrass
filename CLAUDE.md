@@ -36,7 +36,7 @@ uv run ks-vote-scraper 2024 --special        # special session
 ```
 src/ks_vote_scraper/
   config.py    - Constants (BASE_URL, delays, workers, user agent)
-  session.py   - KSSession: biennium URL resolution (current vs historical vs special)
+  session.py   - KSSession: biennium URL resolution, STATE_DIR, data_dir/results_dir properties
   models.py    - IndividualVote + RollCall dataclasses
   scraper.py   - KSVoteScraper: 4-step pipeline (bill URLs → API filter → vote parse → legislator enrich)
                - FetchResult/FetchFailure/VoteLink dataclasses: typed HTTP results + vote page links
@@ -112,12 +112,12 @@ The KS Legislature uses different URL prefixes per session — this is the singl
 
 ## Output
 
-Three CSVs in `data/{legislature}_{start}-{end}/` (e.g. `data/91st_2025-2026/`):
+Three CSVs in `data/kansas/{legislature}_{start}-{end}/` (e.g. `data/kansas/91st_2025-2026/`):
 - `{output_name}_votes.csv` — ~68K rows, one per legislator per roll call
 - `{output_name}_rollcalls.csv` — ~500 rows, one per roll call
 - `{output_name}_legislators.csv` — ~172 rows, one per legislator
 
-Cache lives in `data/{output_name}/.cache/`. Use `--clear-cache` to force fresh fetches.
+Cache lives in `data/kansas/{output_name}/.cache/`. Use `--clear-cache` to force fresh fetches.
 
 The directory naming uses the Kansas Legislature numbering scheme: `(start_year - 1879) // 2 + 18` gives the legislature number (e.g., 91 for 2025-2026). Special sessions use `{year}s` (e.g., `2024s`).
 
@@ -125,35 +125,36 @@ When vote page fetches fail, a `failure_manifest.json` is written alongside the 
 
 ## Results Directory
 
-Analysis outputs go in `results/` (gitignored), organized by session, analysis type, and run date:
+Analysis outputs go in `results/` (gitignored), organized by state, session, analysis type, and run date:
 
 ```
 results/
-  91st_2025-2026/
-    eda_report.html → eda/latest/eda_report.html      ← Convenience symlinks
-    pca_report.html → pca/latest/pca_report.html
-    ...
-    synthesis_report.html → synthesis/latest/...
-    eda/
-      2026-02-19/
-        plots/                  ← PNGs
-        data/                   ← Parquet intermediates
-        filtering_manifest.json ← What was filtered and why
-        run_info.json           ← Git hash, timestamp, parameters
-        run_log.txt             ← Captured console output
-      latest → 2026-02-19/     ← Symlink to most recent run
-    pca/                        ← Same structure
-    irt/
-    clustering/
-    network/
-    prediction/
-    indices/
-    synthesis/                  ← Joins all phases into one narrative report
+  kansas/
+    91st_2025-2026/
+      eda_report.html → eda/latest/eda_report.html      ← Convenience symlinks
+      pca_report.html → pca/latest/pca_report.html
+      ...
+      synthesis_report.html → synthesis/latest/...
+      eda/
+        2026-02-19/
+          plots/                  ← PNGs
+          data/                   ← Parquet intermediates
+          filtering_manifest.json ← What was filtered and why
+          run_info.json           ← Git hash, timestamp, parameters
+          run_log.txt             ← Captured console output
+        latest → 2026-02-19/     ← Symlink to most recent run
+      pca/                        ← Same structure
+      irt/
+      clustering/
+      network/
+      prediction/
+      indices/
+      synthesis/                  ← Joins all phases into one narrative report
 ```
 
-All analysis scripts use `RunContext` from `analysis/run_context.py` as a context manager to get structured output. Downstream scripts read from `results/<session>/<analysis>/latest/`.
+All analysis scripts use `RunContext` from `analysis/run_context.py` as a context manager to get structured output. Downstream scripts read from `results/kansas/<session>/<analysis>/latest/`.
 
-Results paths use the biennium naming scheme: `91st_2025-2026` (matching the data directory).
+Results paths use the biennium naming scheme: `91st_2025-2026` (matching the data directory). The `kansas/` state directory is controlled by `STATE_DIR` in `session.py` (see ADR-0016).
 
 ## Architecture Decision Records
 

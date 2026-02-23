@@ -129,7 +129,9 @@ class RunContext:
         self.analysis_name = analysis_name
         self.params = params or {}
 
-        root = results_root or Path("results")
+        from ks_vote_scraper.session import STATE_DIR
+
+        root = results_root or (Path("results") / STATE_DIR)
         today = datetime.now(_CT).strftime("%Y-%m-%d")
 
         self.run_dir = root / self.session / analysis_name / today

@@ -2,7 +2,7 @@
 
 ## Output Files
 
-The scraper produces three CSV files per session in `data/{output_name}/` (e.g., `data/91st_2025-2026/`).
+The scraper produces three CSV files per session in `data/kansas/{output_name}/` (e.g., `data/kansas/91st_2025-2026/`).
 
 ---
 

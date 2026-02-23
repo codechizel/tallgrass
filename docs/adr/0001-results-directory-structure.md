@@ -16,21 +16,22 @@ Additionally, `data/` is semantically wrong for analysis outputs — it's the sc
 
 ## Decision
 
-Analysis outputs go in a structured `results/` directory:
+Analysis outputs go in a structured `results/` directory with a state-level grouping (see ADR-0016):
 
 ```
 results/
-  91st_2025-2026/
-    eda/
-      2026-02-19/
-        plots/                  <- PNGs
-        data/                   <- Parquet intermediates
-        filtering_manifest.json <- What was filtered and why
-        run_info.json           <- Git hash, timestamp, parameters
-        run_log.txt             <- Captured console output
-      latest -> 2026-02-19/    <- Symlink to most recent run
-    pca/
-      ...
+  kansas/
+    91st_2025-2026/
+      eda/
+        2026-02-19/
+          plots/                  <- PNGs
+          data/                   <- Parquet intermediates
+          filtering_manifest.json <- What was filtered and why
+          run_info.json           <- Git hash, timestamp, parameters
+          run_log.txt             <- Captured console output
+        latest -> 2026-02-19/    <- Symlink to most recent run
+      pca/
+        ...
 ```
 
 Key design choices:

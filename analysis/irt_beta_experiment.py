@@ -418,8 +418,8 @@ def main() -> None:
     from ks_vote_scraper.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
-    data_dir = Path("data") / ks.output_name
-    results_root = Path("results") / ks.output_name
+    data_dir = ks.data_dir
+    results_root = ks.results_dir
     eda_dir = results_root / "eda" / "latest"
     pca_dir = results_root / "pca" / "latest"
     output_dir = results_root / "irt" / "beta_experiment"

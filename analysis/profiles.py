@@ -603,7 +603,9 @@ def main() -> None:
         params=vars(args),
         primer=PROFILES_PRIMER,
     ) as ctx:
-        results_base = Path("results") / ctx.session
+        from ks_vote_scraper.session import STATE_DIR
+
+        results_base = Path("results") / STATE_DIR / ctx.session
         print(f"Loading upstream data from {results_base}")
 
         # ── Load upstream ─────────────────────────────────────────────
@@ -628,7 +630,7 @@ def main() -> None:
             return
 
         # ── Load raw votes and rollcalls ──────────────────────────────
-        data_dir = Path("data") / ctx.session
+        data_dir = Path("data") / STATE_DIR / ctx.session
         votes_path = next(data_dir.glob("*_votes.csv"), None)
         rollcalls_path = next(data_dir.glob("*_rollcalls.csv"), None)
 

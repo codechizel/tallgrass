@@ -21,6 +21,9 @@ CURRENT_BIENNIUM_START = 2025
 # Known special session years
 SPECIAL_SESSION_YEARS = [2024, 2021, 2020, 2016, 2013]
 
+# State-level directory name (sits between data/results root and biennium dir)
+STATE_DIR = "kansas"
+
 
 def _ordinal(n: int) -> str:
     """Return the ordinal string for an integer (1st, 2nd, 3rd, 4th, ..., 91st)."""
@@ -98,6 +101,16 @@ class KSSession:
         return f"{self.legislature_name}_{self.start_year}-{self.end_year}"
 
     @property
+    def data_dir(self) -> Path:
+        """Data directory path, e.g., Path('data/kansas/91st_2025-2026')."""
+        return Path("data") / STATE_DIR / self.output_name
+
+    @property
+    def results_dir(self) -> Path:
+        """Results directory path, e.g., Path('results/kansas/91st_2025-2026')."""
+        return Path("results") / STATE_DIR / self.output_name
+
+    @property
     def bill_url_pattern(self) -> re.Pattern:
         """Compiled regex to match bill URLs within this session's paths."""
         escaped = re.escape(self.li_prefix)
@@ -143,10 +156,10 @@ class KSSession:
         """Convert a CLI-style session string to the data directory Path.
 
         Examples:
-            "2025-26" -> Path("data/91st_2025-2026")
-            "2023-24" -> Path("data/90th_2023-2024")
+            "2025-26" -> Path("data/kansas/91st_2025-2026")
+            "2023-24" -> Path("data/kansas/90th_2023-2024")
         """
         normalized = session.replace("_", "-")
         parts = normalized.split("-")
         ks = KSSession.from_year(int(parts[0]), special=special)
-        return Path("data") / ks.output_name
+        return ks.data_dir

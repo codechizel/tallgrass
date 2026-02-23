@@ -1518,9 +1518,9 @@ def main() -> None:
     from ks_vote_scraper.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
-    data_dir = Path(args.data_dir) if args.data_dir else Path("data") / ks.output_name
+    data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
 
-    results_root = Path("results") / ks.output_name
+    results_root = ks.results_dir
     irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "irt" / "latest"
     clustering_dir = (
         Path(args.clustering_dir) if args.clustering_dir else results_root / "clustering" / "latest"

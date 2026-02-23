@@ -8,7 +8,7 @@ Covers analytic methods 01-04:
   04: Agreement matrix & heatmap
 
 Usage:
-  uv run python analysis/eda.py [--session 2025-26] [--data-dir data/91st_2025-2026]
+  uv run python analysis/eda.py [--session 2025-26] [--data-dir data/kansas/91st_2025-2026]
 
 Outputs (in results/<session>/eda/<date>/):
   - plots/:   8 PNG visualization plots
@@ -1564,7 +1564,7 @@ def main() -> None:
     else:
         from ks_vote_scraper.session import KSSession
 
-        data_dir = Path("data") / KSSession.from_session_string(args.session).output_name
+        data_dir = KSSession.from_session_string(args.session).data_dir
 
     with RunContext(
         session=args.session,

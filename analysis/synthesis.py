@@ -760,7 +760,9 @@ def main() -> None:
         primer=SYNTHESIS_PRIMER,
     ) as ctx:
         # Resolve results base path
-        results_base = Path("results") / ctx.session
+        from ks_vote_scraper.session import STATE_DIR
+
+        results_base = Path("results") / STATE_DIR / ctx.session
         print(f"Loading upstream data from {results_base}")
 
         # ── Load ─────────────────────────────────────────────────────────

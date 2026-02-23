@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> None:
         "-o",
         type=Path,
         default=None,
-        help="Output directory (default: data/{legislature}_{start}-{end}/)",
+        help="Output directory (default: data/kansas/{legislature}_{start}-{end}/)",
     )
     parser.add_argument(
         "--delay",
