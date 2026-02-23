@@ -37,7 +37,7 @@ All three functions share the same signature: `(Z, slugs, ideal_points, chamber,
 
 **Trade-offs:**
 - Polar dendrogram labels are still hard to read at 130 members (House) — the voting blocs and icicle charts handle House better
-- `_build_display_labels()` is local to clustering.py; other modules that extract last names (prediction, profiles) use their own `.split(" - ")[0].split()[-1]` pattern and would benefit from a shared utility in future
+- `_build_display_labels()` remains in clustering.py for display label disambiguation (duplicate last names). The underlying suffix stripping is now centralized in `strip_leadership_suffix()` in `run_context.py`, applied at every CSV load point across all phases (v2026.02.22.34)
 
 **Risk:**
 - The radial staggering heuristic (gap < 0.8 × even_sep → outer lane) is empirical. Future sessions with different legislator counts may need tuning.

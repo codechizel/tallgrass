@@ -130,7 +130,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 |------|------|---------|
 | Update `CURRENT_BIENNIUM_START` | 2027 | Change from 2025 to 2027 in `session.py` |
 | Add special sessions | As needed | Add year to `SPECIAL_SESSION_YEARS` in `session.py` |
-| ~~Fix Shallenburger suffix~~ | ~~Done~~ | Fixed in analysis via `_build_display_labels()` — strips " - " suffixes before name extraction (ADR-0014). Scraper stores the raw name; analysis handles display. |
+| ~~Fix Shallenburger suffix~~ | ~~Done~~ | Fixed in analysis via `strip_leadership_suffix()` in `run_context.py` — applied at every CSV load point across all phases (ADR-0014). Scraper stores the raw name; analysis handles display. |
 
 ---
 

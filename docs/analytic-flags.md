@@ -262,8 +262,8 @@ This is a living document — add entries as each analysis phase surfaces new fi
 - **Phase:** Prediction (data quality), resolved in Clustering (visualization)
 - **Observation:** `full_name` = "Tim Shallenburger - Vice President of the Senate" in per-legislator output. The scraper stores the raw name with leadership suffix.
 - **Explanation:** The scraper strips suffixes like "House Minority Caucus Chair" from the member page `<h1>` but "Vice President of the Senate" is in a different format. Four legislators are affected: Shallenburger, Masterson, Hawkins, Carpenter.
-- **Resolution:** Fixed in analysis via `_build_display_labels()` in clustering.py (2026-02-22). Strips " - " suffixes before name extraction. Also disambiguates duplicate last names (two Claeys senators, two Carpenters in House). See Bug 8 in `docs/lessons-learned.md` and ADR-0014.
-- **Downstream:** The fix is local to clustering.py. Other modules (prediction, profiles) still use `.split(" - ")[0].split()[-1]` inline. A shared utility would prevent recurrence.
+- **Resolution:** Fixed permanently via `strip_leadership_suffix()` in `run_context.py` (2026-02-22). Applied at every CSV load point across all 10 analysis phases so display names are clean from the moment they're loaded. Clustering.py retains `_build_display_labels()` for duplicate last name disambiguation. See ADR-0014.
+- **Downstream:** Fully resolved — no phase sees the raw suffix anymore.
 
 ### IRT Anchor Legislators — 100% Prediction Accuracy (Trivially)
 
