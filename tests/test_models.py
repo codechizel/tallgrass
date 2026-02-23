@@ -117,6 +117,18 @@ class TestVoteLink:
         )
         assert vl.bill_number == "SB 1"
         assert vl.vote_text == "Emergency Final Action"
+        assert vl.is_odt is False
+
+    def test_odt_link(self):
+        """VoteLink with is_odt=True for ODT vote pages."""
+        vl = VoteLink(
+            bill_number="SB 1",
+            bill_path="/li_2014/b2013_14/measures/sb1/",
+            vote_url="https://example.com/odt_view/je_123.odt",
+            vote_text="Final Action",
+            is_odt=True,
+        )
+        assert vl.is_odt is True
 
     def test_frozen(self):
         vl = VoteLink(

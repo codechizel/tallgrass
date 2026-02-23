@@ -70,10 +70,11 @@ class FetchResult:
     status_code: int | None = None
     error_type: str | None = None  # permanent, transient, timeout, connection
     error_message: str | None = None
+    content_bytes: bytes | None = None
 
     @property
     def ok(self) -> bool:
-        return self.html is not None
+        return self.html is not None or self.content_bytes is not None
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,7 @@ class VoteLink:
     bill_path: str
     vote_url: str
     vote_text: str
+    is_odt: bool = False
 
 
 class KSVoteScraper:
@@ -131,6 +133,7 @@ class KSVoteScraper:
         self.legislators: dict[str, dict] = {}  # slug -> info
         self.bill_metadata: dict[str, dict] = {}  # normalized code -> API data
         self.failures: list[FetchFailure] = []
+        self._member_directory: dict[tuple[str, str], dict] | None = None
 
         # Ensure directories exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -146,7 +149,7 @@ class KSVoteScraper:
                 time.sleep(self.delay - elapsed)
             self._last_request_time = time.monotonic()
 
-    def _get(self, url: str) -> FetchResult:
+    def _get(self, url: str, binary: bool = False) -> FetchResult:
         """Fetch a URL with retries, caching, and rate limiting.
 
         Retry strategy varies by error type:
@@ -154,11 +157,18 @@ class KSVoteScraper:
         - 5xx: exponential backoff (5s, 10s, 20s)
         - Timeout: exponential backoff
         - Connection error: fixed 5s delay
+
+        When ``binary=True``, stores ``response.content`` (bytes) in
+        ``content_bytes`` instead of decoding to text.  Skips HTML
+        error-page detection.  Caches with a ``.bin`` extension.
         """
         # Check cache first (no rate limiting needed)
         cache_key = url.replace("/", "_").replace(":", "_").replace("?", "_")
-        cache_file = self.cache_dir / f"{cache_key[:200]}.html"
+        cache_ext = ".bin" if binary else ".html"
+        cache_file = self.cache_dir / f"{cache_key[:200]}{cache_ext}"
         if cache_file.exists():
+            if binary:
+                return FetchResult(url=url, html=None, content_bytes=cache_file.read_bytes())
             return FetchResult(url=url, html=cache_file.read_text(encoding="utf-8"))
 
         last_error = ""
@@ -175,6 +185,15 @@ class KSVoteScraper:
 
                 resp = self.http.get(url, timeout=REQUEST_TIMEOUT)
                 resp.raise_for_status()
+
+                if binary:
+                    content = resp.content
+                    try:
+                        cache_file.write_bytes(content)
+                    except OSError:
+                        pass
+                    return FetchResult(url=url, html=None, content_bytes=content)
+
                 html = resp.text
 
                 # Guard against HTML error pages served with HTTP 200
@@ -256,6 +275,7 @@ class KSVoteScraper:
         desc: str = "Fetching",
         max_waves: int = RETRY_WAVES,
         wave_cooldown: float = WAVE_COOLDOWN,
+        binary: bool = False,
     ) -> dict[str, FetchResult]:
         """Fetch multiple URLs concurrently using a thread pool.
 
@@ -264,12 +284,14 @@ class KSVoteScraper:
         and a cooldown between waves.  This lets the server recover from sustained
         load without the thundering-herd effect of all workers retrying at once.
 
+        When ``binary=True``, all fetches use binary mode (for ODT downloads).
+
         Returns a dict mapping each URL to its FetchResult.
         """
         # --- initial pass (full concurrency) ---
         results: dict[str, FetchResult] = {}
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_url = {executor.submit(self._get, url): url for url in urls}
+            future_to_url = {executor.submit(self._get, url, binary): url for url in urls}
             for future in tqdm(
                 as_completed(future_to_url),
                 total=len(future_to_url),
@@ -299,7 +321,9 @@ class KSVoteScraper:
             self.delay = WAVE_DELAY
             try:
                 with ThreadPoolExecutor(max_workers=WAVE_WORKERS) as executor:
-                    future_to_url = {executor.submit(self._get, url): url for url in failed_urls}
+                    future_to_url = {
+                        executor.submit(self._get, url, binary): url for url in failed_urls
+                    }
                     for future in tqdm(
                         as_completed(future_to_url),
                         total=len(future_to_url),
@@ -356,6 +380,12 @@ class KSVoteScraper:
                 if pattern.match(href):
                     bill_urls.add(href)
 
+        # Fallback: sessions before 2021 load bill lists via JavaScript,
+        # so HTML listing pages may have zero <a> tags matching bill URLs.
+        if not bill_urls and self.session.js_data_paths:
+            print("  HTML listing yielded 0 bills — trying JS data fallback...")
+            bill_urls = self._get_bill_urls_from_js()
+
         bill_urls = sorted(bill_urls, key=self._bill_sort_key)
         print(f"  Found {len(bill_urls)} unique bill/resolution URLs")
         return bill_urls
@@ -370,6 +400,54 @@ class KSVoteScraper:
             order = {"sb": 0, "sr": 1, "scr": 2, "hb": 3, "hr": 4, "hcr": 5}
             return (order.get(prefix, 9), number)
         return (99, 0)
+
+    def _get_bill_urls_from_js(self) -> set[str]:
+        """Discover bill URLs from JavaScript data files (pre-2021 sessions).
+
+        The JS files assign a ``measures_data`` variable containing a JSON array
+        of bill objects.  Each object has a ``measures_url`` field with the bill
+        path (e.g., ``/li_2020/b2019_20/measures/hb2001/``).
+        """
+        bill_urls: set[str] = set()
+        pattern = self.session.bill_url_pattern
+
+        for js_path in self.session.js_data_paths:
+            print(f"  Trying JS data file: {js_path}")
+            result = self._get(BASE_URL + js_path)
+            if not result.ok or not result.html:
+                continue
+            parsed = self._parse_js_bill_data(result.html)
+            for url in parsed:
+                if pattern.match(url):
+                    bill_urls.add(url)
+            if bill_urls:
+                print(f"  JS fallback found {len(bill_urls)} bill URLs")
+                break
+
+        return bill_urls
+
+    @staticmethod
+    def _parse_js_bill_data(js_content: str) -> list[str]:
+        """Extract bill URLs from a ``measures_data = [...]`` JS assignment.
+
+        Finds the JSON array between the first ``[`` and last ``]``, parses it,
+        and returns ``measures_url`` values that match the bill URL pattern.
+        """
+        start = js_content.find("[")
+        end = js_content.rfind("]")
+        if start == -1 or end == -1 or end <= start:
+            return []
+        try:
+            data = json.loads(js_content[start : end + 1])
+        except ValueError:
+            return []
+
+        urls: list[str] = []
+        for entry in data:
+            url = entry.get("measures_url", "") if isinstance(entry, dict) else ""
+            if url:
+                urls.append(url)
+        return urls
 
     # -- Step 1b: KLISS API pre-filter -----------------------------------------
 
@@ -465,7 +543,7 @@ class KSVoteScraper:
             bill_number = self._extract_bill_number(soup, bill_path)
 
             found_votes = False
-            for link in soup.find_all("a", href=re.compile(r"vote_view")):
+            for link in soup.find_all("a", href=re.compile(r"(?:vote_view|odt_view)")):
                 href = link["href"]
                 vote_links.append(
                     VoteLink(
@@ -473,6 +551,7 @@ class KSVoteScraper:
                         bill_path=bill_path,
                         vote_url=href if href.startswith("http") else BASE_URL + href,
                         vote_text=link.get_text(strip=True),
+                        is_odt="odt_view" in href,
                     )
                 )
                 found_votes = True
@@ -543,14 +622,92 @@ class KSVoteScraper:
 
         return "; ".join(sponsors)
 
+    # -- Member directory (for ODT sessions) ------------------------------------
+
+    def _load_member_directory(self) -> None:
+        """Build a member directory from the session's /members/ listing page.
+
+        Creates a mapping of ``(chamber_lower, last_name_lower)`` to member info.
+        Same-chamber last-name collisions are marked as ambiguous. When an initial
+        is available (e.g., "C. Holmes"), the initial-qualified key
+        ``(chamber, "c. holmes")`` is also added for disambiguation.
+        """
+        members_path = f"{self.session.li_prefix}/members/"
+        print(f"  Loading member directory from {members_path}...")
+        result = self._get(BASE_URL + members_path)
+        if not result.ok or not result.html:
+            print("  WARNING: Could not load member directory — ODT name resolution disabled")
+            self._member_directory = {}
+            return
+
+        soup = BeautifulSoup(result.html, "lxml")
+        directory: dict[tuple[str, str], dict] = {}
+
+        for link in soup.find_all("a", href=re.compile(r"/members/(sen_|rep_)")):
+            href = link["href"]
+            slug_match = re.search(r"/members/([^/]+)/", href)
+            if not slug_match:
+                continue
+            slug = slug_match.group(1)
+            name = link.get_text(strip=True).rstrip(",").strip()
+            if not name:
+                continue
+
+            # Determine chamber from slug prefix
+            if slug.startswith("sen_"):
+                chamber_lower = "senate"
+            elif slug.startswith("rep_"):
+                chamber_lower = "house"
+            else:
+                continue
+
+            # Extract last name (last word, or name after comma)
+            if "," in name:
+                last_name = name.split(",")[0].strip()
+            else:
+                last_name = name.split()[-1] if name.split() else name
+
+            key = (chamber_lower, last_name.lower())
+            if key in directory:
+                # Mark both as ambiguous
+                directory[key]["ambiguous"] = True
+            else:
+                directory[key] = {
+                    "slug": slug,
+                    "name": name,
+                    "chamber": chamber_lower.capitalize(),
+                }
+
+        self._member_directory = directory
+        print(f"  Member directory: {len(directory)} entries")
+
     # -- Step 3: Parse each vote page -----------------------------------------
 
     def parse_vote_pages(self, vote_links: list[VoteLink]) -> None:
-        """Visit each vote_view page and extract individual legislator votes."""
+        """Visit each vote page and extract individual legislator votes.
+
+        Splits links into HTML (vote_view) and ODT (odt_view) groups and
+        processes each with the appropriate parser.
+        """
         print("\n" + "=" * 60)
         print("Step 3: Parsing individual roll call vote pages...")
         print("=" * 60)
 
+        html_links = [vl for vl in vote_links if not vl.is_odt]
+        odt_links = [vl for vl in vote_links if vl.is_odt]
+
+        if html_links:
+            self._parse_html_vote_pages(html_links)
+
+        if odt_links:
+            self._parse_odt_vote_pages(odt_links)
+
+        print(f"  Parsed {len(self.rollcalls)} roll calls")
+        print(f"  Collected {len(self.individual_votes)} individual votes")
+        print(f"  Found {len(self.legislators)} unique legislators")
+
+    def _parse_html_vote_pages(self, vote_links: list[VoteLink]) -> None:
+        """Parse HTML vote_view pages (2015+)."""
         # Fetch phase (concurrent)
         vote_urls = [vl.vote_url for vl in vote_links]
         fetched = self._fetch_many(vote_urls, desc="Fetching votes")
@@ -559,30 +716,98 @@ class KSVoteScraper:
         for vl in tqdm(vote_links, desc="Parsing votes", unit="vote"):
             result = fetched.get(vl.vote_url)
             if not result or not result.ok:
-                if result and result.error_type:
-                    self.failures.append(
-                        FetchFailure(
-                            bill_number=vl.bill_number,
-                            vote_text=vl.vote_text,
-                            vote_url=vl.vote_url,
-                            bill_path=vl.bill_path,
-                            status_code=result.status_code,
-                            error_type=result.error_type,
-                            error_message=result.error_message or "",
-                            timestamp=datetime.now().isoformat(timespec="seconds"),
-                        )
-                    )
-                    print(
-                        f"  FAILED: {vl.bill_number} - {vl.vote_text}"
-                        f" ({result.error_type}: {result.error_message})"
-                    )
+                self._record_fetch_failure(vl, result)
                 continue
             soup = BeautifulSoup(result.html, "lxml")
             self._parse_vote_page(soup, vl)
 
-        print(f"  Parsed {len(self.rollcalls)} roll calls")
-        print(f"  Collected {len(self.individual_votes)} individual votes")
-        print(f"  Found {len(self.legislators)} unique legislators")
+    def _parse_odt_vote_pages(self, vote_links: list[VoteLink]) -> None:
+        """Parse ODT vote files (2011-2014)."""
+        from ks_vote_scraper.odt_parser import parse_odt_votes
+
+        # Fetch phase (concurrent, binary mode)
+        vote_urls = [vl.vote_url for vl in vote_links]
+        fetched = self._fetch_many(vote_urls, desc="Fetching ODT votes", binary=True)
+
+        # Parse phase (sequential)
+        for vl in tqdm(vote_links, desc="Parsing ODT votes", unit="vote"):
+            result = fetched.get(vl.vote_url)
+            if not result or not result.ok:
+                self._record_fetch_failure(vl, result)
+                continue
+
+            try:
+                rollcalls, votes, new_legs = parse_odt_votes(
+                    odt_bytes=result.content_bytes,
+                    bill_number=vl.bill_number,
+                    bill_path=vl.bill_path,
+                    vote_url=vl.vote_url,
+                    session_label=self.session.label,
+                    member_directory=self._member_directory,
+                    bill_metadata=self.bill_metadata,
+                )
+            except Exception as e:
+                print(f"  WARNING: ODT parse error for {vl.bill_number}: {e}")
+                self.failures.append(
+                    FetchFailure(
+                        bill_number=vl.bill_number,
+                        vote_text=vl.vote_text,
+                        vote_url=vl.vote_url,
+                        bill_path=vl.bill_path,
+                        status_code=200,
+                        error_type="parsing",
+                        error_message=f"ODT parse error: {e}",
+                        timestamp=datetime.now().isoformat(timespec="seconds"),
+                    )
+                )
+                continue
+
+            self.rollcalls.extend(rollcalls)
+            self.individual_votes.extend(votes)
+
+            for leg in new_legs:
+                slug = leg["slug"]
+                if slug and slug not in self.legislators:
+                    self.legislators[slug] = {
+                        "name": leg["name"],
+                        "slug": slug,
+                        "chamber": leg["chamber"],
+                        "member_url": (f"{BASE_URL}{self.session.li_prefix}/members/{slug}/"),
+                    }
+
+            if not rollcalls:
+                self.failures.append(
+                    FetchFailure(
+                        bill_number=vl.bill_number,
+                        vote_text=vl.vote_text,
+                        vote_url=vl.vote_url,
+                        bill_path=vl.bill_path,
+                        status_code=200,
+                        error_type="parsing",
+                        error_message="0 votes parsed from ODT",
+                        timestamp=datetime.now().isoformat(timespec="seconds"),
+                    )
+                )
+
+    def _record_fetch_failure(self, vl: VoteLink, result: FetchResult | None) -> None:
+        """Record a fetch failure for a vote link."""
+        if result and result.error_type:
+            self.failures.append(
+                FetchFailure(
+                    bill_number=vl.bill_number,
+                    vote_text=vl.vote_text,
+                    vote_url=vl.vote_url,
+                    bill_path=vl.bill_path,
+                    status_code=result.status_code,
+                    error_type=result.error_type,
+                    error_message=result.error_message or "",
+                    timestamp=datetime.now().isoformat(timespec="seconds"),
+                )
+            )
+            print(
+                f"  FAILED: {vl.bill_number} - {vl.vote_text}"
+                f" ({result.error_type}: {result.error_message})"
+            )
 
     def _parse_vote_page(self, soup: BeautifulSoup, vote_link: VoteLink):
         """Parse a single vote_view page."""
@@ -883,6 +1108,17 @@ class KSVoteScraper:
                 elif "Democrat" in h2_text:
                     info["party"] = "Democrat"
 
+            # Pre-2015 fallback: party is in <h3> as "Party: Republican"
+            if not info["party"]:
+                for h3 in soup.find_all("h3"):
+                    h3_text = h3.get_text(strip=True)
+                    if "Party:" in h3_text:
+                        if "Republican" in h3_text:
+                            info["party"] = "Republican"
+                        elif "Democrat" in h3_text:
+                            info["party"] = "Democrat"
+                        break
+
         print(f"  Enriched {len(slugs_to_fetch)} legislators")
 
     # -- Failure reporting -----------------------------------------------------
@@ -1029,6 +1265,10 @@ class KSVoteScraper:
         t = time.time()
         vote_links = self.get_vote_links(filtered_urls)
         step_times.append(("Scan bill pages", time.time() - t))
+
+        # Load member directory if any vote links are ODT (needed for name resolution)
+        if any(vl.is_odt for vl in vote_links):
+            self._load_member_directory()
 
         t = time.time()
         self.parse_vote_pages(vote_links)

@@ -60,15 +60,39 @@ Run `just typecheck` or `just check` (which includes it).
 src/ks_vote_scraper/
   config.py    - Constants (BASE_URL, delays, workers, user agent)
   session.py   - KSSession: biennium URL resolution, STATE_DIR, data_dir/results_dir properties
+               - Properties: uses_odt (pre-2015), js_data_paths (pre-2021 JS bill discovery)
   models.py    - IndividualVote + RollCall dataclasses
   scraper.py   - KSVoteScraper: 4-step pipeline (bill URLs → API filter → vote parse → legislator enrich)
                - FetchResult/FetchFailure/VoteLink dataclasses: typed HTTP results + vote page links
+               - FetchResult.content_bytes for binary downloads (ODT files)
+               - VoteLink.is_odt flag for routing to appropriate parser
+               - JS bill discovery fallback (_get_bill_urls_from_js, _parse_js_bill_data)
+               - Member directory (_load_member_directory) for ODT name resolution
+               - Pre-2015 party detection (h3 "Party:" fallback)
                - Module constants: _BILL_URL_RE, VOTE_CATEGORIES, _normalize_bill_code()
+  odt_parser.py - ODT vote file parser (2011-2014): pure functions, no I/O
+               - parse_odt_votes(): main entry point, bytes → (RollCall, IndividualVote, legislators)
+               - Extracts content.xml from ZIP, parses user-field-decl metadata
+               - Maps House/Senate vote category variants to canonical names
+               - Last-name resolution via member directory (handles initials and ambiguity)
   output.py    - CSV export (3 files: votes, rollcalls, legislators)
   cli.py       - argparse CLI entry point
 ```
 
 Pipeline: `get_bill_urls()` → `_filter_bills_with_votes()` → `get_vote_links()` → `parse_vote_pages()` → `enrich_legislators()` → `save_csvs()`
+
+### Session Coverage (2011-2026)
+
+| Biennium | Bill Discovery | Vote Format | Party Detection |
+|----------|---------------|-------------|-----------------|
+| 2025-26 (91st) | HTML links | vote_view | `<h2>District N - Party` |
+| 2023-24 (90th) | HTML links | vote_view | `<h2>` |
+| 2021-22 (89th) | HTML links | vote_view | `<h2>` |
+| 2019-20 (88th) | JS fallback | vote_view | `<h2>` |
+| 2017-18 (87th) | JS fallback | vote_view | `<h2>` |
+| 2015-16 (86th) | JS fallback | vote_view | `<h3>Party:` |
+| 2013-14 (85th) | JS fallback | odt_view | `<h3>Party:` |
+| 2011-12 (84th) | JS fallback | odt_view | `<h3>Party:` |
 
 ## Concurrency Pattern
 
@@ -113,6 +137,12 @@ These are real bugs that were found and fixed. Do NOT regress on them:
 3. **Vote category parsing requires scanning BOTH h2 and h3.** The `Yea - (33):` heading can appear as either `<h2>` or `<h3>` depending on the page. The parser correctly uses `soup.find_all(["h2", "h3", "a"])` — do not simplify this to only one tag.
 
 4. **KLISS API response structure varies.** Sometimes it's a raw list, sometimes `{"content": [...]}`. Always handle both: `data if isinstance(data, list) else data.get("content", [])`.
+
+5. **Pre-2015 party detection uses a different tag.** Sessions before 2015 show party as `<h3>Party: Republican</h3>` instead of encoding it in the `<h2>District N - Republican</h2>` tag. The parser checks `<h2>` first (current format), then falls back to `<h3>Party:` if empty.
+
+6. **Pre-2021 bill lists are JavaScript-rendered.** HTML listing pages for sessions before 2021 have zero `<a>` tags for bills. The JS fallback fetches `bills_li_{end_year}.js` data files and extracts `measures_url` from the JSON array.
+
+7. **Pre-2015 vote pages are ODT files, not HTML.** Sessions 2011-12 and 2013-14 link to `.odt` (OpenDocument) files via `odt_view` URLs. These are ZIP archives with `content.xml` containing user-field metadata and comma-separated legislator names. House and Senate use different vote category names ("Present but not voting" vs "Present and Passing"). Names are last-name-only, requiring a member directory lookup for slug resolution.
 
 ## Session URL Logic
 
@@ -274,10 +304,11 @@ uv run ruff check src/       # lint clean
 
 ### Scraper Test Files
 - `tests/conftest.py` — shared KSSession fixtures (current, historical, special)
-- `tests/test_session.py` — session URL resolution, biennium logic (~30 tests)
-- `tests/test_scraper_pure.py` — pure functions: bill codes, datetime parsing, result derivation (~35 tests)
-- `tests/test_scraper_html.py` — HTML parsing with inline BeautifulSoup fixtures (~25 tests)
-- `tests/test_models.py` — dataclass construction and immutability (~6 tests)
+- `tests/test_session.py` — session URL resolution, biennium logic, uses_odt, js_data_paths (~40 tests)
+- `tests/test_scraper_pure.py` — pure functions: bill codes, datetime parsing, result derivation, JS bill parsing, binary FetchResult (~45 tests)
+- `tests/test_scraper_html.py` — HTML parsing with inline BeautifulSoup fixtures, pre-2015 party detection, odt_view link detection (~35 tests)
+- `tests/test_models.py` — dataclass construction and immutability, VoteLink.is_odt (~8 tests)
+- `tests/test_odt_parser.py` — ODT vote parsing: XML extraction, metadata, body text, vote categories, name resolution, integration (~47 tests)
 - `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip (~10 tests)
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 

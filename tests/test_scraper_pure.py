@@ -3,12 +3,13 @@ Tests for pure functions and staticmethods in scraper.py.
 
 Covers bill code normalization, vote datetime parsing, motion classification,
 result derivation (Bug #4 regression), elapsed time formatting, bill sort keys,
-and FetchResult dataclass behavior. No BeautifulSoup or HTTP required.
+FetchResult dataclass behavior (including binary mode), and JS bill data parsing.
 
 Run: uv run pytest tests/test_scraper_pure.py -v
 """
 
 import dataclasses
+import json
 
 import pytest
 
@@ -88,9 +89,7 @@ class TestParseVoteTypeAndResult:
         assert result == "Be passed as amended"
 
     def test_consent_calendar(self):
-        vtype, result = KSVoteScraper._parse_vote_type_and_result(
-            "Consent Calendar - Passed"
-        )
+        vtype, result = KSVoteScraper._parse_vote_type_and_result("Consent Calendar - Passed")
         assert vtype == "Consent Calendar"
         assert result == "Passed"
 
@@ -224,3 +223,66 @@ class TestFetchResult:
         r = FetchResult(url="http://example.com", html="<html></html>")
         with pytest.raises(dataclasses.FrozenInstanceError):
             r.url = "other"  # type: ignore[misc]
+
+
+# ── FetchResult binary mode ─────────────────────────────────────────────────
+
+
+class TestFetchResultBinary:
+    """FetchResult with content_bytes for binary downloads (ODT files)."""
+
+    def test_ok_when_content_bytes_set(self):
+        r = FetchResult(url="http://example.com", html=None, content_bytes=b"\x50\x4b")
+        assert r.ok is True
+
+    def test_not_ok_when_both_none(self):
+        r = FetchResult(url="http://example.com", html=None, content_bytes=None)
+        assert r.ok is False
+
+    def test_ok_with_html_and_no_bytes(self):
+        """Backwards-compatible: html-only FetchResult still works."""
+        r = FetchResult(url="http://example.com", html="<html></html>")
+        assert r.ok is True
+        assert r.content_bytes is None
+
+    def test_content_bytes_default_none(self):
+        r = FetchResult(url="http://example.com", html="<html></html>")
+        assert r.content_bytes is None
+
+
+# ── _parse_js_bill_data() ───────────────────────────────────────────────────
+
+
+class TestParseJsBillData:
+    """Parse bill URLs from JavaScript data files (pre-2021 sessions)."""
+
+    def test_standard_js_file(self):
+        """JS file with measures_data containing measures_url fields."""
+        data = [
+            {"measures_url": "/li_2020/b2019_20/measures/hb2001/", "title": "Tax bill"},
+            {"measures_url": "/li_2020/b2019_20/measures/sb100/", "title": "Budget"},
+        ]
+        js_content = f"var measures_data = {json.dumps(data)};"
+        urls = KSVoteScraper._parse_js_bill_data(js_content)
+        assert len(urls) == 2
+        assert "/li_2020/b2019_20/measures/hb2001/" in urls
+
+    def test_empty_array(self):
+        js_content = "var measures_data = [];"
+        assert KSVoteScraper._parse_js_bill_data(js_content) == []
+
+    def test_no_brackets(self):
+        """Malformed JS content with no array brackets."""
+        assert KSVoteScraper._parse_js_bill_data("var x = 42;") == []
+
+    def test_invalid_json(self):
+        """Brackets present but content isn't valid JSON."""
+        assert KSVoteScraper._parse_js_bill_data("var x = [undefined];") == []
+
+    def test_missing_measures_url(self):
+        """Entries without measures_url are skipped."""
+        data = [{"title": "no url"}, {"measures_url": "/sb1/"}]
+        js_content = f"var measures_data = {json.dumps(data)};"
+        urls = KSVoteScraper._parse_js_bill_data(js_content)
+        assert len(urls) == 1
+        assert urls[0] == "/sb1/"

@@ -299,3 +299,51 @@ Additionally, duplicate last names (Joseph Claeys / J.R. Claeys in the Senate; t
 **Fix:** Guard the summary print statements with `if loyalty.height > 0`.
 
 **Lesson:** Any function that indexes into a DataFrame or Series must either (a) guarantee the collection is non-empty via an upstream check, or (b) guard the indexing operation. Print/logging statements are particularly easy to forget — they feel "safe" because they don't affect the return value, but they can still crash the function.
+
+---
+
+## Gotcha: Pre-2021 Sessions Load Bills via JavaScript
+
+**Discovered during:** Historical session support (2026-02-22)
+
+**Symptom:** `get_bill_urls()` returns 0 bills for sessions before 2021 (e.g., 2019-20, 2017-18). The HTML listing pages exist but contain zero `<a>` tags matching the bill URL pattern.
+
+**Root cause:** The KS Legislature website transitioned from server-side rendered bill lists to JavaScript-loaded bill lists sometime between 2020 and 2021. Pre-2021 listing pages load their bill data client-side from JavaScript data files at paths like `/li_2020/s/js/data/bills_li_2020.js`. These files assign a `measures_data` variable containing a JSON array of bill objects with `measures_url` fields.
+
+**Fix:** Added JS data file fallback in `get_bill_urls()`. When HTML scanning finds zero bills and `KSSession.js_data_paths` is non-empty, the scraper fetches the JS data file, extracts the JSON array between `[` and `]`, and parses `measures_url` values.
+
+**Lesson:** Government websites silently change rendering strategies across sessions. Always verify that the scraper works on historical sessions, not just the current one. The absence of data (0 results) is harder to notice than broken data.
+
+---
+
+## Gotcha: Pre-2015 Sessions Use ODT Vote Files
+
+**Discovered during:** Historical session support (2026-02-22)
+
+**Symptom:** Vote pages for 2011-2014 sessions return binary data (ZIP archives) instead of HTML, causing parse failures.
+
+**Root cause:** Sessions before 2015 link to `.odt` (OpenDocument Text) files via `odt_view` URLs instead of HTML `vote_view` pages. The ODT files are ZIP archives containing `content.xml` with structured metadata in `<text:user-field-decl>` elements and vote data in paragraph text.
+
+**Key format differences from HTML:**
+- Legislator names are last-name-only (e.g., "Smith" not "Smith, John"), requiring a member directory for slug resolution
+- House and Senate use different vote category names ("Present but not voting" vs "Present and Passing")
+- Ambiguous names (same last name, same chamber) cannot be resolved and get empty slugs
+- The XML namespace handling requires `xml.etree.ElementTree` with explicit namespace URIs
+
+**Fix:** Added `odt_parser.py` module (pure functions, no I/O) and `_parse_odt_vote_pages()` integration in the scraper. Binary fetch mode added to `FetchResult` and `_get()`.
+
+**Lesson:** Format transitions in government data are typically undocumented. When extending a scraper backwards in time, expect that every 2-4 years will bring a different page structure, data format, or rendering strategy. Build format-specific parsers behind a common interface rather than trying to make one parser handle everything.
+
+---
+
+## Gotcha: Pre-2015 Party Detection Uses Different HTML
+
+**Discovered during:** Historical session support (2026-02-22)
+
+**Symptom:** All legislators from pre-2015 sessions have empty `party` fields even though their member pages exist and contain party information.
+
+**Root cause:** Pre-2015 legislator pages display party as `<h3>Party: Republican</h3>` instead of encoding it in the `<h2>District N - Republican</h2>` format used by 2015+ pages. The existing parser only checks `<h2>`.
+
+**Fix:** Added fallback in `enrich_legislators()`: when `<h2>` yields no party, scan `<h3>` tags for `"Party: Republican"` or `"Party: Democrat"`.
+
+**Lesson:** When a parser works for recent data but fails on historical data, check whether the HTML structure changed between sessions. Government website redesigns happen regularly and usually aren't documented.

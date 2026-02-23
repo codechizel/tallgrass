@@ -111,6 +111,31 @@ class KSSession:
         return Path("results") / STATE_DIR / self.output_name
 
     @property
+    def uses_odt(self) -> bool:
+        """Whether this session uses ODT vote files instead of vote_view HTML."""
+        return self.start_year < 2015 and not self.special
+
+    @property
+    def js_data_paths(self) -> list[str]:
+        """Candidate JS data file URLs for bill discovery fallback.
+
+        Sessions before 2021 load bill lists via JavaScript instead of server-side
+        HTML rendering.  The JS file lives at one of two paths (Senate ``/s/`` or
+        House ``/m/``). Returns an empty list for sessions that use HTML listing.
+        """
+        if self.start_year >= 2021:
+            return []
+        if self.special:
+            prefix = f"/li_{self.start_year}s"
+            return [f"{prefix}/js/data/bills_li_{self.start_year}s.js"]
+        prefix = f"/li_{self.end_year}"
+        basename = f"bills_li_{self.end_year}.js"
+        return [
+            f"{prefix}/s/js/data/{basename}",
+            f"{prefix}/m/js/data/{basename}",
+        ]
+
+    @property
     def bill_url_pattern(self) -> re.Pattern:
         """Compiled regex to match bill URLs within this session's paths."""
         escaped = re.escape(self.li_prefix)

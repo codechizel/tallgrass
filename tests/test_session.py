@@ -207,3 +207,65 @@ class TestDataDirForSession:
 
     def test_special(self):
         assert KSSession.data_dir_for_session("2024", special=True) == Path("data/kansas/2024s")
+
+
+# ── uses_odt ────────────────────────────────────────────────────────────────
+
+
+class TestUsesOdt:
+    """ODT vote format detection for pre-2015 sessions."""
+
+    def test_2013_uses_odt(self):
+        s = KSSession(start_year=2013)
+        assert s.uses_odt is True
+
+    def test_2011_uses_odt(self):
+        s = KSSession(start_year=2011)
+        assert s.uses_odt is True
+
+    def test_2015_does_not_use_odt(self):
+        s = KSSession(start_year=2015)
+        assert s.uses_odt is False
+
+    def test_current_does_not_use_odt(self, current_session: KSSession):
+        assert current_session.uses_odt is False
+
+    def test_special_does_not_use_odt(self):
+        """Special sessions (even 2013) don't use ODT."""
+        s = KSSession(start_year=2013, special=True)
+        assert s.uses_odt is False
+
+
+# ── js_data_paths ───────────────────────────────────────────────────────────
+
+
+class TestJsDataPaths:
+    """JavaScript data file paths for bill discovery fallback."""
+
+    def test_2019_has_paths(self):
+        s = KSSession(start_year=2019)
+        paths = s.js_data_paths
+        assert len(paths) == 2
+        assert "/li_2020/s/js/data/bills_li_2020.js" in paths
+        assert "/li_2020/m/js/data/bills_li_2020.js" in paths
+
+    def test_2013_has_paths(self):
+        s = KSSession(start_year=2013)
+        paths = s.js_data_paths
+        assert len(paths) == 2
+        assert "/li_2014/s/js/data/bills_li_2014.js" in paths
+
+    def test_2025_empty(self, current_session: KSSession):
+        """Current session uses HTML listing, no JS fallback needed."""
+        assert current_session.js_data_paths == []
+
+    def test_2023_empty(self, historical_session: KSSession):
+        """2023 (start_year=2023) is >= 2021, so no JS fallback."""
+        assert historical_session.js_data_paths == []
+
+    def test_special_session_path(self):
+        """Special sessions use a different JS path format."""
+        s = KSSession(start_year=2016, special=True)
+        paths = s.js_data_paths
+        assert len(paths) == 1
+        assert "/li_2016s/js/data/bills_li_2016s.js" in paths

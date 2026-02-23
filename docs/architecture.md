@@ -11,15 +11,21 @@ The scraper runs a 5-step pipeline:
 ```
 Step 1: get_bill_urls()
   ↓  Fetches listing pages, extracts bill URLs via regex
+  ↓  Falls back to JS data files for pre-2021 sessions
 Step 1b: _filter_bills_with_votes()
   ↓  KLISS API pre-filter — reduces ~1000 bills to ~200 with votes
   ↓  Also captures short_title + sponsor metadata (no extra requests)
 Step 2: get_vote_links()
-  ↓  Fetches each bill page, extracts vote_view links
+  ↓  Fetches each bill page, extracts vote_view/odt_view links
+  ↓  Sets VoteLink.is_odt=True for ODT links
+Step 2b: _load_member_directory() (if ODT links present)
+  ↓  Builds name→slug mapping for ODT last-name resolution
 Step 3: parse_vote_pages()
-  ↓  Fetches + parses each vote page → rollcalls + individual votes
+  ↓  Routes HTML links → _parse_html_vote_pages()
+  ↓  Routes ODT links → _parse_odt_vote_pages() (binary fetch + odt_parser)
 Step 4: enrich_legislators()
   ↓  Fetches member pages → full name, party, district
+  ↓  Pre-2015 fallback: h3 "Party:" when h2 has no party
 Step 5: save_csvs()
      Writes 3 CSV files
 ```
@@ -33,6 +39,10 @@ Constants only. No logic. `BASE_URL`, rate limiting params, `USER_AGENT`.
 `KSSession` frozen dataclass. Encapsulates the complex URL prefix logic that varies by biennium (current vs historical vs special session). All URL construction flows through properties on this class.
 
 Key constant: `CURRENT_BIENNIUM_START` must be manually updated when the legislature starts a new biennium (every 2 years, odd years).
+
+Properties for historical session support:
+- `uses_odt`: True for pre-2015 sessions (ODT vote files instead of HTML)
+- `js_data_paths`: Candidate JS data file URLs for pre-2021 sessions (bill discovery fallback)
 
 ### models.py
 Two frozen dataclasses:
@@ -52,7 +62,23 @@ Module-level constants and helpers:
 - `VOTE_CATEGORIES` — the 5 vote categories as a tuple
 - `_normalize_bill_code()` — normalize "SB 1" → "sb1" for lookups
 
-Dataclasses: `FetchResult`, `FetchFailure`, `VoteLink` (all frozen).
+Dataclasses: `FetchResult` (with `content_bytes` for binary downloads), `FetchFailure`, `VoteLink` (with `is_odt` flag) — all frozen.
+
+Historical session extensions:
+- JS bill discovery fallback (`_get_bill_urls_from_js`, `_parse_js_bill_data`) for pre-2021 sessions
+- Member directory (`_load_member_directory`) for ODT name resolution
+- ODT vote parsing integration (`_parse_odt_vote_pages`) routes ODT links to the dedicated parser
+- Pre-2015 party detection (h3 "Party:" fallback in `enrich_legislators`)
+
+### odt_parser.py
+Pure-function module for parsing ODT (OpenDocument Text) vote files from 2011-2014 sessions. No I/O, no HTTP — takes bytes and context, returns `RollCall`/`IndividualVote` instances.
+
+Key functions:
+- `parse_odt_votes()` — main entry point, accepts ODT bytes and returns structured vote data
+- `_extract_content_xml()` — unzips ODT archive, extracts content.xml
+- `_parse_odt_metadata()` — parses user-field-decl XML elements (chamber, bill number, timestamp, tally)
+- `_parse_odt_body_votes()` — parses vote categories from paragraph text (handles House/Senate naming variants)
+- `_resolve_last_name()` — resolves last-name-only legislators via member directory with initial disambiguation
 
 ### output.py
 CSV export. Uses `dataclasses.asdict()` for RollCall/IndividualVote. Legislators use explicit field list since they're stored as plain dicts.

@@ -4,10 +4,13 @@ Tests for HTML parsing in scraper.py using inline BeautifulSoup fixtures.
 Each fixture is a minimal HTML string reproducing the real kslegislature.gov
 tag structure. Covers documented bugs #1 (vote page tag hierarchy), #2 (party
 detection via h2), #2b (legislator name from second h1), #3 (vote categories
-from both h2 and h3), and #5 (inline <a> space preservation).
+from both h2 and h3), #5 (inline <a> space preservation), pre-2015 party
+detection via h3, and odt_view link detection.
 
 Run: uv run pytest tests/test_scraper_html.py -v
 """
+
+import re
 
 import pytest
 from bs4 import BeautifulSoup
@@ -196,9 +199,7 @@ class TestVoteCategoryParsing:
                     slug = re.search(r"/members/([^/]+)/", href)
                     slug = slug.group(1) if slug else ""
                     if name:
-                        vote_categories[current_category].append(
-                            {"name": name, "slug": slug}
-                        )
+                        vote_categories[current_category].append({"name": name, "slug": slug})
 
         return vote_categories
 
@@ -388,8 +389,6 @@ class TestVotePageMetadata:
 
     def test_vote_date_from_h3(self, vote_metadata_html: str):
         """Date extracted from the h3 chamber/date line."""
-        import re
-
         soup = BeautifulSoup(vote_metadata_html, "lxml")
         vote_date = ""
         for h3 in soup.find_all("h3"):
@@ -402,3 +401,139 @@ class TestVotePageMetadata:
                 vote_date = match.group(3)
                 break
         assert vote_date == "01/15/2025"
+
+
+# ── Pre-2015 party detection ───────────────────────────────────────────────
+# Pre-2015 legislator pages use <h3>Party: Republican</h3> instead of the
+# "District N - Republican" format in <h2>.
+
+
+class TestPreFifteenLegislatorParsing:
+    """Fallback party detection from <h3>Party: ...</h3> (pre-2015 sessions)."""
+
+    def test_party_from_h3(self):
+        """When h2 has no party, fall back to h3 'Party: Republican'."""
+        html = """
+        <html><body>
+        <h1>Legislators</h1>
+        <h1>Representative Smith</h1>
+        <h2>District 10</h2>
+        <h3>Party: Republican</h3>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        _, party, _ = self._parse_legislator(soup)
+        assert party == "Republican"
+
+    def test_democrat_from_h3(self):
+        html = """
+        <html><body>
+        <h1>Legislators</h1>
+        <h1>Senator Davis</h1>
+        <h2>District 5</h2>
+        <h3>Party: Democrat</h3>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        _, party, _ = self._parse_legislator(soup)
+        assert party == "Democrat"
+
+    def test_h2_takes_priority_over_h3(self):
+        """When h2 has party info, h3 fallback is not used."""
+        html = """
+        <html><body>
+        <h1>Legislators</h1>
+        <h1>Senator Jones</h1>
+        <h2>District 15 - Republican</h2>
+        <h3>Party: Republican</h3>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        _, party, _ = self._parse_legislator(soup)
+        assert party == "Republican"
+
+    @staticmethod
+    def _parse_legislator(soup: BeautifulSoup) -> tuple[str, str, str]:
+        """Replicate the legislator parsing logic including pre-2015 fallback."""
+        # Full name from h1 containing "Senator" or "Representative"
+        name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
+        full_name = ""
+        if name_h1:
+            full_name = _clean_text(name_h1)
+            full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
+            full_name = re.sub(r"\s+-\s+.*$", "", full_name)
+
+        # Party and district from h2 containing "District \d+"
+        party = ""
+        district = ""
+        dist_h2 = soup.find("h2", string=re.compile(r"District\s+\d+"))
+        if dist_h2:
+            h2_text = dist_h2.get_text(strip=True)
+            dist_match = re.search(r"District\s+(\d+)", h2_text)
+            if dist_match:
+                district = dist_match.group(1)
+            if "Republican" in h2_text:
+                party = "Republican"
+            elif "Democrat" in h2_text:
+                party = "Democrat"
+
+        # Pre-2015 fallback: party from h3 "Party: ..."
+        if not party:
+            for h3 in soup.find_all("h3"):
+                h3_text = h3.get_text(strip=True)
+                if "Party:" in h3_text:
+                    if "Republican" in h3_text:
+                        party = "Republican"
+                    elif "Democrat" in h3_text:
+                        party = "Democrat"
+                    break
+
+        return full_name, party, district
+
+
+# ── odt_view link detection ───────────────────────────────────────────────
+
+
+class TestOdtViewLinkDetection:
+    """Detect odt_view links on bill pages (2011-2014 sessions)."""
+
+    def test_odt_view_link_found(self):
+        """odt_view hrefs should match the vote link regex."""
+        html = """
+        <html><body>
+        <h2>SB 1</h2>
+        <a href="/li_2014/b2013_14/measures/odt_view/je_20130327_207704.odt">
+          Final Action Yea: 40 Nay: 0
+        </a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = soup.find_all("a", href=re.compile(r"(?:vote_view|odt_view)"))
+        assert len(links) == 1
+        assert "odt_view" in links[0]["href"]
+
+    def test_vote_view_still_found(self):
+        """Existing vote_view links still match."""
+        html = """
+        <html><body>
+        <a href="/li/b2025_26/measures/vote_view/je_20250320/page.html">
+          Emergency Final Action
+        </a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = soup.find_all("a", href=re.compile(r"(?:vote_view|odt_view)"))
+        assert len(links) == 1
+
+    def test_mixed_links(self):
+        """Page with both vote_view and odt_view links."""
+        html = """
+        <html><body>
+        <a href="/measures/vote_view/je_1/">Vote A</a>
+        <a href="/measures/odt_view/je_2.odt">Vote B</a>
+        <a href="/unrelated/link/">Not a vote</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = soup.find_all("a", href=re.compile(r"(?:vote_view|odt_view)"))
+        assert len(links) == 2

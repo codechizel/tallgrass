@@ -108,3 +108,13 @@ One row per legislator (~172 rows for a full session).
 - For passage analysis, filter to `vote_type` in ("Final Action", "Emergency Final Action") to exclude procedural/committee votes
 - `short_title` from the API is generally cleaner and more concise than `bill_title` from HTML
 - The 5 vote categories are exhaustive — every legislator falls into exactly one per roll call
+
+## ODT Sessions (2011-2014)
+
+Sessions before 2015 use ODT vote files instead of HTML. This affects the data in several ways:
+
+- **`legislator_slug`** may be empty for legislators whose last name is ambiguous (same last name, same chamber). These appear with an empty slug and a last-name-only `legislator_name`.
+- **`legislator_name`** is last-name-only (e.g., "Smith") or initial + last name (e.g., "C. Holmes") instead of "Last, First" format.
+- **`vote_id`** uses the same `je_YYYYMMDDHHMMSS` format extracted from the ODT URL.
+- **`vote_url`** points to the `.odt` file URL instead of an HTML page.
+- **Vote categories** are mapped from ODT-specific names: "Yeas"→"Yea", "Nays"→"Nay", "Present but not voting"→"Present and Passing", "Absent or not voting"→"Absent and Not Voting".
