@@ -25,25 +25,13 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | Cross-Biennium Portability | 2026-02-22 | Removed all hardcoded legislator names from general phases; full pipeline re-run validated |
 | — | Visualization Improvement Pass | 2026-02-22 | All 6 phases (Network, IRT, Prediction, PCA, Clustering, EDA) retrofitted for nontechnical audience; plain-English titles, annotated findings, data-driven highlights |
 | — | Missing Votes Visibility | 2026-02-22 | Auto-injected "Missing Votes" section in every HTML report + standalone `missing_votes.md` in data directory; close votes bolded |
+| 8 | Hierarchical Bayesian IRT | 2026-02-22 | 2-level partial pooling by party, non-centered parameterization, ICC variance decomposition, shrinkage vs flat IRT |
 
 ---
 
 ## Next Up
 
-### 1. Hierarchical Bayesian Legislator Model
-
-**Priority:** High — the "Crown Jewel" from the methods overview.
-
-Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`. Legislators nested within party and chamber, with partial pooling:
-
-- Models legislator-level parameters as draws from party-level distributions
-- Naturally handles the R supermajority (more data = tighter party estimate)
-- Quantifies how much individual legislators deviate from their party's typical behavior
-- Partial pooling shrinks extreme estimates (Tyson, Miller) toward party mean — the statistically principled version of what CQ unity does informally
-- Uses PyMC (already installed for IRT)
-- Supersedes the Beta-Binomial phase for formal analysis; Beta-Binomial remains as the fast exploratory baseline
-
-### 2. Cross-Session Scrape (2023-24)
+### 1. Cross-Session Scrape (2023-24)
 
 **Priority:** High — unlocks temporal analysis and honest out-of-sample validation.
 
@@ -172,7 +160,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 | 13 | Optimal Classification | DIM | Rejected (R-only) |
 | 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
-| 16 | Hierarchical Bayesian Model | BAY | **Planned** — item #1 above |
+| 16 | Hierarchical Bayesian Model | BAY | Completed (Hierarchical IRT, Phase 8) |
 | 17 | Posterior Predictive Checks | BAY | Partial (embedded in IRT) |
 | 18 | Hierarchical Clustering | CLU | Completed (Clustering) |
 | 19 | K-Means / GMM Clustering | CLU | Completed (Clustering) |
@@ -186,7 +174,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 | 27 | Changepoint Detection | TSA | **Planned** — item #5 above |
 | 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
 
-**Score: 19 completed, 2 rejected, 4 planned, 2 deferred, 1 partial = 29 total**
+**Score: 20 completed, 2 rejected, 3 planned, 2 deferred, 1 partial = 29 total** (was 19+1 after hierarchical IRT)
 
 ---
 

@@ -101,7 +101,7 @@ PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0"}
 
 UPSTREAM_PHASES = [
     "eda", "pca", "irt", "clustering", "network", "prediction", "indices", "umap",
-    "beta_binomial",
+    "beta_binomial", "hierarchical",
 ]
 
 
@@ -183,6 +183,12 @@ def load_all_upstream(results_base: Path) -> dict:
                 df = _read_parquet_safe(data_dir / f"posterior_loyalty_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["beta_posterior"] = df
+            elif phase == "hierarchical":
+                df = _read_parquet_safe(
+                    data_dir / f"hierarchical_ideal_points_{chamber}.parquet"
+                )
+                if df is not None:
+                    upstream[chamber]["hierarchical"] = df
 
         # Track upstream plot paths
         upstream["plots"][phase] = plots_dir
@@ -279,6 +285,21 @@ def build_legislator_df(upstream: dict, chamber: str) -> pl.DataFrame:
     if bp is not None:
         df = df.join(
             bp.select("legislator_slug", "posterior_mean", "ci_width", "shrinkage"),
+            on="legislator_slug",
+            how="left",
+        )
+
+    # Hierarchical IRT ideal points
+    hier = upstream[chamber].get("hierarchical")
+    if hier is not None:
+        hier_cols = ["legislator_slug"]
+        rename_map: dict[str, str] = {}
+        for col in ["xi_mean", "xi_sd", "shrinkage_pct"]:
+            if col in hier.columns:
+                hier_cols.append(col)
+                rename_map[col] = f"hier_{col}"
+        df = df.join(
+            hier.select(hier_cols).rename(rename_map),
             on="legislator_slug",
             how="left",
         )

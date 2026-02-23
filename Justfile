@@ -66,6 +66,10 @@ indices *args:
 betabinom *args:
     uv run python analysis/beta_binomial.py {{args}}
 
+# Run hierarchical Bayesian IRT
+hierarchical *args:
+    uv run python analysis/hierarchical.py {{args}}
+
 # Run synthesis report
 synthesis *args:
     uv run python analysis/synthesis.py {{args}}

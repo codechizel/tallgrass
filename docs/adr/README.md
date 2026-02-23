@@ -44,6 +44,7 @@ What are the trade-offs?
 | [0014](0014-clustering-visualization-overhaul.md) | Clustering visualization overhaul | Accepted | 2026-02-22 |
 | [0015](0015-empirical-bayes-beta-binomial.md) | Empirical Bayes for Beta-Binomial party loyalty | Accepted | 2026-02-22 |
 | [0016](0016-state-level-directory-structure.md) | State-level directory structure | Accepted | 2026-02-22 |
+| [0017](0017-hierarchical-bayesian-irt.md) | Hierarchical Bayesian IRT | Accepted | 2026-02-22 |
 
 ## Creating a New ADR
 
