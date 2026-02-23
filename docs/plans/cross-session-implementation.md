@@ -305,7 +305,7 @@ cross-session *args:
 
 Update CLAUDE.md analysis architecture section to include:
 - `analysis/cross_session.py` + `cross_session_data.py` + `cross_session_report.py`
-- Output path: `results/kansas/cross-session/validation/`
+- Output path: `results/kansas/cross-session/<pair>/validation/` (e.g., `cross-session/90th-vs-91st/validation/`)
 
 Update roadmap: move cross-session from "Next Up" to "In Progress".
 

@@ -57,7 +57,7 @@ Use the same affine transformation approach already proven for cross-chamber equ
 - Compare: same roles flagged? Same threshold behavior?
 - If thresholds fail on 2023-24, propose adaptive alternatives.
 
-**Output location:** `results/kansas/cross-session/validation/YYYY-MM-DD/` — a pseudo-session directory that spans both bienniums. RunContext's `_normalize_session` passes "cross-session" through unchanged (it only transforms "YYYY-YY" patterns).
+**Output location:** `results/kansas/cross-session/<pair>/validation/YYYY-MM-DD/` (e.g., `cross-session/90th-vs-91st/validation/2026-02-22/`). The comparison pair is encoded in the path so that multiple pairwise comparisons (89th-vs-90th, 90th-vs-91st, 89th-vs-91st) each get their own `latest` symlink. RunContext's `_normalize_session` passes the `cross-session/90th-vs-91st` session string through unchanged (it only transforms "YYYY-YY" patterns).
 
 ## Consequences
 
