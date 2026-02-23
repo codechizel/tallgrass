@@ -83,16 +83,18 @@ Pipeline: `get_bill_urls()` → `_filter_bills_with_votes()` → `get_vote_links
 
 ### Session Coverage (2011-2026)
 
-| Biennium | Bill Discovery | Vote Format | Party Detection |
-|----------|---------------|-------------|-----------------|
-| 2025-26 (91st) | HTML links | vote_view | `<h2>District N - Party` |
-| 2023-24 (90th) | HTML links | vote_view | `<h2>` |
-| 2021-22 (89th) | HTML links | vote_view | `<h2>` |
-| 2019-20 (88th) | JS fallback | vote_view | `<h2>` |
-| 2017-18 (87th) | JS fallback | vote_view | `<h2>` |
-| 2015-16 (86th) | JS fallback | vote_view | `<h3>Party:` |
-| 2013-14 (85th) | JS fallback | odt_view | `<h3>Party:` |
-| 2011-12 (84th) | JS fallback | odt_view | `<h3>Party:` |
+| Biennium | Bill Discovery | Vote Format | Party Detection | Member Dir |
+|----------|---------------|-------------|-----------------|------------|
+| 2025-26 (91st) | HTML links | vote_view | `<h2>District N - Party` | HTML links |
+| 2023-24 (90th) | HTML links | vote_view | `<h2>` | HTML links |
+| 2021-22 (89th) | HTML links | vote_view | `<h2>` | HTML links |
+| 2019-20 (88th) | JS (quoted keys) | vote_view | `<h2>` | JS fallback |
+| 2017-18 (87th) | JS (unquoted keys) | vote_view | `<h2>` | JS fallback |
+| 2015-16 (86th) | JS (unquoted keys) | vote_view | `<h3>Party:` | JS fallback |
+| 2013-14 (85th) | JS (unquoted keys) | odt_view | `<h3>Party:` | JS fallback |
+| 2011-12 (84th) | JS (unquoted keys) | odt_view* | `<h3>Party:` | JS fallback |
+
+\* 84th session ODTs: ~30% of vote pages contain only tally metadata (no individual legislator names in body text). These are committee-of-the-whole and conference committee votes. The remaining 70% parse normally.
 
 ## Concurrency Pattern
 
@@ -142,7 +144,17 @@ These are real bugs that were found and fixed. Do NOT regress on them:
 
 6. **Pre-2021 bill lists are JavaScript-rendered.** HTML listing pages for sessions before 2021 have zero `<a>` tags for bills. The JS fallback fetches `bills_li_{end_year}.js` data files and extracts `measures_url` from the JSON array.
 
+6b. **Pre-2021 JS data uses two different key formats.** The 88th (2019-2020) uses quoted JSON keys (`"measures_url":`), but all older sessions (87th and earlier) use unquoted JavaScript object literal syntax (`measures_url:`). The parser applies `re.sub(r"(?m)^(\s+)(\w+):", ...)` to quote bare keys before `json.loads()`.
+
+6c. **JS data files live at `/m/` not `/s/` for all sessions except the 88th.** The scraper tries both paths (`/s/` then `/m/`) and uses whichever responds. The 88th (2019-2020) JS is at `/li_2020/s/js/data/`; all others are at `/li_{year}/m/js/data/`.
+
 7. **Pre-2015 vote pages are ODT files, not HTML.** Sessions 2011-12 and 2013-14 link to `.odt` (OpenDocument) files via `odt_view` URLs. These are ZIP archives with `content.xml` containing user-field metadata and comma-separated legislator names. House and Senate use different vote category names ("Present but not voting" vs "Present and Passing"). Names are last-name-only, requiring a member directory lookup for slug resolution.
+
+8. **Pre-2021 member directories are JavaScript-rendered.** Same as bill lists — the `/members/` page has zero `<a>` tags with slugs. The fallback parses `<script src="...members_list...">` tags and fetches `senate_members_list_li_{end_year}.js` and `house_members_list_li_{end_year}.js`. Same unquoted-key issue as bill data.
+
+9. **The KS Legislature server returns HTML error pages with HTTP 200 for binary URLs.** Some `.odt` URLs return a 169-byte HTML 404 page with HTTP 200 status. For binary fetches, the `_get()` method checks if content starts with `<html` to detect these. Without this check, the bad bytes get cached as `.bin` and the ODT parser silently returns 0 votes.
+
+10. **84th session (2011-12) ODTs often lack individual vote data.** ~30% of vote pages contain only tally metadata (e.g., "41:73" in `T_JE_T_VOTE`) with no "Yeas:/Nays:" section in the body text. These are committee-of-the-whole and conference committee votes. They produce "0 votes parsed from ODT" failures — this is a data limitation, not a parser bug.
 
 ## Session URL Logic
 

@@ -188,6 +188,16 @@ class KSVoteScraper:
 
                 if binary:
                     content = resp.content
+                    # Detect HTML error pages served as binary (e.g., 404 page
+                    # returned with HTTP 200 for .odt URLs)
+                    if content[:5].startswith(b"<html") or content[:5].startswith(b"<HTML"):
+                        return FetchResult(
+                            url=url,
+                            html=None,
+                            status_code=200,
+                            error_type="permanent",
+                            error_message="HTML error page served for binary request",
+                        )
                     try:
                         cache_file.write_bytes(content)
                     except OSError:
@@ -432,13 +442,20 @@ class KSVoteScraper:
 
         Finds the JSON array between the first ``[`` and last ``]``, parses it,
         and returns ``measures_url`` values that match the bill URL pattern.
+
+        Some sessions (2017-18 and earlier) use JavaScript object literal syntax
+        with unquoted keys (``measures_url:`` instead of ``"measures_url":``) which
+        is not valid JSON.  We quote bare keys before parsing.
         """
         start = js_content.find("[")
         end = js_content.rfind("]")
         if start == -1 or end == -1 or end <= start:
             return []
+        array_text = js_content[start : end + 1]
+        # Quote unquoted JS object keys: `  measures_url:` → `  "measures_url":`
+        array_text = re.sub(r"(?m)^(\s+)(\w+):", r'\1"\2":', array_text)
         try:
-            data = json.loads(js_content[start : end + 1])
+            data = json.loads(array_text)
         except ValueError:
             return []
 
@@ -631,6 +648,10 @@ class KSVoteScraper:
         Same-chamber last-name collisions are marked as ambiguous. When an initial
         is available (e.g., "C. Holmes"), the initial-qualified key
         ``(chamber, "c. holmes")`` is also added for disambiguation.
+
+        Pre-2021 sessions render member lists via JavaScript, so we fall back to
+        parsing the JS data files (``senate_members_list_li_{end_year}.js`` and
+        ``house_members_list_li_{end_year}.js``).
         """
         members_path = f"{self.session.li_prefix}/members/"
         print(f"  Loading member directory from {members_path}...")
@@ -641,7 +662,7 @@ class KSVoteScraper:
             return
 
         soup = BeautifulSoup(result.html, "lxml")
-        directory: dict[tuple[str, str], dict] = {}
+        members: list[tuple[str, str]] = []  # (slug, last_name)
 
         for link in soup.find_all("a", href=re.compile(r"/members/(sen_|rep_)")):
             href = link["href"]
@@ -652,8 +673,19 @@ class KSVoteScraper:
             name = link.get_text(strip=True).rstrip(",").strip()
             if not name:
                 continue
+            # Extract last name
+            if "," in name:
+                last_name = name.split(",")[0].strip()
+            else:
+                last_name = name.split()[-1] if name.split() else name
+            members.append((slug, last_name))
 
-            # Determine chamber from slug prefix
+        # JS fallback: pre-2021 sessions render member lists via JavaScript
+        if not members:
+            members = self._load_members_from_js(soup)
+
+        directory: dict[tuple[str, str], dict] = {}
+        for slug, last_name in members:
             if slug.startswith("sen_"):
                 chamber_lower = "senate"
             elif slug.startswith("rep_"):
@@ -661,25 +693,86 @@ class KSVoteScraper:
             else:
                 continue
 
-            # Extract last name (last word, or name after comma)
-            if "," in name:
-                last_name = name.split(",")[0].strip()
-            else:
-                last_name = name.split()[-1] if name.split() else name
-
             key = (chamber_lower, last_name.lower())
             if key in directory:
-                # Mark both as ambiguous
                 directory[key]["ambiguous"] = True
             else:
                 directory[key] = {
                     "slug": slug,
-                    "name": name,
+                    "name": last_name,
                     "chamber": chamber_lower.capitalize(),
                 }
 
         self._member_directory = directory
         print(f"  Member directory: {len(directory)} entries")
+
+    def _load_members_from_js(self, members_soup: BeautifulSoup) -> list[tuple[str, str]]:
+        """Load member data from JavaScript files (pre-2021 sessions).
+
+        Parses ``<script src="...members_list...">`` tags from the members page,
+        fetches each JS file, and extracts ``members_url`` and ``last_name`` fields.
+
+        Returns:
+            List of (slug, last_name) tuples.
+        """
+        members: list[tuple[str, str]] = []
+
+        # Find JS data files referenced in script tags
+        js_urls: list[str] = []
+        for script in members_soup.find_all("script", src=True):
+            src = script["src"]
+            if "member" in src.lower() and src.endswith(".js"):
+                js_urls.append(src)
+
+        if not js_urls:
+            print("  WARNING: No member data JS files found — ODT name resolution disabled")
+            return members
+
+        for js_url in js_urls:
+            full_url = BASE_URL + js_url if js_url.startswith("/") else js_url
+            print(f"  Loading member data from {js_url}...")
+            result = self._get(full_url)
+            if not result.ok or not result.html:
+                continue
+
+            parsed = self._parse_js_member_data(result.html)
+            members.extend(parsed)
+
+        if members:
+            print(f"  JS fallback found {len(members)} members")
+
+        return members
+
+    @staticmethod
+    def _parse_js_member_data(js_content: str) -> list[tuple[str, str]]:
+        """Extract (slug, last_name) pairs from a JS member data file.
+
+        The JS file assigns a ``*_member_data`` variable containing a JSON-like
+        array of member objects with ``members_url`` and ``last_name`` fields.
+        Keys may be unquoted (JS object literal syntax).
+        """
+        start = js_content.find("[")
+        end = js_content.rfind("]")
+        if start == -1 or end == -1 or end <= start:
+            return []
+        array_text = js_content[start : end + 1]
+        # Quote unquoted JS object keys
+        array_text = re.sub(r"(?m)^(\s+)(\w+):", r'\1"\2":', array_text)
+        try:
+            data = json.loads(array_text)
+        except ValueError:
+            return []
+
+        members: list[tuple[str, str]] = []
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            url = entry.get("members_url", "")
+            last_name = entry.get("last_name", "")
+            slug_match = re.search(r"/members/([^/]+)/", url)
+            if slug_match and last_name:
+                members.append((slug_match.group(1), last_name))
+        return members
 
     # -- Step 3: Parse each vote page -----------------------------------------
 

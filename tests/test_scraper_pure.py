@@ -286,3 +286,27 @@ class TestParseJsBillData:
         urls = KSVoteScraper._parse_js_bill_data(js_content)
         assert len(urls) == 1
         assert urls[0] == "/sb1/"
+
+    def test_unquoted_js_keys(self):
+        """Sessions 2017-18 and earlier use unquoted JS object literal keys.
+
+        Run: uv run pytest tests/test_scraper_pure.py -k test_unquoted_js_keys
+        """
+        js_content = (
+            'let measures_data = [\n'
+            '    {\n'
+            '        measures_url: "/li_2018/b2017_18/measures/sb1/",\n'
+            '        billno: "sb1",\n'
+            '        display_text: "SB1 - Some bill title"\n'
+            '    },\n'
+            '    {\n'
+            '        measures_url: "/li_2018/b2017_18/measures/hb2001/",\n'
+            '        billno: "hb2001",\n'
+            '        display_text: "HB2001 - Another bill"\n'
+            '    }\n'
+            '];'
+        )
+        urls = KSVoteScraper._parse_js_bill_data(js_content)
+        assert len(urls) == 2
+        assert "/li_2018/b2017_18/measures/sb1/" in urls
+        assert "/li_2018/b2017_18/measures/hb2001/" in urls
