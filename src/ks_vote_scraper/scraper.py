@@ -736,6 +736,10 @@ class KSVoteScraper:
                 self._record_fetch_failure(vl, result)
                 continue
 
+            if not result.content_bytes:
+                self._record_fetch_failure(vl, result)
+                continue
+
             try:
                 rollcalls, votes, new_legs = parse_odt_votes(
                     odt_bytes=result.content_bytes,
