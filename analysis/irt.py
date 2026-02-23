@@ -351,7 +351,7 @@ def build_joint_vote_matrix(
         final_vids = [
             v
             for v in vids
-            if vid_to_motion.get(v, "").lower()
+            if (vid_to_motion.get(v) or "").lower()
             in (
                 "final action",
                 "emergency final action",

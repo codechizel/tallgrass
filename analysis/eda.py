@@ -1428,7 +1428,7 @@ def plot_temporal_activity(rollcalls: pl.DataFrame, out_dir: Path) -> None:
         .sort("month")
     )
     fig, ax = plt.subplots(figsize=(12, 5))
-    months = sorted(monthly["month"].unique().to_list())
+    months = sorted(m for m in monthly["month"].unique().to_list() if m is not None)
     house_counts = []
     senate_counts = []
     for m in months:

@@ -656,6 +656,19 @@ def train_passage_models(
         print(f"  WARNING: Only {len(y)} observations for {chamber} passage — skipping")
         return {"skipped": True, "reason": f"Only {len(y)} observations"}
 
+    classes, counts = np.unique(y, return_counts=True)
+    if len(classes) < 2:
+        label = int(y[0])
+        print(f"  WARNING: All bills have same outcome ({label}) for {chamber} — skipping passage")
+        return {"skipped": True, "reason": f"Only one class ({label}) in data"}
+    min_class_count = int(counts.min())
+    if min_class_count < 2:
+        print(
+            f"  WARNING: Minority class has only {min_class_count} member(s) for {chamber}"
+            " — skipping passage (need ≥2 for stratified split)"
+        )
+        return {"skipped": True, "reason": f"Minority class has {min_class_count} member(s)"}
+
     # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y

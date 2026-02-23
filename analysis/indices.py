@@ -645,7 +645,7 @@ def plot_rice_by_vote_type(
                 )
 
     # Truncate long motion names
-    short_motions = [m[:30] + "..." if len(m) > 30 else m for m in motions]
+    short_motions = [(m or "")[:30] + "..." if len(m or "") > 30 else (m or "") for m in motions]
     ax.set_xticks(x)
     ax.set_xticklabels(short_motions, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel("Mean Rice Index")
