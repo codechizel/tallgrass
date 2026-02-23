@@ -33,11 +33,12 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 
 ## Next Up
 
-### 1. Cross-Session Validation
+### 1. Cross-Session Validation (In Progress)
 
 **Priority:** High — the single biggest gap in current results.
+**Status:** Data layer complete (`cross_session_data.py`, 42 tests). ADR-0019, design doc, and implementation plan written. Plots, CLI, report, and prediction transfer remaining.
 
-Three distinct analyses become possible once 2023-24 is scraped:
+Three distinct analyses become possible now that both bienniums are scraped:
 
 - **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. Also solves the Senate bill passage small-N problem (59 test bills in 2025-26 is too few; stacking sessions doubles the data).
 - **Temporal comparison (who moved?):** Compare IRT ideal points for returning legislators across bienniums. Who shifted ideology? Are the 2025-26 mavericks (Schreiber, Dietrich) the same people who were mavericks in 2023-24? This is the most newsworthy output for the nontechnical audience — "Senator X moved 1.2 points rightward since last session" is a concrete, actionable finding.
@@ -106,7 +107,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-528 tests exist across scraper (146) and analysis (382) modules. Coverage could be expanded:
+596 tests exist across scraper (146) and analysis (450) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

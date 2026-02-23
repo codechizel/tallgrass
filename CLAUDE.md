@@ -24,6 +24,7 @@ just umap                                    # UMAP ideological landscape
 just indices                                 # classical indices analysis
 just betabinom                               # Beta-Binomial Bayesian loyalty
 just hierarchical                            # hierarchical Bayesian IRT
+just cross-session                           # cross-session validation
 just synthesis                               # run synthesis report
 just profiles                                # legislator profiles
 uv run ks-vote-scraper 2023                  # historical session
@@ -193,6 +194,7 @@ Each analysis phase has a design document in `analysis/design/` recording the st
 - `analysis/design/prediction.md` — XGBoost primary, IRT features dominate, NLP topic features (NMF on short_title), target leakage assessment
 - `analysis/design/beta_binomial.md` — Empirical Bayes, per-party-per-chamber priors, method of moments, shrinkage factor
 - `analysis/design/synthesis.md` — Data-driven detection thresholds, graceful degradation, template narratives
+- `analysis/design/cross_session.md` — Affine IRT alignment, name matching, shift metrics, prediction transfer, detection validation
 
 ## Analytics
 
@@ -239,6 +241,8 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 9 phases (incl. beta_binomial), joins into unified legislator DataFrames, runs data-driven detection, produces 29-33 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
 - `analysis/profiles_data.py` — Profiles data logic: `ProfileTarget`/`BillTypeBreakdown` dataclasses, `gather_profile_targets()`, `build_scorecard()`, `compute_bill_type_breakdown()`, `find_defection_bills()`, `find_voting_neighbors()`, `find_legislator_surprising_votes()`.
 - `analysis/profiles.py` + `analysis/profiles_report.py` — Profiles: deep-dive per-legislator reports with scorecard, bill-type breakdown, defection analysis, voting neighbors, surprising votes. 5 plots per legislator. Reuses `load_all_upstream()`/`build_legislator_df()` from synthesis.
+- `analysis/cross_session_data.py` — Cross-session: pure data logic for legislator matching (by normalized name), IRT scale alignment (robust affine transform), ideology shift metrics, metric stability correlations, turnover impact analysis. No I/O. See ADR-0019.
+- `analysis/cross_session.py` + `analysis/cross_session_report.py` — Cross-session validation (WIP): compares two bienniums. Ideology shift scatter, out-of-sample prediction, detection threshold validation. Output: `results/kansas/cross-session/validation/`.
 - `RunContext` auto-writes the HTML in `finalize()` if sections were added. If a `failure_manifest.json` exists in the session's data directory, a "Missing Votes" section is automatically appended to every report (sorted by margin, close votes bolded).
 
 Tables use great_tables with polars DataFrames (no pandas conversion). Plots are base64-embedded PNGs. See ADR-0004 for rationale.
@@ -288,6 +292,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_beta_binomial.py` — method of moments estimation, Bayesian posteriors, shrinkage properties, edge cases (~26 tests)
 - `tests/test_hierarchical.py` — hierarchical data prep, model structure, result extraction, variance decomposition, shrinkage comparison (~24 tests)
 - `tests/test_profiles.py` — profile target selection, scorecard, bill-type breakdown, defections, voting neighbors, surprising votes (~23 tests)
+- `tests/test_cross_session.py` — legislator matching, IRT alignment, ideology shift, metric stability, turnover impact (~42 tests)
 
 ### Manual Verification
 - Run scraper with `--clear-cache`, check that `vote_date`, `chamber`, `motion`, `bill_title` are populated
