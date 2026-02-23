@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after Missing Votes visibility feature)
+**Last updated:** 2026-02-22 (after ty type checker adoption + 90th biennium pipeline run)
 
 ---
 
@@ -26,23 +26,14 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | Visualization Improvement Pass | 2026-02-22 | All 6 phases (Network, IRT, Prediction, PCA, Clustering, EDA) retrofitted for nontechnical audience; plain-English titles, annotated findings, data-driven highlights |
 | — | Missing Votes Visibility | 2026-02-22 | Auto-injected "Missing Votes" section in every HTML report + standalone `missing_votes.md` in data directory; close votes bolded |
 | 8 | Hierarchical Bayesian IRT | 2026-02-22 | 2-level partial pooling by party, non-centered parameterization, ICC variance decomposition, shrinkage vs flat IRT |
+| — | 90th Biennium Pipeline Run | 2026-02-22 | Full 11-phase pipeline on 2023-24 data (94K votes, 168 legislators); cross-biennium analysis now possible |
+| — | ty Type Checker | 2026-02-22 | Two-tier policy: scraper strict (0 errors), analysis warnings-only; caught 2 real type bugs on first run (ADR-0018) |
 
 ---
 
 ## Next Up
 
-### 1. Cross-Session Scrape (2023-24)
-
-**Priority:** High — unlocks temporal analysis and honest out-of-sample validation.
-
-**Directory structure migrated** (2026-02-22): data and results now live under state-level directories (`data/kansas/`, `results/kansas/`). See ADR-0016.
-
-- Run `uv run ks-vote-scraper 2023` to scrape the prior biennium
-- Produces a second set of 3 CSVs in `data/kansas/90th_2023-2024/`
-- Then run the full 8-phase pipeline: `just scrape 2023 && just eda --session 2023-24 && ...`
-- Enables all three cross-session analyses below
-
-### 3. Cross-Session Validation
+### 1. Cross-Session Validation
 
 **Priority:** High — the single biggest gap in current results.
 
@@ -182,6 +173,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 - **Polars over pandas** everywhere
 - **Python over R** — no rpy2, no W-NOMINATE
+- **Ruff + ty + uv** — all-Astral toolchain (lint, type check, package management)
 - **IRT ideal points are the primary feature** — prediction confirmed this; everything else is marginal
 - **Chambers analyzed separately** unless explicitly doing cross-chamber comparison
 - **Tables never truncated** in analysis reports — full data for initial analysis
