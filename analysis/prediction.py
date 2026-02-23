@@ -485,7 +485,7 @@ def build_bill_features(
 
     metadata_cols = ["vote_id", "bill_number", "passed_binary", "vote_date"]
     keep_cols = [c for c in feature_cols + metadata_cols if c in rc.columns]
-    result = rc.select(keep_cols).drop_nulls(subset=feature_cols)
+    result = rc.select(keep_cols).drop_nulls(subset=feature_cols + ["passed_binary"])
 
     return result
 

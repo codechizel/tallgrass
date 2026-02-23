@@ -7,7 +7,7 @@
 
 1. **Vote prediction is a binary classification task.** Each observation is a (legislator, roll call) pair with target Yea=1, Nay=0. Absent/not-voting observations are excluded — they match the IRT and EDA encoding where only substantive votes are modeled. Including absences as a third class would require a multinomial model and confound ideological signal with attendance patterns.
 
-2. **Bill passage prediction is a separate binary classification task.** Each observation is a roll call with target `passed` from the rollcalls CSV. The unit of analysis shifts from (legislator, vote) to (vote), reducing the dataset from ~68K to ~500 rows. This small sample requires regularization and careful validation.
+2. **Bill passage prediction is a separate binary classification task.** Each observation is a roll call with target `passed` from the rollcalls CSV. The unit of analysis shifts from (legislator, vote) to (vote), reducing the dataset from ~68K to ~500 rows. This small sample requires regularization and careful validation. Roll calls where `passed` is null (e.g., procedural motions like "Motion to divide the question" that don't map to pass/fail) are dropped from the bill passage model.
 
 3. **Features from upstream phases carry forward.** IRT ideal points, party loyalty, PCA scores, and network centrality are treated as fixed features (not re-estimated). Any uncertainty in these features (e.g., xi_sd) is captured as an input feature, not propagated through the prediction model.
 

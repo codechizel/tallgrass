@@ -22,6 +22,7 @@ just check                                   # full check
 just umap                                    # UMAP ideological landscape
 just indices                                 # classical indices analysis
 just betabinom                               # Beta-Binomial Bayesian loyalty
+just hierarchical                            # hierarchical Bayesian IRT
 just synthesis                               # run synthesis report
 just profiles                                # legislator profiles
 uv run ks-vote-scraper 2023                  # historical session
@@ -114,7 +115,7 @@ The KS Legislature uses different URL prefixes per session — this is the singl
 
 - `vote_id` encodes a timestamp: `je_20250320203513` → `2025-03-20T20:35:13`
 - `bill_metadata` (short_title, sponsor) comes from the KLISS API — already fetched during pre-filtering, no extra requests needed
-- `passed` is derived from result text: passed/adopted/prevailed/concurred → True; failed/rejected/sustained → False
+- `passed` is derived from result text: passed/adopted/prevailed/concurred → True; failed/rejected/sustained → False; procedural motions that don't match any pattern → null
 - Vote categories: defined in `VOTE_CATEGORIES` constant — Yea, Nay, Present and Passing, Absent and Not Voting, Not Voting (exactly these 5)
 - Legislator slugs encode chamber: `sen_` prefix = Senate, `rep_` prefix = House
 
@@ -220,6 +221,7 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/umap_viz.py` + `analysis/umap_report.py` — UMAP: nonlinear dimensionality reduction on vote matrix (cosine metric, n_neighbors=15). Produces ideological landscape plots, validates against PCA/IRT via Spearman, Procrustes sensitivity sweep.
 - `analysis/nlp_features.py` — NLP: TF-IDF + NMF topic modeling on bill `short_title` text. Pure data logic (no I/O). `TopicModel` frozen dataclass, `fit_topic_features()`, `get_topic_display_names()`, `plot_topic_words()`. See ADR-0012.
 - `analysis/beta_binomial.py` + `analysis/beta_binomial_report.py` — Beta-Binomial: empirical Bayes shrinkage on CQ party unity scores. Closed-form Beta posteriors per legislator, 4 plots per chamber. Reads from indices `party_unity_{chamber}.parquet`. See ADR-0015.
+- `analysis/hierarchical.py` + `analysis/hierarchical_report.py` — Hierarchical IRT: 2-level partial pooling by party on full IRT model. Non-centered parameterization, ordering constraint, variance decomposition (ICC), shrinkage comparison vs flat IRT. 5 plots per chamber + optional joint model. See ADR-0017.
 - `analysis/synthesis_detect.py` — Detection: pure data logic that identifies notable legislators (mavericks, bridge-builders, metric paradoxes) from upstream DataFrames. Returns frozen dataclasses with pre-formatted titles and subtitles.
 - `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 9 phases (incl. beta_binomial), joins into unified legislator DataFrames, runs data-driven detection, produces 29-33 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
 - `analysis/profiles_data.py` — Profiles data logic: `ProfileTarget`/`BillTypeBreakdown` dataclasses, `gather_profile_targets()`, `build_scorecard()`, `compute_bill_type_breakdown()`, `find_defection_bills()`, `find_voting_neighbors()`, `find_legislator_surprising_votes()`.
@@ -271,6 +273,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration, hardest-to-predict detection (~36 tests)
 - `tests/test_beta_binomial.py` — method of moments estimation, Bayesian posteriors, shrinkage properties, edge cases (~26 tests)
+- `tests/test_hierarchical.py` — hierarchical data prep, model structure, result extraction, variance decomposition, shrinkage comparison (~24 tests)
 - `tests/test_profiles.py` — profile target selection, scorecard, bill-type breakdown, defections, voting neighbors, surprising votes (~23 tests)
 
 ### Manual Verification
