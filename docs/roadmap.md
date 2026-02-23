@@ -36,7 +36,7 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 ### 1. Cross-Session Validation (In Progress)
 
 **Priority:** High — the single biggest gap in current results.
-**Status:** Data layer complete (`cross_session_data.py`, 42 tests). ADR-0019, design doc, and implementation plan written. Plots, CLI, report, and prediction transfer remaining.
+**Status:** Data layer + plots + CLI + report builder complete. Prediction transfer remaining (behind `--skip-prediction` flag). Ready for first real run once both sessions' upstream phases are complete.
 
 Three distinct analyses become possible now that both bienniums are scraped:
 

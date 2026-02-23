@@ -74,6 +74,10 @@ hierarchical *args:
 synthesis *args:
     uv run python analysis/synthesis.py {{args}}
 
+# Run cross-session validation
+cross-session *args:
+    uv run python analysis/cross_session.py {{args}}
+
 # Run legislator profiles
 profiles *args:
     uv run python analysis/profiles.py {{args}}
