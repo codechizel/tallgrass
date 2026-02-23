@@ -33,10 +33,10 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 
 ## Next Up
 
-### 1. Cross-Session Validation (In Progress)
+### 1. Cross-Session Validation (Feature Complete)
 
 **Priority:** High — the single biggest gap in current results.
-**Status:** Data layer + plots + CLI + report builder complete. Prediction transfer remaining (behind `--skip-prediction` flag). Ready for first real run once both sessions' upstream phases are complete.
+**Status:** All 7 implementation steps complete (data layer, plots, report builder, CLI, prediction transfer, detection validation, docs). 55 tests. Ready for first real run once both sessions' upstream phases are complete.
 
 Three distinct analyses become possible now that both bienniums are scraped:
 
@@ -107,7 +107,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-596 tests exist across scraper (146) and analysis (450) modules. Coverage could be expanded:
+609 tests exist across scraper (146) and analysis (463) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

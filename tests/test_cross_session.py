@@ -11,13 +11,16 @@ import polars as pl
 import pytest
 
 from analysis.cross_session_data import (
+    align_feature_columns,
     align_irt_scales,
     classify_turnover,
+    compare_feature_importance,
     compute_ideology_shift,
     compute_metric_stability,
     compute_turnover_impact,
     match_legislators,
     normalize_name,
+    standardize_features,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -581,3 +584,177 @@ class TestComputeTurnoverImpact:
         result = compute_turnover_impact(arr, arr, arr)
         assert result["p_departing_vs_returning"] > 0.9
         assert result["p_new_vs_returning"] > 0.9
+
+
+# ── TestAlignFeatureColumns ────────────────────────────────────────────────
+
+
+class TestAlignFeatureColumns:
+    """Tests for aligning vote feature columns across sessions.
+
+    Run: uv run pytest tests/test_cross_session.py::TestAlignFeatureColumns -v
+    """
+
+    def _make_vote_features(
+        self, n: int, extra_cols: list[str] | None = None
+    ) -> pl.DataFrame:
+        """Build a minimal vote features DataFrame."""
+        data: dict = {
+            "legislator_slug": [f"rep_{i}" for i in range(n)],
+            "vote_id": [f"je_{i:014d}" for i in range(n)],
+            "vote_binary": [1] * n,
+            "xi_mean": [float(i) for i in range(n)],
+            "beta_mean": [float(i) * 0.5 for i in range(n)],
+            "party_binary": [1] * n,
+        }
+        if extra_cols:
+            for col in extra_cols:
+                data[col] = [0] * n
+        return pl.DataFrame(data)
+
+    def test_shared_columns_kept(self) -> None:
+        """Both DataFrames should retain only shared feature columns."""
+        df_a = self._make_vote_features(5, extra_cols=["vt_final_action"])
+        df_b = self._make_vote_features(5, extra_cols=["vt_conference"])
+        a_out, b_out, feats = align_feature_columns(df_a, df_b)
+        assert "xi_mean" in feats
+        assert "beta_mean" in feats
+        assert "vt_final_action" not in feats
+        assert "vt_conference" not in feats
+
+    def test_meta_columns_excluded(self) -> None:
+        """Meta columns should not appear in feature_cols."""
+        df_a = self._make_vote_features(5)
+        df_b = self._make_vote_features(5)
+        _, _, feats = align_feature_columns(df_a, df_b)
+        assert "legislator_slug" not in feats
+        assert "vote_id" not in feats
+        assert "vote_binary" not in feats
+
+    def test_identical_schemas(self) -> None:
+        """If schemas are identical, all features should be shared."""
+        df_a = self._make_vote_features(5)
+        df_b = self._make_vote_features(5)
+        a_out, b_out, feats = align_feature_columns(df_a, df_b)
+        assert set(a_out.columns) == set(b_out.columns)
+        assert len(feats) == 3  # xi_mean, beta_mean, party_binary
+
+    def test_output_column_order_matches(self) -> None:
+        """Both output DataFrames should have columns in the same order."""
+        df_a = self._make_vote_features(5, ["vt_a", "vt_shared"])
+        df_b = self._make_vote_features(5, ["vt_b", "vt_shared"])
+        a_out, b_out, _ = align_feature_columns(df_a, df_b)
+        assert a_out.columns == b_out.columns
+
+
+# ── TestStandardizeFeatures ────────────────────────────────────────────────
+
+
+class TestStandardizeFeatures:
+    """Tests for z-score standardization of vote features.
+
+    Run: uv run pytest tests/test_cross_session.py::TestStandardizeFeatures -v
+    """
+
+    def test_continuous_columns_standardized(self) -> None:
+        """Continuous columns should have mean~0, std~1 after standardization."""
+        df = pl.DataFrame(
+            {
+                "xi_mean": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "beta_mean": [10.0, 20.0, 30.0, 40.0, 50.0],
+                "party_binary": [1, 0, 1, 0, 1],
+            }
+        )
+        result = standardize_features(df, ["xi_mean", "beta_mean", "party_binary"])
+        assert result["xi_mean"].mean() == pytest.approx(0.0, abs=0.01)
+        assert result["xi_mean"].std() == pytest.approx(1.0, abs=0.1)
+
+    def test_binary_columns_unchanged(self) -> None:
+        """Binary columns should not be standardized."""
+        df = pl.DataFrame(
+            {
+                "xi_mean": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "party_binary": [1, 0, 1, 0, 1],
+            }
+        )
+        result = standardize_features(df, ["xi_mean", "party_binary"])
+        assert result["party_binary"].to_list() == [1, 0, 1, 0, 1]
+
+    def test_constant_column_unchanged(self) -> None:
+        """A column with zero variance should not be modified."""
+        df = pl.DataFrame(
+            {
+                "xi_mean": [1.0, 2.0, 3.0],
+                "constant": [5.0, 5.0, 5.0],
+            }
+        )
+        result = standardize_features(df, ["xi_mean", "constant"])
+        # constant has 1 unique value → treated as binary → unchanged
+        assert result["constant"].to_list() == [5.0, 5.0, 5.0]
+
+    def test_no_numeric_columns(self) -> None:
+        """Empty numeric_cols should return unchanged DataFrame."""
+        df = pl.DataFrame({"party_binary": [1, 0, 1]})
+        result = standardize_features(df, [])
+        assert result.equals(df)
+
+
+# ── TestCompareFeatureImportance ───────────────────────────────────────────
+
+
+class TestCompareFeatureImportance:
+    """Tests for SHAP importance comparison across sessions.
+
+    Run: uv run pytest tests/test_cross_session.py::TestCompareFeatureImportance -v
+    """
+
+    def test_identical_importance_high_tau(self) -> None:
+        """Identical SHAP values should produce tau=1.0."""
+        rng = np.random.default_rng(42)
+        shap_vals = rng.random((100, 5))
+        names = ["f1", "f2", "f3", "f4", "f5"]
+        df, tau = compare_feature_importance(shap_vals, shap_vals, names)
+        assert tau == pytest.approx(1.0, abs=0.01)
+
+    def test_reversed_importance_low_tau(self) -> None:
+        """Reversed SHAP importance should produce negative tau."""
+        n_features = 5
+        # Session A: feature 0 most important, feature 4 least
+        shap_a = np.zeros((100, n_features))
+        for i in range(n_features):
+            shap_a[:, i] = (n_features - i) * 0.1
+        # Session B: reversed
+        shap_b = np.zeros((100, n_features))
+        for i in range(n_features):
+            shap_b[:, i] = (i + 1) * 0.1
+        names = [f"f{i}" for i in range(n_features)]
+        df, tau = compare_feature_importance(shap_a, shap_b, names)
+        assert tau < 0
+
+    def test_output_columns(self) -> None:
+        """Comparison DataFrame should have expected columns."""
+        rng = np.random.default_rng(42)
+        shap_vals = rng.random((50, 4))
+        names = ["a", "b", "c", "d"]
+        df, _ = compare_feature_importance(shap_vals, shap_vals, names)
+        expected = {"feature", "importance_a", "importance_b", "rank_a", "rank_b"}
+        assert set(df.columns) == expected
+        assert df.height == 4
+
+    def test_top_k_limits_tau_calculation(self) -> None:
+        """top_k should limit how many features are compared."""
+        rng = np.random.default_rng(42)
+        shap_vals = rng.random((50, 10))
+        names = [f"f{i}" for i in range(10)]
+        df, tau = compare_feature_importance(shap_vals, shap_vals, names, top_k=3)
+        # Should still return all features in the DataFrame
+        assert df.height == 10
+        # But tau is computed on top 3 only
+        assert tau == pytest.approx(1.0, abs=0.01)
+
+    def test_single_feature(self) -> None:
+        """Single feature should produce NaN tau (can't rank 1 item)."""
+        shap_vals = np.array([[1.0], [2.0], [3.0]])
+        df, tau = compare_feature_importance(shap_vals, shap_vals, ["only"])
+        assert np.isnan(tau)
+        assert df.height == 1

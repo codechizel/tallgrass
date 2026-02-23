@@ -1,19 +1,21 @@
 """
 Kansas Legislature — Cross-Session Validation
 
-Compares two bienniums (default: 2023-24 and 2025-26) across three dimensions:
+Compares two bienniums (default: 2023-24 and 2025-26) across four dimensions:
 1. Ideology stability: IRT ideal point shifts for returning legislators
 2. Metric consistency: Party loyalty, network influence, maverick rates
-3. Detection validation: Do synthesis thresholds generalize across sessions?
+3. Prediction transfer: Train on one session, test on the other (AUC comparison)
+4. Detection validation: Do synthesis thresholds generalize across sessions?
 
 Usage:
   uv run python analysis/cross_session.py
   uv run python analysis/cross_session.py --session-a 2023-24 --session-b 2025-26
   uv run python analysis/cross_session.py --chambers house
+  uv run python analysis/cross_session.py --skip-prediction
 
 Outputs (in results/kansas/cross-session/validation/<date>/):
-  - data/:   Parquet files (ideology_shift, metric_stability per chamber)
-  - plots/:  PNG visualizations (shift scatter, movers, turnover, stability)
+  - data/:   Parquet files (ideology_shift, metric_stability, prediction_transfer)
+  - plots/:  PNG visualizations (shift scatter, movers, turnover, prediction AUC)
   - filtering_manifest.json, run_info.json, run_log.txt
   - validation_report.html
 """
@@ -35,24 +37,34 @@ import polars as pl
 try:
     from analysis.cross_session_data import (
         CORRELATION_WARN,
+        FEATURE_IMPORTANCE_TOP_K,
+        PREDICTION_META_COLS,
         SHIFT_THRESHOLD_SD,
+        align_feature_columns,
         align_irt_scales,
         classify_turnover,
+        compare_feature_importance,
         compute_ideology_shift,
         compute_metric_stability,
         compute_turnover_impact,
         match_legislators,
+        standardize_features,
     )
 except ModuleNotFoundError:
     from cross_session_data import (  # type: ignore[no-redef]
         CORRELATION_WARN,
+        FEATURE_IMPORTANCE_TOP_K,
+        PREDICTION_META_COLS,
         SHIFT_THRESHOLD_SD,
+        align_feature_columns,
         align_irt_scales,
         classify_turnover,
+        compare_feature_importance,
         compute_ideology_shift,
         compute_metric_stability,
         compute_turnover_impact,
         match_legislators,
+        standardize_features,
     )
 
 try:
@@ -96,13 +108,15 @@ CROSS_SESSION_PRIMER = """\
 
 ## Purpose
 
-Compares two Kansas Legislature bienniums to answer three questions:
+Compares two Kansas Legislature bienniums to answer four questions:
 
 1. **Who moved ideologically?** IRT ideal points for returning legislators are
    placed on a common scale via affine transformation, then compared.
 2. **Are our metrics stable?** Party loyalty, maverick rates, and network
    influence are correlated across sessions for returning legislators.
-3. **Do our detection methods generalize?** Synthesis detection thresholds
+3. **Do vote prediction models generalize?** Train XGBoost on one session's
+   vote features, test on the other. Compare cross-session AUC to within-session.
+4. **Do our detection methods generalize?** Synthesis detection thresholds
    (maverick, bridge-builder, metric paradox) are run on both sessions.
 
 ## Method
@@ -111,17 +125,24 @@ IRT ideal points are fitted independently per session. To compare them, we use
 a robust affine transformation fitted on the overlapping legislators, trimming
 the most extreme residuals (genuine movers) before the final fit.
 
+For prediction transfer, features are z-score standardized within each session
+before cross-session application (since IRT scales differ). Feature importance
+rankings are compared via Kendall's tau on SHAP values.
+
 ## Inputs
 
 Reads from both sessions' `results/<session>/` directories:
 - IRT ideal points (per chamber)
 - Synthesis legislator DataFrames (all upstream phases joined)
+- Vote features parquets (from prediction phase, if available)
 - Raw legislator CSVs (for matching)
 
 ## Outputs
 
 - `ideology_shift_{chamber}.parquet` — per-legislator shift metrics
 - `metric_stability_{chamber}.parquet` — cross-session correlations
+- `prediction_transfer_{chamber}.parquet` — cross-session AUC/accuracy
+- `feature_importance_{chamber}.parquet` — SHAP comparison
 - `turnover_impact_{chamber}.json` — cohort distribution comparison
 - `detection_validation.json` — detection threshold comparison
 - `validation_report.html` — narrative HTML report
@@ -132,6 +153,9 @@ Reads from both sessions' `results/<session>/` directories:
   moved rightward (more conservative). Dots below = moved leftward.
 - **Significant movers:** Flagged when |shift| > 1 SD of all shifts.
 - **Metric stability:** Pearson r > 0.7 = good stability. < 0.5 = weak.
+- **Prediction transfer:** Cross-session AUC < within-session is expected.
+  A large drop (>0.1) indicates session-specific overfitting.
+- **Feature importance:** Kendall's tau > 0.7 = stable model structure.
 - **Detection validation:** Same role flagged in both sessions = threshold
   generalizes. Different people in the same role = expected turnover.
 """
@@ -149,6 +173,11 @@ def parse_args() -> argparse.Namespace:
         default="both",
         choices=["house", "senate", "both"],
         help="Which chambers to analyze (default: both)",
+    )
+    parser.add_argument(
+        "--skip-prediction",
+        action="store_true",
+        help="Skip cross-session prediction transfer (faster)",
     )
     return parser.parse_args()
 
@@ -363,6 +392,111 @@ def plot_turnover_impact(
     save_fig(fig, plots_dir / f"turnover_impact_{chamber.lower()}.png")
 
 
+# ── Prediction Plots ────────────────────────────────────────────────────────
+
+
+def plot_prediction_comparison(
+    within_auc_a: float,
+    within_auc_b: float,
+    cross_auc_ab: float,
+    cross_auc_ba: float,
+    chamber: str,
+    plots_dir: Path,
+    session_a_label: str,
+    session_b_label: str,
+) -> None:
+    """Grouped bar chart: within-session vs cross-session AUC."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    labels = [
+        f"Within {session_a_label}",
+        f"Within {session_b_label}",
+        f"Train {session_a_label}\nTest {session_b_label}",
+        f"Train {session_b_label}\nTest {session_a_label}",
+    ]
+    values = [within_auc_a, within_auc_b, cross_auc_ab, cross_auc_ba]
+    colors = ["#4CAF50", "#4CAF50", "#FF9800", "#FF9800"]
+
+    bars = ax.bar(labels, values, color=colors, edgecolor="white", width=0.6)
+    for bar, val in zip(bars, values):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.005,
+            f"{val:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+        )
+
+    ax.set_ylabel("AUC-ROC", fontsize=11)
+    ax.set_title(
+        f"{chamber}: Within-Session vs Cross-Session Prediction",
+        fontsize=13,
+        fontweight="bold",
+    )
+    ax.set_ylim(0, 1.05)
+    ax.axhline(0.5, color="#999999", linestyle="--", linewidth=0.8, label="Random")
+    ax.legend(loc="lower right")
+
+    fig.tight_layout()
+    save_fig(fig, plots_dir / f"prediction_comparison_{chamber.lower()}.png")
+
+
+def plot_feature_importance_comparison(
+    comparison_df: pl.DataFrame,
+    chamber: str,
+    plots_dir: Path,
+    session_a_label: str,
+    session_b_label: str,
+    top_k: int | None = None,
+) -> None:
+    """Side-by-side horizontal bar chart of top-K SHAP features."""
+    if top_k is None:
+        top_k = FEATURE_IMPORTANCE_TOP_K
+
+    try:
+        from analysis.prediction import FEATURE_DISPLAY_NAMES
+    except ModuleNotFoundError:
+        from prediction import FEATURE_DISPLAY_NAMES  # type: ignore[no-redef]
+
+    top = comparison_df.head(min(top_k, comparison_df.height))
+    if top.height == 0:
+        return
+
+    names = [FEATURE_DISPLAY_NAMES.get(f, f) for f in top["feature"].to_list()]
+    imp_a = top["importance_a"].to_numpy()
+    imp_b = top["importance_b"].to_numpy()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, max(4, len(names) * 0.4)))
+
+    y_pos = np.arange(len(names))
+    ax1.barh(y_pos, imp_a, color="#4CAF50", edgecolor="white")
+    ax1.set_yticks(y_pos)
+    ax1.set_yticklabels(names, fontsize=9)
+    ax1.invert_yaxis()
+    ax1.set_xlabel("Mean |SHAP|", fontsize=10)
+    ax1.set_title(session_a_label, fontsize=11, fontweight="bold")
+
+    ax2.barh(y_pos, imp_b, color="#FF9800", edgecolor="white")
+    ax2.set_yticks(y_pos)
+    ax2.set_yticklabels(names, fontsize=9)
+    ax2.invert_yaxis()
+    ax2.set_xlabel("Mean |SHAP|", fontsize=10)
+    ax2.set_title(session_b_label, fontsize=11, fontweight="bold")
+
+    fig.suptitle(
+        f"{chamber}: Feature Importance Comparison (Top {top.height})",
+        fontsize=13,
+        fontweight="bold",
+    )
+    fig.tight_layout()
+    save_fig(
+        fig,
+        plots_dir / f"feature_importance_comparison_{chamber.lower()}.png",
+    )
+
+
 # ── Detection Validation ────────────────────────────────────────────────────
 
 
@@ -396,6 +530,209 @@ def validate_detection(
     result["paradox_b"] = paradox_b.full_name if paradox_b else None
 
     return result
+
+
+# ── Cross-Session Prediction ────────────────────────────────────────────────
+
+
+def _load_vote_features(
+    ks: object,
+    chamber: str,
+) -> pl.DataFrame | None:
+    """Load vote_features parquet from a session's prediction results."""
+    results_dir = ks.results_dir  # type: ignore[attr-defined]
+    path = results_dir / "prediction" / "latest" / "data" / f"vote_features_{chamber}.parquet"
+    if not path.exists():
+        return None
+    return pl.read_parquet(path)
+
+
+def _load_within_session_auc(ks: object, chamber: str) -> float | None:
+    """Load the within-session XGBoost AUC from holdout results."""
+    results_dir = ks.results_dir  # type: ignore[attr-defined]
+    path = results_dir / "prediction" / "latest" / "data" / f"holdout_results_{chamber}.parquet"
+    if not path.exists():
+        return None
+    holdout = pl.read_parquet(path)
+    xgb_row = holdout.filter(pl.col("model") == "XGBoost")
+    if xgb_row.height == 0:
+        return None
+    return float(xgb_row["auc"][0])
+
+
+def _run_cross_prediction(
+    ks_a: object,
+    ks_b: object,
+    chamber: str,
+    chamber_cap: str,
+    ctx: RunContext,
+    session_a_label: str,
+    session_b_label: str,
+) -> dict | None:
+    """Run cross-session prediction transfer for one chamber.
+
+    Trains XGBoost on session A features, tests on session B
+    (and vice versa). Compares SHAP feature importance.
+
+    Returns dict with prediction metrics, or None if data is missing.
+    """
+    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+    from xgboost import XGBClassifier
+
+    print("\n  Cross-session prediction transfer...")
+
+    # Load vote features
+    vf_a = _load_vote_features(ks_a, chamber)
+    vf_b = _load_vote_features(ks_b, chamber)
+    if vf_a is None or vf_b is None:
+        missing = []
+        if vf_a is None:
+            missing.append(session_a_label)
+        if vf_b is None:
+            missing.append(session_b_label)
+        print(f"    SKIP: vote features not found for {', '.join(missing)}")
+        return None
+
+    # Align columns (intersection of features)
+    vf_a, vf_b, feature_cols = align_feature_columns(vf_a, vf_b)
+    n_dropped = set(vf_a.columns) - set(feature_cols) - set(PREDICTION_META_COLS)
+    if n_dropped:
+        print(f"    Dropped {len(n_dropped)} session-specific columns")
+    print(f"    Shared features: {len(feature_cols)}")
+    print(f"    Session A votes: {vf_a.height:,}")
+    print(f"    Session B votes: {vf_b.height:,}")
+
+    # Identify continuous columns for standardization
+    numeric_cols = [c for c in feature_cols if vf_a[c].dtype in (pl.Float64, pl.Float32)]
+
+    # Standardize within each session
+    vf_a_std = standardize_features(vf_a, numeric_cols)
+    vf_b_std = standardize_features(vf_b, numeric_cols)
+
+    # Extract arrays
+    X_a = vf_a_std.select(feature_cols).to_numpy().astype(np.float64)
+    y_a = vf_a_std["vote_binary"].to_numpy()
+    X_b = vf_b_std.select(feature_cols).to_numpy().astype(np.float64)
+    y_b = vf_b_std["vote_binary"].to_numpy()
+
+    # Train A → predict B
+    print(f"    Training on {session_a_label}, testing on {session_b_label}...")
+    model_ab = XGBClassifier(
+        n_estimators=200,
+        max_depth=6,
+        learning_rate=0.1,
+        random_state=42,
+        eval_metric="logloss",
+        verbosity=0,
+    )
+    model_ab.fit(X_a, y_a)
+    y_pred_ab = model_ab.predict(X_b)
+    y_prob_ab = model_ab.predict_proba(X_b)[:, 1]
+    auc_ab = float(roc_auc_score(y_b, y_prob_ab))
+    acc_ab = float(accuracy_score(y_b, y_pred_ab))
+    f1_ab = float(f1_score(y_b, y_pred_ab, zero_division=0))
+    print(f"      AUC={auc_ab:.3f}, Accuracy={acc_ab:.3f}, F1={f1_ab:.3f}")
+
+    # Train B → predict A
+    print(f"    Training on {session_b_label}, testing on {session_a_label}...")
+    model_ba = XGBClassifier(
+        n_estimators=200,
+        max_depth=6,
+        learning_rate=0.1,
+        random_state=42,
+        eval_metric="logloss",
+        verbosity=0,
+    )
+    model_ba.fit(X_b, y_b)
+    y_pred_ba = model_ba.predict(X_a)
+    y_prob_ba = model_ba.predict_proba(X_a)[:, 1]
+    auc_ba = float(roc_auc_score(y_a, y_prob_ba))
+    acc_ba = float(accuracy_score(y_a, y_pred_ba))
+    f1_ba = float(f1_score(y_a, y_pred_ba, zero_division=0))
+    print(f"      AUC={auc_ba:.3f}, Accuracy={acc_ba:.3f}, F1={f1_ba:.3f}")
+
+    # Within-session AUC for comparison
+    within_auc_a = _load_within_session_auc(ks_a, chamber)
+    within_auc_b = _load_within_session_auc(ks_b, chamber)
+    if within_auc_a:
+        print(f"    Within-session AUC ({session_a_label}): {within_auc_a:.3f}")
+    if within_auc_b:
+        print(f"    Within-session AUC ({session_b_label}): {within_auc_b:.3f}")
+
+    # SHAP comparison
+    print("    Computing SHAP feature importance...")
+    import shap
+
+    shap_sample_n = min(5000, X_a.shape[0], X_b.shape[0])
+    rng = np.random.default_rng(42)
+    idx_a = rng.choice(X_a.shape[0], shap_sample_n, replace=False)
+    idx_b = rng.choice(X_b.shape[0], shap_sample_n, replace=False)
+
+    explainer_ab = shap.TreeExplainer(model_ab)
+    shap_ab = explainer_ab(X_b[idx_b]).values
+
+    explainer_ba = shap.TreeExplainer(model_ba)
+    shap_ba = explainer_ba(X_a[idx_a]).values
+
+    comp_df, kendall_tau = compare_feature_importance(
+        shap_ab,
+        shap_ba,
+        feature_cols,
+    )
+    print(f"    Kendall's tau (top-{FEATURE_IMPORTANCE_TOP_K} features): {kendall_tau:.3f}")
+
+    # Plots
+    if within_auc_a is not None and within_auc_b is not None:
+        plot_prediction_comparison(
+            within_auc_a,
+            within_auc_b,
+            auc_ab,
+            auc_ba,
+            chamber_cap,
+            ctx.plots_dir,
+            session_a_label,
+            session_b_label,
+        )
+
+    plot_feature_importance_comparison(
+        comp_df,
+        chamber_cap,
+        ctx.plots_dir,
+        session_a_label,
+        session_b_label,
+    )
+
+    # Save prediction parquets
+    pred_summary = pl.DataFrame(
+        {
+            "direction": [
+                f"{session_a_label}→{session_b_label}",
+                f"{session_b_label}→{session_a_label}",
+            ],
+            "auc": [auc_ab, auc_ba],
+            "accuracy": [acc_ab, acc_ba],
+            "f1": [f1_ab, f1_ba],
+        }
+    )
+    pred_summary.write_parquet(
+        ctx.data_dir / f"prediction_transfer_{chamber}.parquet",
+    )
+    comp_df.write_parquet(
+        ctx.data_dir / f"feature_importance_{chamber}.parquet",
+    )
+
+    return {
+        "auc_ab": auc_ab,
+        "auc_ba": auc_ba,
+        "acc_ab": acc_ab,
+        "acc_ba": acc_ba,
+        "f1_ab": f1_ab,
+        "f1_ba": f1_ba,
+        "within_auc_a": within_auc_a,
+        "within_auc_b": within_auc_b,
+        "kendall_tau": kendall_tau,
+        "feature_comparison": comp_df,
+    }
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -566,9 +903,26 @@ def main() -> None:
                 session_b_label,
             )
 
+            # ── Cross-session prediction ──
+            prediction_result: dict | None = None
+            if not args.skip_prediction:
+                prediction_result = _run_cross_prediction(
+                    ks_a,
+                    ks_b,
+                    chamber,
+                    chamber_cap,
+                    ctx,
+                    session_a_label,
+                    session_b_label,
+                )
+
             # ── Save data ──
-            shifted.write_parquet(ctx.data_dir / f"ideology_shift_{chamber}.parquet")
-            stability.write_parquet(ctx.data_dir / f"metric_stability_{chamber}.parquet")
+            shifted.write_parquet(
+                ctx.data_dir / f"ideology_shift_{chamber}.parquet",
+            )
+            stability.write_parquet(
+                ctx.data_dir / f"metric_stability_{chamber}.parquet",
+            )
             with open(ctx.data_dir / f"turnover_impact_{chamber}.json", "w") as f:
                 json.dump(turnover_impact, f, indent=2)
 
@@ -578,6 +932,7 @@ def main() -> None:
                 "turnover": turnover_impact,
                 "detection": detection,
                 "r_value": r_val,
+                "prediction": prediction_result,
             }
 
         # ── Save detection results ──

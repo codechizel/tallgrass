@@ -133,9 +133,10 @@ Per-chamber sections repeat for each chamber (House, Senate):
 9. **Detection Validation** — Table comparing flagged mavericks, bridges, paradoxes across sessions
 10. **Methodology Notes** — Alignment coefficients, thresholds, matching method, references
 
-Future sections (behind `--skip-prediction`):
-- Cross-Session Prediction AUC (per chamber) — Bar chart: within-session vs cross-session
-- Feature Importance Comparison (per chamber) — Side-by-side SHAP bar charts
+Prediction sections (behind `--skip-prediction` flag):
+11. **Prediction Transfer Summary** (per chamber) — Table: cross-session AUC, accuracy, F1 vs within-session
+12. **Prediction AUC Comparison** (per chamber) — Grouped bar chart: within-session vs cross-session
+13. **Feature Importance Comparison** (per chamber) — Side-by-side SHAP bar charts + Kendall's tau
 
 ## Downstream Implications
 

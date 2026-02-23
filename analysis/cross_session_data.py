@@ -27,6 +27,12 @@ ALIGNMENT_TRIM_PCT: int = 10
 CORRELATION_WARN: float = 0.70
 """Warn if cross-session Pearson r falls below this value."""
 
+FEATURE_IMPORTANCE_TOP_K: int = 10
+"""Compare top K SHAP features across sessions."""
+
+PREDICTION_META_COLS: list[str] = ["legislator_slug", "vote_id", "vote_binary"]
+"""Columns to exclude from feature sets during prediction."""
+
 STABILITY_METRICS: list[str] = [
     "unity_score",
     "maverick_rate",
@@ -412,3 +418,126 @@ def compute_turnover_impact(
         result["p_new_vs_returning"] = float(p_new)
 
     return result
+
+
+# ── Cross-Session Prediction Helpers ────────────────────────────────────────
+
+
+def align_feature_columns(
+    df_a: pl.DataFrame,
+    df_b: pl.DataFrame,
+) -> tuple[pl.DataFrame, pl.DataFrame, list[str]]:
+    """Align feature columns across two vote-feature DataFrames.
+
+    Takes the intersection of feature columns (excluding metadata).
+    One-hot vote_type columns may differ between sessions — only shared
+    columns are kept.
+
+    Args:
+        df_a: Vote features from session A.
+        df_b: Vote features from session B.
+
+    Returns:
+        ``(df_a_aligned, df_b_aligned, feature_cols)`` where both
+        DataFrames have exactly the same columns in the same order.
+    """
+    meta = set(PREDICTION_META_COLS)
+    cols_a = set(df_a.columns) - meta
+    cols_b = set(df_b.columns) - meta
+    shared = sorted(cols_a & cols_b)
+
+    select_cols = list(PREDICTION_META_COLS) + shared
+    # Only select columns that actually exist (some meta cols may be absent)
+    select_a = [c for c in select_cols if c in df_a.columns]
+    select_b = [c for c in select_cols if c in df_b.columns]
+
+    return df_a.select(select_a), df_b.select(select_b), shared
+
+
+def standardize_features(
+    df: pl.DataFrame,
+    numeric_cols: list[str],
+) -> pl.DataFrame:
+    """Z-score standardize numeric feature columns in-place.
+
+    Binary and one-hot columns (detected by having only 0/1 values)
+    are left untouched. Only truly continuous columns are standardized.
+
+    Args:
+        df: Vote features DataFrame.
+        numeric_cols: Columns to consider for standardization.
+
+    Returns:
+        DataFrame with continuous numeric columns z-scored.
+    """
+    binary_cols = set()
+    for col in numeric_cols:
+        vals = df[col].drop_nulls()
+        if vals.n_unique() <= 2:
+            binary_cols.add(col)
+
+    z_exprs = []
+    for col in numeric_cols:
+        if col in binary_cols:
+            continue
+        mean = df[col].mean()
+        std = df[col].std()
+        if std is not None and std > 0:
+            z_exprs.append(((pl.col(col) - mean) / std).alias(col))
+
+    if z_exprs:
+        return df.with_columns(z_exprs)
+    return df
+
+
+def compare_feature_importance(
+    shap_a: np.ndarray,
+    shap_b: np.ndarray,
+    feature_names: list[str],
+    top_k: int | None = None,
+) -> tuple[pl.DataFrame, float]:
+    """Compare SHAP importance rankings across sessions.
+
+    Args:
+        shap_a: SHAP values from session A model (n_samples x n_features).
+        shap_b: SHAP values from session B model.
+        feature_names: Feature names matching the columns.
+        top_k: Compare top K features. Defaults to
+            :data:`FEATURE_IMPORTANCE_TOP_K`.
+
+    Returns:
+        ``(comparison_df, kendall_tau)`` where *comparison_df* has columns
+        ``feature``, ``importance_a``, ``importance_b``, ``rank_a``,
+        ``rank_b``; and *kendall_tau* is Kendall's tau on the top-K
+        rankings.
+    """
+    if top_k is None:
+        top_k = FEATURE_IMPORTANCE_TOP_K
+
+    imp_a = np.abs(shap_a).mean(axis=0)
+    imp_b = np.abs(shap_b).mean(axis=0)
+
+    rank_a = np.argsort(-imp_a) + 1  # 1-indexed
+    rank_b = np.argsort(-imp_b) + 1
+
+    df = pl.DataFrame(
+        {
+            "feature": feature_names,
+            "importance_a": imp_a.tolist(),
+            "importance_b": imp_b.tolist(),
+            "rank_a": rank_a.tolist(),
+            "rank_b": rank_b.tolist(),
+        }
+    ).sort("rank_a")
+
+    # Kendall's tau on top-K features (by session A ranking)
+    top_features = df.head(min(top_k, len(feature_names)))
+    if top_features.height >= 2:
+        tau, _ = stats.kendalltau(
+            top_features["rank_a"].to_numpy(),
+            top_features["rank_b"].to_numpy(),
+        )
+    else:
+        tau = float("nan")
+
+    return df, float(tau)

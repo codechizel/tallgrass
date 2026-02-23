@@ -27,11 +27,17 @@ except ModuleNotFoundError:
     )
 
 try:
-    from analysis.cross_session_data import ALIGNMENT_TRIM_PCT, CORRELATION_WARN, SHIFT_THRESHOLD_SD
+    from analysis.cross_session_data import (
+        ALIGNMENT_TRIM_PCT,
+        CORRELATION_WARN,
+        FEATURE_IMPORTANCE_TOP_K,
+        SHIFT_THRESHOLD_SD,
+    )
 except ModuleNotFoundError:
     from cross_session_data import (  # type: ignore[no-redef]
         ALIGNMENT_TRIM_PCT,
         CORRELATION_WARN,
+        FEATURE_IMPORTANCE_TOP_K,
         SHIFT_THRESHOLD_SD,
     )
 
@@ -56,6 +62,24 @@ def build_cross_session_report(
         _add_shift_distribution(report, plots_dir, chamber)
         _add_turnover_figure(report, plots_dir, chamber)
         _add_metric_stability_table(report, cr["stability"], chamber)
+
+    # Prediction transfer (if available)
+    has_prediction = any(
+        results.get(ch, {}).get("prediction") is not None for ch in results.get("chambers", [])
+    )
+    if has_prediction:
+        for chamber in sorted(results["chambers"]):
+            cr = results[chamber]
+            if cr.get("prediction") is not None:
+                _add_prediction_summary(
+                    report,
+                    cr["prediction"],
+                    chamber,
+                    session_a_label,
+                    session_b_label,
+                )
+                _add_prediction_comparison_figure(report, plots_dir, chamber)
+                _add_feature_importance_figure(report, plots_dir, chamber)
 
     _add_detection_validation(report, results)
     _add_methodology(report, results, session_a_label, session_b_label)
@@ -293,6 +317,116 @@ def _add_metric_stability_table(
             html=html,
         )
     )
+
+
+def _add_prediction_summary(
+    report: ReportBuilder,
+    prediction: dict,
+    chamber: str,
+    session_a_label: str,
+    session_b_label: str,
+) -> None:
+    rows = [
+        {
+            "Direction": f"Train {session_a_label} → Test {session_b_label}",
+            "AUC-ROC": prediction["auc_ab"],
+            "Accuracy": prediction["acc_ab"],
+            "F1": prediction["f1_ab"],
+        },
+        {
+            "Direction": f"Train {session_b_label} → Test {session_a_label}",
+            "AUC-ROC": prediction["auc_ba"],
+            "Accuracy": prediction["acc_ba"],
+            "F1": prediction["f1_ba"],
+        },
+    ]
+
+    within_rows = []
+    if prediction.get("within_auc_a") is not None:
+        within_rows.append(
+            {
+                "Direction": f"Within {session_a_label} (holdout)",
+                "AUC-ROC": prediction["within_auc_a"],
+                "Accuracy": None,
+                "F1": None,
+            }
+        )
+    if prediction.get("within_auc_b") is not None:
+        within_rows.append(
+            {
+                "Direction": f"Within {session_b_label} (holdout)",
+                "AUC-ROC": prediction["within_auc_b"],
+                "Accuracy": None,
+                "F1": None,
+            }
+        )
+
+    df = pl.DataFrame(within_rows + rows)
+    tau = prediction.get("kendall_tau", float("nan"))
+    html = make_gt(
+        df,
+        title=f"{chamber} — Cross-Session Prediction Transfer",
+        subtitle="Does a model trained on one session generalize to another?",
+        number_formats={"AUC-ROC": ".3f", "Accuracy": ".3f", "F1": ".3f"},
+        source_note=(
+            "Cross-session AUC below within-session AUC is expected — "
+            "different bills and political contexts reduce performance. "
+            f"Feature importance Kendall's tau = {tau:.3f} "
+            f"(top {FEATURE_IMPORTANCE_TOP_K} features)."
+        ),
+    )
+    report.add(
+        TableSection(
+            id=f"prediction-{chamber.lower()}",
+            title=f"{chamber} Prediction Transfer",
+            html=html,
+        )
+    )
+
+
+def _add_prediction_comparison_figure(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    path = plots_dir / f"prediction_comparison_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-pred-comparison-{chamber.lower()}",
+                f"{chamber} — Prediction AUC Comparison",
+                path,
+                caption=(
+                    "Green bars: within-session AUC (model trained and "
+                    "tested on same session). Orange bars: cross-session "
+                    "AUC (model trained on one session, tested on the "
+                    "other). A small drop is expected; a large drop "
+                    "indicates session-specific patterns."
+                ),
+            )
+        )
+
+
+def _add_feature_importance_figure(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    path = plots_dir / f"feature_importance_comparison_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-feat-importance-{chamber.lower()}",
+                f"{chamber} — Feature Importance Comparison",
+                path,
+                caption=(
+                    "Mean |SHAP| values for the top features in each "
+                    "session. Stable rankings indicate the model captures "
+                    "generalizable patterns rather than session-specific "
+                    "quirks."
+                ),
+            )
+        )
 
 
 def _add_detection_validation(report: ReportBuilder, results: dict) -> None:

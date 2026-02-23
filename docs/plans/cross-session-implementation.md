@@ -319,11 +319,11 @@ Update roadmap: move cross-session from "Next Up" to "In Progress".
 | 2 | Plot functions in `cross_session.py` | Step 1 | Done (v2026.02.22.28) |
 | 3 | `cross_session_report.py` | Steps 1-2 | Done (v2026.02.22.28) |
 | 4 | CLI orchestration in `cross_session.py` | Steps 1-3 | Done (v2026.02.22.28) |
-| 5 | Cross-session prediction logic | Steps 1, 4 | Remaining (behind `--skip-prediction`) |
+| 5 | Cross-session prediction logic | Steps 1, 4 | Done (v2026.02.22.30) |
 | 6 | Detection validation | Steps 1, 4 | Done (v2026.02.22.28) |
 | 7 | Justfile + doc updates | Steps 1-6 | Done (v2026.02.22.28) |
 
-Step 5 (prediction transfer) is the only remaining work. It is deferred behind `--skip-prediction` and can be added independently.
+All 7 steps complete. `--skip-prediction` flag available for faster runs when prediction transfer is not needed.
 
 ---
 
