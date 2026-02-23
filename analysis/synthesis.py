@@ -99,7 +99,10 @@ statistical training.
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
 PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0"}
 
-UPSTREAM_PHASES = ["eda", "pca", "irt", "clustering", "network", "prediction", "indices", "umap"]
+UPSTREAM_PHASES = [
+    "eda", "pca", "irt", "clustering", "network", "prediction", "indices", "umap",
+    "beta_binomial",
+]
 
 
 # ── Data Loading ─────────────────────────────────────────────────────────────
@@ -176,6 +179,10 @@ def load_all_upstream(results_base: Path) -> dict:
                 df = _read_parquet_safe(data_dir / f"umap_embedding_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["umap"] = df
+            elif phase == "beta_binomial":
+                df = _read_parquet_safe(data_dir / f"posterior_loyalty_{chamber}.parquet")
+                if df is not None:
+                    upstream[chamber]["beta_posterior"] = df
 
         # Track upstream plot paths
         upstream["plots"][phase] = plots_dir
@@ -263,6 +270,15 @@ def build_legislator_df(upstream: dict, chamber: str) -> pl.DataFrame:
     if loy is not None:
         df = df.join(
             loy.select("legislator_slug", "loyalty_rate"),
+            on="legislator_slug",
+            how="left",
+        )
+
+    # Beta-Binomial posterior loyalty
+    bp = upstream[chamber].get("beta_posterior")
+    if bp is not None:
+        df = df.join(
+            bp.select("legislator_slug", "posterior_mean", "ci_width", "shrinkage"),
             on="legislator_slug",
             how="left",
         )

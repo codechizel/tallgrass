@@ -82,6 +82,8 @@ def build_synthesis_report(
     _add_calibration_figure(report, upstream_plots, "house")
     # 26. surprising-votes
     _add_surprising_votes_table(report, upstream)
+    # 26b. bayesian loyalty (optional — only if beta_binomial phase was run)
+    _add_bayesian_loyalty_narrative(report, leg_dfs)
     # 27. methodology
     _add_methodology_note(report, session)
     # 28. convergence
@@ -761,6 +763,61 @@ def _add_surprising_votes_table(report: object, upstream: dict) -> None:
             id="surprising-votes",
             title="The 20 Most Surprising Votes",
             html=html,
+        )
+    )
+
+
+def _add_bayesian_loyalty_narrative(report: object, leg_dfs: dict) -> None:
+    """Section 26b: Bayesian loyalty — optional, skipped if beta_binomial wasn't run."""
+    has_data = False
+    for chamber in ("house", "senate"):
+        df = leg_dfs.get(chamber)
+        if df is not None and "posterior_mean" in df.columns:
+            has_data = True
+            break
+
+    if not has_data:
+        return
+
+    parts = [
+        "<p>The Bayesian analysis applied <strong>shrinkage</strong> to the raw party loyalty "
+        "scores. Legislators with many party votes barely changed — their data speaks for "
+        "itself. Legislators with fewer votes were pulled toward the party average, producing "
+        "more reliable estimates.</p>"
+    ]
+
+    for chamber in ("house", "senate"):
+        df = leg_dfs.get(chamber)
+        if df is None or "posterior_mean" not in df.columns or "unity_score" not in df.columns:
+            continue
+
+        # Find who moved the most
+        df_with_delta = df.filter(pl.col("posterior_mean").is_not_null()).with_columns(
+            (pl.col("unity_score") - pl.col("posterior_mean")).abs().alias("abs_delta")
+        )
+        if df_with_delta.height == 0:
+            continue
+
+        most_moved = df_with_delta.sort("abs_delta", descending=True).row(0, named=True)
+        mean_shrink = (
+            float(df_with_delta["shrinkage"].mean())
+            if "shrinkage" in df_with_delta.columns
+            else 0
+        )
+
+        label = chamber.title()
+        parts.append(
+            f"<p><strong>{label}:</strong> Average shrinkage factor was {mean_shrink:.3f}. "
+            f"The most affected legislator was {most_moved['full_name']} "
+            f"({most_moved['party']}), whose estimate moved by "
+            f"{most_moved['abs_delta']:.3f}.</p>"
+        )
+
+    report.add(
+        TextSection(
+            id="bayesian-loyalty",
+            title="Bayesian Party Loyalty — Shrinkage in Action",
+            html="".join(parts),
         )
     )
 

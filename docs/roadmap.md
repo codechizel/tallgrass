@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after clustering viz overhaul and EDA heatmap sizing fix)
+**Last updated:** 2026-02-22 (after Beta-Binomial party loyalty phase)
 
 ---
 
@@ -21,6 +21,7 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | 6+ | NLP Bill Text Features | 2026-02-22 | NMF topics on short_title; House temporal AUC 0.90→0.96, Senate 0.86→0.96 |
 | — | Synthesis Report | 2026-02-22 | 32-section narrative HTML; joins all 8 phases into one deliverable |
 | — | Legislator Profiles | 2026-02-22 | Per-legislator deep-dives: scorecard, bill-type breakdown, defections, neighbors, surprising votes |
+| 7b | Beta-Binomial Party Loyalty | 2026-02-22 | Bayesian shrinkage on CQ unity; empirical Bayes, closed-form posteriors, 4 plots per chamber |
 | — | Cross-Biennium Portability | 2026-02-22 | Removed all hardcoded legislator names from general phases; full pipeline re-run validated |
 
 ---
@@ -90,19 +91,7 @@ All EDA visualization improvements completed (2026-02-22):
 - **Heatmap sizing fix**: `size = max(8, n * 0.19)` and `fontsize = max(4, min(7, 500 / n))` — House heatmap now 24.7" with 4pt labels (up from 15.6"/3pt). Senate unchanged.
 - Name labels on heatmap axes already exist. Cross-party annotation is now data-driven (2026-02-22 portability refactor).
 
-### 2. Beta-Binomial Party Loyalty (Bayesian)
-
-**Priority:** High — experimental code already exists.
-
-Method documented in `Analytic_Methods/14_BAY_beta_binomial_party_loyalty.md`. Experimental implementation exists at `analysis/irt_beta_experiment.py` (558 lines) but is not integrated into the main pipeline.
-
-- Bayesian alternative to the frequentist CQ party unity from Phase 7
-- Produces credible intervals on loyalty — crucial for legislators with few party votes
-- Beta(alpha, beta) posterior per legislator; shrinks noisy estimates toward the group mean
-- Compare Bayesian loyalty posteriors to CQ unity point estimates
-- Especially useful for Miller (30 votes) and other sparse legislators
-
-### 3. Hierarchical Bayesian Legislator Model
+### 2. Hierarchical Bayesian Legislator Model
 
 **Priority:** High — the "Crown Jewel" from the methods overview.
 
@@ -113,17 +102,20 @@ Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`.
 - Quantifies how much individual legislators deviate from their party's typical behavior
 - Partial pooling shrinks extreme estimates (Tyson, Miller) toward party mean — the statistically principled version of what CQ unity does informally
 - Uses PyMC (already installed for IRT)
+- Supersedes the Beta-Binomial phase for formal analysis; Beta-Binomial remains as the fast exploratory baseline
 
-### 4. Cross-Session Scrape (2023-24)
+### 3. Cross-Session Scrape (2023-24)
 
 **Priority:** High — unlocks temporal analysis and honest out-of-sample validation.
 
+**Directory structure migrated** (2026-02-22): data and results now live under state-level directories (`data/kansas/`, `results/kansas/`). See ADR-0016.
+
 - Run `uv run ks-vote-scraper 2023` to scrape the prior biennium
-- Produces a second set of 3 CSVs in `data/90th_2023-2024/`
+- Produces a second set of 3 CSVs in `data/kansas/90th_2023-2024/`
 - Then run the full 8-phase pipeline: `just scrape 2023 && just eda --session 2023-24 && ...`
 - Enables all three cross-session analyses below
 
-### 5. Cross-Session Validation
+### 4. Cross-Session Validation
 
 **Priority:** High — the single biggest gap in current results.
 
@@ -133,7 +125,7 @@ Three distinct analyses become possible once 2023-24 is scraped:
 - **Temporal comparison (who moved?):** Compare IRT ideal points for returning legislators across bienniums. Who shifted ideology? Are the 2025-26 mavericks (Schreiber, Dietrich) the same people who were mavericks in 2023-24? This is the most newsworthy output for the nontechnical audience — "Senator X moved 1.2 points rightward since last session" is a concrete, actionable finding.
 - **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
 
-### 6. MCA (Multiple Correspondence Analysis)
+### 5. MCA (Multiple Correspondence Analysis)
 
 **Priority:** Medium — alternative view on the vote matrix.
 
@@ -144,7 +136,7 @@ Method documented in `Analytic_Methods/10_DIM_correspondence_analysis.md`. MCA t
 - `prince` library already in `pyproject.toml`
 - Compare MCA dimensions to PCA PC1/PC2 — if they agree, PCA's linear assumption is validated
 
-### 7. Time Series Analysis
+### 6. Time Series Analysis
 
 **Priority:** Medium — adds temporal depth to static snapshots.
 
@@ -155,7 +147,7 @@ Two methods documented but not yet implemented:
 
 Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
 
-### 8. 2D Bayesian IRT Model
+### 7. 2D Bayesian IRT Model
 
 **Priority:** Medium — solves the Tyson paradox properly. (Formerly item #9.)
 
@@ -239,7 +231,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 | 11 | UMAP / t-SNE | DIM | Completed (UMAP, Phase 2b) |
 | 12 | W-NOMINATE | DIM | Rejected (R-only) |
 | 13 | Optimal Classification | DIM | Rejected (R-only) |
-| 14 | Beta-Binomial Party Loyalty | BAY | **Experimental** — item #2 above |
+| 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
 | 16 | Hierarchical Bayesian Model | BAY | **Planned** — item #3 above |
 | 17 | Posterior Predictive Checks | BAY | Partial (embedded in IRT) |
@@ -255,7 +247,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 | 27 | Changepoint Detection | TSA | **Planned** — item #7 above |
 | 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
 
-**Score: 18 completed, 2 rejected, 5 planned, 1 experimental, 2 deferred, 1 partial = 29 total**
+**Score: 19 completed, 2 rejected, 4 planned, 2 deferred, 1 partial = 29 total** (was: 1 experimental → completed)
 
 ---
 

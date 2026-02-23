@@ -58,9 +58,21 @@ prediction *args:
 umap *args:
     uv run python analysis/umap_viz.py {{args}}
 
+# Run classical indices analysis
+indices *args:
+    uv run python analysis/indices.py {{args}}
+
+# Run Beta-Binomial Bayesian party loyalty
+betabinom *args:
+    uv run python analysis/beta_binomial.py {{args}}
+
 # Run synthesis report
 synthesis *args:
     uv run python analysis/synthesis.py {{args}}
+
+# Run legislator profiles
+profiles *args:
+    uv run python analysis/profiles.py {{args}}
 
 # Run all tests
 test *args:

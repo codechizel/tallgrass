@@ -19,7 +19,10 @@ just lint-check                              # check only
 just sessions                                # list available sessions
 just check                                   # full check
 just umap                                    # UMAP ideological landscape
+just indices                                 # classical indices analysis
+just betabinom                               # Beta-Binomial Bayesian loyalty
 just synthesis                               # run synthesis report
+just profiles                                # legislator profiles
 uv run ks-vote-scraper 2023                  # historical session
 uv run ks-vote-scraper 2024 --special        # special session
 ```
@@ -169,6 +172,7 @@ Each analysis phase has a design document in `analysis/design/` recording the st
 - `analysis/design/irt.md` — Priors (Normal(0,1) discrimination, anchors), MCMC settings, missing data handling
 - `analysis/design/clustering.md` — Three methods for robustness, party loyalty metric, k=2 finding
 - `analysis/design/prediction.md` — XGBoost primary, IRT features dominate, NLP topic features (NMF on short_title), target leakage assessment
+- `analysis/design/beta_binomial.md` — Empirical Bayes, per-party-per-chamber priors, method of moments, shrinkage factor
 - `analysis/design/synthesis.md` — Data-driven detection thresholds, graceful degradation, template narratives
 
 ## Analytics
@@ -210,8 +214,9 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/eda_report.py` — EDA-specific: `build_eda_report()` adds ~19 sections.
 - `analysis/umap_viz.py` + `analysis/umap_report.py` — UMAP: nonlinear dimensionality reduction on vote matrix (cosine metric, n_neighbors=15). Produces ideological landscape plots, validates against PCA/IRT via Spearman, Procrustes sensitivity sweep.
 - `analysis/nlp_features.py` — NLP: TF-IDF + NMF topic modeling on bill `short_title` text. Pure data logic (no I/O). `TopicModel` frozen dataclass, `fit_topic_features()`, `get_topic_display_names()`, `plot_topic_words()`. See ADR-0012.
+- `analysis/beta_binomial.py` + `analysis/beta_binomial_report.py` — Beta-Binomial: empirical Bayes shrinkage on CQ party unity scores. Closed-form Beta posteriors per legislator, 4 plots per chamber. Reads from indices `party_unity_{chamber}.parquet`. See ADR-0015.
 - `analysis/synthesis_detect.py` — Detection: pure data logic that identifies notable legislators (mavericks, bridge-builders, metric paradoxes) from upstream DataFrames. Returns frozen dataclasses with pre-formatted titles and subtitles.
-- `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 8 phases, joins into unified legislator DataFrames, runs data-driven detection, produces 29-32 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
+- `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 9 phases (incl. beta_binomial), joins into unified legislator DataFrames, runs data-driven detection, produces 29-33 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
 - `analysis/profiles_data.py` — Profiles data logic: `ProfileTarget`/`BillTypeBreakdown` dataclasses, `gather_profile_targets()`, `build_scorecard()`, `compute_bill_type_breakdown()`, `find_defection_bills()`, `find_voting_neighbors()`, `find_legislator_surprising_votes()`.
 - `analysis/profiles.py` + `analysis/profiles_report.py` — Profiles: deep-dive per-legislator reports with scorecard, bill-type breakdown, defection analysis, voting neighbors, surprising votes. 5 plots per legislator. Reuses `load_all_upstream()`/`build_legislator_df()` from synthesis.
 - `RunContext` auto-writes the HTML in `finalize()` if sections were added.
@@ -260,6 +265,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names, TopicModel dataclass (~16 tests)
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration, hardest-to-predict detection (~36 tests)
+- `tests/test_beta_binomial.py` — method of moments estimation, Bayesian posteriors, shrinkage properties, edge cases (~26 tests)
 - `tests/test_profiles.py` — profile target selection, scorecard, bill-type breakdown, defections, voting neighbors, surprising votes (~23 tests)
 
 ### Manual Verification
