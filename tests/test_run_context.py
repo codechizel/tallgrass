@@ -19,6 +19,7 @@ from analysis.run_context import (
     _git_commit_hash,
     _normalize_session,
     _TeeStream,
+    strip_leadership_suffix,
 )
 
 # ── _TeeStream ───────────────────────────────────────────────────────────────
@@ -116,6 +117,36 @@ class TestGitCommitHash:
         if result != "unknown":
             assert len(result) == 40
             assert all(c in "0123456789abcdef" for c in result)
+
+
+# ── strip_leadership_suffix() ─────────────────────────────────────────────────
+
+
+class TestStripLeadershipSuffix:
+    """Strip leadership titles from legislator display names."""
+
+    def test_strips_president_of_senate(self):
+        assert strip_leadership_suffix("Ty Masterson - President of the Senate") == "Ty Masterson"
+
+    def test_strips_vice_president(self):
+        result = strip_leadership_suffix("Tim Shallenburger - Vice President of the Senate")
+        assert result == "Tim Shallenburger"
+
+    def test_strips_house_leader(self):
+        assert strip_leadership_suffix("John Alcala - House Majority Leader") == "John Alcala"
+
+    def test_strips_speaker_pro_tem(self):
+        assert strip_leadership_suffix("Alice Brown - Speaker Pro Tem") == "Alice Brown"
+
+    def test_no_suffix_unchanged(self):
+        assert strip_leadership_suffix("Mary Ware") == "Mary Ware"
+
+    def test_empty_string(self):
+        assert strip_leadership_suffix("") == ""
+
+    def test_hyphenated_name_preserved(self):
+        """Suffix pattern requires space-dash-space, not a bare hyphen."""
+        assert strip_leadership_suffix("Mary Smith-Jones") == "Mary Smith-Jones"
 
 
 # ── RunContext ────────────────────────────────────────────────────────────────

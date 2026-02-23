@@ -175,7 +175,7 @@ results/
       synthesis/                  ← Joins all phases into one narrative report
 ```
 
-All analysis scripts use `RunContext` from `analysis/run_context.py` as a context manager to get structured output. Downstream scripts read from `results/kansas/<session>/<analysis>/latest/`.
+All analysis scripts use `RunContext` from `analysis/run_context.py` as a context manager to get structured output. Downstream scripts read from `results/kansas/<session>/<analysis>/latest/`. The module also exports `strip_leadership_suffix()` — a shared utility that removes " - President of the Senate" and similar titles from legislator names. Every phase that reads the legislators CSV applies this at load time so display names are clean throughout the pipeline.
 
 Results paths use the biennium naming scheme: `91st_2025-2026` (matching the data directory). The `kansas/` state directory is controlled by `STATE_DIR` in `session.py` (see ADR-0016).
 
@@ -282,7 +282,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 
 ### Analysis Infrastructure Test Files
-- `tests/test_run_context.py` — TeeStream, session normalization, RunContext lifecycle (~26 tests)
+- `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, RunContext lifecycle (~33 tests)
 - `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt (~36 tests)
 - `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity filter, joint model, forest highlights, paradox detection (~45 tests)
 - `tests/test_umap_viz.py` — imputation, orientation, embedding construction, Procrustes, validation correlations (~21 tests)

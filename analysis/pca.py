@@ -36,9 +36,9 @@ from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, strip_leadership_suffix
 
 try:
     from analysis.pca_report import build_pca_report
@@ -214,6 +214,11 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     prefix = data_dir.name
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    legislators = legislators.with_columns(
+        pl.col("full_name")
+        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
+        .alias("full_name")
+    )
     return rollcalls, legislators
 
 

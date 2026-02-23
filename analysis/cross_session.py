@@ -72,9 +72,9 @@ except ModuleNotFoundError:
     from cross_session_report import build_cross_session_report  # type: ignore[no-redef]
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext  # type: ignore[no-redef]
+    from run_context import RunContext, strip_leadership_suffix  # type: ignore[no-redef]
 
 try:
     from analysis.synthesis import build_legislator_df, load_all_upstream
@@ -760,8 +760,15 @@ def main() -> None:
 
         # ── Load raw legislator CSVs ──
         print("\n── Loading legislator data ──")
-        leg_a = pl.read_csv(ks_a.data_dir / f"{ks_a.output_name}_legislators.csv")
-        leg_b = pl.read_csv(ks_b.data_dir / f"{ks_b.output_name}_legislators.csv")
+        _suffix_strip = pl.col("full_name").map_elements(
+            strip_leadership_suffix, return_dtype=pl.Utf8
+        )
+        leg_a = pl.read_csv(ks_a.data_dir / f"{ks_a.output_name}_legislators.csv").with_columns(
+            _suffix_strip
+        )
+        leg_b = pl.read_csv(ks_b.data_dir / f"{ks_b.output_name}_legislators.csv").with_columns(
+            _suffix_strip
+        )
         print(f"  Session A: {leg_a.height} legislators")
         print(f"  Session B: {leg_b.height} legislators")
 

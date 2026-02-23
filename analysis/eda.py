@@ -34,9 +34,9 @@ import polars as pl
 import seaborn as sns
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, strip_leadership_suffix
 
 try:
     from analysis.eda_report import build_eda_report
@@ -203,6 +203,11 @@ def load_data(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]
     votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    legislators = legislators.with_columns(
+        pl.col("full_name")
+        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
+        .alias("full_name")
+    )
     return votes, rollcalls, legislators
 
 

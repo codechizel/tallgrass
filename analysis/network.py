@@ -37,9 +37,9 @@ from matplotlib.patches import Patch
 from sklearn.metrics import adjusted_rand_score, cohen_kappa_score, normalized_mutual_info_score
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, strip_leadership_suffix
 
 try:
     from analysis.network_report import build_network_report
@@ -327,6 +327,11 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     prefix = data_dir.name
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    legislators = legislators.with_columns(
+        pl.col("full_name")
+        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
+        .alias("full_name")
+    )
     return rollcalls, legislators
 
 

@@ -38,9 +38,9 @@ from scipy.spatial import procrustes
 from scipy.stats import spearmanr
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, strip_leadership_suffix
 
 try:
     from analysis.umap_report import build_umap_report
@@ -243,6 +243,11 @@ def load_metadata(data_dir: Path) -> pl.DataFrame:
     """Load legislator CSV for metadata enrichment."""
     prefix = data_dir.name
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    legislators = legislators.with_columns(
+        pl.col("full_name")
+        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
+        .alias("full_name")
+    )
     return legislators
 
 

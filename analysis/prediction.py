@@ -50,9 +50,9 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from xgboost import XGBClassifier
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, strip_leadership_suffix
 
 try:
     from analysis.prediction_report import build_prediction_report
@@ -230,7 +230,12 @@ def load_rollcall_data(data_dir: Path) -> pl.DataFrame:
 
 def load_legislator_data(data_dir: Path) -> pl.DataFrame:
     """Load legislators CSV."""
-    return pl.read_csv(data_dir / f"{data_dir.name}_legislators.csv")
+    legislators = pl.read_csv(data_dir / f"{data_dir.name}_legislators.csv")
+    return legislators.with_columns(
+        pl.col("full_name")
+        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
+        .alias("full_name")
+    )
 
 
 def load_ideal_points(irt_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -882,9 +887,7 @@ def detect_hardest_legislators(
             if abs(xi - midpoint) < abs(median - midpoint) * 0.7:
                 explanation = f"Centrist {party} \u2014 less ideologically committed than most"
             elif party == "Republican" and xi > median:
-                explanation = (
-                    "Strongly conservative but occasionally crosses party lines"
-                )
+                explanation = "Strongly conservative but occasionally crosses party lines"
             elif party == "Democrat" and xi < median:
                 explanation = "Strongly liberal but occasionally crosses party lines"
             else:

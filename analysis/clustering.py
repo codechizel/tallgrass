@@ -43,9 +43,9 @@ from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.mixture import GaussianMixture
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, strip_leadership_suffix
 
 try:
     from analysis.clustering_report import build_clustering_report
@@ -326,6 +326,11 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     prefix = data_dir.name
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    legislators = legislators.with_columns(
+        pl.col("full_name")
+        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
+        .alias("full_name")
+    )
     return rollcalls, legislators
 
 
@@ -798,9 +803,7 @@ def plot_polar_dendrogram(
 
     # Draw leaf dots and labels
     # The actual leaf x positions from ddata
-    leaf_positions = sorted(
-        [(5 + 10 * i, leaves[i]) for i in range(n_leaves)], key=lambda t: t[0]
-    )
+    leaf_positions = sorted([(5 + 10 * i, leaves[i]) for i in range(n_leaves)], key=lambda t: t[0])
 
     # Compute leaf angles
     leaf_angles: list[float] = []
@@ -838,9 +841,7 @@ def plot_polar_dendrogram(
         label = display_labels.get(name, name.split()[-1])
 
         # Leaf dot
-        ax.scatter(
-            angle, outer_r, c=color, s=15, edgecolors="black", linewidth=0.3, zorder=3
-        )
+        ax.scatter(angle, outer_r, c=color, s=15, edgecolors="black", linewidth=0.3, zorder=3)
 
         # Label at staggered radius
         r_label = label_radii[idx]

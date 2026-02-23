@@ -35,6 +35,24 @@ from zoneinfo import ZoneInfo
 
 _CT = ZoneInfo("America/Chicago")
 
+_LEADERSHIP_SUFFIX_RE = re.compile(r"\s*-\s+.*$")
+"""Matches leadership suffixes like ' - House Minority Caucus Chair'."""
+
+
+def strip_leadership_suffix(name: str) -> str:
+    """Remove leadership suffix from a legislator's display name.
+
+    The scraper stores raw names from kslegislature.gov which include
+    leadership titles (e.g., "Ty Masterson - President of the Senate").
+    This strips everything after " - " for clean display labels.
+
+    Examples:
+        "Ty Masterson - President of the Senate" → "Ty Masterson"
+        "Tim Shallenburger - Vice President of the Senate" → "Tim Shallenburger"
+        "John Alcala" → "John Alcala"  (no-op)
+    """
+    return _LEADERSHIP_SUFFIX_RE.sub("", name).strip()
+
 
 class _TeeStream:
     """Wraps a stream to duplicate output to both the original stream and a buffer.
