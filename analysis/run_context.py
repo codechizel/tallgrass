@@ -27,6 +27,7 @@ import json
 import re
 import subprocess
 import sys
+import typing
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
@@ -143,7 +144,7 @@ class RunContext:
         self._today = today
         self._primer = primer
         self._tee: _TeeStream | None = None
-        self._original_stdout: io.TextIOBase | None = None
+        self._original_stdout: typing.TextIO | None = None
         self._start_time: datetime | None = None
 
         # Lazy-init report builder (avoids importing report.py at module level)

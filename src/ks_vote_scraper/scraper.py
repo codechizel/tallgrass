@@ -398,6 +398,7 @@ class KSVoteScraper:
             return bill_urls, {}
 
         try:
+            assert result.html is not None  # guaranteed by result.ok above
             data = json.loads(result.html)
         except (json.JSONDecodeError, TypeError) as e:
             print(f"  API pre-filter returned invalid JSON ({e}), falling back to full scan")

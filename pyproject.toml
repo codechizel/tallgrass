@@ -51,3 +51,73 @@ target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+# ── ty type checker ──────────────────────────────────────────────────────────
+# ty is in beta (astral-sh/ty). We're using it as an early adopter to catch
+# real type errors, while accepting that third-party stubs (BeautifulSoup,
+# PyMC, sklearn, matplotlib) generate false positives. Run: just typecheck
+
+[tool.ty.environment]
+python = ".venv"
+
+[tool.ty.src]
+include = ["src", "analysis"]
+
+[tool.ty.rules]
+# BeautifulSoup's overloaded find(name=..., string=re.compile(...)) doesn't
+# match any declared overload — stubs limitation, not a real bug.
+no-matching-overload = "warn"
+# Polars scalar → float() conversions trigger false positives (Polars stubs
+# return types ty can't map to ConvertibleToFloat).
+unused-type-ignore-comment = "warn"
+
+[tool.ty.analysis]
+# Libraries with missing or incomplete type stubs. Treating these as Any
+# prevents cascading false positives throughout the analysis code.
+replace-imports-with-any = [
+    "pymc.**",
+    "arviz.**",
+    "sklearn.**",
+    "xgboost.**",
+    "shap.**",
+    "umap.**",
+    "community.**",
+    "great_tables.**",
+    "css_inline.**",
+    "bs4.**",
+]
+# analysis/ scripts use bare imports (not a package) — allow them
+allowed-unresolved-imports = [
+    "run_context",
+    "report",
+    "nlp_features",
+    "eda_report",
+    "pca_report",
+    "irt_report",
+    "clustering_report",
+    "network_report",
+    "prediction_report",
+    "indices_report",
+    "umap_report",
+    "beta_binomial_report",
+    "hierarchical_report",
+    "synthesis_report",
+    "synthesis_detect",
+    "synthesis",
+    "profiles_data",
+    "profiles_report",
+]
+
+# Analysis code: suppress noise from third-party stubs while ty matures.
+# The scraper (src/) has no overrides — it must pass clean.
+[[tool.ty.overrides]]
+include = ["analysis/**"]
+[tool.ty.overrides.rules]
+# Polars scalar → float() / matplotlib kwargs / frozen dataclass __new__:
+# all stubs limitations, not real bugs.
+invalid-argument-type = "warn"
+# replace-imports-with-any causes return types to become object/Any,
+# cascading into unresolved-attribute on .fit(), .predict(), .add(), etc.
+unresolved-attribute = "warn"
+# Polars arithmetic on extracted scalars
+unsupported-operator = "warn"

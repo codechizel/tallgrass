@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from jinja2 import Environment
+from jinja2 import Environment, Template
 
 # ── Section Types ─────────────────────────────────────────────────────────────
 
@@ -393,7 +393,7 @@ REPORT_TEMPLATE = """\
 </html>"""
 
 
-def _get_template() -> Environment:
+def _get_template() -> Template:
     """Return a compiled Jinja2 Template."""
     env = Environment(autoescape=False)
     return env.from_string(REPORT_TEMPLATE)

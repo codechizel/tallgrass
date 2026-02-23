@@ -86,7 +86,13 @@ test *args:
 test-scraper *args:
     uv run pytest tests/test_session.py tests/test_scraper_pure.py tests/test_scraper_html.py tests/test_models.py tests/test_output.py tests/test_cli.py {{args}} -v
 
-# Full check (lint + tests)
+# Type check with ty (scraper must pass clean, analysis warnings-only)
+typecheck:
+    uvx ty check src/
+    uvx ty check analysis/
+
+# Full check (lint + typecheck + tests)
 check:
     just lint-check
+    just typecheck
     just test

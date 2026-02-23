@@ -17,8 +17,9 @@ just scrape 2025                             # scrape (cached)
 just scrape-fresh 2025                       # scrape (fresh)
 just lint                                    # lint + format
 just lint-check                              # check only
+just typecheck                               # ty type check (src + analysis)
 just sessions                                # list available sessions
-just check                                   # full check
+just check                                   # full check (lint + typecheck + tests)
 just umap                                    # UMAP ideological landscape
 just indices                                 # classical indices analysis
 just betabinom                               # Beta-Binomial Bayesian loyalty
@@ -37,8 +38,20 @@ uv run ks-vote-scraper 2024 --special        # special session
 
 - Python 3.14+, use modern type hints (`list[str]` not `List[str]`, `X | None` not `Optional[X]`)
 - Ruff: line-length 100, rules E/F/I/W
+- ty: type checking (beta, see below)
 - Frozen dataclasses for data models
 - Type hints on all function signatures
+
+### ty Type Checker (Beta)
+
+We use [ty](https://github.com/astral-sh/ty) (Astral's Rust-based type checker) as an early adopter. It's in beta — we're both using it for real type error detection and testing its readiness for scientific Python projects.
+
+**Policy:**
+- `src/` (scraper): must pass with **zero errors**. All diagnostics are real or fixable.
+- `analysis/`: errors demoted to **warnings** for categories dominated by third-party stubs noise (Polars scalars, matplotlib kwargs, sklearn/PyMC return types). Real errors should still be fixed.
+- Libraries with incomplete stubs (`pymc`, `sklearn`, `bs4`, etc.) are configured as `replace-imports-with-any` in `pyproject.toml` to prevent cascading false positives.
+
+Run `just typecheck` or `just check` (which includes it).
 
 ## Architecture
 
