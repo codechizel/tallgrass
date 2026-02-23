@@ -23,7 +23,7 @@ Everything needed is already in the stack: PyMC for posteriors, ArviZ for diagno
 
 Build a cross-session validation phase from scratch using existing dependencies. No new packages.
 
-**Three sub-analyses:**
+**Four sub-analyses:**
 
 ### 1. Ideology Stability (Anchor-Based Scale Alignment)
 
@@ -38,14 +38,20 @@ Use the same affine transformation approach already proven for cross-chamber equ
 
 **Why affine transformation over concurrent calibration (stacking vote matrices):** Concurrent calibration would require fitting a single IRT model on both sessions simultaneously — doubling the model size and requiring careful parameter sharing for overlapping legislators. With 131 anchors, the affine approach gives equivalent accuracy at a fraction of the complexity. The cross-chamber equating section of the IRT design doc already validates this methodology. Concurrent calibration remains available as a future upgrade if the affine approach proves insufficient.
 
-### 2. Out-of-Sample Prediction
+### 2. Metric Stability
+
+- Compute Pearson r and Spearman rho for 8 legislative metrics (party unity, maverick rate, weighted maverick, betweenness, eigenvector, pagerank, clustering loyalty, PC1) across sessions for returning legislators.
+- High correlations indicate these measures capture stable traits rather than session-specific noise.
+- Warn when any metric falls below r = 0.70.
+
+### 3. Out-of-Sample Prediction
 
 - Train XGBoost on session A's vote features, test on session B's returning legislators (and vice versa).
 - Standardize features (z-score within session) before cross-session application, since IRT scales differ.
 - Compare cross-session AUC to within-session AUC (0.98).
 - Compare feature importance rankings (SHAP) across sessions — stable rankings indicate generalizable patterns.
 
-### 3. Detection Threshold Validation
+### 4. Detection Threshold Validation
 
 - Run synthesis detection (`detect_chamber_maverick`, `detect_bridge_builder`, `detect_metric_paradox`) on both sessions' legislator DataFrames.
 - Compare: same roles flagged? Same threshold behavior?

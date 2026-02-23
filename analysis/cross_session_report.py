@@ -110,7 +110,8 @@ def _add_overview(
             html=(
                 f"<p>This report compares the <strong>{session_a_label}</strong> "
                 f"and <strong>{session_b_label}</strong> Kansas Legislature sessions "
-                "to answer three questions: <em>Who moved ideologically?</em> "
+                "to answer four questions: <em>Who moved ideologically?</em> "
+                "<em>Are our metrics stable?</em> "
                 "<em>Are our predictive models honest?</em> "
                 "<em>Do our detection methods generalize?</em></p>"
                 f"<p><strong>{n_matched} legislators</strong> served in both "
@@ -475,6 +476,13 @@ def _add_methodology(
     session_b_label: str,
 ) -> None:
     a_coeff = results.get("alignment_coefficients", {})
+    alignment_para = ""
+    if a_coeff:
+        coeff_str = ", ".join(
+            f"{ch}: A={coefs['A']:.3f}, B={coefs['B']:.3f}" for ch, coefs in sorted(a_coeff.items())
+        )
+        alignment_para = f"<p><strong>Alignment coefficients:</strong> {coeff_str}.</p>"
+
     report.add(
         TextSection(
             id="methodology",
@@ -486,15 +494,8 @@ def _add_methodology(
                 f"the {results.get('n_matched', '?')} returning legislators. The top/bottom "
                 f"{ALIGNMENT_TRIM_PCT}% of residuals are trimmed before the final fit to prevent "
                 "genuine movers from distorting the alignment.</p>"
-                "<p><strong>Alignment coefficients:</strong> "
-                + ", ".join(
-                    f"{ch}: A={coefs['A']:.3f}, B={coefs['B']:.3f}"
-                    for ch, coefs in sorted(a_coeff.items())
-                )
-                + ".</p>"
-                if a_coeff
-                else ""
-                "<p><strong>Significant mover threshold:</strong> A legislator is flagged as a "
+                + alignment_para
+                + "<p><strong>Significant mover threshold:</strong> A legislator is flagged as a "
                 f"significant mover if |shift| > {SHIFT_THRESHOLD_SD} &times; SD(all shifts). "
                 "This adapts to the overall session-to-session variability.</p>"
                 "<p><strong>Legislator matching:</strong> Legislators are matched by normalized "

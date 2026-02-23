@@ -38,10 +38,11 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 **Priority:** High — the single biggest gap in current results.
 **Status:** All 7 implementation steps complete (data layer, plots, report builder, CLI, prediction transfer, detection validation, docs). 55 tests. Ready for first real run once both sessions' upstream phases are complete.
 
-Three distinct analyses become possible now that both bienniums are scraped:
+Four distinct analyses become possible now that both bienniums are scraped:
 
-- **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. Also solves the Senate bill passage small-N problem (59 test bills in 2025-26 is too few; stacking sessions doubles the data).
 - **Temporal comparison (who moved?):** Compare IRT ideal points for returning legislators across bienniums. Who shifted ideology? Are the 2025-26 mavericks (Schreiber, Dietrich) the same people who were mavericks in 2023-24? This is the most newsworthy output for the nontechnical audience — "Senator X moved 1.2 points rightward since last session" is a concrete, actionable finding.
+- **Metric stability:** Cross-session correlations for party unity, maverick rates, network centrality, and other legislative metrics. High Pearson/Spearman r for returning legislators indicates these measures capture stable traits, not session-specific noise.
+- **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. SHAP feature importance rankings compared via Kendall's tau.
 - **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
 
 ### 4. MCA (Multiple Correspondence Analysis)

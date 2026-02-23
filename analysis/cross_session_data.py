@@ -517,8 +517,11 @@ def compare_feature_importance(
     imp_a = np.abs(shap_a).mean(axis=0)
     imp_b = np.abs(shap_b).mean(axis=0)
 
-    rank_a = np.argsort(-imp_a) + 1  # 1-indexed
-    rank_b = np.argsort(-imp_b) + 1
+    # argsort gives indices that sort the array; we need ranks (position of each element)
+    rank_a = np.empty_like(np.argsort(-imp_a))
+    rank_a[np.argsort(-imp_a)] = np.arange(1, len(imp_a) + 1)
+    rank_b = np.empty_like(np.argsort(-imp_b))
+    rank_b[np.argsort(-imp_b)] = np.arange(1, len(imp_b) + 1)
 
     df = pl.DataFrame(
         {

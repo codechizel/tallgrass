@@ -325,6 +325,8 @@ Update roadmap: move cross-session from "Next Up" to "In Progress".
 
 All 7 steps complete. `--skip-prediction` flag available for faster runs when prediction transfer is not needed.
 
+**Code review (v2026.02.22.31):** Fixed 6 bugs — broken ternary precedence in methodology section, `np.argsort` vs rank inversion in SHAP comparison, dead `n_dropped` code, truthy float check on AUC, RNG re-creation inside loop, "three questions" → "four questions" text.
+
 ---
 
 ## Open Questions (to resolve during implementation)

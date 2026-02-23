@@ -33,12 +33,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+from scipy import stats as sp_stats
 
 try:
     from analysis.cross_session_data import (
         CORRELATION_WARN,
         FEATURE_IMPORTANCE_TOP_K,
-        PREDICTION_META_COLS,
         SHIFT_THRESHOLD_SD,
         align_feature_columns,
         align_irt_scales,
@@ -54,7 +54,6 @@ except ModuleNotFoundError:
     from cross_session_data import (  # type: ignore[no-redef]
         CORRELATION_WARN,
         FEATURE_IMPORTANCE_TOP_K,
-        PREDICTION_META_COLS,
         SHIFT_THRESHOLD_SD,
         align_feature_columns,
         align_irt_scales,
@@ -354,10 +353,10 @@ def plot_turnover_impact(
         (f"New\n(joined in {session_b_label})", xi_new, "#333333"),
     ]
 
+    rng = np.random.default_rng(42)
     for i, (label, data, color) in enumerate(cohorts):
         if len(data) == 0:
             continue
-        rng = np.random.default_rng(42)
         jitter = rng.uniform(-0.15, 0.15, size=len(data))
         ax.scatter(
             data,
@@ -595,9 +594,6 @@ def _run_cross_prediction(
 
     # Align columns (intersection of features)
     vf_a, vf_b, feature_cols = align_feature_columns(vf_a, vf_b)
-    n_dropped = set(vf_a.columns) - set(feature_cols) - set(PREDICTION_META_COLS)
-    if n_dropped:
-        print(f"    Dropped {len(n_dropped)} session-specific columns")
     print(f"    Shared features: {len(feature_cols)}")
     print(f"    Session A votes: {vf_a.height:,}")
     print(f"    Session B votes: {vf_b.height:,}")
@@ -654,9 +650,9 @@ def _run_cross_prediction(
     # Within-session AUC for comparison
     within_auc_a = _load_within_session_auc(ks_a, chamber)
     within_auc_b = _load_within_session_auc(ks_b, chamber)
-    if within_auc_a:
+    if within_auc_a is not None:
         print(f"    Within-session AUC ({session_a_label}): {within_auc_a:.3f}")
-    if within_auc_b:
+    if within_auc_b is not None:
         print(f"    Within-session AUC ({session_b_label}): {within_auc_b:.3f}")
 
     # SHAP comparison
@@ -828,8 +824,6 @@ def main() -> None:
             print(f"    {n_movers} significant movers out of {shifted.height}")
 
             # Correlation check
-            from scipy import stats as sp_stats
-
             xi_a_arr = shifted["xi_a_aligned"].to_numpy()
             xi_b_arr = shifted["xi_b"].to_numpy()
             r_val, _ = sp_stats.pearsonr(xi_a_arr, xi_b_arr)
@@ -865,13 +859,21 @@ def main() -> None:
             xi_dep = irt_a.filter(pl.col("legislator_slug").is_in(dep_slugs))["xi_mean"].to_numpy()
             xi_new = irt_b.filter(pl.col("legislator_slug").is_in(new_slugs))["xi_mean"].to_numpy()
 
-            ti = compute_turnover_impact(xi_ret, xi_dep, xi_new)
-            turnover_impact = ti
-            print(f"    Returning: n={ti['returning_n']}, mean={ti['returning_mean']:.2f}")
-            if ti["departing_n"] > 0 and ti["departing_mean"] is not None:
-                print(f"    Departing: n={ti['departing_n']}, mean={ti['departing_mean']:.2f}")
-            if ti["new_n"] > 0 and ti["new_mean"] is not None:
-                print(f"    New:       n={ti['new_n']}, mean={ti['new_mean']:.2f}")
+            turnover_impact = compute_turnover_impact(xi_ret, xi_dep, xi_new)
+            print(
+                f"    Returning: n={turnover_impact['returning_n']}, "
+                f"mean={turnover_impact['returning_mean']:.2f}"
+            )
+            if turnover_impact["departing_n"] > 0 and turnover_impact["departing_mean"] is not None:
+                print(
+                    f"    Departing: n={turnover_impact['departing_n']}, "
+                    f"mean={turnover_impact['departing_mean']:.2f}"
+                )
+            if turnover_impact["new_n"] > 0 and turnover_impact["new_mean"] is not None:
+                print(
+                    f"    New:       n={turnover_impact['new_n']}, "
+                    f"mean={turnover_impact['new_mean']:.2f}"
+                )
 
             # ── Detection validation ──
             print("  Validating detection thresholds...")
