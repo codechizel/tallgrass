@@ -337,7 +337,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_umap_viz.py` — imputation, orientation, embedding construction, Procrustes, validation correlations (~21 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names, TopicModel dataclass (~16 tests)
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)
-- `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration, hardest-to-predict detection (~36 tests)
+- `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration, hardest-to-predict detection, surprising bills schema (~38 tests)
 - `tests/test_beta_binomial.py` — method of moments estimation, Bayesian posteriors, shrinkage properties, edge cases (~26 tests)
 - `tests/test_hierarchical.py` — hierarchical data prep, model structure, result extraction, variance decomposition, shrinkage comparison (~26 tests)
 - `tests/test_profiles.py` — profile target selection, scorecard, bill-type breakdown, defections, voting neighbors, surprising votes (~23 tests)

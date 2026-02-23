@@ -57,6 +57,8 @@
 
 **Risk:** The joint model may produce divergences or poor ESS due to the sparse link between chambers. The `--skip-joint` flag allows bypassing it without losing the primary results.
 
+**Identification:** The joint model uses the same `pt.sort` ordering constraint within each chamber's pair of party offsets (House D < House R, Senate D < Senate R) to prevent sign flips. Without this, the sampler could place Senate Democrats above Senate Republicans while correctly ordering the House — a label-switching pathology observed in the 90th biennium audit.
+
 ### Variance decomposition via ICC
 
 **Decision:** Compute the intraclass correlation coefficient (ICC) as `sigma_between² / (sigma_between² + sigma_within²)` where `sigma_between` is derived from the variance of party means and `sigma_within` is the pooled within-party standard deviation (weighted by group size). Computed per posterior draw (vectorized with numpy) to propagate uncertainty.

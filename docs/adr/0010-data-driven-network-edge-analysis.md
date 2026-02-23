@@ -39,3 +39,7 @@ Additionally, network visualization was enhanced with data-driven annotations:
 **Files changed:**
 - `analysis/network.py` — Renamed function, generalized logic, added visualization enhancements (+398/-80 lines).
 - `analysis/network_report.py` — Renamed `_add_tyson_thompson` to `_add_extreme_edge_analysis`, added `_add_centrality_ranking_figure`, updated captions (+78/-80 lines).
+
+## Update: Community Composition n_other Column (2026-02-23)
+
+A cross-biennium audit discovered that `analyze_community_composition()` only tracked `n_republican` and `n_democrat` columns. In the 89th biennium (2021-22), Dennis Pyle (Independent) was invisible in community composition tables — community 2 showed 7 Republicans but the 8th member was unaccounted for. Added `n_other` column that counts non-R/D legislators, ensuring `n_republican + n_democrat + n_other == n_legislators` always holds. Four tests added to verify the invariant.

@@ -630,12 +630,14 @@ def analyze_community_composition(
             if loy is not None:
                 loyalty_values.append(loy)
 
+        n_other = n_total - parties.get("Republican", 0) - parties.get("Democrat", 0)
         row: dict = {
             "chamber": chamber,
             "community": comm_id,
             "n_legislators": n_total,
             "n_republican": parties.get("Republican", 0),
             "n_democrat": parties.get("Democrat", 0),
+            "n_other": n_other,
             "pct_republican": round(parties.get("Republican", 0) / n_total * 100, 1),
             "mean_xi": round(float(np.mean(xi_values)), 3) if xi_values else None,
             "std_xi": round(float(np.std(xi_values)), 3) if len(xi_values) > 1 else None,

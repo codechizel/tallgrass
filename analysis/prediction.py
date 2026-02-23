@@ -1002,7 +1002,20 @@ def find_surprising_bills(
     # Only look at wrong predictions (consistent with find_surprising_votes)
     wrong_mask = y_pred != y
     if wrong_mask.sum() == 0:
-        return pl.DataFrame()
+        return pl.DataFrame(
+            schema={
+                "vote_id": pl.Utf8,
+                "bill_number": pl.Utf8,
+                "passed_binary": pl.Int64,
+                "y_prob": pl.Float64,
+                "predicted": pl.Float64,
+                "confidence_error": pl.Float64,
+                "motion": pl.Utf8,
+                "vote_type": pl.Utf8,
+                "yea_count": pl.Int64,
+                "nay_count": pl.Int64,
+            }
+        )
 
     wrong_df = (
         features_df.filter(pl.Series(wrong_mask))

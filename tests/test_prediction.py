@@ -19,6 +19,7 @@ from analysis.prediction import (
     compute_per_legislator_accuracy,
     compute_shap_values,
     detect_hardest_legislators,
+    find_surprising_bills,
     find_surprising_votes,
     train_passage_models,
     train_vote_models,
@@ -500,6 +501,65 @@ class TestTrainPassageModels:
         # Should not crash even with very few rows
         result = train_passage_models(features, "House")
         assert isinstance(result, dict)
+
+
+# ── Tests: Surprising Bills ─────────────────────────────────────────────────
+
+
+class TestSurprisingBills:
+    """Run: uv run pytest tests/test_prediction.py::TestSurprisingBills -v"""
+
+    def test_empty_result_has_schema(self, synthetic_rollcalls, synthetic_bill_params):
+        """When model gets everything right, empty DataFrame should have proper schema."""
+        features = build_bill_features(synthetic_rollcalls, synthetic_bill_params, "House")
+        result = train_passage_models(features, "House")
+        if result.get("skipped"):
+            pytest.skip("Too few observations")
+
+        xgb = result["models"]["XGBoost"]
+        feature_cols = result["feature_names"]
+
+        # Find surprising bills (may or may not be empty)
+        surprising = find_surprising_bills(xgb, features, feature_cols, synthetic_rollcalls)
+
+        # Whether empty or not, should always have the expected columns
+        expected_cols = {
+            "vote_id", "bill_number", "passed_binary",
+            "y_prob", "predicted", "confidence_error",
+            "motion", "vote_type", "yea_count", "nay_count",
+        }
+        assert expected_cols.issubset(set(surprising.columns))
+
+    def test_empty_schema_direct(self):
+        """Directly test that a perfect model returns typed empty DataFrame, not Schema()."""
+
+        class FakeModel:
+            def predict_proba(self, X):
+                probs = np.zeros((len(X), 2))
+                probs[:, 1] = (X[:, 0] > 0).astype(float)
+                return probs
+
+            def predict(self, X):
+                return (X[:, 0] > 0).astype(int)
+
+        features_df = pl.DataFrame({
+            "vote_id": ["v1", "v2", "v3"],
+            "bill_number": ["HB1", "HB2", "HB3"],
+            "passed_binary": [1, 1, 0],
+            "feat1": [1.0, 1.0, -1.0],
+        })
+        rollcalls = pl.DataFrame({
+            "vote_id": ["v1", "v2", "v3"],
+            "motion": ["m1", "m2", "m3"],
+            "vote_type": ["Final Action", "Final Action", "Final Action"],
+            "yea_count": [80, 90, 10],
+            "nay_count": [20, 10, 90],
+        })
+
+        result = find_surprising_bills(FakeModel(), features_df, ["feat1"], rollcalls)
+        assert result.height == 0
+        assert len(result.columns) > 0, "Empty DataFrame should have column schema"
+        assert "vote_id" in result.columns
 
 
 # ── Tests: Per-Legislator Accuracy ───────────────────────────────────────────

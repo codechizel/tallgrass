@@ -441,6 +441,24 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** The 84th House data has ~30% of vote pages missing individual-level data (tally-only ODTs), plus 899/900 rollcalls with tally mismatches between summary and detail counts. The observation matrix is only 51.7% complete before filtering. This produces a degenerate likelihood surface for the House IRT model. Senate data is cleaner.
 - **Downstream:** House IRT-derived metrics for the 84th (ideal points, bill discrimination, SHAP from prediction) should be treated as unreliable. Senate results are trustworthy. Hierarchical IRT also failed convergence for House (R-hat up to 1.04). All phases that depend on IRT ideal points (clustering IRT scatter, prediction IRT features, synthesis dashboards, profiles) inherit this uncertainty for House only.
 
+### IRT Convergence Failures Across Historical Sessions
+
+- **Phase:** IRT
+- **Observation:** Five chamber-sessions have catastrophic flat IRT convergence failure (R-hat ~1.83, ESS ~3). The affected chambers produce compressed ideal points in [-1, +1] (the anchor bounds) with inverted party signs. The broken `xi_mean` propagates into network (centrality, community composition `mean_xi`), prediction (vote features `xi_mean`, `xi_x_beta`), and synthesis (`xi_mean`, `xi_mean_percentile`).
+
+| Biennium | Chamber | R-hat (xi) | ESS (xi) | IRT-PCA r | Status |
+|----------|---------|-----------|----------|-----------|--------|
+| 84th (2011-12) | House | 1.83 | 3 | -0.65 | Known |
+| 85th (2013-14) | Senate | 1.83 | 3 | -0.49 | Known |
+| 86th (2015-16) | House | 1.84 | 3 | -0.69 | Known |
+| 87th (2017-18) | Senate | 1.83 | 3 | -0.47 | Known |
+| 88th (2019-20) | Both | OK | OK | +0.96 | Clean |
+| 89th (2021-22) | House | 1.83 | 3 | inverted | Known |
+| 90th-91st | Both | OK | OK | > +0.93 | Clean |
+
+- **Explanation:** The flat IRT model (2-parameter, unconstrained Normal discrimination, fixed anchors) intermittently fails to converge for one chamber per session. The failures cluster in historical sessions where vote matrix completeness is lower (ODT parsing gaps, mid-session replacements). The hierarchical per-chamber model often converges where flat IRT fails, because the party-level prior provides additional regularization.
+- **Downstream:** For affected chambers, `hier_xi_mean` from the hierarchical model is the authoritative ideology estimate. Flat IRT `xi_mean` should not be used. Synthesis, network, and prediction consume flat IRT values by default — the broken values propagate but do not crash these phases (prediction still achieves high AUC via other features). The `shrinkage_pct` comparison in hierarchical output is meaningless when flat IRT failed (computing delta against noise).
+
 ### 84th (2011-12) — Senate ICC = 49%
 
 - **Phase:** Hierarchical IRT

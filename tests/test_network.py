@@ -14,6 +14,7 @@ import pytest
 from analysis.network import (
     KAPPA_THRESHOLD_DEFAULT,
     _community_label,
+    analyze_community_composition,
     build_kappa_network,
     build_within_party_network,
     compare_communities_to_party,
@@ -296,6 +297,47 @@ class TestCommunityDetection:
         n_communities = len(set(partition.values()))
         # Should find 2 communities (one per party) since no cross-party edges
         assert n_communities == 2
+
+
+# ── TestAnalyzeCommunityComposition ─────────────────────────────────────────
+
+
+class TestAnalyzeCommunityComposition:
+    """Run: uv run pytest tests/test_network.py::TestAnalyzeCommunityComposition -v"""
+
+    def test_has_n_other_column(self, synthetic_graph: tuple) -> None:
+        """Community composition should track non-R/D legislators via n_other."""
+        G = synthetic_graph[0]
+        partition = {n: 0 if G.nodes[n]["party"] == "Republican" else 1 for n in G.nodes()}
+        comp = analyze_community_composition(partition, G, "House")
+        assert "n_other" in comp.columns
+
+    def test_n_other_zero_for_rd_only(self, synthetic_graph: tuple) -> None:
+        """With only R and D legislators, n_other should be 0 everywhere."""
+        G = synthetic_graph[0]
+        partition = {n: 0 if G.nodes[n]["party"] == "Republican" else 1 for n in G.nodes()}
+        comp = analyze_community_composition(partition, G, "House")
+        assert comp["n_other"].sum() == 0
+
+    def test_n_other_counts_independents(self) -> None:
+        """Independents should be counted in n_other."""
+        G = nx.Graph()
+        G.add_node("leg_a", party="Republican", xi_mean=1.0, loyalty_rate=0.9)
+        G.add_node("leg_b", party="Independent", xi_mean=0.5, loyalty_rate=0.8)
+        G.add_edge("leg_a", "leg_b")
+        partition = {"leg_a": 0, "leg_b": 0}
+        comp = analyze_community_composition(partition, G, "Senate")
+        assert comp["n_other"][0] == 1
+        assert comp["n_republican"][0] == 1
+        assert comp["n_democrat"][0] == 0
+
+    def test_counts_sum_to_total(self, synthetic_graph: tuple) -> None:
+        """n_republican + n_democrat + n_other should equal n_legislators."""
+        G = synthetic_graph[0]
+        partition = {n: 0 for n in G.nodes()}  # All in one community
+        comp = analyze_community_composition(partition, G, "House")
+        row = comp.row(0, named=True)
+        assert row["n_republican"] + row["n_democrat"] + row["n_other"] == row["n_legislators"]
 
 
 # ── TestCompareCommunitiesToParty ────────────────────────────────────────────

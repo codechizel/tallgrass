@@ -42,3 +42,11 @@ Implement a 2-level hierarchical IRT with ordering constraint and non-centered p
 - Small Senate Democrat group (~10) produces wide credible intervals on the Democratic party mean
 
 **Supersedes:** The hierarchical model provides a more principled version of the Beta-Binomial's shrinkage. Beta-Binomial remains as a fast exploratory baseline (no MCMC, instant results).
+
+## Update: Joint Model Ordering Constraint (2026-02-23)
+
+A cross-biennium results audit discovered that the 3-level joint model lacked an ordering constraint on its 4 group-level means (House-D, House-R, Senate-D, Senate-R). While the per-chamber model correctly used `pt.sort(mu_party_raw)` to enforce D < R, the joint model's `group_offset` was unconstrained `Normal(0, 1)`, allowing the sampler to independently flip the party ordering for each chamber — a label-switching pathology.
+
+**Confirmed in:** 90th biennium (2023-24), where the joint model Senate showed r=-0.9999 vs the per-chamber model (perfect sign inversion for Senate while House was correct).
+
+**Fix:** Apply `pt.sort` to each chamber's pair of group offsets (`group_offset_raw[:2]` for House, `group_offset_raw[2:]` for Senate) before computing `mu_group`. This enforces D < R within each chamber independently, consistent with the per-chamber model's identification strategy.

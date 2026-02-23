@@ -436,11 +436,21 @@ def build_joint_model(
             "mu_chamber", mu_global + sigma_chamber * chamber_offset, dims="chamber"
         )
 
-        # --- Group-level (4 groups) ---
+        # --- Group-level (4 groups: House-D, House-R, Senate-D, Senate-R) ---
+        # Use ordering constraint within each chamber (D < R) for identification,
+        # mirroring the per-chamber model's pt.sort(mu_party_raw) approach.
         sigma_party = pm.HalfNormal("sigma_party", sigma=1)
-        group_offset = pm.Normal("group_offset", mu=0, sigma=1, shape=n_groups, dims="group")
+        group_offset_raw = pm.Normal(
+            "group_offset_raw", mu=0, sigma=1, shape=n_groups, dims="group"
+        )
+        # Sort each chamber's pair so D < R: indices [0,1] for House, [2,3] for Senate
+        house_pair = pt.sort(group_offset_raw[:2])
+        senate_pair = pt.sort(group_offset_raw[2:])
+        group_offset_sorted = pt.concatenate([house_pair, senate_pair])
         mu_group = pm.Deterministic(
-            "mu_group", mu_chamber[group_chamber] + sigma_party * group_offset, dims="group"
+            "mu_group",
+            mu_chamber[group_chamber] + sigma_party * group_offset_sorted,
+            dims="group",
         )
 
         # --- Within-group ---
