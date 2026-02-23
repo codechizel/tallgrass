@@ -239,19 +239,35 @@ def prepare_hierarchical_data(
 ) -> dict:
     """Extend flat IRT data with party indices for hierarchical model.
 
+    Independent legislators are excluded from the hierarchical model because
+    partial pooling by party requires party membership. They still appear in
+    the flat IRT results.
+
     Returns the same dict as prepare_irt_data() plus:
     - party_idx: array mapping each legislator to their party index (0=D, 1=R)
     - party_names: list of party names in index order
     - n_parties: number of parties (2)
+    - n_excluded: number of legislators excluded (non-major-party)
     """
+    # Filter out non-major-party legislators (e.g. Independent) before IRT prep
+    major_party_slugs = set(
+        legislators.filter(pl.col("party").is_in(PARTY_NAMES))["slug"].to_list()
+    )
+    all_slugs = set(matrix["legislator_slug"].to_list())
+    non_major = all_slugs - major_party_slugs
+    if non_major:
+        print(f"  Excluding {len(non_major)} non-major-party legislators: {sorted(non_major)}")
+        matrix = matrix.filter(~pl.col("legislator_slug").is_in(non_major))
+
     data = prepare_irt_data(matrix, chamber)
+    data["n_excluded"] = len(non_major)
 
     # Map legislator slugs to parties
     meta = legislators.select("slug", "party").unique(subset=["slug"])
     slug_to_party = dict(zip(meta["slug"].to_list(), meta["party"].to_list()))
 
     party_idx = np.array(
-        [PARTY_IDX_MAP.get(slug_to_party.get(s, "Republican"), 1) for s in data["leg_slugs"]],
+        [PARTY_IDX_MAP[slug_to_party[s]] for s in data["leg_slugs"]],
         dtype=np.int64,
     )
 
@@ -733,9 +749,9 @@ def compute_variance_decomposition(
     party_counts = np.array([(data["party_idx"] == p).sum() for p in range(n_party)])
     total = party_counts.sum()
     # sigma_post shape: (chain, draw, party)
-    sigma_within_pooled_sq = np.sum(
-        party_counts[np.newaxis, np.newaxis, :] * sigma_post**2, axis=2
-    ) / total  # (chain, draw)
+    sigma_within_pooled_sq = (
+        np.sum(party_counts[np.newaxis, np.newaxis, :] * sigma_post**2, axis=2) / total
+    )  # (chain, draw)
 
     total_var = sigma_between_sq + sigma_within_pooled_sq
     icc_flat = np.where(total_var > 0, sigma_between_sq / total_var, 0.0)

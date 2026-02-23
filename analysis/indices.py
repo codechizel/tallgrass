@@ -161,7 +161,7 @@ CO_DEFECTION_MIN = 3
 ENP_MULTIPARTY_THRESHOLD = 2.5
 ROLLING_WINDOW = 15
 TOP_DEFECTORS_N = 20
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -238,7 +238,8 @@ def load_raw_data(
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return votes, rollcalls, legislators
 
@@ -701,7 +702,7 @@ def compute_unity_and_maverick(
     for row in indiv.iter_rows(named=True):
         slug = row["legislator_slug"]
         party = leg_party.get(slug)
-        if not party:
+        if not party or party not in ("Republican", "Democrat"):
             continue
         vid = row["vote_id"]
         vote_cat = row["vote"]

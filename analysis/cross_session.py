@@ -96,7 +96,11 @@ except ModuleNotFoundError:
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-PARTY_COLORS: dict[str, str] = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS: dict[str, str] = {
+    "Republican": "#E81B23",
+    "Democrat": "#0015BC",
+    "Independent": "#999999",
+}
 TOP_MOVERS_N: int = 15
 ANNOTATE_N: int = 5
 
@@ -763,11 +767,14 @@ def main() -> None:
         _suffix_strip = pl.col("full_name").map_elements(
             strip_leadership_suffix, return_dtype=pl.Utf8
         )
+        _party_fill = (
+            pl.col("party").fill_null("Independent").replace("", "Independent").alias("party")
+        )
         leg_a = pl.read_csv(ks_a.data_dir / f"{ks_a.output_name}_legislators.csv").with_columns(
-            _suffix_strip
+            _suffix_strip, _party_fill
         )
         leg_b = pl.read_csv(ks_b.data_dir / f"{ks_b.output_name}_legislators.csv").with_columns(
-            _suffix_strip
+            _suffix_strip, _party_fill
         )
         print(f"  Session A: {leg_a.height} legislators")
         print(f"  Session B: {leg_b.height} legislators")

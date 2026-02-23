@@ -84,7 +84,7 @@ XGB_MAX_DEPTH = 6
 XGB_LEARNING_RATE = 0.1
 TOP_SHAP_FEATURES = 15
 TOP_SURPRISING_N = 20
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 HARDEST_N = 8
 
 # Plain-English feature names for SHAP and feature importance plots (nontechnical audience)
@@ -225,7 +225,10 @@ def load_vote_data(data_dir: Path) -> pl.DataFrame:
 
 def load_rollcall_data(data_dir: Path) -> pl.DataFrame:
     """Load rollcalls CSV."""
-    return pl.read_csv(data_dir / f"{data_dir.name}_rollcalls.csv")
+    rc = pl.read_csv(data_dir / f"{data_dir.name}_rollcalls.csv")
+    if "vote_type" in rc.columns:
+        rc = rc.with_columns(pl.col("vote_type").fill_null("Unknown").alias("vote_type"))
+    return rc
 
 
 def load_legislator_data(data_dir: Path) -> pl.DataFrame:
@@ -234,7 +237,8 @@ def load_legislator_data(data_dir: Path) -> pl.DataFrame:
     return legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
 
 

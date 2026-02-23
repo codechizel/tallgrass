@@ -26,6 +26,7 @@ except ModuleNotFoundError:
         make_gt,
     )
 
+
 def build_hierarchical_report(
     report: ReportBuilder,
     *,

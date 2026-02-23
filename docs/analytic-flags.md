@@ -423,6 +423,15 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Observation:** `short_title` from the KLISS API is never null for standard roll calls. However, amendment vote pages may have different title structures. The NLP module handles null/empty strings gracefully (zero-filled topic columns).
 - **Downstream:** If future sessions introduce roll calls without `short_title` data, the fallback to zero-filled columns ensures the pipeline doesn't crash, but those rows contribute no topic signal. Monitor the fraction of zero-topic rows in the filtering manifest's NLP metadata.
 
+## Flagged Legislators — 89th Biennium (2021-22)
+
+### Sen. Dennis Pyle (Independent, District 1)
+
+- **Phase:** EDA, all downstream phases
+- **Observation:** The scraper stores an empty string for Pyle's party because the party detection only recognizes "Republican" and "Democrat". The KS Legislature website lists him as "District 1 - Independent" for the 89th biennium (he switched affiliation before his 2022 governor's race).
+- **Explanation:** The analysis pipeline now fills null/empty party to "Independent" at every CSV load point (ADR-0021). Pyle is excluded from party-specific models (hierarchical IRT, party unity/maverick, beta-binomial) because partial pooling by party is undefined for a one-member "party." He retains flat IRT ideal points and appears in synthesis/profiles with null values for party-specific metrics.
+- **Downstream:** If future sessions have multiple Independent legislators, consider a 3-party hierarchical model. The scraper itself still only detects R/D/empty — the analysis-level fix handles the mapping. Pyle's `ideology_label()` returns "moderate" (neither "conservative Republican" nor "liberal Democrat"), which is a reasonable default.
+
 ## Template
 
 ```

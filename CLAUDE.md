@@ -209,6 +209,10 @@ All analysis scripts use `RunContext` from `analysis/run_context.py` as a contex
 
 Results paths use the biennium naming scheme: `91st_2025-2026` (matching the data directory). The `kansas/` state directory is controlled by `STATE_DIR` in `session.py` (see ADR-0016).
 
+### Independent Party Handling
+
+The scraper only detects "Republican" and "Democrat" — legislators with other affiliations (e.g., Dennis Pyle as "Independent" in 2021-22) get an empty party string. Every analysis phase fills null/empty party to "Independent" at CSV load time: `pl.col("party").fill_null("Independent").replace("", "Independent")`. All 12 modules define `PARTY_COLORS` with `"Independent": "#999999"`. Party-specific models (hierarchical IRT, party unity/maverick, beta-binomial) exclude Independents. Plots and legends dynamically iterate over parties present in data rather than hardcoding R/D. See ADR-0021.
+
 ## Architecture Decision Records
 
 Significant technical decisions are documented in `docs/adr/`. See `docs/adr/README.md` for the full index and template.

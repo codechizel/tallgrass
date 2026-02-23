@@ -197,7 +197,7 @@ COPHENETIC_THRESHOLD = 0.70
 SILHOUETTE_GOOD = 0.50
 GMM_COVARIANCE = "full"
 GMM_N_INIT = 20
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 CLUSTER_CMAP = "Set2"
 MINORITY_THRESHOLD = 0.025
 SENSITIVITY_THRESHOLD = 0.10
@@ -329,7 +329,8 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return rollcalls, legislators
 
@@ -2264,9 +2265,14 @@ def main() -> None:
                 }
             )
             if "labels_2d" in km_results.get(km_k, {}):
-                km_df = km_df.with_columns(
-                    pl.Series(f"cluster_2d_k{km_k}", km_results[km_k]["labels_2d"].tolist())
-                )
+                labels_2d = km_results[km_k]["labels_2d"].tolist()
+                if len(labels_2d) == km_df.height:
+                    km_df = km_df.with_columns(pl.Series(f"cluster_2d_k{km_k}", labels_2d))
+                else:
+                    print(
+                        f"  Note: 2D labels length ({len(labels_2d)}) != legislator count "
+                        f"({km_df.height}) — skipping 2D cluster column"
+                    )
             km_df.write_parquet(ctx.data_dir / f"kmeans_assignments_{chamber.lower()}.parquet")
             print(f"  Saved: kmeans_assignments_{chamber.lower()}.parquet")
 

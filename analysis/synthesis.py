@@ -96,12 +96,20 @@ statistical training.
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
-PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
+PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0", "Independent": "#CCCCCC"}
 
 UPSTREAM_PHASES = [
-    "eda", "pca", "irt", "clustering", "network", "prediction", "indices", "umap",
-    "beta_binomial", "hierarchical",
+    "eda",
+    "pca",
+    "irt",
+    "clustering",
+    "network",
+    "prediction",
+    "indices",
+    "umap",
+    "beta_binomial",
+    "hierarchical",
 ]
 
 
@@ -184,9 +192,7 @@ def load_all_upstream(results_base: Path) -> dict:
                 if df is not None:
                     upstream[chamber]["beta_posterior"] = df
             elif phase == "hierarchical":
-                df = _read_parquet_safe(
-                    data_dir / f"hierarchical_ideal_points_{chamber}.parquet"
-                )
+                df = _read_parquet_safe(data_dir / f"hierarchical_ideal_points_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["hierarchical"] = df
 
@@ -235,14 +241,16 @@ def build_legislator_df(upstream: dict, chamber: str) -> pl.DataFrame:
             how="left",
         )
 
-    # Clustering assignments
+    # Clustering assignments (optimal k varies by session)
     km = upstream[chamber].get("kmeans")
     if km is not None:
-        df = df.join(
-            km.select("legislator_slug", "cluster_k2", "distance_to_centroid"),
-            on="legislator_slug",
-            how="left",
-        )
+        cluster_cols = [
+            c for c in km.columns if c.startswith("cluster_k") and not c.startswith("cluster_2d")
+        ]
+        select_cols = ["legislator_slug", "distance_to_centroid"] + cluster_cols
+        select_cols = [c for c in select_cols if c in km.columns]
+        if select_cols:
+            df = df.join(km.select(select_cols), on="legislator_slug", how="left")
 
     # Per-legislator prediction accuracy
     acc = upstream[chamber].get("accuracy")
@@ -374,7 +382,9 @@ def plot_dashboard_scatter(
             continue
         r = row.to_dicts()[0]
         x = r["xi_mean"]
-        y = r.get("unity_score", 0.5) if has_unity else 0.5
+        y = (r.get("unity_score") or 0.5) if has_unity else 0.5
+        if x is None:
+            continue
         name = r["full_name"]
         ax.annotate(
             name,

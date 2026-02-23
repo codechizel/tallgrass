@@ -127,8 +127,8 @@ Each legislator profile includes:
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
-PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
+PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0", "Independent": "#CCCCCC"}
 
 
 # ── Vote Data Prep ───────────────────────────────────────────────────────────

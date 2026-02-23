@@ -48,6 +48,7 @@ What are the trade-offs?
 | [0018](0018-ty-type-checker-adoption.md) | ty type checker adoption (beta) | Accepted | 2026-02-22 |
 | [0019](0019-cross-session-validation.md) | Cross-session validation | Accepted | 2026-02-22 |
 | [0020](0020-historical-session-support.md) | Historical session support (2011-2026) | Accepted | 2026-02-22 |
+| [0021](0021-independent-party-handling.md) | Independent party handling across analysis pipeline | Accepted | 2026-02-22 |
 
 ## Creating a New ADR
 

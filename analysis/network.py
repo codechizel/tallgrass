@@ -57,7 +57,7 @@ HIGH_DISC_THRESHOLD = 1.5
 TOP_BRIDGE_N = 15
 TOP_LABEL_N = 10
 RANDOM_SEED = 42
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
 # Plain-English labels for centrality measures and IRT columns (nontechnical audience)
 PLAIN_LABELS: dict[str, str] = {
@@ -330,7 +330,8 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return rollcalls, legislators
 

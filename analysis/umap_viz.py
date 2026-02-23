@@ -178,7 +178,7 @@ DEFAULT_MIN_DIST = 0.1
 DEFAULT_METRIC = "cosine"
 RANDOM_STATE = 42
 SENSITIVITY_N_NEIGHBORS = [5, 15, 30, 50]
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -246,7 +246,8 @@ def load_metadata(data_dir: Path) -> pl.DataFrame:
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return legislators
 

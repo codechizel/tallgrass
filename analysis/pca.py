@@ -155,7 +155,7 @@ SENSITIVITY_THRESHOLD = 0.10  # Sensitivity: 10% (per workflow rules)
 MIN_VOTES = 20  # Minimum substantive votes per legislator
 HOLDOUT_FRACTION = 0.20  # Random 20% of non-null cells
 HOLDOUT_SEED = 42
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -217,7 +217,8 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return rollcalls, legislators
 

@@ -192,7 +192,7 @@ HOLDOUT_FRACTION = 0.20  # Random 20% of observed cells
 HOLDOUT_SEED = 42
 MIN_PARTICIPATION_FOR_ANCHOR = 0.50  # Anchors must have >= 50% participation
 
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
 # Joint model defaults
 JOINT_TARGET_ACCEPT = 0.95
@@ -287,10 +287,12 @@ def load_metadata(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
     # Strip leadership suffixes (" - President of the Senate" etc.)
+    # Fill empty/null party with "Independent" (e.g. Dennis Pyle in 89th)
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return rollcalls, legislators
 

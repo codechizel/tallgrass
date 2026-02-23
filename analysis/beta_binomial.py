@@ -121,7 +121,7 @@ All outputs land in `results/<session>/beta_binomial/<date>/`:
 
 MIN_PARTY_VOTES = 3
 CI_LEVEL = 0.95
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 FALLBACK_ALPHA = 1.0
 FALLBACK_BETA = 1.0
 
@@ -238,9 +238,7 @@ def compute_bayesian_loyalty(
 
             post_mean = alpha_post / (alpha_post + beta_post)
             post_median = float(sp_stats.beta.median(alpha_post, beta_post))
-            ci_lower, ci_upper = sp_stats.beta.ppf(
-                [ci_tail, 1 - ci_tail], alpha_post, beta_post
-            )
+            ci_lower, ci_upper = sp_stats.beta.ppf([ci_tail, 1 - ci_tail], alpha_post, beta_post)
 
             raw_rate = yi / ni if ni > 0 else float("nan")
             shrinkage = (alpha_prior + beta_prior) / (alpha_prior + beta_prior + ni)
@@ -312,8 +310,17 @@ def plot_shrinkage_arrows(
         # Raw dots
         ax.scatter(raw, n_votes, color=color, alpha=0.4, s=20, zorder=3)
         # Posterior dots
-        ax.scatter(post, n_votes, color=color, alpha=0.8, s=30, edgecolors="white",
-                   linewidth=0.5, zorder=4, label=party)
+        ax.scatter(
+            post,
+            n_votes,
+            color=color,
+            alpha=0.8,
+            s=30,
+            edgecolors="white",
+            linewidth=0.5,
+            zorder=4,
+            label=party,
+        )
 
     # Prior mean line
     prior_means = loyalty_df["prior_mean"].unique().to_list()
@@ -332,9 +339,9 @@ def plot_shrinkage_arrows(
 
     # Annotation
     ax.text(
-        0.02, 0.98,
-        "Faded dots = raw rate\nBright dots = Bayesian estimate\n"
-        "Longer arrows = more shrinkage",
+        0.02,
+        0.98,
+        "Faded dots = raw rate\nBright dots = Bayesian estimate\nLonger arrows = more shrinkage",
         transform=ax.transAxes,
         fontsize=9,
         va="top",
@@ -393,14 +400,18 @@ def plot_credible_intervals(
     ax.annotate(
         f"Widest CI: {ci_widths[widest_idx]:.3f}",
         (post_mean[widest_idx], y[widest_idx]),
-        fontsize=7, fontweight="bold",
-        xytext=(10, 0), textcoords="offset points",
+        fontsize=7,
+        fontweight="bold",
+        xytext=(10, 0),
+        textcoords="offset points",
     )
     ax.annotate(
         f"Narrowest: {ci_widths[narrowest_idx]:.3f}",
         (post_mean[narrowest_idx], y[narrowest_idx]),
-        fontsize=7, fontweight="bold",
-        xytext=(10, 0), textcoords="offset points",
+        fontsize=7,
+        fontweight="bold",
+        xytext=(10, 0),
+        textcoords="offset points",
     )
 
     from matplotlib.patches import Patch
@@ -456,8 +467,9 @@ def plot_posterior_distributions(
         name = row["full_name"] or slug
         color = colors_cycle[i % len(colors_cycle)]
 
-        ax.plot(x, pdf, color=color, linewidth=2,
-                label=f"{name} — {label} (n={row['n_party_votes']})")
+        ax.plot(
+            x, pdf, color=color, linewidth=2, label=f"{name} — {label} (n={row['n_party_votes']})"
+        )
         ax.fill_between(x, pdf, alpha=0.1, color=color)
 
     ax.set_xlabel("Party Loyalty Rate")
@@ -497,8 +509,14 @@ def plot_raw_vs_bayesian(
         sizes = 20 + sub["n_party_votes"].to_numpy() * 0.8
 
         ax.scatter(
-            raw, post, c=color, s=sizes, alpha=0.7,
-            edgecolors="white", linewidth=0.5, label=party,
+            raw,
+            post,
+            c=color,
+            s=sizes,
+            alpha=0.7,
+            edgecolors="white",
+            linewidth=0.5,
+            label=party,
         )
 
     # 45-degree reference line
@@ -515,7 +533,8 @@ def plot_raw_vs_bayesian(
     )
 
     ax.text(
-        0.02, 0.98,
+        0.02,
+        0.98,
         "Dot size = number of party votes\n"
         "Points near the diagonal barely changed;\n"
         "points far from it were heavily shrunk.",
@@ -595,12 +614,8 @@ def main() -> None:
 
             # Summary stats
             print(f"  {chamber}: {loyalty_df.height} posterior estimates")
-            print(
-                f"    Mean shrinkage: {float(loyalty_df['shrinkage'].mean()):.4f}"
-            )
-            print(
-                f"    Mean CI width:  {float(loyalty_df['ci_width'].mean()):.4f}"
-            )
+            print(f"    Mean shrinkage: {float(loyalty_df['shrinkage'].mean()):.4f}")
+            print(f"    Mean CI width:  {float(loyalty_df['ci_width'].mean()):.4f}")
 
             # Who moved the most?
             most_shrunk = loyalty_df.sort(
@@ -653,9 +668,7 @@ def main() -> None:
                 if party_sub.height > 0:
                     manifest[f"{ch}_{party.lower()}_alpha"] = float(party_sub["alpha_prior"][0])
                     manifest[f"{ch}_{party.lower()}_beta"] = float(party_sub["beta_prior"][0])
-                    manifest[f"{ch}_{party.lower()}_prior_mean"] = float(
-                        party_sub["prior_mean"][0]
-                    )
+                    manifest[f"{ch}_{party.lower()}_prior_mean"] = float(party_sub["prior_mean"][0])
                     manifest[f"{ch}_{party.lower()}_n"] = party_sub.height
 
         manifest_path = ctx.run_dir / "filtering_manifest.json"

@@ -499,9 +499,7 @@ def _add_per_legislator_figure(report: ReportBuilder, plots_dir: Path, chamber: 
         )
 
 
-def _add_hardest_to_predict_figure(
-    report: ReportBuilder, plots_dir: Path, chamber: str
-) -> None:
+def _add_hardest_to_predict_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
     path = plots_dir / f"hardest_to_predict_{chamber.lower()}.png"
     if path.exists():
         report.add(

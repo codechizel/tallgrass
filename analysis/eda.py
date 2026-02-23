@@ -153,7 +153,7 @@ All outputs land in `results/<session>/eda/<date>/`:
 MINORITY_THRESHOLD = 0.025  # Drop votes where minority < 2.5% (VoteView standard)
 MIN_VOTES = 20  # Drop legislators with fewer than 20 substantive votes
 VOTE_CATEGORIES = ["Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting"]
-PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC"}
+PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
 # Kansas Legislature constitutional seat counts. These are fixed and serve as
 # a data integrity guardrail: if we see more legislators than seats, we have
@@ -202,11 +202,17 @@ def load_data(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]
     prefix = data_dir.name
     votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
+    # Fill null vote_type (some historical sessions have missing values)
+    if "vote_type" in rollcalls.columns:
+        rollcalls = rollcalls.with_columns(
+            pl.col("vote_type").fill_null("Unknown").alias("vote_type")
+        )
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
     legislators = legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name")
+        .alias("full_name"),
+        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
     )
     return votes, rollcalls, legislators
 
@@ -1131,7 +1137,7 @@ def analyze_participation(
         .agg(pl.len())
     )
     print("\n  Vote breakdown by party:")
-    for party in ["Republican", "Democrat"]:
+    for party in sorted(total_votes_per_party["party"].unique().to_list()):
         party_data = total_votes_per_party.filter(pl.col("party") == party)
         total = party_data["len"].sum()
         print(f"\n    {party}:")
@@ -1297,18 +1303,18 @@ def plot_agreement_heatmap(
         fontsize=14,
     )
 
-    # Party color legend
+    # Party color legend — dynamic based on parties present in the data
     from matplotlib.patches import Patch
 
+    parties_in_data = sorted(set(parties))
     legend_elements = [
-        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
-        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+        Patch(facecolor=PARTY_COLORS.get(p, "#999999"), label=p) for p in parties_in_data
     ]
     g.ax_heatmap.legend(
         handles=legend_elements,
         loc="lower left",
         bbox_to_anchor=(0, -0.15),
-        ncol=2,
+        ncol=len(parties_in_data),
         frameon=False,
         fontsize=9,
     )
@@ -1460,7 +1466,11 @@ def plot_party_vote_breakdown(
     )
     breakdown = vote_with_party.group_by("party", "vote").agg(pl.len())
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    parties_present = sorted(breakdown["party"].unique().to_list())
+    n_parties = len(parties_present)
+    fig, axes = plt.subplots(1, n_parties, figsize=(7 * n_parties, 6))
+    if n_parties == 1:
+        axes = [axes]
     cat_colors = {
         "Yea": "#2ecc71",
         "Nay": "#e74c3c",
@@ -1469,7 +1479,7 @@ def plot_party_vote_breakdown(
         "Not Voting": "#bdc3c7",
     }
 
-    for ax, party in zip(axes, ["Republican", "Democrat"]):
+    for ax, party in zip(axes, parties_present):
         party_data = breakdown.filter(pl.col("party") == party)
         total = party_data["len"].sum()
         cats = []
@@ -1533,9 +1543,9 @@ def plot_participation_rates(participation: pl.DataFrame, chamber: str, out_dir:
 
     from matplotlib.patches import Patch
 
+    parties_in_data = sorted(set(parties))
     legend_elements = [
-        Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
-        Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+        Patch(facecolor=PARTY_COLORS.get(p, "#999999"), label=p) for p in parties_in_data
     ]
     ax.legend(handles=legend_elements, loc="lower right", fontsize=9)
 

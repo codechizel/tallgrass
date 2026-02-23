@@ -169,7 +169,7 @@ def _add_full_table(
         source_note=(
             "Raw Loyalty = CQ-standard party unity (votes with party / party votes present). "
             "Bayesian Estimate = posterior mean after shrinkage toward party average. "
-            f"CI = {CI_LEVEL*100:.0f}% credible interval. "
+            f"CI = {CI_LEVEL * 100:.0f}% credible interval. "
             "Shrinkage: 0 = no change, 1 = fully pulled to party mean."
         ),
     )
@@ -217,7 +217,7 @@ def _add_credible_intervals_figure(
                 f"{chamber} Credible Intervals",
                 path,
                 caption=(
-                    f"Each horizontal bar shows the {CI_LEVEL*100:.0f}% credible interval for a "
+                    f"Each horizontal bar shows the {CI_LEVEL * 100:.0f}% credible interval for a "
                     "legislator's true loyalty. Wider bars mean less certainty. The dot marks "
                     "the posterior mean (best estimate)."
                 ),

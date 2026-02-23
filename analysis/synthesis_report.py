@@ -800,9 +800,7 @@ def _add_bayesian_loyalty_narrative(report: object, leg_dfs: dict) -> None:
 
         most_moved = df_with_delta.sort("abs_delta", descending=True).row(0, named=True)
         mean_shrink = (
-            float(df_with_delta["shrinkage"].mean())
-            if "shrinkage" in df_with_delta.columns
-            else 0
+            float(df_with_delta["shrinkage"].mean()) if "shrinkage" in df_with_delta.columns else 0
         )
 
         label = chamber.title()
