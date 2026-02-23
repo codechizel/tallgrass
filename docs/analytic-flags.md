@@ -432,6 +432,50 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** The analysis pipeline now fills null/empty party to "Independent" at every CSV load point (ADR-0021). Pyle is excluded from party-specific models (hierarchical IRT, party unity/maverick, beta-binomial) because partial pooling by party is undefined for a one-member "party." He retains flat IRT ideal points and appears in synthesis/profiles with null values for party-specific metrics.
 - **Downstream:** If future sessions have multiple Independent legislators, consider a 3-party hierarchical model. The scraper itself still only detects R/D/empty — the analysis-level fix handles the mapping. Pyle's `ideology_label()` returns "moderate" (neither "conservative Republican" nor "liberal Democrat"), which is a reasonable default.
 
+## Historical Session Data Quality (84th-88th, 2011-2020)
+
+### 84th (2011-12) — IRT House Convergence Failure
+
+- **Phase:** IRT
+- **Observation:** House flat IRT model has catastrophic convergence: R-hat up to 1.83, ESS as low as 3. Ideal points are unreliable — most legislators cluster near 0 with wide HDI spanning [-3, +4]. Senate converges normally (R-hat < 1.01, ESS > 270).
+- **Explanation:** The 84th House data has ~30% of vote pages missing individual-level data (tally-only ODTs), plus 899/900 rollcalls with tally mismatches between summary and detail counts. The observation matrix is only 51.7% complete before filtering. This produces a degenerate likelihood surface for the House IRT model. Senate data is cleaner.
+- **Downstream:** House IRT-derived metrics for the 84th (ideal points, bill discrimination, SHAP from prediction) should be treated as unreliable. Senate results are trustworthy. Hierarchical IRT also failed convergence for House (R-hat up to 1.04). All phases that depend on IRT ideal points (clustering IRT scatter, prediction IRT features, synthesis dashboards, profiles) inherit this uncertainty for House only.
+
+### 84th (2011-12) — Senate ICC = 49%
+
+- **Phase:** Hierarchical IRT
+- **Observation:** Senate intra-class correlation is only 0.494 — party explains less than half of ideological variance. Republican within-party sigma (2.998) is nearly 4x the Democrat sigma (0.774). This is far lower than all other sessions (typically 75-90%).
+- **Explanation:** The 84th Kansas Senate had a deep intra-Republican schism. Moderates like John Vratil (maverick rate 0.811) and Jean Schodorf (0.792) defected on over 80% of party votes. The Senate community detection assigns 7 Democrats and 3 moderate Republicans to the same community, reflecting real bipartisan voting patterns (not a bug). This was the era of Kansas's moderate-vs-conservative Republican civil war.
+- **Downstream:** The low ICC is substantively correct, not a model error. It makes the 84th Senate the most interesting session for studying intra-party dynamics.
+
+### 85th (2013-14) — Vote Deduplication
+
+- **Phase:** EDA
+- **Observation:** Raw scrape produced 132,180 individual votes; after deduplication by (legislator_slug, vote_id), 91,825 remain — 40,355 duplicates (31%). The 84th had 6,276 duplicates (8.5%).
+- **Explanation:** ODT sessions can link the same vote page from multiple bills when a single roll call covers bundled legislation. The deduplication is correct — verified by checking that deduplicated vote counts match tally metadata.
+- **Downstream:** Deduplication is now built into `save_csvs()` and applies to all sessions. Non-ODT sessions produce zero duplicates.
+
+### 85th-86th — Null Motion Text
+
+- **Phase:** IRT, Indices
+- **Observation:** Some roll calls in pre-2015 sessions have null `motion` text (the ODT metadata field was empty). This caused crashes in IRT's `_pick_best_vid()` (AttributeError on `.lower()`) and Indices' `plot_rice_by_vote_type()` (TypeError on `len(None)`).
+- **Explanation:** The ODT vote files sometimes lack the motion text field. Fixed by guarding with `(value or "")` in both locations.
+- **Downstream:** All null-motion guards are now in place. These roll calls still have valid vote data — only the motion description is missing.
+
+### 85th — 100% House Bill Passage Rate
+
+- **Phase:** Prediction
+- **Observation:** All 110 House bills with a `passed` value passed (100% rate). Senate had 190 bills with only 1 failure (99.5%). Bill passage models are skipped for both chambers.
+- **Explanation:** The ODT sessions may have biased coverage — committee-of-the-whole and conference committee votes (which include most failed motions) are the tally-only ODTs that produce 0 individual votes. The surviving roll calls are biased toward final passage actions, which overwhelmingly pass.
+- **Downstream:** Bill passage prediction is unreliable for ODT sessions due to survivorship bias in the vote data. Individual vote prediction and all other phases are unaffected.
+
+### All Historical Sessions — Zero Veto Override Votes
+
+- **Phase:** Clustering, Indices, Network
+- **Observation:** All sessions from 84th through 88th (2011-2020) have zero veto override votes, unlike the 91st (2025-26) which has 34.
+- **Explanation:** Either veto overrides were rare in these sessions, or they are coded differently in the historical data (different motion text patterns, or lumped into "Unknown" vote type). The 84th-85th had 57.9% "Unknown" vote types — some may be overrides.
+- **Downstream:** Override-specific analyses (override subnetwork, override Rice, override clustering) are skipped for all historical sessions. Cross-session comparison of override behavior is not possible.
+
 ## Template
 
 ```

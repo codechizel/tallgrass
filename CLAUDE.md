@@ -178,9 +178,11 @@ The KS Legislature uses different URL prefixes per session — this is the singl
 ## Output
 
 Three CSVs in `data/kansas/{legislature}_{start}-{end}/` (e.g. `data/kansas/91st_2025-2026/`):
-- `{output_name}_votes.csv` — ~68K rows, one per legislator per roll call
+- `{output_name}_votes.csv` — ~68K rows, one per legislator per roll call (deduplicated by `legislator_slug` + `vote_id`)
 - `{output_name}_rollcalls.csv` — ~500 rows, one per roll call
 - `{output_name}_legislators.csv` — ~172 rows, one per legislator
+
+Vote deduplication: ODT sessions (2011-2014) can link the same vote page from multiple bills, producing duplicate `(legislator_slug, vote_id)` pairs. `save_csvs()` deduplicates by this key, keeping the first occurrence. The 85th session went from 132K to 92K after dedup; the 84th from 74K to 68K.
 
 Cache lives in `data/kansas/{output_name}/.cache/`. Use `--clear-cache` to force fresh fetches.
 
