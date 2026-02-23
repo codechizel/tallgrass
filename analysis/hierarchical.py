@@ -372,12 +372,11 @@ def build_joint_model(
     vote_to_idx = {v: i for i, v in enumerate(all_vote_ids)}
 
     # Remap indices for combined model
-    house_leg_offset = 0
     senate_leg_offset = n_house
 
     combined_leg_idx = np.concatenate(
         [
-            house_data["leg_idx"] + house_leg_offset,
+            house_data["leg_idx"],
             senate_data["leg_idx"] + senate_leg_offset,
         ]
     )
@@ -571,15 +570,19 @@ def extract_hierarchical_ideal_points(
     xi_sd = xi_posterior.std(dim=["chain", "draw"]).values
     xi_hdi = az.hdi(idata, var_names=["xi"], hdi_prob=0.95)["xi"].values
 
-    # Party means
-    mu_party_mean = idata.posterior["mu_party"].mean(dim=["chain", "draw"]).values
+    # Group/party means — joint model uses mu_group, per-chamber uses mu_party
+    if "mu_group" in idata.posterior:
+        mu_mean = idata.posterior["mu_group"].mean(dim=["chain", "draw"]).values
+        group_idx = data.get("group_idx", data.get("party_idx"))
+    else:
+        mu_mean = idata.posterior["mu_party"].mean(dim=["chain", "draw"]).values
+        group_idx = data["party_idx"]
 
     slugs = data["leg_slugs"]
-    party_idx = data["party_idx"]
 
     rows = []
     for i, slug in enumerate(slugs):
-        party_mean = float(mu_party_mean[party_idx[i]])
+        party_mean = float(mu_mean[group_idx[i]])
         rows.append(
             {
                 "legislator_slug": slug,
@@ -606,32 +609,49 @@ def extract_hierarchical_ideal_points(
         )
         df = df.join(flat_cols, on="legislator_slug", how="left")
 
+        # Rescale flat estimates to hierarchical scale via linear regression.
+        # The two models produce ideal points on different scales (flat ≈ [-4,3],
+        # hier ≈ [-11,9]) because their identification constraints differ.
+        # A linear transform (slope, intercept) maps flat → hier for comparison.
+        matched = df.filter(pl.col("flat_xi_mean").is_not_null() & pl.col("xi_mean").is_not_null())
+        if len(matched) > 2:
+            flat_vals = matched["flat_xi_mean"].to_numpy()
+            hier_vals = matched["xi_mean"].to_numpy()
+            slope, intercept = np.polyfit(flat_vals, hier_vals, 1)
+            df = df.with_columns(
+                (pl.col("flat_xi_mean") * slope + intercept).alias("flat_xi_rescaled"),
+            )
+        else:
+            slope = 1.0
+            df = df.with_columns(
+                pl.col("flat_xi_mean").alias("flat_xi_rescaled"),
+            )
+
         df = df.with_columns(
             [
-                (pl.col("xi_mean") - pl.col("flat_xi_mean")).alias("delta_from_flat"),
-                pl.when(pl.col("flat_xi_sd") > 0.01)
-                .then(
-                    (
-                        (pl.col("xi_mean") - pl.col("flat_xi_mean")).abs()
-                        / pl.col("flat_xi_sd")
-                        * 100
-                    )
-                )
+                # Delta in hierarchical scale (flat rescaled to match)
+                (pl.col("xi_mean") - pl.col("flat_xi_rescaled")).alias("delta_from_flat"),
+            ]
+        )
+
+        # Determine if shrinkage is toward party mean (using rescaled flat)
+        flat_dist = (pl.col("flat_xi_rescaled") - pl.col("party_mean")).abs()
+        hier_dist = (pl.col("xi_mean") - pl.col("party_mean")).abs()
+        df = df.with_columns(
+            [
+                (hier_dist < flat_dist).alias("toward_party_mean"),
+                # Shrinkage = fraction of flat's distance to party mean absorbed by pooling.
+                # 100% = fully pooled to party mean. 0% = no change. Negative = moved away.
+                # Null when flat_dist < 0.5 (ratio unstable near party mean) or anchored.
+                pl.when((pl.col("flat_xi_sd") > 0.01) & (flat_dist > 0.5))
+                .then((1 - hier_dist / flat_dist) * 100)
                 .otherwise(None)
                 .alias("shrinkage_pct"),
             ]
         )
 
-        # Determine if shrinkage is toward party mean
-        df = df.with_columns(
-            pl.when(
-                (pl.col("xi_mean") - pl.col("party_mean")).abs()
-                < (pl.col("flat_xi_mean") - pl.col("party_mean")).abs()
-            )
-            .then(True)
-            .otherwise(False)
-            .alias("toward_party_mean"),
-        )
+        # Drop the intermediate rescaled column
+        df = df.drop("flat_xi_rescaled")
     else:
         df = df.with_columns(
             [
@@ -704,24 +724,22 @@ def compute_variance_decomposition(
 
     n_chain, n_draw, n_party = mu_post.shape
 
-    # Compute ICC per posterior draw
-    icc_samples = np.zeros(n_chain * n_draw)
-    for c in range(n_chain):
-        for d in range(n_draw):
-            mu_vals = mu_post[c, d, :]
-            sigma_vals = sigma_post[c, d, :]
+    # Compute ICC per posterior draw (vectorized)
+    # Between-party variance: var of party means across parties per draw
+    # mu_post shape: (chain, draw, party) → var across party axis
+    sigma_between_sq = np.var(mu_post, axis=2)  # (chain, draw)
 
-            # Between-party variance: var of party means
-            sigma_between_sq = float(np.var(mu_vals))
+    # Within-party variance: pooled (weighted by group size)
+    party_counts = np.array([(data["party_idx"] == p).sum() for p in range(n_party)])
+    total = party_counts.sum()
+    # sigma_post shape: (chain, draw, party)
+    sigma_within_pooled_sq = np.sum(
+        party_counts[np.newaxis, np.newaxis, :] * sigma_post**2, axis=2
+    ) / total  # (chain, draw)
 
-            # Within-party variance: pooled (weighted by group size)
-            party_counts = np.array([int((data["party_idx"] == p).sum()) for p in range(n_party)])
-            total = party_counts.sum()
-            sigma_within_pooled_sq = float(np.sum(party_counts * sigma_vals**2) / total)
-
-            total_var = sigma_between_sq + sigma_within_pooled_sq
-            icc = sigma_between_sq / total_var if total_var > 0 else 0.0
-            icc_samples[c * n_draw + d] = icc
+    total_var = sigma_between_sq + sigma_within_pooled_sq
+    icc_flat = np.where(total_var > 0, sigma_between_sq / total_var, 0.0)
+    icc_samples = icc_flat.ravel()  # (chain * draw,)
 
     icc_mean = float(np.mean(icc_samples))
     icc_sd = float(np.std(icc_samples))
@@ -880,22 +898,26 @@ def plot_icc(
         fontweight="bold",
     )
 
-    ax.text(
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(["Party", "Individual"], fontsize=11, fontweight="bold")
+    ax.tick_params(axis="x", length=0, pad=8)
+
+    fig.text(
         0.5,
-        -0.08,
+        0.01,
         f"Party membership explains {icc_mean:.0%} of the variation in "
-        f"how {chamber} members vote.\n"
+        f"how {chamber} members vote. "
         f"The remaining {1 - icc_mean:.0%} reflects individual differences within parties.",
         ha="center",
-        transform=ax.transAxes,
         fontsize=10,
         fontstyle="italic",
         color="#555555",
+        wrap=True,
     )
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
     save_fig(fig, out_dir / f"icc_{chamber.lower()}.png")
 
 
@@ -940,10 +962,15 @@ def plot_shrinkage_scatter(
     ]
     ax.plot(lims, lims, "k--", alpha=0.3, label="No change")
 
-    # Annotate biggest movers
-    df_with_delta = df.with_columns(
-        (pl.col("xi_mean") - pl.col("flat_xi_mean")).abs().alias("abs_delta")
-    ).sort("abs_delta", descending=True)
+    # Annotate biggest movers (use delta_from_flat which is scale-corrected)
+    if "delta_from_flat" in df.columns:
+        df_with_delta = df.with_columns(pl.col("delta_from_flat").abs().alias("abs_delta")).sort(
+            "abs_delta", descending=True
+        )
+    else:
+        df_with_delta = df.with_columns(
+            (pl.col("xi_mean") - pl.col("flat_xi_mean")).abs().alias("abs_delta")
+        ).sort("abs_delta", descending=True)
 
     for row in df_with_delta.head(5).iter_rows(named=True):
         name = row.get("full_name", row["legislator_slug"])

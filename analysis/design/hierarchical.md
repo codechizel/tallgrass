@@ -59,19 +59,21 @@
 
 ### Variance decomposition via ICC
 
-**Decision:** Compute the intraclass correlation coefficient (ICC) as `sigma_between² / (sigma_between² + sigma_within²)` where `sigma_between` is derived from the party means and `sigma_within` is the within-party standard deviation.
+**Decision:** Compute the intraclass correlation coefficient (ICC) as `sigma_between² / (sigma_between² + sigma_within²)` where `sigma_between` is derived from the variance of party means and `sigma_within` is the pooled within-party standard deviation (weighted by group size). Computed per posterior draw (vectorized with numpy) to propagate uncertainty.
 
 **Rationale:** ICC directly answers "what fraction of ideological variance is explained by party?" This is the most interpretable summary of the hierarchical structure. Values near 1 mean party explains almost everything; near 0 means legislators vary independently of party.
 
-**Expected range:** 0.6-0.8 for Kansas (strong party structure but meaningful within-party variation).
+**Expected range:** 0.6-0.8 for Kansas (strong party structure but meaningful within-party variation). Observed: ~0.90 for both chambers in the 91st session.
 
 ### Shrinkage comparison with flat IRT
 
-**Decision:** Compare hierarchical ideal points to flat IRT ideal points by computing delta and percent shrinkage toward party mean.
+**Decision:** Compare hierarchical ideal points to flat IRT ideal points by computing delta and percent shrinkage toward party mean. Because the two models produce ideal points on different scales (flat ≈ [-4, 3], hierarchical ≈ [-11, 9]) due to different identification constraints (hard anchors vs ordering constraint), flat estimates are rescaled to the hierarchical scale via linear regression (`np.polyfit`) before computing deltas.
 
-**Rationale:** The whole point of the hierarchical model is partial pooling. Showing *which* legislators moved and *how much* they moved toward their party mean is the primary deliverable. Legislators with sparse records should show the most shrinkage.
+**Rationale:** The whole point of the hierarchical model is partial pooling. Showing *which* legislators moved and *how much* they moved toward their party mean is the primary deliverable. Legislators with sparse records should show the most shrinkage. Shrinkage percent is computed as `(1 - hier_dist/flat_dist) * 100` where distances are measured to the party mean; positive values indicate the estimate moved closer to the party mean.
 
-**Edge case:** Anchored legislators in the flat IRT (fixed at xi=±1) have xi_sd≈0, which makes percent shrinkage undefined. These are excluded from the shrinkage comparison.
+**Edge cases:**
+- Anchored legislators in the flat IRT (fixed at xi=±1) have xi_sd≈0, which makes percent shrinkage undefined. These are excluded (`flat_xi_sd > 0.01` guard).
+- Legislators near the party mean have unstable shrinkage ratios. These are excluded (`flat_dist > 0.5` guard).
 
 ## Downstream Implications
 

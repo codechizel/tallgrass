@@ -290,7 +290,7 @@ uv run ruff check src/       # lint clean
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, per-legislator, NLP integration, hardest-to-predict detection (~36 tests)
 - `tests/test_beta_binomial.py` — method of moments estimation, Bayesian posteriors, shrinkage properties, edge cases (~26 tests)
-- `tests/test_hierarchical.py` — hierarchical data prep, model structure, result extraction, variance decomposition, shrinkage comparison (~24 tests)
+- `tests/test_hierarchical.py` — hierarchical data prep, model structure, result extraction, variance decomposition, shrinkage comparison (~26 tests)
 - `tests/test_profiles.py` — profile target selection, scorecard, bill-type breakdown, defections, voting neighbors, surprising votes (~23 tests)
 - `tests/test_cross_session.py` — legislator matching, IRT alignment, ideology shift, metric stability, turnover impact (~42 tests)
 

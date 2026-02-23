@@ -26,10 +26,6 @@ except ModuleNotFoundError:
         make_gt,
     )
 
-# Duplicated to avoid circular import
-HIER_TARGET_ACCEPT = 0.95
-
-
 def build_hierarchical_report(
     report: ReportBuilder,
     *,
@@ -324,7 +320,7 @@ def _add_shrinkage_table(
         "party_mean",
     ]
     if "delta_from_flat" in ideal_points.columns:
-        cols.extend(["delta_from_flat", "toward_party_mean"])
+        cols.extend(["delta_from_flat", "shrinkage_pct", "toward_party_mean"])
 
     display = ideal_points.sort("xi_mean", descending=True).select(
         [c for c in cols if c in ideal_points.columns]
@@ -340,6 +336,7 @@ def _add_shrinkage_table(
         "xi_hdi_97.5": "HDI High",
         "party_mean": "Party Mean",
         "delta_from_flat": "Change from Flat",
+        "shrinkage_pct": "Shrinkage %",
         "toward_party_mean": "Toward Party?",
     }
 
@@ -350,6 +347,7 @@ def _add_shrinkage_table(
         "xi_hdi_97.5": "+.3f",
         "party_mean": "+.3f",
         "delta_from_flat": "+.3f",
+        "shrinkage_pct": ".1f",
     }
 
     html = make_gt(
@@ -550,7 +548,12 @@ def _add_flat_vs_hier_comparison(
 
         ip = res["ideal_points"]
         if "toward_party_mean" in ip.columns and "delta_from_flat" in ip.columns:
-            toward_pct = ip.filter(pl.col("toward_party_mean")).height / ip.height
+            non_null = ip.drop_nulls(subset=["toward_party_mean"])
+            toward_pct = (
+                non_null.filter(pl.col("toward_party_mean")).height / non_null.height
+                if non_null.height > 0
+                else 0.0
+            )
             avg_delta = (
                 float(ip.select(pl.col("delta_from_flat").abs().mean())[0, 0])
                 if ip.drop_nulls(subset=["delta_from_flat"]).height > 0
@@ -599,7 +602,7 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
                 "2000 per chain",
                 "1500 (discarded)",
                 "2",
-                str(HIER_TARGET_ACCEPT),
+                "0.95",
                 "Ordering constraint (sort)",
                 "Non-centered",
                 "Normal(0, 2)",

@@ -38,7 +38,7 @@ Implement a 2-level hierarchical IRT with ordering constraint and non-centered p
 **Trade-offs:**
 - 2-4x slower than flat IRT (more parameters, higher target_accept, more tuning)
 - Joint model may not converge (~71 shared bills for ~169 legislators)
-- Ordering constraint means the scale is set by the data and priors, not by fixed anchors — less directly comparable to the flat IRT's absolute scale
+- Ordering constraint means the scale is set by the data and priors, not by fixed anchors — the hierarchical and flat models produce ideal points on different scales (~3x ratio), requiring linear rescaling (`np.polyfit`) for shrinkage comparison
 - Small Senate Democrat group (~10) produces wide credible intervals on the Democratic party mean
 
 **Supersedes:** The hierarchical model provides a more principled version of the Beta-Binomial's shrinkage. Beta-Binomial remains as a fast exploratory baseline (no MCMC, instant results).
