@@ -521,6 +521,7 @@ def _make_models() -> dict[str, object]:
             random_state=RANDOM_SEED,
             eval_metric="logloss",
             verbosity=0,
+            n_jobs=-1,
         ),
         "Random Forest": RandomForestClassifier(
             n_estimators=N_ESTIMATORS_RF,

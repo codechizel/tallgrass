@@ -37,9 +37,9 @@ results/
 Key design choices:
 
 - **Biennium naming** (`91st_2025-2026` not `2025-26`): uses the Kansas Legislature's numbered biennium system for clarity
-- **Date-based run directories**: each run is immutable; re-running creates a new date directory (or overwrites same-day)
-- **`latest` symlink**: relative path (`latest -> 2026-02-19`) so the tree is portable across machines
-- **`run_info.json`**: captures git hash, timestamp, Python version, and script parameters for full reproducibility
+- **Date-based run directories with same-day preservation**: each run is immutable. The first run of the day uses the bare date (`2026-02-19`); subsequent same-day runs append `.1`, `.2`, etc. (`2026-02-19.1`, `2026-02-19.2`). This preserves earlier runs for comparison after fixes or reruns.
+- **`latest` symlink**: relative path (`latest -> 2026-02-19.1`) so the tree is portable across machines. Always points to the most recent run.
+- **`run_info.json`**: captures git hash, timestamps, elapsed wall-clock time (`elapsed_seconds`, `elapsed_display`), run label, Python version, and script parameters for full reproducibility. Runtime serves as a sanity check — unexpected speedups or slowdowns may indicate bugs.
 - **`run_log.txt`**: captures all console output (print statements) via a TeeStream wrapper
 - **Reusable `RunContext` class**: any analysis script uses the same context manager to get structured output
 

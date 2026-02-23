@@ -99,11 +99,13 @@
 
 ### Two chains (not four)
 
-**Decision:** Default to 2 MCMC chains instead of the textbook 4.
+**Decision:** Default to 2 MCMC chains instead of the textbook 4. Chains run in parallel (`cores=n_chains`).
 
-**Why:** Runtime. Each chain takes ~5-10 minutes per chamber. 2 chains = ~15-20 min total; 4 chains = ~30-40 min. The model is well-identified (anchored, positive-constrained discrimination), so 2 chains are typically sufficient.
+**Why:** Runtime. Each chain takes ~5-10 minutes per chamber. With parallel chain sampling, 2 chains complete in roughly the time of 1 (~5-10 min) instead of running sequentially (~15-20 min). The model is well-identified (anchored, positive-constrained discrimination), so 2 chains are typically sufficient.
 
-**Trade-off:** Less power to detect multi-modal posteriors. If R-hat > 1.01 or ESS < 400, re-run with `--n-chains 4`.
+**Parallel safety:** PyMC uses multiprocessing (not threading) for parallel chains. Each chain gets its own process, its own memory, and a deterministic per-chain seed derived from `random_seed`. Results are mathematically identical to sequential execution.
+
+**Trade-off:** Less power to detect multi-modal posteriors. Memory usage doubles with parallel chains (~2x model size). If R-hat > 1.01 or ESS < 400, re-run with `--n-chains 4`.
 
 ### In-sample holdout (not true out-of-sample)
 

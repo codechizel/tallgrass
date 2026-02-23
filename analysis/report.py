@@ -212,6 +212,7 @@ class ReportBuilder:
     title: str = "Analysis Report"
     session: str = ""
     git_hash: str = ""
+    elapsed_display: str = ""
     _sections: list[tuple[str, SectionType]] = field(default_factory=list)
 
     def add(self, section: SectionType) -> None:
@@ -244,6 +245,7 @@ class ReportBuilder:
             title=self.title,
             session=self.session,
             git_hash=self.git_hash,
+            elapsed_display=self.elapsed_display,
             generated_at=now,
             toc_items=toc_items,
             sections=rendered_sections,
@@ -363,6 +365,7 @@ REPORT_TEMPLATE = """\
     <div class="meta">
       {% if session %}<span>Session: <strong>{{ session }}</strong></span>{% endif %}
       <span>Generated: {{ generated_at }}</span>
+      {% if elapsed_display %}<span>Runtime: {{ elapsed_display }}</span>{% endif %}
       {% if git_hash and git_hash != "unknown" %}\
 <span>Git: <code>{{ git_hash[:8] }}</code></span>{% endif %}
     </div>

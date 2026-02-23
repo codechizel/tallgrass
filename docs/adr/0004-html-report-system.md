@@ -37,7 +37,8 @@ Key technology choices:
 - great_tables handles table styling; report.py only manages layout.
 - Reusable across all future analysis scripts.
 
-**Auto-injected sections:**
+**Auto-injected metadata and sections:**
+- The report header displays session, generation timestamp, wall-clock runtime (e.g., "Runtime: 2m 15s"), and git commit hash. Runtime is recorded automatically by `RunContext` and serves as a sanity check — unexpected changes in runtime may indicate bugs or skipped computation.
 - `RunContext.finalize()` appends a "Missing Votes" section to every report when `failure_manifest.json` exists in the session's data directory. This ensures data gaps from failed vote page fetches are surfaced in every analysis output without modifying individual analysis scripts. The table is sorted by margin (closest votes first) with close votes (≤ 10) bolded.
 
 **Trade-offs:**

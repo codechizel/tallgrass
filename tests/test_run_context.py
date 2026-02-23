@@ -16,7 +16,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.run_context import (
     RunContext,
+    _format_elapsed,
     _git_commit_hash,
+    _next_run_label,
     _normalize_session,
     _TeeStream,
     strip_leadership_suffix,
@@ -98,6 +100,69 @@ class TestNormalizeSession:
     def test_plain_year_passthrough(self):
         """Bare year with no separator passes through."""
         assert _normalize_session("2025") == "2025"
+
+
+# ── _next_run_label() ────────────────────────────────────────────────────────
+
+
+class TestNextRunLabel:
+    """Unique run labels avoid clobbering same-day results."""
+
+    def test_first_run_returns_bare_date(self, tmp_path):
+        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23"
+
+    def test_second_run_returns_dot_1(self, tmp_path):
+        (tmp_path / "2026-02-23").mkdir()
+        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23.1"
+
+    def test_third_run_returns_dot_2(self, tmp_path):
+        (tmp_path / "2026-02-23").mkdir()
+        (tmp_path / "2026-02-23.1").mkdir()
+        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23.2"
+
+    def test_gap_fills_next_available(self, tmp_path):
+        """If .1 exists but .2 doesn't, next is .2 even if .3 exists."""
+        (tmp_path / "2026-02-23").mkdir()
+        (tmp_path / "2026-02-23.1").mkdir()
+        (tmp_path / "2026-02-23.3").mkdir()  # gap at .2
+        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23.2"
+
+    def test_symlink_not_counted_as_existing(self, tmp_path):
+        """A 'latest' symlink named like a date doesn't trigger suffixing."""
+        target = tmp_path / "something"
+        target.mkdir()
+        (tmp_path / "2026-02-23").symlink_to(target)
+        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23"
+
+    def test_nonexistent_analysis_dir(self, tmp_path):
+        """Works even if the analysis dir doesn't exist yet."""
+        nonexistent = tmp_path / "does_not_exist"
+        assert _next_run_label(nonexistent, "2026-02-23") == "2026-02-23"
+
+
+# ── _format_elapsed() ────────────────────────────────────────────────────────
+
+
+class TestFormatElapsed:
+    """Human-readable elapsed time formatting."""
+
+    def test_seconds_only(self):
+        assert _format_elapsed(3.2) == "3.2s"
+
+    def test_zero(self):
+        assert _format_elapsed(0.0) == "0.0s"
+
+    def test_minutes_and_seconds(self):
+        assert _format_elapsed(105) == "1m 45s"
+
+    def test_hours_minutes_seconds(self):
+        assert _format_elapsed(4325) == "1h 12m 5s"
+
+    def test_exactly_one_minute(self):
+        assert _format_elapsed(60) == "1m 0s"
+
+    def test_just_under_one_minute(self):
+        assert _format_elapsed(59.9) == "59.9s"
 
 
 # ── _git_commit_hash() ───────────────────────────────────────────────────────
@@ -193,6 +258,10 @@ class TestRunContext:
         assert data["params"]["flag"] is True
         assert "git_commit" in data
         assert "python_version" in data
+        assert "elapsed_seconds" in data
+        assert isinstance(data["elapsed_seconds"], float)
+        assert data["elapsed_seconds"] >= 0
+        assert "elapsed_display" in data
 
     def test_finalize_writes_run_log(self, tmp_path):
         ctx = RunContext(
@@ -275,15 +344,19 @@ class TestRunContext:
         )
         assert ctx.params == {}
 
-    def test_consecutive_runs_update_latest(self, tmp_path):
-        """Second run overwrites the latest symlink."""
+    def test_consecutive_runs_get_separate_dirs(self, tmp_path):
+        """Second run on same day gets .1 suffix, not clobbered."""
         ctx1 = RunContext(
             session="2024s",
             analysis_name="test",
             results_root=tmp_path,
         )
         ctx1.setup()
+        print("first run output")
         ctx1.finalize()
+
+        first_run_dir = ctx1.run_dir
+        assert first_run_dir.exists()
 
         ctx2 = RunContext(
             session="2024s",
@@ -291,7 +364,56 @@ class TestRunContext:
             results_root=tmp_path,
         )
         ctx2.setup()
+        print("second run output")
         ctx2.finalize()
 
+        second_run_dir = ctx2.run_dir
+        assert second_run_dir.exists()
+        assert first_run_dir != second_run_dir
+        assert second_run_dir.name.endswith(".1")
+
+        # First run's output preserved
+        assert "first run output" in (first_run_dir / "run_log.txt").read_text()
+        assert "second run output" in (second_run_dir / "run_log.txt").read_text()
+
+        # Latest points to the second run
         latest = tmp_path / "2024s" / "test" / "latest"
         assert latest.is_symlink()
+        assert latest.resolve() == second_run_dir.resolve()
+
+    def test_third_run_gets_suffix_2(self, tmp_path):
+        """Third same-day run gets .2 suffix."""
+        for _ in range(3):
+            ctx = RunContext(
+                session="2024s",
+                analysis_name="test",
+                results_root=tmp_path,
+            )
+            ctx.setup()
+            ctx.finalize()
+
+        # Should have bare date, .1, and .2
+        analysis_dir = tmp_path / "2024s" / "test"
+        today = ctx._today
+        assert (analysis_dir / today).exists()
+        assert (analysis_dir / f"{today}.1").exists()
+        assert (analysis_dir / f"{today}.2").exists()
+
+    def test_run_info_includes_run_label(self, tmp_path):
+        """run_info.json records the run_label for traceability."""
+        # Create first run to occupy the bare date dir
+        ctx1 = RunContext(
+            session="2024s", analysis_name="test", results_root=tmp_path
+        )
+        ctx1.setup()
+        ctx1.finalize()
+
+        # Second run gets .1 suffix
+        ctx2 = RunContext(
+            session="2024s", analysis_name="test", results_root=tmp_path
+        )
+        ctx2.setup()
+        ctx2.finalize()
+
+        info = json.loads((ctx2.run_dir / "run_info.json").read_text())
+        assert info["run_label"].endswith(".1")

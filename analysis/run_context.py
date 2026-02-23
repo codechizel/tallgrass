@@ -121,6 +121,39 @@ def _git_commit_hash() -> str:
     return "unknown"
 
 
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed seconds into a human-readable string.
+
+    Examples: "3.2s", "1m 45s", "1h 12m 5s"
+    """
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, secs = divmod(int(seconds), 60)
+    if minutes < 60:
+        return f"{minutes}m {secs}s"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h {mins}m {secs}s"
+
+
+def _next_run_label(analysis_dir: Path, today: str) -> str:
+    """Return a unique run label for today, appending .1, .2, etc. if needed.
+
+    First run of the day:  "2026-02-23"
+    Second run:            "2026-02-23.1"
+    Third run:             "2026-02-23.2"
+
+    Checks for existing directories (not symlinks) under *analysis_dir*.
+    """
+    if not (analysis_dir / today).exists() or (analysis_dir / today).is_symlink():
+        return today
+
+    # The bare date dir exists — find the next available suffix
+    n = 1
+    while (analysis_dir / f"{today}.{n}").exists():
+        n += 1
+    return f"{today}.{n}"
+
+
 class RunContext:
     """Context manager that sets up structured output for an analysis run.
 
@@ -153,12 +186,17 @@ class RunContext:
         root = results_root or (Path("results") / STATE_DIR)
         today = datetime.now(_CT).strftime("%Y-%m-%d")
 
-        self.run_dir = root / self.session / analysis_name / today
+        # Parent of date dirs — where the `latest` symlink and primer live
+        self._analysis_dir = root / self.session / analysis_name
+
+        # Avoid clobbering same-day runs: append .1, .2, etc. if the date dir exists
+        run_label = _next_run_label(self._analysis_dir, today)
+
+        self.run_dir = self._analysis_dir / run_label
         self.plots_dir = self.run_dir / "plots"
         self.data_dir = self.run_dir / "data"
 
-        # Parent of date dirs — where the `latest` symlink and primer live
-        self._analysis_dir = root / self.session / analysis_name
+        self._run_label = run_label
         self._today = today
         self._primer = primer
         self._tee: _TeeStream | None = None
@@ -226,12 +264,18 @@ class RunContext:
 
         # Write run info
         end_time = datetime.now(_CT)
+        elapsed_seconds = (
+            (end_time - self._start_time).total_seconds() if self._start_time else 0.0
+        )
         run_info = {
             "analysis": self.analysis_name,
             "session": self.session,
             "run_date": self._today,
+            "run_label": self._run_label,
             "timestamp_start": (self._start_time.isoformat() if self._start_time else None),
             "timestamp_end": end_time.isoformat(),
+            "elapsed_seconds": round(elapsed_seconds, 1),
+            "elapsed_display": _format_elapsed(elapsed_seconds),
             "git_commit": _git_commit_hash(),
             "python_version": sys.version,
             "params": self.params,
@@ -240,11 +284,15 @@ class RunContext:
         with open(info_path, "w") as f:
             json.dump(run_info, f, indent=2, default=str)
 
+        # Print elapsed time (after stdout is restored so it goes to console, not log)
+        print(f"\n{self.analysis_name.upper()} completed in {run_info['elapsed_display']}")
+
         # Write HTML report if sections were added
         if self.report is not None and hasattr(self.report, "has_sections"):
             if self.report.has_sections:
                 _append_missing_votes(self.report, self.session)
                 self.report.git_hash = run_info["git_commit"]
+                self.report.elapsed_display = run_info["elapsed_display"]
                 report_path = self.run_dir / f"{self.analysis_name}_report.html"
                 self.report.write(report_path)
 
@@ -261,7 +309,7 @@ class RunContext:
         latest = self._analysis_dir / "latest"
         if latest.is_symlink() or latest.exists():
             latest.unlink()
-        latest.symlink_to(self._today)
+        latest.symlink_to(self._run_label)
 
 
 def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:

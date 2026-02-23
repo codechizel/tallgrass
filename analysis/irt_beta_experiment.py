@@ -123,6 +123,7 @@ def build_and_sample_variant(
             draws=n_samples,
             tune=n_tune,
             chains=n_chains,
+            cores=n_chains,
             target_accept=TARGET_ACCEPT,
             random_seed=RANDOM_SEED,
             progressbar=True,

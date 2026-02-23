@@ -1153,6 +1153,7 @@ def build_and_sample(
             draws=n_samples,
             tune=n_tune,
             chains=n_chains,
+            cores=n_chains,
             target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,

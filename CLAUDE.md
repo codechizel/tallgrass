@@ -100,6 +100,12 @@ Pipeline: `get_bill_urls()` → `_filter_bills_with_votes()` → `get_vote_links
 
 All HTTP fetching uses a two-phase pattern: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), then sequential parse. Rate limiting is thread-safe via `threading.Lock()`. Never mutate shared state during the fetch phase.
 
+### Analysis Parallelism
+
+- **MCMC chains** (`irt.py`, `hierarchical.py`): `cores=n_chains` runs chains in parallel via multiprocessing. Each chain gets its own process and deterministic per-chain seed. Results are mathematically identical to sequential execution.
+- **XGBoost** (`prediction.py`, `cross_session.py`): `n_jobs=-1` enables multi-core tree building via XGBoost's internal C++ thread pool. Deterministic with `random_state`.
+- **Random Forest** (`prediction.py`): `n_jobs=-1` for parallel tree fitting.
+
 ### Retry Strategy
 
 `_get()` returns a `FetchResult` (not raw HTML) and classifies errors for differentiated retry behavior:
@@ -207,9 +213,11 @@ results/
           plots/                  ← PNGs
           data/                   ← Parquet intermediates
           filtering_manifest.json ← What was filtered and why
-          run_info.json           ← Git hash, timestamp, parameters
+          run_info.json           ← Git hash, timestamp, parameters, run_label
           run_log.txt             ← Captured console output
-        latest → 2026-02-19/     ← Symlink to most recent run
+        2026-02-19.1/             ← Second run same day (preserves first)
+        2026-02-19.2/             ← Third run same day, etc.
+        latest → 2026-02-19.2/   ← Symlink to most recent run
       pca/                        ← Same structure
       irt/
       clustering/
@@ -218,6 +226,8 @@ results/
       indices/
       synthesis/                  ← Joins all phases into one narrative report
 ```
+
+Same-day runs are never clobbered. The first run uses the bare date (`2026-02-19`), subsequent runs append `.1`, `.2`, etc. The `latest` symlink always points to the most recent run. This preserves earlier runs for comparison after fixes or reruns.
 
 All analysis scripts use `RunContext` from `analysis/run_context.py` as a context manager to get structured output. Downstream scripts read from `results/kansas/<session>/<analysis>/latest/`. The module also exports `strip_leadership_suffix()` — a shared utility that removes " - President of the Senate" and similar titles from legislator names. Every phase that reads the legislators CSV applies this at load time so display names are clean throughout the pipeline.
 
@@ -291,7 +301,7 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/profiles.py` + `analysis/profiles_report.py` — Profiles: deep-dive per-legislator reports with scorecard, bill-type breakdown, defection analysis, voting neighbors, surprising votes. 5 plots per legislator. Reuses `load_all_upstream()`/`build_legislator_df()` from synthesis.
 - `analysis/cross_session_data.py` — Cross-session: pure data logic for legislator matching (by normalized name), IRT scale alignment (robust affine transform), ideology shift metrics, metric stability correlations, turnover impact, prediction transfer helpers (feature alignment, z-score standardization, SHAP comparison). No I/O. See ADR-0019.
 - `analysis/cross_session.py` + `analysis/cross_session_report.py` — Cross-session validation: compares two bienniums. 6 plot types (ideology scatter, biggest movers, shift distribution, turnover impact, prediction AUC comparison, feature importance comparison), detection threshold validation, metric stability correlations, cross-session prediction transfer. CLI: `--session-a`, `--session-b`, `--chambers`, `--skip-prediction`. Output: `results/kansas/cross-session/<pair>/validation/` (e.g., `cross-session/90th-vs-91st/validation/`).
-- `RunContext` auto-writes the HTML in `finalize()` if sections were added. If a `failure_manifest.json` exists in the session's data directory, a "Missing Votes" section is automatically appended to every report (sorted by margin, close votes bolded).
+- `RunContext` auto-writes the HTML in `finalize()` if sections were added. Records wall-clock elapsed time (`elapsed_seconds`, `elapsed_display`) in `run_info.json` and displays "Runtime: Xm Ys" in the HTML report header. If a `failure_manifest.json` exists in the session's data directory, a "Missing Votes" section is automatically appended to every report (sorted by margin, close votes bolded).
 
 Tables use great_tables with polars DataFrames (no pandas conversion). Plots are base64-embedded PNGs. See ADR-0004 for rationale.
 
@@ -331,8 +341,8 @@ uv run ruff check src/       # lint clean
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 
 ### Analysis Infrastructure Test Files
-- `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, RunContext lifecycle (~33 tests)
-- `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt (~36 tests)
+- `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, RunContext lifecycle, same-day run labeling (~41 tests)
+- `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt, elapsed display (~38 tests)
 - `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity filter, joint model, forest highlights, paradox detection (~45 tests)
 - `tests/test_umap_viz.py` — imputation, orientation, embedding construction, Procrustes, validation correlations (~21 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names, TopicModel dataclass (~16 tests)

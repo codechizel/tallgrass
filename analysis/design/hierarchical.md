@@ -23,7 +23,7 @@
 |----------|-------|---------------|
 | `HIER_N_SAMPLES` | 2000 | Same as flat IRT; sufficient for posterior summaries |
 | `HIER_N_TUNE` | 1500 | Higher than flat's 1000 — hierarchical funnels need more warmup |
-| `HIER_N_CHAINS` | 2 | Same as flat IRT |
+| `HIER_N_CHAINS` | 2 | Same as flat IRT. Chains run in parallel (`cores=n_chains`) via multiprocessing. |
 | `HIER_TARGET_ACCEPT` | 0.95 | Higher than flat's 0.9 — reduces divergences in hierarchical geometry |
 | `RHAT_THRESHOLD` | 1.01 | Reused from flat IRT |
 | `ESS_THRESHOLD` | 400 | Reused from flat IRT |

@@ -42,6 +42,16 @@
 - Tables should use plain-English column headers and include interpretive context (e.g., "higher = more independent from party" rather than just "maverick_score").
 - Reports should lead with the most accessible findings and build toward technical detail, not the reverse.
 
+## Runtime Timing as a Sanity Check
+- Every analysis run records wall-clock elapsed time in `run_info.json` (`elapsed_seconds`, `elapsed_display`) and displays it in the HTML report header.
+- **Always check runtime when reviewing results.** A phase that suddenly runs much faster or slower than expected can indicate:
+  - A bug that skips important computation (faster than expected)
+  - An accidental optimization that removed a needed step (faster)
+  - A regression that added unnecessary work (slower)
+  - A convergence problem causing extra MCMC iterations (slower)
+  - Data quality issues causing degenerate model fits (faster — model converges trivially)
+- Typical runtimes for the 91st session (M3 Pro, 36GB): EDA ~30s, PCA ~15s, IRT ~10-20min per chamber, prediction ~2-5min, synthesis ~30s. Large deviations from these baselines warrant investigation.
+
 ## Kansas-Specific Defaults
 - Always analyze chambers separately unless explicitly doing cross-chamber comparison.
 - Use Cohen's Kappa (not raw agreement) when thresholding similarity for networks or clustering.

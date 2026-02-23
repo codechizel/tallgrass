@@ -25,7 +25,7 @@ Bayesian IRT is the canonical baseline analysis per the analytic workflow rules:
 
 2. **PCA-based anchor method.** Fix the most conservative legislator (highest PCA PC1) at xi=+1 and most liberal (lowest PC1) at xi=-1. Anchors must have >= 50% participation to ensure tight estimation. This leverages the PCA results we already have and avoids requiring manual knowledge of Kansas legislators. The alternative (soft identification via priors + post-hoc correction) was rejected because it requires checking sign orientation across chains and can produce label-switching artifacts.
 
-3. **2 chains by default.** Sufficient for R-hat and ESS computation with dramatically lower runtime (~15-20 min total vs. ~40+ min for 4 chains). For a mature, well-identified model with strong data, 2 chains typically converge identically. If convergence diagnostics show problems, `--n-chains 4` is available. This follows the PyMC documentation recommendation for computationally expensive models.
+3. **2 chains by default, sampled in parallel.** Sufficient for R-hat and ESS computation. With `cores=n_chains`, PyMC runs chains in parallel via multiprocessing (separate processes, not threads), so 2 chains complete in roughly the wall-clock time of 1 (~5-10 min per chamber). Each chain gets its own process, memory, and deterministic per-chain seed — results are mathematically identical to sequential execution. If convergence diagnostics show problems, `--n-chains 4` is available. This follows the PyMC documentation recommendation for computationally expensive models.
 
 4. **In-sample holdout prediction.** Use posterior means from the full model to predict a random 20% of observed cells. This is documented as in-sample (the model saw all data during fitting). The proper Bayesian validation is the posterior predictive check (PPC), which samples from the full posterior and compares replicated data to observed. A true out-of-sample holdout would require refitting — available as a future enhancement but not worth the doubled runtime for the baseline.
 
@@ -38,7 +38,7 @@ Bayesian IRT is the canonical baseline analysis per the analytic workflow rules:
 **Benefits:**
 - Unconstrained Normal(0, 1) discrimination uses all contested bills — both R-Yea and D-Yea votes contribute to ideal point estimation. The sign of beta encodes direction (positive = conservative Yea, negative = liberal Yea), while the magnitude encodes how partisan the vote was.
 - PCA-based anchors are automated and reproducible — no manual legislator selection required. They also provide the sign identification that makes the unconstrained beta prior safe.
-- 2 chains cuts runtime nearly in half while maintaining adequate diagnostic coverage.
+- 2 parallel chains provide the same diagnostic coverage as sequential chains at roughly half the wall-clock time.
 - In-sample holdout + PPC together provide comprehensive validation without the cost of refitting.
 - Per-chamber models are simple, standard, and sufficient for the 1D baseline.
 - NetCDF files enable full posterior reuse in downstream phases (clustering, network analysis).
@@ -56,3 +56,4 @@ Bayesian IRT is the canonical baseline analysis per the analytic workflow rules:
 - 2026-02-20: Changed to Normal(0, 1) after discovering the D-Yea blind spot. See `analysis/design/beta_prior_investigation.md`.
 - 2026-02-20: Added joint cross-chamber model (Decision 5 updated from per-chamber-only to per-chamber + joint).
 - 2026-02-20: Changed from joint MCMC to test equating after convergence failure. See `analysis/design/irt.md` "Why Not a Joint MCMC Model?"
+- 2026-02-23: Added `cores=n_chains` for parallel chain sampling (Decision 3 updated). See ADR-0022.

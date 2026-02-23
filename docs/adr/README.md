@@ -49,6 +49,7 @@ What are the trade-offs?
 | [0019](0019-cross-session-validation.md) | Cross-session validation | Accepted | 2026-02-22 |
 | [0020](0020-historical-session-support.md) | Historical session support (2011-2026) | Accepted | 2026-02-22 |
 | [0021](0021-independent-party-handling.md) | Independent party handling across analysis pipeline | Accepted | 2026-02-22 |
+| [0022](0022-analysis-parallelism-and-timing.md) | Analysis parallelism and runtime timing | Accepted | 2026-02-23 |
 
 ## Creating a New ADR
 

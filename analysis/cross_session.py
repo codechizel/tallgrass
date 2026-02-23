@@ -625,6 +625,7 @@ def _run_cross_prediction(
         random_state=42,
         eval_metric="logloss",
         verbosity=0,
+        n_jobs=-1,
     )
     model_ab.fit(X_a, y_a)
     y_pred_ab = model_ab.predict(X_b)
@@ -643,6 +644,7 @@ def _run_cross_prediction(
         random_state=42,
         eval_metric="logloss",
         verbosity=0,
+        n_jobs=-1,
     )
     model_ba.fit(X_b, y_b)
     y_pred_ba = model_ba.predict(X_a)

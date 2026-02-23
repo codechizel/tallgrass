@@ -207,6 +207,18 @@ class TestReportBuilder:
         html = report.render()
         assert "abcdef12" in html
 
+    def test_render_includes_elapsed_display(self):
+        report = ReportBuilder(title="Test", elapsed_display="2m 15s")
+        report.add(TextSection(id="s1", title="S", html="<p>Hi</p>"))
+        html = report.render()
+        assert "Runtime: 2m 15s" in html
+
+    def test_render_no_runtime_when_empty(self):
+        report = ReportBuilder(title="Test")
+        report.add(TextSection(id="s1", title="S", html="<p>Hi</p>"))
+        html = report.render()
+        assert "Runtime:" not in html
+
     def test_render_no_git_hash_when_unknown(self):
         report = ReportBuilder(title="Test", git_hash="unknown")
         report.add(TextSection(id="s1", title="S", html="<p>Hi</p>"))
