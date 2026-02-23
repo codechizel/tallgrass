@@ -205,8 +205,9 @@ def _majority_party(leg_df: pl.DataFrame) -> str | None:
 
 
 def _extract_name(full_name: str) -> str:
-    """Extract last name for plot annotation."""
-    parts = full_name.strip().split()
+    """Extract last name for plot annotation, stripping leadership suffixes."""
+    name = full_name.split(" - ")[0].strip()
+    parts = name.split()
     return parts[-1] if parts else full_name
 
 

@@ -247,6 +247,8 @@ def align_irt_scales(
     aligned = (
         pairs.with_columns(
             (pl.col("xi_a") * a_final + b_final).alias("xi_a_aligned"),
+            # Strip leadership suffixes (" - President of the Senate" etc.)
+            pl.col("full_name").str.replace(r"\s*-\s+.*$", "").alias("full_name"),
         )
         .with_columns(
             (pl.col("xi_b") - pl.col("xi_a_aligned")).alias("delta_xi"),
