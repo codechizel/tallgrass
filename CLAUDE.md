@@ -6,7 +6,8 @@ Scrapes Kansas Legislature roll call votes from kslegislature.gov into CSV files
 
 - **No Co-Authored-By lines.** Never append co-author trailers.
 - Use conventional commits with version tags: `type(scope): description [vYYYY.MM.DD.N]`
-- Never push without explicit permission.
+- **After every feature/fix:** update relevant docs (CLAUDE.md, ADRs, roadmap, design docs) before committing. Create a new ADR when the change involves a non-obvious architectural decision. Code and docs ship in the same commit.
+- Never push without explicit permission — push is manual or by request.
 - See `.claude/rules/commit-workflow.md` for full details.
 
 ## Commands
