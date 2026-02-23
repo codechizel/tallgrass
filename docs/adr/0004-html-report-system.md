@@ -37,6 +37,9 @@ Key technology choices:
 - great_tables handles table styling; report.py only manages layout.
 - Reusable across all future analysis scripts.
 
+**Auto-injected sections:**
+- `RunContext.finalize()` appends a "Missing Votes" section to every report when `failure_manifest.json` exists in the session's data directory. This ensures data gaps from failed vote page fetches are surfaced in every analysis output without modifying individual analysis scripts. The table is sorted by margin (closest votes first) with close votes (≤ 10) bolded.
+
 **Trade-offs:**
 - File size grows with embedded PNGs (~2-5 MB per report with 8 plots).
 - great_tables and jinja2 are new dev dependencies.

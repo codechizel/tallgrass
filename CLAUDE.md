@@ -27,6 +27,10 @@ uv run ks-vote-scraper 2023                  # historical session
 uv run ks-vote-scraper 2024 --special        # special session
 ```
 
+## Build Philosophy
+
+- **Check for existing open source solutions first.** Before building any new feature, analysis method, or tooling, search for well-maintained open source packages that already solve the problem. No need to reinvent the wheel — but don't force it either. If the off-the-shelf options don't meet our needs, require heavy finagling to integrate, or are in the wrong language/ecosystem, build from scratch. A clean custom implementation that fits the project is better than a shoehorned dependency.
+
 ## Code Style
 
 - Python 3.14+, use modern type hints (`list[str]` not `List[str]`, `X | None` not `Optional[X]`)
@@ -124,7 +128,7 @@ Cache lives in `data/kansas/{output_name}/.cache/`. Use `--clear-cache` to force
 
 The directory naming uses the Kansas Legislature numbering scheme: `(start_year - 1879) // 2 + 18` gives the legislature number (e.g., 91 for 2025-2026). Special sessions use `{year}s` (e.g., `2024s`).
 
-When vote page fetches fail, a `failure_manifest.json` is written alongside the CSVs with per-failure context (bill number, motion, URL, status code, error type). Failed pages are never cached, so re-running the scraper automatically retries them.
+When vote page fetches fail, a `failure_manifest.json` is written alongside the CSVs with per-failure context (bill number, motion, URL, status code, error type). A companion `missing_votes.md` is also written with a human-readable table sorted by vote margin (closest votes first, bolded if margin ≤ 10). Failed pages are never cached, so re-running the scraper automatically retries them.
 
 ## Results Directory
 
@@ -219,7 +223,7 @@ Each analysis phase produces a self-contained HTML report (`{analysis}_report.ht
 - `analysis/synthesis.py` + `analysis/synthesis_report.py` — Synthesis: loads upstream parquets from all 9 phases (incl. beta_binomial), joins into unified legislator DataFrames, runs data-driven detection, produces 29-33 section narrative HTML report for nontechnical audiences. No hardcoded legislator names.
 - `analysis/profiles_data.py` — Profiles data logic: `ProfileTarget`/`BillTypeBreakdown` dataclasses, `gather_profile_targets()`, `build_scorecard()`, `compute_bill_type_breakdown()`, `find_defection_bills()`, `find_voting_neighbors()`, `find_legislator_surprising_votes()`.
 - `analysis/profiles.py` + `analysis/profiles_report.py` — Profiles: deep-dive per-legislator reports with scorecard, bill-type breakdown, defection analysis, voting neighbors, surprising votes. 5 plots per legislator. Reuses `load_all_upstream()`/`build_legislator_df()` from synthesis.
-- `RunContext` auto-writes the HTML in `finalize()` if sections were added.
+- `RunContext` auto-writes the HTML in `finalize()` if sections were added. If a `failure_manifest.json` exists in the session's data directory, a "Missing Votes" section is automatically appended to every report (sorted by margin, close votes bolded).
 
 Tables use great_tables with polars DataFrames (no pandas conversion). Plots are base64-embedded PNGs. See ADR-0004 for rationale.
 

@@ -224,6 +224,7 @@ class RunContext:
         # Write HTML report if sections were added
         if self.report is not None and hasattr(self.report, "has_sections"):
             if self.report.has_sections:
+                _append_missing_votes(self.report, self.session)
                 self.report.git_hash = run_info["git_commit"]
                 report_path = self.run_dir / f"{self.analysis_name}_report.html"
                 self.report.write(report_path)
@@ -242,3 +243,102 @@ class RunContext:
         if latest.is_symlink() or latest.exists():
             latest.unlink()
         latest.symlink_to(self._today)
+
+
+def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:
+    """Parse 'Yea: 63 Nay: 59' into (yea, nay, margin) or None if unparseable."""
+    m = re.search(r"Yea:\s*(\d+)\s*Nay:\s*(\d+)", vote_text)
+    if not m:
+        return None
+    yea, nay = int(m.group(1)), int(m.group(2))
+    return yea, nay, abs(yea - nay)
+
+
+def _append_missing_votes(report: object, session: str) -> None:
+    """Append a Missing Votes section to the report from the failure manifest."""
+    from ks_vote_scraper.session import STATE_DIR
+
+    try:
+        from analysis.report import TextSection
+    except ModuleNotFoundError:
+        from report import TextSection  # type: ignore[no-redef]
+
+    data_dir = Path("data") / STATE_DIR / session
+    manifest_path = data_dir / "failure_manifest.json"
+    if not manifest_path.exists():
+        return
+
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+
+    failures = manifest.get("failures", [])
+    if not failures:
+        return
+
+    total = manifest.get("total_vote_pages", "?")
+
+    # Parse tallies and sort by margin (closest first), unparseable last
+    rows: list[tuple[int | None, dict]] = []
+    for fail in failures:
+        tally = _parse_vote_tally(fail.get("vote_text", ""))
+        rows.append((tally[2] if tally else None, fail))
+
+    rows.sort(key=lambda r: (r[0] is None, r[0] or 0))
+
+    # Build HTML table
+    lines = [
+        f"<p>{len(failures)} of {total:,} vote pages could not be fetched."
+        " Close votes are bolded.</p>",
+        '<table style="width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;">',
+        "<thead><tr>"
+        '<th style="text-align:left; border-bottom:2px solid #333; padding:6px;">Bill</th>'
+        '<th style="text-align:center; border-bottom:2px solid #333; padding:6px;">Tally</th>'
+        '<th style="text-align:center; border-bottom:2px solid #333; padding:6px;">Margin</th>'
+        '<th style="text-align:left; border-bottom:2px solid #333; padding:6px;">Error</th>'
+        '<th style="text-align:left; border-bottom:2px solid #333; padding:6px;">Link</th>'
+        "</tr></thead><tbody>",
+    ]
+
+    for margin, fail in rows:
+        bill = fail.get("bill_number", "?")
+        url = fail.get("vote_url", "")
+        status = fail.get("status_code", "")
+        error_type = fail.get("error_type", "")
+        error_label = f"{status}" if status else error_type
+
+        tally = _parse_vote_tally(fail.get("vote_text", ""))
+        if tally:
+            yea, nay, mg = tally
+            tally_str = f"{yea}-{nay}"
+            margin_str = f"<strong>{mg}</strong>" if mg <= 10 else str(mg)
+        else:
+            tally_str = fail.get("vote_text", "?")
+            margin_str = "?"
+
+        link = f'<a href="{url}">vote page</a>' if url else ""
+        lines.append(
+            "<tr>"
+            f'<td style="padding:4px 6px; border-bottom:1px solid #eee;">{bill}</td>'
+            f'<td style="padding:4px 6px; border-bottom:1px solid #eee; text-align:center;">'
+            f"{tally_str}</td>"
+            f'<td style="padding:4px 6px; border-bottom:1px solid #eee; text-align:center;">'
+            f"{margin_str}</td>"
+            f'<td style="padding:4px 6px; border-bottom:1px solid #eee;">{error_label}</td>'
+            f'<td style="padding:4px 6px; border-bottom:1px solid #eee;">{link}</td>'
+            "</tr>"
+        )
+
+    lines.append("</tbody></table>")
+    lines.append(
+        '<p style="margin-top:12px; font-size:13px; color:#555;">'
+        "Re-running the scraper retries failed pages. For persistent 404s,"
+        " check legislative journals or archives.</p>"
+    )
+
+    report.add(  # type: ignore[union-attr]
+        TextSection(
+            id="missing-votes",
+            title="Missing Votes",
+            html="\n".join(lines),
+        )
+    )

@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after Beta-Binomial party loyalty phase)
+**Last updated:** 2026-02-22 (after Missing Votes visibility feature)
 
 ---
 
@@ -23,75 +23,14 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | Legislator Profiles | 2026-02-22 | Per-legislator deep-dives: scorecard, bill-type breakdown, defections, neighbors, surprising votes |
 | 7b | Beta-Binomial Party Loyalty | 2026-02-22 | Bayesian shrinkage on CQ unity; empirical Bayes, closed-form posteriors, 4 plots per chamber |
 | — | Cross-Biennium Portability | 2026-02-22 | Removed all hardcoded legislator names from general phases; full pipeline re-run validated |
+| — | Visualization Improvement Pass | 2026-02-22 | All 6 phases (Network, IRT, Prediction, PCA, Clustering, EDA) retrofitted for nontechnical audience; plain-English titles, annotated findings, data-driven highlights |
+| — | Missing Votes Visibility | 2026-02-22 | Auto-injected "Missing Votes" section in every HTML report + standalone `missing_votes.md` in data directory; close votes bolded |
 
 ---
 
 ## Next Up
 
-### 1. Visualization Improvement Pass
-
-**Priority:** Highest — the nontechnical audience rule was added during Phase 7 (Indices). Phases 1-6 predate it and need retrofitting. The Synthesis Report reuses upstream plots directly, so improving them improves the deliverable.
-
-The Indices phase is the gold standard: plain-English titles ("Who Are the Most Independent Legislators?"), annotated key actors, and report text that defines every metric before showing plots. The earlier phases have good HTML report prose but their plots are still analyst-facing. 112+ total plots across 8 phases; roughly half need improvement.
-
-**Guiding principle:** If a finding is explained in the HTML report, it should also appear visually in at least one plot. If a legislator is flagged in `docs/analytic-flags.md`, they should have a visual highlight somewhere.
-
-#### Network Phase — DONE
-
-All five network visualization improvements completed (2026-02-22):
-- **Bridge annotations** — red halos + yellow callout labels on high-betweenness nodes (already existed)
-- **"What is betweenness?" inset** — 3-node diagram on centrality scatter (already existed)
-- **Ranked bar chart** — "Who Holds the Most Influence?" with plain-English annotation (already existed)
-- **Cross-party bridge before/after** — data-driven `find_cross_party_bridge()` + `plot_cross_party_bridge()` showing network with and without top cross-party connector at κ=0.30
-- **Threshold sweep event markers** — default threshold + party split annotations on all 4 panels (was only on 1 each), plus "further fragmentation" marker, narrative panel titles
-- **Community composition labels** — "Mostly Republican (96%, n=87)" instead of "Community 0"
-- **Edge weight cross-party gap** — arrow annotation on strongest cross-party κ value, narrative title
-- **Network layout narrative titles** — "Who Votes With Whom? (N legislators, N connections)" + subtitle support
-- 8 new tests (3 `TestFindCrossPartyBridge`, 5 `TestCommunityLabel`)
-
-#### IRT Phase — DONE
-
-All four IRT visualization improvements completed (2026-02-22):
-- **Paradox spotlight subplot** — `find_paradox_legislator()` detects ideologically extreme but contrarian legislators data-driven; `plot_paradox_spotlight()` produces two-panel figure (grouped bar chart of Yea rates by bill type + simplified forest plot with callout)
-- **Convergence summary panel** — already existed: "The model ran N chains and they all agree" (done previously)
-- **Data-driven forest highlights** — `_detect_forest_highlights()` replaces hardcoded slug annotations; detects most extreme, widest HDI, most moderate, capped at 5
-- **Plain-English title** — already existed: "Where Does Each Legislator Fall on the Ideological Spectrum?" (done previously)
-- **Bugfix** — fixed Python 2 `except` syntax in `run_context.py` line 100
-- 8 new tests (4 `TestDetectForestHighlights`, 4 `TestFindParadoxLegislator`), 458 total passing
-
-#### Prediction Phase — DONE
-
-All three prediction visualization improvements completed (2026-02-22):
-- **Conversational SHAP labels** — all 14 `FEATURE_DISPLAY_NAMES` rewritten for nontechnical audiences (e.g., "How conservative the legislator is" instead of "xi_mean", "Legislator–bill ideology match" instead of "Ideology × partisanship interaction"). Flows through SHAP beeswarm, SHAP bar, and XGBoost feature importance plots automatically via `_rename_shap_features()`.
-- **"Hardest to Predict" spotlight** — `detect_hardest_legislators()` pure-data function + `HardestLegislator` frozen dataclass. Horizontal dot chart (`plot_hardest_to_predict()`) showing bottom 8 legislators with party-colored dots, data-driven plain-English explanations (moderate, centrist for party, strongly partisan crossover, or doesn't fit 1D model), chamber median reference line, and callout box.
-- **Calibration plot annotation** — already done: "When the model says 80% chance of Yea, it's right about 80% of the time" (lightyellow callout box).
-- 14 tests in `TestDetectHardestLegislators` (6 original + 8 added in review pass covering null full_name, single-party, custom n, all explanation branches, null xi_mean, field correctness), `HARDEST_N=8` added to design doc parameters table.
-- **Bugfixes (review pass):** null `full_name` crash in `detect_hardest_legislators()` (`.get()` returns `None` not fallback when key exists with null value); dead code removal in `plot_hardest_to_predict()`; consistent leadership suffix stripping in `plot_per_legislator_accuracy()` and `plot_surprising_votes()`.
-
-#### PCA Phase — DONE
-
-All three PCA visualization improvements completed (2026-02-22):
-- **Scree plot elbow annotation** — "The sharp drop means Kansas is essentially a one-dimensional legislature — party affiliation explains almost everything" (lightyellow callout with arrow)
-- **PC2 axis label** — "contrarianism — voting Nay on routine, near-unanimous bills" on ideological map Y axis
-- **Data-driven extreme PC2 callout** — `detect_extreme_pc2()` pure-data function + `ExtremePC2Legislator` frozen dataclass; detects >3σ outlier dynamically (Tyson at -24.8 in Senate, Parshall at -22.5 in House)
-- **Bugfixes:** null `full_name` crash in outlier labels and extreme PC2 callout (`.get()` returns `None` not fallback when key exists with null value); leadership suffix stripping in outlier labels
-- 6 new tests in `TestDetectExtremePC2`
-
-#### Clustering Phase — DONE
-
-All clustering visualization improvements completed (2026-02-22):
-- **Three dendrogram alternatives**: voting blocs (sorted dot plot), polar dendrogram (circular tree with radial label staggering), icicle chart (flame chart with majority-party coloring). Original dendrograms kept as supplementary figures. See ADR-0014.
-- **Centralized name extraction**: `_build_display_labels()` helper strips leadership suffixes ("Vice President of the Senate" → "Shallenburger") and disambiguates duplicate last names with first-name prefix ("Jo. Claeys" vs "J.R. Claeys").
-- **Report integration**: all 3 new plot types added to clustering report with `path.exists()` guards.
-- Notable-legislator annotations and report notes are data-driven (2026-02-22 portability refactor).
-
-#### EDA Phase — DONE
-
-All EDA visualization improvements completed (2026-02-22):
-- **Heatmap sizing fix**: `size = max(8, n * 0.19)` and `fontsize = max(4, min(7, 500 / n))` — House heatmap now 24.7" with 4pt labels (up from 15.6"/3pt). Senate unchanged.
-- Name labels on heatmap axes already exist. Cross-party annotation is now data-driven (2026-02-22 portability refactor).
-
-### 2. Hierarchical Bayesian Legislator Model
+### 1. Hierarchical Bayesian Legislator Model
 
 **Priority:** High — the "Crown Jewel" from the methods overview.
 
@@ -104,7 +43,7 @@ Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`.
 - Uses PyMC (already installed for IRT)
 - Supersedes the Beta-Binomial phase for formal analysis; Beta-Binomial remains as the fast exploratory baseline
 
-### 3. Cross-Session Scrape (2023-24)
+### 2. Cross-Session Scrape (2023-24)
 
 **Priority:** High — unlocks temporal analysis and honest out-of-sample validation.
 
@@ -115,7 +54,7 @@ Method documented in `Analytic_Methods/16_BAY_hierarchical_legislator_model.md`.
 - Then run the full 8-phase pipeline: `just scrape 2023 && just eda --session 2023-24 && ...`
 - Enables all three cross-session analyses below
 
-### 4. Cross-Session Validation
+### 3. Cross-Session Validation
 
 **Priority:** High — the single biggest gap in current results.
 
@@ -125,7 +64,7 @@ Three distinct analyses become possible once 2023-24 is scraped:
 - **Temporal comparison (who moved?):** Compare IRT ideal points for returning legislators across bienniums. Who shifted ideology? Are the 2025-26 mavericks (Schreiber, Dietrich) the same people who were mavericks in 2023-24? This is the most newsworthy output for the nontechnical audience — "Senator X moved 1.2 points rightward since last session" is a concrete, actionable finding.
 - **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
 
-### 5. MCA (Multiple Correspondence Analysis)
+### 4. MCA (Multiple Correspondence Analysis)
 
 **Priority:** Medium — alternative view on the vote matrix.
 
@@ -136,7 +75,7 @@ Method documented in `Analytic_Methods/10_DIM_correspondence_analysis.md`. MCA t
 - `prince` library already in `pyproject.toml`
 - Compare MCA dimensions to PCA PC1/PC2 — if they agree, PCA's linear assumption is validated
 
-### 6. Time Series Analysis
+### 5. Time Series Analysis
 
 **Priority:** Medium — adds temporal depth to static snapshots.
 
@@ -147,9 +86,9 @@ Two methods documented but not yet implemented:
 
 Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
 
-### 7. 2D Bayesian IRT Model
+### 6. 2D Bayesian IRT Model
 
-**Priority:** Medium — solves the Tyson paradox properly. (Formerly item #9.)
+**Priority:** Medium — solves the Tyson paradox properly.
 
 The 1D model compresses Tyson's two-dimensional behavior (ideology + contrarianism) into one axis. A 2D model would:
 - Place Tyson as (very conservative on Dim 1, extreme outlier on Dim 2)
@@ -188,7 +127,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-502 tests exist across scraper (146) and analysis (356) modules. Coverage could be expanded:
+528 tests exist across scraper (146) and analysis (382) modules. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
@@ -227,13 +166,13 @@ Each results directory should have a `README.md` explaining the analysis for non
 | 07 | ENP | IDX | Completed (Indices) |
 | 08 | Maverick Scores | IDX | Completed (Indices) |
 | 09 | PCA | DIM | Completed (PCA) |
-| 10 | MCA / Correspondence Analysis | DIM | **Planned** — item #6 above |
+| 10 | MCA / Correspondence Analysis | DIM | **Planned** — item #4 above |
 | 11 | UMAP / t-SNE | DIM | Completed (UMAP, Phase 2b) |
 | 12 | W-NOMINATE | DIM | Rejected (R-only) |
 | 13 | Optimal Classification | DIM | Rejected (R-only) |
 | 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
-| 16 | Hierarchical Bayesian Model | BAY | **Planned** — item #3 above |
+| 16 | Hierarchical Bayesian Model | BAY | **Planned** — item #1 above |
 | 17 | Posterior Predictive Checks | BAY | Partial (embedded in IRT) |
 | 18 | Hierarchical Clustering | CLU | Completed (Clustering) |
 | 19 | K-Means / GMM Clustering | CLU | Completed (Clustering) |
@@ -243,11 +182,11 @@ Each results directory should have a `README.md` explaining the analysis for non
 | 23 | Community Detection | NET | Completed (Network) |
 | 24 | Vote Prediction | PRD | Completed (Prediction) |
 | 25 | SHAP Analysis | PRD | Completed (Prediction) |
-| 26 | Ideological Drift | TSA | **Planned** — item #7 above |
-| 27 | Changepoint Detection | TSA | **Planned** — item #7 above |
+| 26 | Ideological Drift | TSA | **Planned** — item #5 above |
+| 27 | Changepoint Detection | TSA | **Planned** — item #5 above |
 | 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
 
-**Score: 19 completed, 2 rejected, 4 planned, 2 deferred, 1 partial = 29 total** (was: 1 experimental → completed)
+**Score: 19 completed, 2 rejected, 4 planned, 2 deferred, 1 partial = 29 total**
 
 ---
 

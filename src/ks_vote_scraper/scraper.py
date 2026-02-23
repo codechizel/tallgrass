@@ -912,6 +912,68 @@ class KSVoteScraper:
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         return manifest_path
 
+    @staticmethod
+    def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:
+        """Parse 'Yea: 63 Nay: 59' into (yea, nay, margin) or None if unparseable."""
+        m = re.search(r"Yea:\s*(\d+)\s*Nay:\s*(\d+)", vote_text)
+        if not m:
+            return None
+        yea, nay = int(m.group(1)), int(m.group(2))
+        return yea, nay, abs(yea - nay)
+
+    def _save_missing_votes_doc(self, total_vote_pages: int) -> Path:
+        """Write a standalone missing_votes.md documenting failed vote page fetches."""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        successful = total_vote_pages - len(self.failures)
+
+        # Parse tallies and sort by margin (closest first), unparseable last
+        rows: list[tuple[int | None, FetchFailure]] = []
+        for f in self.failures:
+            tally = self._parse_vote_tally(f.vote_text)
+            rows.append((tally[2] if tally else None, f))
+        rows.sort(key=lambda r: (r[0] is None, r[0] or 0))
+
+        lines = [
+            f"# Missing Votes — {self.session.label}",
+            "",
+            f"Scraped: {now}",
+            f"Success rate: {successful}/{total_vote_pages}"
+            f" ({successful / total_vote_pages * 100:.1f}%)"
+            if total_vote_pages
+            else "",
+            "",
+            "| Bill | Tally | Margin | Error | URL |",
+            "|------|-------|--------|-------|-----|",
+        ]
+
+        for margin, f in rows:
+            tally = self._parse_vote_tally(f.vote_text)
+            if tally:
+                yea, nay, mg = tally
+                tally_str = f"{yea}-{nay}"
+                margin_str = f"**{mg}**" if mg <= 10 else str(mg)
+            else:
+                tally_str = f.vote_text
+                margin_str = "?"
+            status = f"{f.status_code}" if f.status_code else f.error_type
+            lines.append(
+                f"| {f.bill_number} | {tally_str} | {margin_str} | {status} | {f.vote_url} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "Re-running the scraper retries failed pages (they are never cached).",
+                "For persistent 404s, check legislative journals"
+                " or the Kansas State Library archives.",
+                "",
+            ]
+        )
+
+        doc_path = self.output_dir / "missing_votes.md"
+        doc_path.write_text("\n".join(lines), encoding="utf-8")
+        return doc_path
+
     def _print_failure_summary(self):
         """Print a grouped summary of all failed vote page fetches."""
         if not self.failures:
@@ -988,6 +1050,7 @@ class KSVoteScraper:
 
         if self.failures:
             self._save_failure_manifest(len(vote_links))
+            self._save_missing_votes_doc(len(vote_links))
 
         elapsed = time.time() - start
 
