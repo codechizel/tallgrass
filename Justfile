@@ -1,5 +1,10 @@
 # KS Vote Scraper — Command Runner
 
+# Cap thread pools to P-core count (6) to prevent E-core spillover on Apple Silicon.
+# See ADR-0022 and results/experiments/2026-02-23_parallel-chains-performance/.
+export OMP_NUM_THREADS := "6"
+export OPENBLAS_NUM_THREADS := "6"
+
 # Default: show available commands
 default:
     @just --list

@@ -102,10 +102,23 @@ All HTTP fetching uses a two-phase pattern: concurrent fetch via ThreadPoolExecu
 
 ### Analysis Parallelism
 
-- **MCMC chains** (`irt.py`, `hierarchical.py`): `cores=n_chains` runs chains in parallel via multiprocessing. Each chain gets its own process and deterministic per-chain seed. Results are mathematically identical to sequential execution. `hierarchical.py` also accepts `--cores N` CLI flag for explicit override (used in performance experiments). **Caution:** running multiple bienniums' MCMC jobs simultaneously saturates the M3 Pro and causes ~2.5x slowdown per chain — run bienniums sequentially in batch jobs.
+- **MCMC chains** (`irt.py`, `hierarchical.py`): `cores=n_chains` runs chains in parallel via multiprocessing. Each chain gets its own process and deterministic per-chain seed. Results are mathematically identical to sequential execution. `hierarchical.py` also accepts `--cores N` CLI flag for explicit override (used in performance experiments).
 - **IRT chain initialization** (`irt.py`): PCA-informed initialization is on by default (`--no-pca-init` to disable). Standardized PC1 scores seed both chains' ideal point parameters, preventing reflection mode-splitting that caused 5 of 16 historical chamber-sessions to fail convergence. See ADR-0023.
 - **XGBoost** (`prediction.py`, `cross_session.py`): `n_jobs=-1` enables multi-core tree building via XGBoost's internal C++ thread pool. Deterministic with `random_state`.
 - **Random Forest** (`prediction.py`): `n_jobs=-1` for parallel tree fitting.
+
+### Apple Silicon CPU Scheduling (M3 Pro)
+
+The development machine has **6 performance (P) cores + 6 efficiency (E) cores** (12 total). macOS controls core assignment via QoS — **there is no way to pin Python processes to specific cores on Apple Silicon** (`os.sched_setaffinity()` and `psutil.cpu_affinity()` are Linux-only; the Thread Affinity API returns 0 on arm64).
+
+**Key rules for CPU-intensive analysis:**
+
+1. **Run bienniums sequentially, not simultaneously.** Running multiple MCMC jobs at once forces the OS to schedule some chains on E-cores (~50% the IPC of P-cores), causing ~2.5x slowdown. One biennium at a time keeps all chains on P-cores.
+2. **Keep parallel chains within a biennium.** `cores=n_chains` (2 chains on 6 P-cores) is optimal — measured 1.83-1.90x faster than sequential. Sequential causes chain 2 to run at ~50% speed due to thermal throttling and E-core migration after chain 1 heats the chip.
+3. **Cap internal thread pools.** Justfile recipes for CPU-intensive phases set `OMP_NUM_THREADS=6 OPENBLAS_NUM_THREADS=6` to prevent NumPy/SciPy/PyTensor thread pools (which default to 12 = all cores) from spilling onto E-cores.
+4. **Never use `taskpolicy -c background`** for analysis — it forces E-cores only, ~2-3x slower.
+
+See ADR-0022 and the parallel chains performance experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) for measured data.
 
 ### Retry Strategy
 

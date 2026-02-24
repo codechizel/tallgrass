@@ -55,10 +55,26 @@ Added `n_jobs=-1` to all `XGBClassifier` instances in `prediction.py` and `cross
 
 ## Addendum: Parallel Chains Performance Experiment (2026-02-23)
 
-A controlled experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) tested `cores=1` (sequential) vs `cores=2` (parallel) on the 91st Legislature hierarchical IRT.
+A controlled experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) tested `cores=1` (sequential) vs `cores=2` (parallel) across two phases:
+
+- **Phase 1 (91st Legislature):** Per-chamber models only (`--skip-joint`). Parallel is 1.87x faster.
+- **Phase 2 (88th Legislature):** Full run including joint cross-chamber model. Parallel is 1.83x faster overall; joint model specifically 1.89x faster (22.4 min vs 42.4 min).
 
 **Finding:** The `cores=n_chains` change was effectively a **no-op** — PyMC's default already resolves to `cores=min(4, cpu_count())` capped to `chains`, which is 2 for our `chains=2` configuration. The original hypothesis (parallelism caused the slowdown) was wrong.
 
-**Actual cause of the Feb 23 slowdown:** Running 8 bienniums' hierarchical models simultaneously in a batch job saturated the M3 Pro's CPU, causing ~2.5x per-chain slowdown across all processes. Sequential execution within a single biennium actually introduces a *different* problem: thermal throttling causes chain 2 to run at ~50% speed after chain 1 heats the chip, making sequential ~1.8x slower than parallel.
+**Actual cause of the Feb 23 slowdown:** Running 8 bienniums' hierarchical models simultaneously in a batch job saturated the M3 Pro's CPU. With 16+ MCMC processes competing for 6 P-cores, the macOS scheduler assigns some chains to efficiency cores (~50% single-thread IPC of P-cores), causing ~2.5x per-chain slowdown.
 
-**Recommendation:** Keep `cores=n_chains` for within-biennium parallelism, but run bienniums sequentially in batch jobs (not simultaneously). A `--cores` CLI flag was added to `hierarchical.py` for explicit override during experiments.
+**Sequential chain 2 slowdown:** When chains run sequentially (`cores=1`), chain 2 consistently runs at ~50% the speed of chain 1. Two likely causes: (1) thermal throttling after sustained CPU load from chain 1, and (2) macOS QoS-based scheduling migrating the process to E-cores after extended high-CPU usage.
+
+**Convergence determinism:** All convergence diagnostics (R-hat, ESS, E-BFMI, divergences, ICC, group parameters, credible intervals) are **bit-identical** between `cores=1` and `cores=2`. The `cores` parameter is purely a scheduling decision with no effect on the sampler's trajectory.
+
+## Addendum: Apple Silicon CPU Scheduling (2026-02-23)
+
+macOS does **not** expose CPU core affinity APIs on Apple Silicon. `os.sched_setaffinity()`, `psutil.cpu_affinity()`, and the Thread Affinity API are all unavailable or non-functional on arm64. The only scheduling lever is QoS hints via `taskpolicy`, which are preferences not guarantees.
+
+The M3 Pro has 6 performance cores + 6 efficiency cores. E-cores have roughly 50% the single-thread IPC of P-cores. Libraries like NumPy, SciPy, and PyTensor create internal thread pools sized to `cpu_count()` = 12, meaning some threads inevitably land on E-cores for compute-heavy operations.
+
+**Mitigations applied:**
+1. `OMP_NUM_THREADS=6` and `OPENBLAS_NUM_THREADS=6` set in Justfile recipes for CPU-intensive phases (IRT, hierarchical, prediction, cross-session). Caps internal thread pools to the P-core count.
+2. Batch jobs run bienniums sequentially (not simultaneously) to avoid E-core scheduling.
+3. `--cores` CLI flag on `hierarchical.py` for explicit override during experiments.
