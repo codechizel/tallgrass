@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-23 (after PCA init default, parallelism experiment, --cores flag)
+**Last updated:** 2026-02-24 (after analysis primer for general audiences)
 
 ---
 
@@ -33,6 +33,7 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | 89th Biennium Pipeline Run | 2026-02-22 | Full 12-phase pipeline on 2021-22 data; Dennis Pyle (Independent) handled correctly across all phases |
 | — | PCA-Informed IRT Init (Default) | 2026-02-23 | Fixes 5/16 convergence failures; literature-backed (Jackman pscl::ideal); `--no-pca-init` to disable (ADR-0023) |
 | — | Parallelism Performance Experiment | 2026-02-23 | `cores=n_chains` was already PyMC default; batch-job CPU contention was the real cause; sequential chains 1.8x slower due to thermal throttling (ADR-0022 addendum) |
+| — | Analysis Primer | 2026-02-24 | `docs/analysis-primer.md`: plain-English guide to the 13-step pipeline for general audiences (journalists, policymakers, citizens) |
 
 ---
 
@@ -138,9 +139,9 @@ Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. Two-mode n
 
 Documented in `Analytic_Methods/17_BAY_posterior_predictive_checks.md`. Already partially integrated into the IRT phase (PPC plots in the IRT report). A standalone, cross-model PPC comparison could be useful once the hierarchical model and 2D IRT are implemented.
 
-### Analysis Phase Primers
+### Per-Phase Results Primers
 
-Each results directory should have a `README.md` explaining the analysis for non-code readers. Low priority — the HTML reports serve this role for now, but standalone primers would be useful for the `results/` directory.
+Each results directory should have a `README.md` explaining the analysis for non-code readers. Low priority — the HTML reports serve this role for now, and the project-level primer (`docs/analysis-primer.md`) provides the general-audience overview. Standalone per-phase primers would still be useful for the `results/` directory.
 
 ### Test Suite Expansion
 
