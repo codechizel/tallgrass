@@ -16,7 +16,7 @@ Four experiments were conducted on the 87th Senate (the smallest failing case):
 | Increased tuning (3000) | 1.8294 | 3 | -0.38 | FAILURE |
 | Sign constraint on beta | 1.8340 | 3 | -0.46 | FAILURE |
 
-Only PCA-informed initialization resolved the problem. See `docs/irt-convergence-investigation.md` for the full write-up.
+Only PCA-informed initialization resolved the problem. See `results/experiments/2026-02-23_irt-convergence-mode-splitting/irt-convergence-investigation.md` for the full write-up.
 
 ## Decision
 
@@ -31,7 +31,7 @@ Only PCA-informed initialization resolved the problem. See `docs/irt-convergence
 - **Bafumi, Gelman, Park, & Kaplan (2005)** — demonstrates that good initialization improves MCMC mixing in IRT models.
 - **Betancourt (2017)** — Stan case study recommending data-informed initialization for complex hierarchical models.
 
-See `docs/lit-review-irt-initialization.md` for the full literature review.
+See `results/experiments/2026-02-23_irt-convergence-mode-splitting/lit-review-irt-initialization.md` for the full literature review.
 
 **Alternatives considered:**
 - **More tuning iterations (3000):** Failed completely — more random exploration cannot escape a symmetric bimodal posterior.
