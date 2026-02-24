@@ -259,6 +259,12 @@ Significant technical decisions are documented in `docs/adr/`. See `docs/adr/REA
 
 `docs/analysis-primer.md` is a plain-English guide to the full 13-step analysis pipeline, written for a general audience (journalists, policymakers, engaged citizens). It walks through each phase in order with analogies, real Kansas data examples, and an honest discussion of limitations. Share this with anyone who wants to understand what the analysis does without reading code or design docs.
 
+## Field Landscape and Method Evaluation
+
+`docs/landscape-legislative-vote-analysis.md` surveys the legislative analysis field: NOMINATE (Poole & Rosenthal), Bayesian IRT (Clinton-Jackman-Rivers), emIRT (Imai-Lo-Olmsted), state-level projects (Shor-McCarty, DIME), ML approaches, network analysis, and the software ecosystem. ~50 references.
+
+`docs/method-evaluation.md` evaluates every major method against our data and pipeline. **Key finding:** external validation with Shor-McCarty scores is the highest-priority gap. Nine other methods were evaluated and rejected with data-specific rationale (vote-type-stratified IRT, strategic absence modeling, GGUM, dynamic within-biennium IRT, etc.).
+
 ## Analysis Design Choices
 
 Each analysis phase has a design document in `analysis/design/` recording the statistical assumptions, priors, thresholds, and methodological choices that shape results and carry forward into downstream phases. **Read these before interpreting results or adding a new phase.** See `analysis/design/README.md` for the index.

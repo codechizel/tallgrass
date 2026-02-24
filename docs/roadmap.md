@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-24 (after analysis primer for general audiences)
+**Last updated:** 2026-02-24 (after method evaluation and landscape survey)
 
 ---
 
@@ -34,41 +34,37 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | PCA-Informed IRT Init (Default) | 2026-02-23 | Fixes 5/16 convergence failures; literature-backed (Jackman pscl::ideal); `--no-pca-init` to disable (ADR-0023) |
 | — | Parallelism Performance Experiment | 2026-02-23 | `cores=n_chains` was already PyMC default; batch-job CPU contention was the real cause; sequential chains 1.8x slower due to thermal throttling (ADR-0022 addendum) |
 | — | Analysis Primer | 2026-02-24 | `docs/analysis-primer.md`: plain-English guide to the 13-step pipeline for general audiences (journalists, policymakers, citizens) |
+| — | Parallelism Experiment (Complete) | 2026-02-24 | 88th Legislature 4-run experiment: parallel 1.83-1.89x faster; convergence bit-identical; OMP_NUM_THREADS=6 cap applied (ADR-0022) |
+| — | Full 91st Pipeline with Joint Model | 2026-02-24 | 12/12 phases succeeded including hierarchical joint cross-chamber model (93 min, 0 divergences, all checks passed); first complete run with joint model |
+| — | Landscape Survey & Method Evaluation | 2026-02-24 | `docs/landscape-legislative-vote-analysis.md` and `docs/method-evaluation.md`: surveyed the field, evaluated all major methods, identified external validation as the priority gap |
 
 ---
 
 ## Next Up
 
-### 1. MCMC Performance Experiment: Sequential vs Parallel Chains (Complete Runs)
+### 1. External Validation with Shor-McCarty Scores
 
-**Priority:** High — needed to establish reliable batch-run practices.
-**Status:** Partial results from 91st Legislature. Needs re-run on a smaller biennium to get complete joint model timings.
+**Priority:** High — the single biggest credibility gap in the pipeline.
+**Status:** Not started. Data identified and validated; implementation plan ready.
 
-The initial experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) produced valuable but incomplete results. The 91st Legislature's joint cross-chamber model (172 legislators, 491 votes, 43,612 observations) was killed after 2+ hours without completing, making it impractical as an experiment subject.
+Every validation in the pipeline is internal (PCA vs IRT correlation, holdout accuracy, cross-session alignment). We have never compared our ideal points to an independent external measure. Every published ideal point paper does this.
 
-**What we learned so far:**
-- `cores=n_chains` is equivalent to PyMC's default (not a new change)
-- Sequential chains (`cores=1`) are ~1.8x slower than parallel due to thermal throttling on M3 Pro
-- Batch-running multiple bienniums simultaneously caused the original slowdown (CPU contention)
+**Data source:** Shor-McCarty Individual State Legislator Ideology Data (April 2023), [Harvard Dataverse](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/NWSYOS). CC0 license, 6 MB. 610 Kansas legislators with ideology scores (`np_score`) covering 1996-2020. Full "Last, First" names, district numbers, chamber indicators per year.
 
-**What remains:**
-- Re-run the full 4-run experiment on a smaller biennium to get joint model completion times
-- Validate that the thermal throttling pattern holds across different model sizes
-- Establish baseline timings for joint models to set expectations for batch jobs
+**Overlap with our data:** Five bienniums (84th-88th, 2011-2020). This gives five independent correlation estimates.
 
-**Recommended experiment bienniums** (sorted by size, smallest first):
+**Limitation:** `np_score` is fixed per legislator's career (does not vary by session). Our IRT `xi_mean` varies by biennium. The comparison tests rank ordering agreement, not scale equivalence.
 
-| Biennium | Votes CSV rows | House model | Senate model | Hier. House time |
-|----------|---------------|-------------|--------------|-----------------|
-| **88th (2019-20)** | 45K | 127 × 141 | 41 × 108 | ~176s |
-| 84th (2011-12) | 68K | 113 × 260 | 37 × 254 | ~600s |
-| 86th (2015-16) | 79K | 129 × 236 | 40 × 225 | ~442s |
+**Implementation:** Lightweight new phase (`analysis/external_validation.py`). No MCMC — just data download, name matching, correlation analysis, scatter plots, and outlier identification. Estimated development time: modest. See `docs/method-evaluation.md` for full rationale.
 
-**Use the 88th (2019-20) for experiments.** It is the smallest biennium by a wide margin (~45K votes vs 68K+ for all others), completes per-chamber models in under 3 minutes, and its joint model completed in 23 minutes with `cores=2`. This makes it feasible to run all 4 experiment configurations (sequential/parallel × with/without joint) in under 2 hours total.
+**Success criteria:**
+- r > 0.90: Strong external validation. Our scores are essentially interchangeable with the field standard.
+- r = 0.85-0.90: Good agreement. Differences likely reflect session-specific dynamics.
+- r < 0.85: Investigate — could be data quality, convergence failures (84th House), or methodological differences.
 
-Avoid the 91st (2025-26) for experiments — it has the most votes per legislator and its joint model takes 2+ hours. The 90th (2023-24) is even larger at 95K votes.
-
-The experiment template and infrastructure are in `results/experiments/TEMPLATE.md`. New experiments go in `results/experiments/YYYY-MM-DD_short-description/experiment.md`.
+**References:**
+- Shor, B. and N. McCarty. 2011. "The Ideological Mapping of American Legislatures." *APSR* 105(3): 530-551.
+- See `docs/landscape-legislative-vote-analysis.md` for full field context and `docs/method-evaluation.md` for evaluation of this and alternative approaches.
 
 ### 2. Cross-Session Validation (Feature Complete)
 
@@ -119,9 +115,13 @@ This is computationally expensive (doubles MCMC time) and requires careful ident
 
 ## Deferred / Low Priority
 
-### Joint Cross-Chamber IRT
+### ~~Joint Cross-Chamber IRT~~
 
-A full joint MCMC model was attempted and failed: 71 shared bills for 169 legislators is too sparse. Currently using classical test equating (A=1.136, B=-0.305). Revisit only if a future session has significantly more shared bills, or if the 2023-24 session provides additional bridging data.
+~~A full joint MCMC model was attempted and failed.~~ **Completed (2026-02-24).** The hierarchical joint cross-chamber model now runs successfully for the 91st Legislature: 172 legislators, 491 votes, 43,612 observations, 0 divergences, all convergence checks passed. Runtime: 93 minutes on M3 Pro with `OMP_NUM_THREADS=6`. See the full 12-phase pipeline run in the Completed Phases table.
+
+### DIME/CFscores External Validation (Second Source)
+
+Campaign-finance-based ideology from Bonica's DIME project ([data.stanford.edu/dime](https://data.stanford.edu/dime)) provides a completely independent data source — it captures who donors think you are, not how you vote. However, within-party correlation with Shor-McCarty is only 0.65-0.67. For our Kansas analysis where intra-Republican variation is the primary interest, CFscores may lack resolution. Pursue after Shor-McCarty validation succeeds. See `docs/method-evaluation.md`.
 
 ### Latent Class Mixture Models
 
@@ -158,6 +158,15 @@ Each results directory should have a `README.md` explaining the analysis for non
 |--------|-----|
 | W-NOMINATE (`Analytic_Methods/12_DIM_w_nominate.md`) | R-only; project policy is Python-only (no rpy2) |
 | Optimal Classification (`Analytic_Methods/13_DIM_optimal_classification.md`) | R-only; same as above |
+| emIRT (fast EM ideal points) | R-only; PyMC gives full posteriors; speed not a bottleneck for single-state |
+| Vote-type-stratified IRT (IssueIRT) | Data doesn't support it: overrides are party-line (98%/1%), other types too few (N < 56) |
+| Strategic absence modeling (idealstan) | 2.6% absence rate, 22 "Present and Passing" instances — negligible impact |
+| Dynamic IRT within biennium | 2-year window too short; cross-session handles between-biennium |
+| GGUM unfolding models | No extreme-alliance voting pattern in Kansas data |
+| LLM legislative agents | Too experimental; XGBoost already at 0.98 AUC |
+| TBIP text-based ideal points | No full bill text available from scraper |
+
+See `docs/method-evaluation.md` for detailed rationale on each rejection.
 
 ---
 
