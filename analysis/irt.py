@@ -245,6 +245,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip joint cross-chamber model",
     )
+    parser.add_argument(
+        "--no-pca-init",
+        action="store_true",
+        help="Disable PCA-informed chain initialization (on by default)",
+    )
+    parser.add_argument(
+        "--sign-constraint",
+        action="store_true",
+        help="Add soft sign constraint via pm.Potential (convergence experiment)",
+    )
     return parser.parse_args()
 
 
@@ -1088,6 +1098,8 @@ def build_and_sample(
     n_tune: int,
     n_chains: int,
     target_accept: float = TARGET_ACCEPT,
+    xi_initvals: np.ndarray | None = None,
+    sign_constraint_parties: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[az.InferenceData, float]:
     """Build 2PL IRT model with anchor constraints and sample with NUTS.
 
@@ -1100,6 +1112,10 @@ def build_and_sample(
         n_tune: MCMC tuning steps (discarded).
         n_chains: Number of independent MCMC chains.
         target_accept: NUTS target acceptance probability.
+        xi_initvals: Optional initial xi values for free parameters (from PCA).
+            If provided, all chains start near these values with small jitter.
+        sign_constraint_parties: Optional (r_indices, d_indices) arrays for a soft
+            sign constraint that penalizes mean(xi_D) > mean(xi_R).
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -1144,10 +1160,26 @@ def build_and_sample(
         eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
         pm.Bernoulli("obs", logit_p=eta, observed=y, dims="obs_id")
 
+        # --- Optional soft sign constraint (Experiment 4) ---
+        if sign_constraint_parties is not None:
+            r_idx, d_idx = sign_constraint_parties
+            mean_r = xi[r_idx].mean()
+            mean_d = xi[d_idx].mean()
+            # Light penalty: mean(xi_R) should be > mean(xi_D)
+            pm.Potential("sign_constraint", -(mean_d - mean_r))
+            print("  Sign constraint: pm.Potential active (lambda=1.0)")
+
         # --- Sample ---
         print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
         print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
         print(f"  Anchors: {n_anchors} fixed legislators")
+
+        # Build initvals if PCA-informed initialization requested
+        sample_kwargs: dict = {}
+        if xi_initvals is not None:
+            sample_kwargs["initvals"] = {"xi_free": xi_initvals}
+            print(f"  PCA-informed initvals: {len(xi_initvals)} free parameters")
+
         t0 = time.time()
         idata = pm.sample(
             draws=n_samples,
@@ -1157,6 +1189,7 @@ def build_and_sample(
             target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,
+            **sample_kwargs,
         )
         sampling_time = time.time() - t0
 
@@ -2511,12 +2544,71 @@ def main() -> None:
             # ── Phase 3: Build and sample ──
             print_header(f"PHASE 3: MCMC SAMPLING — {chamber}")
             chamber_anchors = [(cons_idx, 1.0), (lib_idx, -1.0)]
+
+            # PCA-informed chain initialization (default: on)
+            # Prevents reflection mode-splitting by starting chains near the
+            # correct orientation. See docs/irt-convergence-investigation.md.
+            xi_init = None
+            if not args.no_pca_init:
+                anchor_set = {cons_idx, lib_idx}
+                free_pos = [
+                    i for i in range(data["n_legislators"])
+                    if i not in anchor_set
+                ]
+                slug_order = {s: i for i, s in enumerate(data["leg_slugs"])}
+                pc1_vals = pca_scores.filter(
+                    pl.col("legislator_slug").is_in(data["leg_slugs"])
+                ).sort(
+                    pl.col("legislator_slug").replace_strict(slug_order)
+                )["PC1"].to_numpy()
+                # Standardize to mean-0, sd-1 (the xi prior)
+                pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
+                xi_init = pc1_std[free_pos].astype(np.float64)
+                print(
+                    f"  PCA init: {len(xi_init)} free params, "
+                    f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                )
+
+            # Experiment: soft sign constraint
+            sign_parties = None
+            if args.sign_constraint:
+                slug_col = (
+                    "slug" if "slug" in legislators.columns
+                    else "legislator_slug"
+                )
+                leg_df = legislators.filter(
+                    pl.col(slug_col).is_in(data["leg_slugs"])
+                )
+                slug_to_idx = {
+                    s: i for i, s in enumerate(data["leg_slugs"])
+                }
+                r_slugs = leg_df.filter(
+                    pl.col("party") == "Republican"
+                )[slug_col].to_list()
+                d_slugs = leg_df.filter(
+                    pl.col("party") == "Democrat"
+                )[slug_col].to_list()
+                r_idx = np.array([
+                    slug_to_idx[s] for s in r_slugs if s in slug_to_idx
+                ])
+                d_idx = np.array([
+                    slug_to_idx[s] for s in d_slugs if s in slug_to_idx
+                ])
+                if len(r_idx) > 0 and len(d_idx) > 0:
+                    sign_parties = (r_idx, d_idx)
+                    print(
+                        f"  Sign constraint: "
+                        f"{len(r_idx)} R, {len(d_idx)} D legislators"
+                    )
+
             idata, sampling_time = build_and_sample(
                 data,
                 chamber_anchors,
                 args.n_samples,
                 args.n_tune,
                 args.n_chains,
+                xi_initvals=xi_init,
+                sign_constraint_parties=sign_parties,
             )
 
             # ── Phase 4: Convergence diagnostics ──

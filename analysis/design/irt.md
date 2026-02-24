@@ -89,6 +89,22 @@
 
 **Impact:** If PCA scores are wrong (e.g., the PC1 sign convention flipped incorrectly), the IRT anchors will be wrong. Validated by the PCA-IRT correlation check (r > 0.95 expected).
 
+### PCA-informed chain initialization (default: on)
+
+**Decision:** Initialize MCMC chains with standardized PCA PC1 scores (mean-0, sd-1) as starting values for the free ideal point parameters (`xi_free`). On by default; disable with `--no-pca-init`.
+
+**Why:** The 2PL IRT model has a reflection invariance — negating all ξ and all β leaves the likelihood unchanged. Hard anchors create an energy barrier between the two modes but cannot prevent a chain from initializing on the wrong side. With random initialization and seed 42, 5 of 16 chamber-sessions exhibited catastrophic mode-splitting (R-hat ~1.83, ESS 3, zero divergences). PCA initialization places both chains in the correct mode's basin of attraction, eliminating the problem at zero cost.
+
+**Literature support:** Jackman's `pscl::ideal()` — the reference implementation for Bayesian IRT in political science — has used eigendecomposition (`startvals="eigen"`) as its default starting values since 2001. Bafumi, Gelman, Park, & Kaplan (2005) discuss PCA-generated starting values as one of three initialization strategies. Betancourt (2017) warns against initialization-based identification for general mixture models but acknowledges it works when modes have a known substantive ordering, which is the case for legislative ideal points. See `docs/irt-convergence-investigation.md` for the full experimental validation and `docs/lit-review-irt-initialization.md` for the literature review.
+
+**Alternatives considered:**
+- Random initialization (PyMC default) — caused 5/16 convergence failures
+- Extended tuning (3000 draws) — zero effect; trapped chains don't cross the energy barrier
+- Soft sign constraint (`pm.Potential`) — zero effect; likelihood overwhelms the penalty
+- 4 chains — partial fix; masks the problem via majority vote but destroys credible interval precision
+
+**Impact:** Eliminates all 5 convergence failures. No known downsides when PC1 cleanly separates the ideological dimension (true for all Kansas sessions, with PCA-IRT r > 0.93 when converged).
+
 ### Native missing data handling
 
 **Decision:** Absences are handled by simply excluding those (legislator, vote) pairs from the likelihood. No imputation.

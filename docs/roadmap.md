@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-22 (after historical session support: 2011-2026)
+**Last updated:** 2026-02-23 (after PCA init default, parallelism experiment, --cores flag)
 
 ---
 
@@ -31,12 +31,45 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | Historical Session Support | 2026-02-22 | 2011-2026 coverage: JS bill discovery fallback, ODT vote parser, pre-2015 party detection (ADR-0020) |
 | — | Independent Party Handling | 2026-02-22 | Pipeline-wide null-party fill, PARTY_COLORS in all 12 modules, dynamic plots, Independent exclusion from party-specific models (ADR-0021) |
 | — | 89th Biennium Pipeline Run | 2026-02-22 | Full 12-phase pipeline on 2021-22 data; Dennis Pyle (Independent) handled correctly across all phases |
+| — | PCA-Informed IRT Init (Default) | 2026-02-23 | Fixes 5/16 convergence failures; literature-backed (Jackman pscl::ideal); `--no-pca-init` to disable (ADR-0023) |
+| — | Parallelism Performance Experiment | 2026-02-23 | `cores=n_chains` was already PyMC default; batch-job CPU contention was the real cause; sequential chains 1.8x slower due to thermal throttling (ADR-0022 addendum) |
 
 ---
 
 ## Next Up
 
-### 1. Cross-Session Validation (Feature Complete)
+### 1. MCMC Performance Experiment: Sequential vs Parallel Chains (Complete Runs)
+
+**Priority:** High — needed to establish reliable batch-run practices.
+**Status:** Partial results from 91st Legislature. Needs re-run on a smaller biennium to get complete joint model timings.
+
+The initial experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) produced valuable but incomplete results. The 91st Legislature's joint cross-chamber model (172 legislators, 491 votes, 43,612 observations) was killed after 2+ hours without completing, making it impractical as an experiment subject.
+
+**What we learned so far:**
+- `cores=n_chains` is equivalent to PyMC's default (not a new change)
+- Sequential chains (`cores=1`) are ~1.8x slower than parallel due to thermal throttling on M3 Pro
+- Batch-running multiple bienniums simultaneously caused the original slowdown (CPU contention)
+
+**What remains:**
+- Re-run the full 4-run experiment on a smaller biennium to get joint model completion times
+- Validate that the thermal throttling pattern holds across different model sizes
+- Establish baseline timings for joint models to set expectations for batch jobs
+
+**Recommended experiment bienniums** (sorted by size, smallest first):
+
+| Biennium | Votes CSV rows | House model | Senate model | Hier. House time |
+|----------|---------------|-------------|--------------|-----------------|
+| **88th (2019-20)** | 45K | 127 × 141 | 41 × 108 | ~176s |
+| 84th (2011-12) | 68K | 113 × 260 | 37 × 254 | ~600s |
+| 86th (2015-16) | 79K | 129 × 236 | 40 × 225 | ~442s |
+
+**Use the 88th (2019-20) for experiments.** It is the smallest biennium by a wide margin (~45K votes vs 68K+ for all others), completes per-chamber models in under 3 minutes, and its joint model completed in 23 minutes with `cores=2`. This makes it feasible to run all 4 experiment configurations (sequential/parallel × with/without joint) in under 2 hours total.
+
+Avoid the 91st (2025-26) for experiments — it has the most votes per legislator and its joint model takes 2+ hours. The 90th (2023-24) is even larger at 95K votes.
+
+The experiment template and infrastructure are in `results/experiments/TEMPLATE.md`. New experiments go in `results/experiments/YYYY-MM-DD_short-description/experiment.md`.
+
+### 2. Cross-Session Validation (Feature Complete)
 
 **Priority:** High — the single biggest gap in current results.
 **Status:** All 7 implementation steps complete (data layer, plots, report builder, CLI, prediction transfer, detection validation, docs). 55 tests. Ready for first real run once both sessions' upstream phases are complete.
@@ -48,7 +81,7 @@ Four distinct analyses become possible now that both bienniums are scraped:
 - **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. SHAP feature importance rankings compared via Kendall's tau.
 - **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
 
-### 4. MCA (Multiple Correspondence Analysis)
+### 3. MCA (Multiple Correspondence Analysis)
 
 **Priority:** Medium — alternative view on the vote matrix.
 
@@ -59,7 +92,7 @@ Method documented in `Analytic_Methods/10_DIM_correspondence_analysis.md`. MCA t
 - `prince` library already in `pyproject.toml`
 - Compare MCA dimensions to PCA PC1/PC2 — if they agree, PCA's linear assumption is validated
 
-### 5. Time Series Analysis
+### 4. Time Series Analysis
 
 **Priority:** Medium — adds temporal depth to static snapshots.
 
@@ -70,7 +103,7 @@ Two methods documented but not yet implemented:
 
 Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
 
-### 6. 2D Bayesian IRT Model
+### 5. 2D Bayesian IRT Model
 
 **Priority:** Medium — solves the Tyson paradox properly.
 
@@ -111,7 +144,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-689 tests exist across scraper (219) and analysis (470) modules. All passing. Coverage could be expanded:
+712 tests exist across scraper (219) and analysis (493) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

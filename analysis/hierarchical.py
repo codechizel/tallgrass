@@ -212,6 +212,7 @@ def parse_args() -> argparse.Namespace:
         "--n-tune", type=int, default=HIER_N_TUNE, help="MCMC tuning samples (discarded)"
     )
     parser.add_argument("--n-chains", type=int, default=HIER_N_CHAINS, help="Number of MCMC chains")
+    parser.add_argument("--cores", type=int, default=None, help="CPU cores for sampling (default: n_chains)")
     parser.add_argument("--skip-joint", action="store_true", help="Skip joint cross-chamber model")
     return parser.parse_args()
 
@@ -291,6 +292,7 @@ def build_per_chamber_model(
     n_samples: int,
     n_tune: int,
     n_chains: int,
+    cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
 ) -> tuple[az.InferenceData, float]:
     """Build 2-level hierarchical IRT and sample with NUTS.
@@ -349,7 +351,7 @@ def build_per_chamber_model(
             draws=n_samples,
             tune=n_tune,
             chains=n_chains,
-            cores=n_chains,
+            cores=cores if cores is not None else n_chains,
             target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,
@@ -366,6 +368,7 @@ def build_joint_model(
     n_samples: int,
     n_tune: int,
     n_chains: int,
+    cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
 ) -> tuple[az.InferenceData, dict, float]:
     """Build 3-level joint cross-chamber hierarchical IRT model.
@@ -482,7 +485,7 @@ def build_joint_model(
             draws=n_samples,
             tune=n_tune,
             chains=n_chains,
-            cores=n_chains,
+            cores=cores if cores is not None else n_chains,
             target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,
@@ -1200,6 +1203,7 @@ def main() -> None:
                 n_samples=args.n_samples,
                 n_tune=args.n_tune,
                 n_chains=args.n_chains,
+                cores=args.cores,
             )
 
             # Convergence
@@ -1266,6 +1270,7 @@ def main() -> None:
                     n_samples=args.n_samples,
                     n_tune=args.n_tune,
                     n_chains=args.n_chains,
+                    cores=args.cores,
                 )
 
                 joint_convergence = check_hierarchical_convergence(joint_idata, "Joint")

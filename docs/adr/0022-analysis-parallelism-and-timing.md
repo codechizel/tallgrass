@@ -52,3 +52,13 @@ Added `n_jobs=-1` to all `XGBClassifier` instances in `prediction.py` and `cross
 - Parallel MCMC chains double memory usage (each process holds the full model and samples). On 36GB RAM this is not a concern, but on constrained machines (<8GB), `cores=1` can be passed to `pm.sample()` to revert to sequential.
 - XGBoost `n_jobs=-1` may compete for CPU with other processes running concurrently. On a shared machine, consider `n_jobs=4` instead.
 - Same-day run directories accumulate disk usage. Acceptable given small file sizes (parquet compression, PNGs).
+
+## Addendum: Parallel Chains Performance Experiment (2026-02-23)
+
+A controlled experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) tested `cores=1` (sequential) vs `cores=2` (parallel) on the 91st Legislature hierarchical IRT.
+
+**Finding:** The `cores=n_chains` change was effectively a **no-op** — PyMC's default already resolves to `cores=min(4, cpu_count())` capped to `chains`, which is 2 for our `chains=2` configuration. The original hypothesis (parallelism caused the slowdown) was wrong.
+
+**Actual cause of the Feb 23 slowdown:** Running 8 bienniums' hierarchical models simultaneously in a batch job saturated the M3 Pro's CPU, causing ~2.5x per-chain slowdown across all processes. Sequential execution within a single biennium actually introduces a *different* problem: thermal throttling causes chain 2 to run at ~50% speed after chain 1 heats the chip, making sequential ~1.8x slower than parallel.
+
+**Recommendation:** Keep `cores=n_chains` for within-biennium parallelism, but run bienniums sequentially in batch jobs (not simultaneously). A `--cores` CLI flag was added to `hierarchical.py` for explicit override during experiments.

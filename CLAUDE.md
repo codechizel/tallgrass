@@ -102,7 +102,8 @@ All HTTP fetching uses a two-phase pattern: concurrent fetch via ThreadPoolExecu
 
 ### Analysis Parallelism
 
-- **MCMC chains** (`irt.py`, `hierarchical.py`): `cores=n_chains` runs chains in parallel via multiprocessing. Each chain gets its own process and deterministic per-chain seed. Results are mathematically identical to sequential execution.
+- **MCMC chains** (`irt.py`, `hierarchical.py`): `cores=n_chains` runs chains in parallel via multiprocessing. Each chain gets its own process and deterministic per-chain seed. Results are mathematically identical to sequential execution. `hierarchical.py` also accepts `--cores N` CLI flag for explicit override (used in performance experiments). **Caution:** running multiple bienniums' MCMC jobs simultaneously saturates the M3 Pro and causes ~2.5x slowdown per chain — run bienniums sequentially in batch jobs.
+- **IRT chain initialization** (`irt.py`): PCA-informed initialization is on by default (`--no-pca-init` to disable). Standardized PC1 scores seed both chains' ideal point parameters, preventing reflection mode-splitting that caused 5 of 16 historical chamber-sessions to fail convergence. See ADR-0023.
 - **XGBoost** (`prediction.py`, `cross_session.py`): `n_jobs=-1` enables multi-core tree building via XGBoost's internal C++ thread pool. Deterministic with `random_state`.
 - **Random Forest** (`prediction.py`): `n_jobs=-1` for parallel tree fitting.
 
@@ -247,7 +248,7 @@ Each analysis phase has a design document in `analysis/design/` recording the st
 
 - `analysis/design/eda.md` — Binary encoding, filtering thresholds, agreement metrics
 - `analysis/design/pca.md` — Imputation, standardization, sign convention, holdout design
-- `analysis/design/irt.md` — Priors (Normal(0,1) discrimination, anchors), MCMC settings, missing data handling
+- `analysis/design/irt.md` — Priors (Normal(0,1) discrimination, anchors), MCMC settings, missing data handling, PCA-informed chain initialization (default on)
 - `analysis/design/clustering.md` — Three methods for robustness, party loyalty metric, k=2 finding
 - `analysis/design/prediction.md` — XGBoost primary, IRT features dominate, NLP topic features (NMF on short_title), target leakage assessment
 - `analysis/design/beta_binomial.md` — Empirical Bayes, per-party-per-chamber priors, method of moments, shrinkage factor
