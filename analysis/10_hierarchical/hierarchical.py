@@ -132,7 +132,8 @@ mu_global     ~ Normal(0, 2)
 sigma_chamber ~ HalfNormal(1)
 mu_chamber    = mu_global + sigma_chamber * offset_chamber
 
-mu_group      = mu_chamber[c] + sigma_party * offset_party
+offset_party_sorted = sort_per_chamber(offset_party)  -- D < R within each chamber
+mu_group      = mu_chamber[c] + sigma_party * offset_party_sorted
 sigma_within  ~ HalfNormal(1)
 xi            = mu_group[g_i] + sigma_within[g_i] * xi_offset_i
 ```
@@ -193,6 +194,17 @@ HIER_TARGET_ACCEPT = 0.95
 # Party index convention: 0 = Democrat, 1 = Republican (after sorting)
 PARTY_NAMES = ["Democrat", "Republican"]
 PARTY_IDX_MAP = {"Democrat": 0, "Republican": 1}
+
+# Shrinkage comparison thresholds
+SHRINKAGE_MIN_DISTANCE = 0.5  # Min flat-to-party-mean distance for meaningful shrinkage_pct
+
+# Small-group warning threshold (James-Stein requires J >= 3; with J=2 and small N,
+# hierarchical shrinkage may be unreliable — see docs/hierarchical-shrinkage-deep-dive.md)
+MIN_GROUP_SIZE_WARN = 15
+
+# Convergence diagnostic variable lists
+HIER_CONVERGENCE_VARS = ["xi", "mu_party", "sigma_within", "alpha", "beta"]
+JOINT_EXTRA_VARS = ["mu_group", "mu_chamber", "sigma_chamber", "sigma_party"]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -276,10 +288,17 @@ def prepare_hierarchical_data(
     data["party_names"] = PARTY_NAMES
     data["n_parties"] = len(PARTY_NAMES)
 
-    # Print party composition
+    # Print party composition with small-group warning
     for i, name in enumerate(PARTY_NAMES):
         count = int((party_idx == i).sum())
         print(f"  {name}: {count} legislators")
+        if count < MIN_GROUP_SIZE_WARN:
+            print(
+                f"  WARNING: {name} has only {count} legislators. "
+                "Hierarchical shrinkage may be unreliable for groups this small "
+                "(J=2 groups with small N; flat IRT may be more trustworthy). "
+                "See docs/hierarchical-shrinkage-deep-dive.md"
+            )
 
     return data
 
@@ -523,11 +542,10 @@ def check_hierarchical_convergence(idata: az.InferenceData, chamber: str) -> dic
     diag: dict = {}
 
     # Variables to check
-    var_names = ["xi", "mu_party", "sigma_within", "alpha", "beta"]
-    available_vars = [v for v in var_names if v in idata.posterior]
+    available_vars = [v for v in HIER_CONVERGENCE_VARS if v in idata.posterior]
 
     # Check also joint-specific variables
-    for extra in ["mu_group", "mu_chamber", "sigma_chamber", "sigma_party"]:
+    for extra in JOINT_EXTRA_VARS:
         if extra in idata.posterior:
             available_vars.append(extra)
 
@@ -678,20 +696,20 @@ def extract_hierarchical_ideal_points(
                 # Shrinkage = fraction of flat's distance to party mean absorbed by pooling.
                 # 100% = fully pooled to party mean. 0% = no change. Negative = moved away.
                 # Null when flat_dist < 0.5 (ratio unstable near party mean) or anchored.
-                pl.when((pl.col("flat_xi_sd") > 0.01) & (flat_dist > 0.5))
+                pl.when((pl.col("flat_xi_sd") > 0.01) & (flat_dist > SHRINKAGE_MIN_DISTANCE))
                 .then((1 - hier_dist / flat_dist) * 100)
                 .otherwise(None)
                 .alias("shrinkage_pct"),
             ]
         )
 
-        # Drop the intermediate rescaled column
-        df = df.drop("flat_xi_rescaled")
+        # Keep flat_xi_rescaled for downstream use (scatter plot, cross-session comparison)
     else:
         df = df.with_columns(
             [
                 pl.lit(None).cast(pl.Float64).alias("flat_xi_mean"),
                 pl.lit(None).cast(pl.Float64).alias("flat_xi_sd"),
+                pl.lit(None).cast(pl.Float64).alias("flat_xi_rescaled"),
                 pl.lit(None).cast(pl.Float64).alias("delta_from_flat"),
                 pl.lit(None).cast(pl.Float64).alias("shrinkage_pct"),
                 pl.lit(None).cast(pl.Boolean).alias("toward_party_mean"),
@@ -707,8 +725,18 @@ def extract_group_params(
 ) -> pl.DataFrame:
     """Extract party-level mu and sigma posteriors.
 
+    Only applicable to per-chamber models (which have mu_party). Joint models use
+    mu_group with a different structure (4 groups, not 2 parties) — call with joint
+    InferenceData will raise ValueError.
+
     Returns DataFrame with party, mu_mean, mu_sd, mu_hdi_*, sigma_within_mean, etc.
     """
+    if "mu_party" not in idata.posterior:
+        msg = (
+            "extract_group_params only supports per-chamber models (mu_party). "
+            "Joint model data has mu_group instead."
+        )
+        raise ValueError(msg)
     mu_post = idata.posterior["mu_party"]
     mu_mean = mu_post.mean(dim=["chain", "draw"]).values
     mu_sd = mu_post.std(dim=["chain", "draw"]).values
@@ -750,9 +778,9 @@ def compute_variance_decomposition(
     ICC = sigma_between² / (sigma_between² + sigma_within_pooled²)
 
     sigma_between is computed from the party means (var of mu_party).
-    sigma_within_pooled is the mean of the per-party sigma_within.
+    sigma_within_pooled is the group-size-weighted mean of the per-party sigma_within.
 
-    Returns single-row DataFrame with icc_mean, icc_sd, icc_hdi_*.
+    Returns single-row DataFrame with icc_mean, icc_sd, icc_ci_*.
     """
     mu_post = idata.posterior["mu_party"].values  # (chain, draw, party)
     sigma_post = idata.posterior["sigma_within"].values  # (chain, draw, party)
@@ -778,17 +806,17 @@ def compute_variance_decomposition(
 
     icc_mean = float(np.mean(icc_samples))
     icc_sd = float(np.std(icc_samples))
-    icc_hdi = np.percentile(icc_samples, [2.5, 97.5])
+    icc_ci = np.percentile(icc_samples, [2.5, 97.5])
 
-    print(f"  ICC: {icc_mean:.3f} ± {icc_sd:.3f} [{icc_hdi[0]:.3f}, {icc_hdi[1]:.3f}]")
+    print(f"  ICC: {icc_mean:.3f} ± {icc_sd:.3f} [{icc_ci[0]:.3f}, {icc_ci[1]:.3f}]")
     print(f"  → Party explains {icc_mean:.0%} of ideological variance")
 
     return pl.DataFrame(
         {
             "icc_mean": [icc_mean],
             "icc_sd": [icc_sd],
-            "icc_hdi_2.5": [float(icc_hdi[0])],
-            "icc_hdi_97.5": [float(icc_hdi[1])],
+            "icc_ci_2.5": [float(icc_ci[0])],
+            "icc_ci_97.5": [float(icc_ci[1])],
         }
     )
 
@@ -876,8 +904,8 @@ def plot_icc(
 ) -> None:
     """Bar chart of ICC — 'How Much Does Party Explain?'"""
     icc_mean = float(icc_df["icc_mean"][0])
-    icc_lo = float(icc_df["icc_hdi_2.5"][0])
-    icc_hi = float(icc_df["icc_hdi_97.5"][0])
+    icc_lo = float(icc_df["icc_ci_2.5"][0])
+    icc_hi = float(icc_df["icc_ci_97.5"][0])
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -962,10 +990,12 @@ def plot_shrinkage_scatter(
     out_dir: Path,
 ) -> None:
     """Flat vs hierarchical scatter — 'How Does Accounting for Party Change Estimates?'"""
-    if "flat_xi_mean" not in hier_ip.columns:
+    # Use rescaled flat values if available (same scale as hierarchical)
+    flat_col = "flat_xi_rescaled" if "flat_xi_rescaled" in hier_ip.columns else "flat_xi_mean"
+    if flat_col not in hier_ip.columns:
         return
 
-    df = hier_ip.drop_nulls(subset=["flat_xi_mean"])
+    df = hier_ip.drop_nulls(subset=[flat_col])
     if df.height == 0:
         return
 
@@ -975,7 +1005,7 @@ def plot_shrinkage_scatter(
         sub = df.filter(pl.col("party") == party)
         if sub.height == 0:
             continue
-        flat = sub["flat_xi_mean"].to_numpy()
+        flat = sub[flat_col].to_numpy()
         hier = sub["xi_mean"].to_numpy()
         ax.scatter(
             flat,
@@ -989,7 +1019,7 @@ def plot_shrinkage_scatter(
         )
 
     # Identity line
-    all_flat = df["flat_xi_mean"].to_numpy()
+    all_flat = df[flat_col].to_numpy()
     all_hier = df["xi_mean"].to_numpy()
     lims = [
         min(all_flat.min(), all_hier.min()) - 0.3,
@@ -1004,7 +1034,7 @@ def plot_shrinkage_scatter(
         )
     else:
         df_with_delta = df.with_columns(
-            (pl.col("xi_mean") - pl.col("flat_xi_mean")).abs().alias("abs_delta")
+            (pl.col("xi_mean") - pl.col(flat_col)).abs().alias("abs_delta")
         ).sort("abs_delta", descending=True)
 
     for row in df_with_delta.head(5).iter_rows(named=True):
@@ -1012,7 +1042,7 @@ def plot_shrinkage_scatter(
         last_name = name.split()[-1] if name else "?"
         ax.annotate(
             last_name,
-            (row["flat_xi_mean"], row["xi_mean"]),
+            (row[flat_col], row["xi_mean"]),
             fontsize=8,
             fontweight="bold",
             xytext=(8, 8),
@@ -1021,7 +1051,7 @@ def plot_shrinkage_scatter(
         )
 
     pearson_r = float(np.corrcoef(all_flat, all_hier)[0, 1])
-    ax.set_xlabel("Flat IRT Ideal Point", fontsize=12)
+    ax.set_xlabel("Flat IRT Ideal Point (rescaled)", fontsize=12)
     ax.set_ylabel("Hierarchical IRT Ideal Point", fontsize=12)
     ax.set_title(
         f"{chamber} — How Does Accounting for Party Change Estimates?\n"

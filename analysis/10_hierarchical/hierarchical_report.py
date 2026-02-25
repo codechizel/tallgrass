@@ -226,8 +226,8 @@ def _add_variance_decomposition_text(
         return
 
     icc_mean = float(icc_df["icc_mean"][0])
-    icc_lo = float(icc_df["icc_hdi_2.5"][0])
-    icc_hi = float(icc_df["icc_hdi_97.5"][0])
+    icc_lo = float(icc_df["icc_ci_2.5"][0])
+    icc_hi = float(icc_df["icc_ci_97.5"][0])
 
     if icc_mean > 0.7:
         interpretation = (

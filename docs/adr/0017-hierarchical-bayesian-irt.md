@@ -54,3 +54,17 @@ A cross-biennium results audit discovered that the 3-level joint model lacked an
 ## Update: Shrinkage Rescaling Fallback Warning (2026-02-25)
 
 The shrinkage comparison requires rescaling flat IRT ideal points to the hierarchical scale via `np.polyfit` on matched legislators. When fewer than 3 legislators match (e.g., due to anchor filtering), the rescaling silently fell back to `slope=1.0` (identity transform), producing misleading shrinkage comparisons. A warning is now emitted when this fallback occurs, making the limitation visible in the output. See `docs/irt-deep-dive.md` for the code audit that identified this issue.
+
+## Update: Hierarchical IRT Deep Dive Improvements (2026-02-25)
+
+A comprehensive code audit and ecosystem survey (`docs/hierarchical-irt-deep-dive.md`) identified 9 issues and 8 test gaps. All have been fixed. Key changes:
+
+- **Small-group warning** (`MIN_GROUP_SIZE_WARN = 15`): `prepare_hierarchical_data` now prints a WARNING when a party has fewer than 15 legislators, alerting users that hierarchical shrinkage may be unreliable for that group (James-Stein J=2 limitation).
+- **`flat_xi_rescaled` retained in output**: The linearly rescaled flat IRT ideal points are now kept in the output parquet instead of being dropped. This enables the scatter plot to use consistent scales and supports downstream comparison.
+- **ICC columns renamed** from `icc_hdi_*` to `icc_ci_*`: The ICC credible interval was computed via `np.percentile` (equal-tailed), not `az.hdi()` (highest-density), so the column names now accurately reflect the computation method.
+- **`extract_group_params` guard**: Now raises `ValueError` when called with joint model InferenceData (which has `mu_group` instead of `mu_party`), replacing a silent `KeyError`.
+- **Shrinkage scatter plot fixed**: Uses `flat_xi_rescaled` for the x-axis and annotations, eliminating the mixed-scale methodology where axes showed raw values but labels used scale-corrected deltas.
+- **Named constants extracted**: `SHRINKAGE_MIN_DISTANCE`, `MIN_GROUP_SIZE_WARN`, `HIER_CONVERGENCE_VARS`, `JOINT_EXTRA_VARS`.
+- **Tests**: 26 → 35. Added tests for small-group warning, joint ordering constraint, rescaling fallback, unequal-group ICC, joint group params boundary, Independent legislator exclusion. Fixed a tautological assertion and strengthened a weak assertion.
+
+See ADR-0033 for the full decision record.

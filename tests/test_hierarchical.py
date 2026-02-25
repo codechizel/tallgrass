@@ -20,8 +20,8 @@ import xarray as xr
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytensor.tensor as pt
-
 from analysis.hierarchical import (
+    MIN_GROUP_SIZE_WARN,
     PARTY_NAMES,
     compute_flat_hier_correlation,
     compute_variance_decomposition,
@@ -351,7 +351,7 @@ class TestExtractHierarchicalResults:
     def test_shrinkage_columns_with_flat(
         self, legislators: pl.DataFrame, flat_ideal_points: pl.DataFrame
     ) -> None:
-        """With flat_ip provided, should have delta_from_flat and toward_party_mean."""
+        """With flat_ip provided, should have shrinkage columns including flat_xi_rescaled."""
         idata = _make_fake_idata()
         data = {
             "leg_slugs": [f"rep_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(8)],
@@ -362,6 +362,7 @@ class TestExtractHierarchicalResults:
         assert "delta_from_flat" in df.columns
         assert "toward_party_mean" in df.columns
         assert "flat_xi_mean" in df.columns
+        assert "flat_xi_rescaled" in df.columns
 
     def test_party_mean_assignment(self, legislators: pl.DataFrame) -> None:
         """Republicans should have positive party_mean, Democrats negative."""
@@ -504,7 +505,7 @@ class TestVarianceDecomposition:
         assert icc < 0.1, f"ICC should be low when parties overlap, got {icc}"
 
     def test_icc_schema(self) -> None:
-        """Output should have icc_mean, icc_sd, icc_hdi_* columns."""
+        """Output should have icc_mean, icc_sd, icc_ci_* columns."""
         idata = _make_fake_idata()
         data = {
             "party_idx": np.array([1, 1, 1, 1, 1, 0, 0, 0]),
@@ -513,8 +514,8 @@ class TestVarianceDecomposition:
         df = compute_variance_decomposition(idata, data)
         assert "icc_mean" in df.columns
         assert "icc_sd" in df.columns
-        assert "icc_hdi_2.5" in df.columns
-        assert "icc_hdi_97.5" in df.columns
+        assert "icc_ci_2.5" in df.columns
+        assert "icc_ci_97.5" in df.columns
         assert df.height == 1
 
 
@@ -542,7 +543,7 @@ class TestCompareWithFlat:
         assert r > 0.99
 
     def test_correlation_handles_missing(self) -> None:
-        """Mismatched slugs should use inner join."""
+        """With < 3 overlap, should return NaN."""
         hier_ip = pl.DataFrame(
             {
                 "legislator_slug": ["a", "b", "c"],
@@ -556,15 +557,24 @@ class TestCompareWithFlat:
             }
         )
         r = compute_flat_hier_correlation(hier_ip, flat_ip, "House")
-        # Only 2 overlap, but should still compute a value
-        assert not np.isnan(r) or True  # With < 3 overlap, nan is acceptable
+        # Only 2 overlap — code returns NaN when < 3 matched
+        assert np.isnan(r)
 
     def test_shrinkage_toward_party_mean(
         self, legislators: pl.DataFrame, flat_ideal_points: pl.DataFrame
     ) -> None:
-        """Most legislators should show toward_party_mean = True."""
-        # Create hierarchical estimates that are closer to party means than flat
-        idata = _make_fake_idata()
+        """toward_party_mean should be computed for legislators with sufficient flat_dist."""
+        # Build hierarchical IPs that are explicitly closer to party means than the flat IPs.
+        # Party means: D=-1.0, R=+1.0. Move each legislator halfway toward their party mean.
+        flat_means = [1.5, 1.2, 0.8, 0.5, 0.3, -0.8, -1.2, -1.5]
+        party_means = [1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0]  # R=1.0, D=-1.0
+        # Shrunk = halfway between flat and party mean
+        shrunk = [(f + p) / 2 for f, p in zip(flat_means, party_means)]
+
+        xi_values = np.tile(shrunk, (2, 100, 1))  # (chains, draws, legislators)
+        xi_values += np.random.default_rng(42).normal(0, 0.01, xi_values.shape)
+
+        idata = _make_fake_idata(xi_values=xi_values)
         data = {
             "leg_slugs": [f"rep_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(8)],
             "party_idx": np.array([1, 1, 1, 1, 1, 0, 0, 0]),
@@ -572,9 +582,13 @@ class TestCompareWithFlat:
         }
         df = extract_hierarchical_ideal_points(idata, data, legislators, flat_ip=flat_ideal_points)
 
-        # At least some should have toward_party_mean values
         non_null = df.drop_nulls(subset=["toward_party_mean"])
         assert non_null.height > 0
+        # With explicitly shrunk values, majority should move toward party mean
+        toward_count = non_null.filter(pl.col("toward_party_mean"))["toward_party_mean"].len()
+        assert toward_count >= non_null.height // 2, (
+            f"Expected majority to shrink toward party mean, got {toward_count}/{non_null.height}"
+        )
 
     def test_delta_sign(self, legislators: pl.DataFrame, flat_ideal_points: pl.DataFrame) -> None:
         """delta_from_flat should be hier - rescaled_flat (not raw flat).
@@ -597,3 +611,245 @@ class TestCompareWithFlat:
         assert mean_abs_delta < xi_range * 0.5, (
             f"Mean |delta| = {mean_abs_delta:.3f} too large relative to range {xi_range:.3f}"
         )
+
+
+# ── TestSmallGroupWarning ──────────────────────────────────────────────────
+
+
+class TestSmallGroupWarning:
+    """Test small-group warnings in prepare_hierarchical_data.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestSmallGroupWarning -v
+    """
+
+    def test_small_group_triggers_warning(
+        self, house_matrix: pl.DataFrame, legislators: pl.DataFrame, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A party with fewer than MIN_GROUP_SIZE_WARN legislators should print WARNING."""
+        # The fixture has 5 R + 3 D, both below MIN_GROUP_SIZE_WARN (15)
+        prepare_hierarchical_data(house_matrix, legislators, "House")
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+        assert "hierarchical shrinkage may be unreliable" in captured.out.lower()
+
+    def test_large_groups_no_warning(
+        self, legislators: pl.DataFrame, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Groups at or above MIN_GROUP_SIZE_WARN should not trigger a warning."""
+        # Create a matrix with enough legislators to avoid the warning
+        n_r = MIN_GROUP_SIZE_WARN + 1
+        n_d = MIN_GROUP_SIZE_WARN + 1
+        slugs_r = [f"rep_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(n_r)]
+        slugs_d = [f"rep_d{i}_d{i}_1" for i in range(n_d)]
+        all_slugs = slugs_r + slugs_d
+
+        # Build matching legislator metadata
+        big_legislators = pl.DataFrame(
+            {
+                "name": [f"L{i}" for i in range(n_r + n_d)],
+                "full_name": [f"L{i} L{i}" for i in range(n_r + n_d)],
+                "slug": all_slugs,
+                "chamber": ["House"] * (n_r + n_d),
+                "party": ["Republican"] * n_r + ["Democrat"] * n_d,
+                "district": list(range(1, n_r + n_d + 1)),
+                "member_url": [""] * (n_r + n_d),
+            }
+        )
+
+        # Build a simple vote matrix
+        rng = np.random.default_rng(42)
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": all_slugs,
+                "v1": rng.integers(0, 2, n_r + n_d).tolist(),
+                "v2": rng.integers(0, 2, n_r + n_d).tolist(),
+            }
+        )
+
+        prepare_hierarchical_data(matrix, big_legislators, "House")
+        captured = capsys.readouterr()
+        assert "WARNING" not in captured.out
+
+
+# ── TestJointModelOrdering ─────────────────────────────────────────────────
+
+
+class TestJointModelOrdering:
+    """Test joint model per-chamber-pair ordering constraint.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestJointModelOrdering -v
+    """
+
+    def test_joint_ordering_per_chamber(self) -> None:
+        """Joint model should sort each chamber's pair independently."""
+        # Simulate unsorted group offsets: [House-D, House-R, Senate-D, Senate-R]
+        raw = np.array([1.5, -0.5, 0.8, -1.2])
+        house_pair = pt.sort(pt.as_tensor_variable(raw[:2])).eval()
+        senate_pair = pt.sort(pt.as_tensor_variable(raw[2:])).eval()
+        assert house_pair[0] < house_pair[1], "House pair should be sorted D < R"
+        assert senate_pair[0] < senate_pair[1], "Senate pair should be sorted D < R"
+
+    def test_joint_ordering_preserves_already_sorted(self) -> None:
+        """Already-sorted pairs should pass through unchanged."""
+        raw = np.array([-1.0, 2.0, -0.5, 1.5])
+        house_pair = pt.sort(pt.as_tensor_variable(raw[:2])).eval()
+        senate_pair = pt.sort(pt.as_tensor_variable(raw[2:])).eval()
+        np.testing.assert_array_almost_equal(house_pair, raw[:2])
+        np.testing.assert_array_almost_equal(senate_pair, raw[2:])
+
+
+# ── TestShrinkageRescalingFallback ─────────────────────────────────────────
+
+
+class TestShrinkageRescalingFallback:
+    """Test shrinkage rescaling when too few legislators match.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestShrinkageRescalingFallback -v
+    """
+
+    def test_fallback_with_two_matches(
+        self, legislators: pl.DataFrame, capsys: pytest.CaptureFixture
+    ) -> None:
+        """With <= 2 matched legislators, should fall back to slope=1.0 with warning."""
+        idata = _make_fake_idata()
+        data = {
+            "leg_slugs": [f"rep_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(8)],
+            "party_idx": np.array([1, 1, 1, 1, 1, 0, 0, 0]),
+            "party_names": PARTY_NAMES,
+        }
+        # Flat IPs with only 2 matching slugs
+        flat_ip = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_a_a_1", "rep_b_b_1"],
+                "xi_mean": [1.5, 1.2],
+                "xi_sd": [0.15, 0.12],
+            }
+        )
+        df = extract_hierarchical_ideal_points(idata, data, legislators, flat_ip=flat_ip)
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+        assert "slope=1.0" in captured.out
+        # Rescaled should equal raw flat values (identity transform)
+        matched = df.filter(pl.col("flat_xi_rescaled").is_not_null())
+        for row in matched.iter_rows(named=True):
+            assert row["flat_xi_rescaled"] == row["flat_xi_mean"]
+
+
+# ── TestUnequalGroupsICC ──────────────────────────────────────────────────
+
+
+class TestUnequalGroupsICC:
+    """Test ICC with highly unequal group sizes (closer to real Kansas data).
+
+    Run: uv run pytest tests/test_hierarchical.py::TestUnequalGroupsICC -v
+    """
+
+    def test_highly_unequal_groups(self) -> None:
+        """ICC should still be valid with 20R / 3D (Kansas-like proportions)."""
+        n_r, n_d = 20, 3
+        n_legislators = n_r + n_d
+        n_chains, n_draws, n_parties = 2, 100, 2
+
+        # Separated means
+        mu_values = np.zeros((n_chains, n_draws, n_parties))
+        mu_values[:, :, 0] = -2.0  # D
+        mu_values[:, :, 1] = 1.0  # R
+        sigma_values = np.ones((n_chains, n_draws, n_parties)) * 0.5
+
+        idata = _make_fake_idata(
+            n_legislators=n_legislators,
+            mu_party_values=mu_values,
+            sigma_within_values=sigma_values,
+        )
+        party_idx = np.array([1] * n_r + [0] * n_d)
+        data = {"party_idx": party_idx, "party_names": PARTY_NAMES}
+
+        df = compute_variance_decomposition(idata, data)
+        icc = float(df["icc_mean"][0])
+        assert 0 <= icc <= 1, f"ICC out of bounds: {icc}"
+        # With separated means and small sigma, ICC should be high
+        assert icc > 0.5, f"ICC unexpectedly low for separated groups: {icc}"
+
+
+# ── TestExtractGroupParamsBoundary ──────────────────────────────────────────
+
+
+class TestExtractGroupParamsBoundary:
+    """Test extract_group_params boundary conditions.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestExtractGroupParamsBoundary -v
+    """
+
+    def test_joint_model_data_raises(self) -> None:
+        """extract_group_params should raise ValueError for joint model InferenceData."""
+        import arviz as az
+
+        # Create idata with mu_group instead of mu_party
+        n_chains, n_draws, n_groups = 2, 100, 4
+        mu_group_values = np.random.default_rng(42).normal(0, 1, (n_chains, n_draws, n_groups))
+        sigma_values = np.abs(
+            np.random.default_rng(42).normal(0.5, 0.1, (n_chains, n_draws, n_groups))
+        )
+
+        posterior = xr.Dataset(
+            {
+                "mu_group": xr.DataArray(
+                    mu_group_values,
+                    dims=["chain", "draw", "group"],
+                    coords={"group": ["House-D", "House-R", "Senate-D", "Senate-R"]},
+                ),
+                "sigma_within": xr.DataArray(
+                    sigma_values,
+                    dims=["chain", "draw", "group"],
+                    coords={"group": ["House-D", "House-R", "Senate-D", "Senate-R"]},
+                ),
+            }
+        )
+        idata = az.InferenceData(posterior=posterior)
+        data = {"party_idx": np.array([1, 1, 0, 0]), "party_names": PARTY_NAMES}
+
+        with pytest.raises(ValueError, match="per-chamber models"):
+            extract_group_params(idata, data)
+
+
+# ── TestIndependentExclusion ───────────────────────────────────────────────
+
+
+class TestIndependentExclusion:
+    """Test that Independent legislators are correctly excluded.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestIndependentExclusion -v
+    """
+
+    def test_independent_excluded(self) -> None:
+        """Independent legislators should be excluded from hierarchical data."""
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_r_1", "rep_r_2", "rep_d_1", "rep_i_1"],
+                "v1": [1, 1, 0, 1],
+                "v2": [1, 0, 0, 1],
+            }
+        )
+        legislators = pl.DataFrame(
+            {
+                "name": ["R1", "R2", "D1", "I1"],
+                "full_name": ["R R1", "R R2", "D D1", "I I1"],
+                "slug": ["rep_r_1", "rep_r_2", "rep_d_1", "rep_i_1"],
+                "chamber": ["House"] * 4,
+                "party": ["Republican", "Republican", "Democrat", "Independent"],
+                "district": [1, 2, 3, 4],
+                "member_url": [""] * 4,
+            }
+        )
+        data = prepare_hierarchical_data(matrix, legislators, "House")
+        # Independent should be excluded
+        assert data["n_excluded"] == 1
+        assert "rep_i_1" not in data["leg_slugs"]
+        assert data["n_legislators"] == 3
+
+    def test_no_independents_no_exclusion(
+        self, house_matrix: pl.DataFrame, legislators: pl.DataFrame
+    ) -> None:
+        """When no Independents present, n_excluded should be 0."""
+        data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        assert data["n_excluded"] == 0

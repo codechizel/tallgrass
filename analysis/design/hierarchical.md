@@ -2,12 +2,13 @@
 
 **Script:** `analysis/10_hierarchical/hierarchical.py`
 **Constants defined at:** `analysis/10_hierarchical/hierarchical.py` (top of file)
+**Deep dive:** `docs/hierarchical-irt-deep-dive.md` (ecosystem survey, code audit, recommendations)
 
 ## Assumptions
 
 1. **Partial pooling by party.** Legislators within the same party (and chamber) share a common party-level mean ideal point. Individual ideal points are drawn from a Normal distribution centered on their party mean, with party-specific within-group variance. This is the standard 2-level hierarchical IRT specification.
 
-2. **Two parties only.** The model assumes exactly two parties (Republican, Democrat). Independents or third-party legislators would need to be either assigned to the closest party or excluded. Kansas currently has none.
+2. **Two parties only.** The model assumes exactly two parties (Republican, Democrat). Independent or third-party legislators are excluded from the hierarchical model (they cannot be pooled toward a party mean) but still receive flat IRT estimates. Kansas has had occasional Independent legislators. See ADR-0021.
 
 3. **Per-chamber primary, joint secondary.** The primary analysis runs separate 2-level models for House and Senate (consistent with the flat IRT phase). A secondary 3-level joint model adds a chamber level but may fail to converge due to sparse cross-chamber overlap (only ~71 shared bills for ~169 legislators).
 
@@ -30,6 +31,8 @@
 | `MAX_DIVERGENCES` | 10 | Reused from flat IRT |
 | `RANDOM_SEED` | 42 | Reused from flat IRT |
 | `PARTY_COLORS` | R=#E81B23, D=#0015BC | Consistent across all phases |
+| `MIN_GROUP_SIZE_WARN` | 15 | Below this, hierarchical shrinkage may be unreliable (James-Stein J=2) |
+| `SHRINKAGE_MIN_DISTANCE` | 0.5 | Min flat-to-party-mean distance for meaningful shrinkage_pct |
 
 ## Methodological Choices
 
@@ -75,7 +78,10 @@
 
 **Edge cases:**
 - Anchored legislators in the flat IRT (fixed at xi=±1) have xi_sd≈0, which makes percent shrinkage undefined. These are excluded (`flat_xi_sd > 0.01` guard).
-- Legislators near the party mean have unstable shrinkage ratios. These are excluded (`flat_dist > 0.5` guard).
+- Legislators near the party mean have unstable shrinkage ratios. These are excluded (`flat_dist > SHRINKAGE_MIN_DISTANCE` guard).
+- The rescaled flat values (`flat_xi_rescaled`) are retained in the output parquet for downstream use (scatter plot, cross-session comparison).
+
+**ICC credible interval:** Computed via `np.percentile([2.5, 97.5])` (equal-tailed interval), not `az.hdi()`. Columns are named `icc_ci_*` to reflect this accurately.
 
 ## Downstream Implications
 
