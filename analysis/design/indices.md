@@ -1,7 +1,7 @@
 # Classical Indices Design Choices
 
-**Script:** `analysis/indices.py`
-**Constants defined at:** `analysis/indices.py` (top of file)
+**Script:** `analysis/07_indices/indices.py`
+**Constants defined at:** `analysis/07_indices/indices.py` (top of file)
 
 ## Assumptions
 
@@ -64,6 +64,16 @@
 **Weighted maverick:** Same as unweighted, but each defection is weighted by how close the overall chamber vote was. Weight = `1 / max(margin, MAVERICK_WEIGHT_FLOOR)` where margin = |Yea - Nay| / (Yea + Nay) at the chamber level. Close votes get higher weight because defecting on a close vote is more consequential than defecting on a blowout.
 
 **Decision:** Use chamber-level margin (not within-party margin) because the question is "how much did this defection matter to the outcome?" Within-party margin is already captured by Rice.
+
+### Carey UNITY: stricter Rice variant
+
+**Formula:** `Carey UNITY = |Yea - Nay| / (total party members in chamber)` per vote per party.
+
+Unlike Rice (denominator = Yea + Nay), Carey includes absent and not-voting legislators in the denominator. This penalizes parties for low turnout, capturing strategic abstention — legislators who skip votes rather than openly defect.
+
+**Reference:** Carey, J.M. (2007). "Competing Principals, Political Institutions, and Party Unity in Legislative Voting." *American Journal of Political Science* 51(1).
+
+**Decision:** Carey UNITY is computed alongside Rice and saved to a separate parquet file. The relationship `Carey ≤ Rice` always holds (larger denominator) and the gap `Rice - Carey` measures the abstention penalty.
 
 ### Co-defection matrix
 

@@ -57,6 +57,7 @@ What are the trade-offs?
 | [0027](0027-umap-validation-and-robustness.md) | UMAP validation and robustness improvements | Accepted | 2026-02-24 |
 | [0028](0028-clustering-deep-dive-improvements.md) | Clustering deep dive improvements | Accepted | 2026-02-24 |
 | [0029](0029-leiden-community-detection.md) | Leiden community detection (replacing Louvain) | Accepted | 2026-02-24 |
+| [0030](adr-0030-analysis-directory-restructuring.md) | Analysis directory restructuring (numbered subdirs + PEP 302) | Accepted | 2026-02-25 |
 
 ## Creating a New ADR
 

@@ -26,8 +26,8 @@ except ModuleNotFoundError:
         make_gt,
     )
 
-# Constants duplicated here to avoid circular import with indices.py
-# (same pattern as clustering_report.py)
+# Constants duplicated from indices.py to avoid circular import
+# (indices.py imports indices_report at module level).
 PARTY_VOTE_THRESHOLD = 0.50
 RICE_FRACTURE_THRESHOLD = 0.50
 MIN_PARTY_VOTERS = 2

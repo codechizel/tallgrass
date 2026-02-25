@@ -37,59 +37,59 @@ sessions:
 
 # Run EDA analysis
 eda *args:
-    uv run python analysis/eda.py {{args}}
+    uv run python analysis/01_eda/eda.py {{args}}
 
 # Run PCA analysis
 pca *args:
-    uv run python analysis/pca.py {{args}}
+    uv run python analysis/02_pca/pca.py {{args}}
 
 # Run Bayesian IRT analysis
 irt *args:
-    uv run python analysis/irt.py {{args}}
+    uv run python analysis/04_irt/irt.py {{args}}
 
 # Run clustering analysis
 clustering *args:
-    uv run python analysis/clustering.py {{args}}
+    uv run python analysis/05_clustering/clustering.py {{args}}
 
 # Run network analysis
 network *args:
-    uv run python analysis/network.py {{args}}
+    uv run python analysis/06_network/network.py {{args}}
 
 # Run prediction analysis
 prediction *args:
-    uv run python analysis/prediction.py {{args}}
+    uv run python analysis/08_prediction/prediction.py {{args}}
 
 # Run UMAP analysis
 umap *args:
-    uv run python analysis/umap_viz.py {{args}}
+    uv run python analysis/03_umap/umap_viz.py {{args}}
 
 # Run classical indices analysis
 indices *args:
-    uv run python analysis/indices.py {{args}}
+    uv run python analysis/07_indices/indices.py {{args}}
 
 # Run Beta-Binomial Bayesian party loyalty
 betabinom *args:
-    uv run python analysis/beta_binomial.py {{args}}
+    uv run python analysis/09_beta_binomial/beta_binomial.py {{args}}
 
 # Run hierarchical Bayesian IRT
 hierarchical *args:
-    uv run python analysis/hierarchical.py {{args}}
+    uv run python analysis/10_hierarchical/hierarchical.py {{args}}
 
 # Run synthesis report
 synthesis *args:
-    uv run python analysis/synthesis.py {{args}}
+    uv run python analysis/11_synthesis/synthesis.py {{args}}
 
 # Run cross-session validation
 cross-session *args:
-    uv run python analysis/cross_session.py {{args}}
+    uv run python analysis/13_cross_session/cross_session.py {{args}}
 
 # Run legislator profiles
 profiles *args:
-    uv run python analysis/profiles.py {{args}}
+    uv run python analysis/12_profiles/profiles.py {{args}}
 
 # Run external validation against Shor-McCarty scores
 external-validation *args:
-    uv run python analysis/external_validation.py {{args}}
+    uv run python analysis/14_external_validation/external_validation.py {{args}}
 
 # Run all tests
 test *args:

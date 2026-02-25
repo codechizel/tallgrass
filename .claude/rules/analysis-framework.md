@@ -18,21 +18,25 @@ External validation compares IRT ideal points against Shor-McCarty scores (84th-
 - **Python over R** — no rpy2 or Rscript. Use PCA/Bayesian IRT instead of W-NOMINATE/OC.
 - Tables: great_tables with polars DataFrames (no pandas conversion). Plots: base64-embedded PNGs. See ADR-0004.
 
+## Directory Structure
+
+Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`, `design/`) stays at the root.
+
 ## HTML Report System
 
 Each phase produces a self-contained HTML report with SPSS/APA-style tables and embedded plots:
 
 - `analysis/report.py` — Generic: `TableSection`, `FigureSection`, `TextSection`, `ReportBuilder`, `make_gt()`, Jinja2 template + CSS
 - `analysis/run_context.py` — `RunContext` context manager: structured output, elapsed timing, auto-primers, `strip_leadership_suffix()` utility
-- Phase-specific report builders: `eda_report.py`, `umap_report.py`, `beta_binomial_report.py`, `hierarchical_report.py`, `synthesis_report.py`, `profiles_report.py`, `cross_session_report.py`, `external_validation_report.py`
+- Phase-specific report builders: `*_report.py` in each subdirectory (e.g., `analysis/01_eda/eda_report.py`)
 
 ## Key Data Modules (Pure Logic, No I/O)
 
-- `analysis/nlp_features.py` — TF-IDF + NMF topic modeling on bill `short_title` text
-- `analysis/synthesis_detect.py` — Notable legislator detection (mavericks, bridge-builders, paradoxes)
-- `analysis/profiles_data.py` — Profile targets, scorecards, bill-type breakdown, defections
-- `analysis/cross_session_data.py` — Legislator matching, IRT alignment, shift metrics, prediction transfer
-- `analysis/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
+- `analysis/08_prediction/nlp_features.py` — TF-IDF + NMF topic modeling on bill `short_title` text
+- `analysis/11_synthesis/synthesis_detect.py` — Notable legislator detection (mavericks, bridge-builders, paradoxes)
+- `analysis/12_profiles/profiles_data.py` — Profile targets, scorecards, bill-type breakdown, defections
+- `analysis/13_cross_session/cross_session_data.py` — Legislator matching, IRT alignment, shift metrics, prediction transfer
+- `analysis/14_external_validation/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
 
 ## Design Documents
 

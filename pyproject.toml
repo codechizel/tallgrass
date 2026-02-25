@@ -88,7 +88,9 @@ replace-imports-with-any = [
     "css_inline.**",
     "bs4.**",
 ]
-# analysis/ scripts use bare imports (not a package) — allow them
+# analysis/ scripts use bare imports (not a package) — allow them.
+# Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to
+# bare imports via try/except when run directly with `uv run python`.
 allowed-unresolved-imports = [
     "run_context",
     "report",
@@ -108,6 +110,8 @@ allowed-unresolved-imports = [
     "synthesis",
     "profiles_data",
     "profiles_report",
+    "cross_session_data",
+    "cross_session_report",
     "external_validation_data",
     "external_validation_report",
 ]

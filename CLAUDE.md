@@ -20,7 +20,7 @@ just lint-check                              # check only
 just typecheck                               # ty type check (src + analysis)
 just sessions                                # list available sessions
 just check                                   # full check (lint + typecheck + tests)
-just test                                    # run all tests
+just test                                    # run all tests (~942)
 just test-scraper                            # scraper tests only
 uv run ks-vote-scraper 2023                  # historical session
 uv run ks-vote-scraper 2024 --special        # special session
@@ -120,11 +120,13 @@ Analysis outputs in `results/kansas/{session}/{analysis}/{date}/` with `latest` 
 
 ## Analysis Pipeline
 
+Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root.
+
 See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (29 decisions)
+- ADRs: `docs/adr/README.md` (30 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)

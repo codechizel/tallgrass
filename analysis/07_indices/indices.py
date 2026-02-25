@@ -79,6 +79,16 @@ to capture when parties split internally.
 
     ENP = 1 / sum(p_i^2)
 
+### Carey UNITY (per vote, per party)
+
+A stricter variant of Rice that penalizes parties for low turnout:
+
+    Carey UNITY = |Yea - Nay| / (total party members in chamber)
+
+Unlike Rice (denominator = Yea + Nay), Carey includes absent and not-voting
+legislators. This captures strategic abstention — legislators who skip votes
+rather than openly defect.
+
 ### Maverick Scores
 
 Unweighted: 1 - unity (fraction of defections on party votes).
@@ -107,6 +117,7 @@ All outputs land in `results/<session>/indices/<date>/`:
 | `party_votes_{chamber}.parquet` | Per-vote: is_party_vote, majority positions, margins |
 | `rice_index_{chamber}.parquet` | Per-vote per-party Rice index values |
 | `fractured_votes_{chamber}.parquet` | Votes where majority party Rice < 0.50 |
+| `carey_unity_{chamber}.parquet` | Per-vote per-party Carey UNITY (Rice penalizing abstentions) |
 | `party_unity_{chamber}.parquet` | Per-legislator CQ-standard unity scores |
 | `enp_{chamber}.parquet` | Per-vote ENP from (party, direction) blocs |
 | `maverick_scores_{chamber}.parquet` | Per-legislator maverick scores (weighted + unweighted) |
@@ -501,6 +512,97 @@ def find_fractured_votes(
         f"({majority_party} Rice < {RICE_FRACTURE_THRESHOLD})"
     )
     return fractured
+
+
+def compute_carey_unity(
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+    chamber: str,
+    session: str,
+) -> pl.DataFrame:
+    """Compute Carey UNITY per vote per party.
+
+    Carey UNITY = |Yea - Nay| / (Yea + Nay + Absent + NotVoting)
+
+    Unlike Rice (which only counts Yea+Nay in the denominator), Carey penalizes
+    parties for low turnout by including all members in the denominator.
+    This captures strategic abstention — legislators who skip votes rather than
+    openly defect.
+
+    Returns DataFrame: vote_id, party, carey_unity, yea_count, nay_count,
+    n_absent, n_members, session.
+    """
+    chamber_prefix = "sen_" if chamber == "Senate" else "rep_"
+    chamber_rollcalls = rollcalls.filter(pl.col("chamber") == chamber)
+    chamber_vote_ids = set(chamber_rollcalls["vote_id"].to_list())
+
+    # Count party members in this chamber (total possible voters)
+    chamber_legs = legislators.filter(pl.col("slug").str.starts_with(chamber_prefix))
+    party_sizes = dict(
+        zip(
+            chamber_legs.group_by("party").agg(pl.len().alias("n"))["party"].to_list(),
+            chamber_legs.group_by("party").agg(pl.len().alias("n"))["n"].to_list(),
+        )
+    )
+
+    # Count Yea/Nay per vote per party (same as party_majority_positions)
+    vote_party = votes.join(
+        legislators.select(pl.col("slug").alias("legislator_slug"), "party"),
+        on="legislator_slug",
+        how="left",
+    ).filter(pl.col("vote_id").is_in(chamber_vote_ids) & pl.col("vote").is_in(["Yea", "Nay"]))
+
+    party_counts = vote_party.group_by("vote_id", "party").agg(
+        (pl.col("vote") == "Yea").sum().alias("yea_count"),
+        (pl.col("vote") == "Nay").sum().alias("nay_count"),
+    )
+
+    # Add Carey UNITY: numerator = |Yea - Nay|, denominator = total party members
+    rows = []
+    for row in party_counts.iter_rows(named=True):
+        n_members = party_sizes.get(row["party"], 0)
+        if n_members < MIN_PARTY_VOTERS:
+            continue
+        yea = row["yea_count"]
+        nay = row["nay_count"]
+        carey = abs(yea - nay) / n_members
+        rows.append(
+            {
+                "vote_id": row["vote_id"],
+                "party": row["party"],
+                "carey_unity": carey,
+                "yea_count": yea,
+                "nay_count": nay,
+                "n_absent": n_members - yea - nay,
+                "n_members": n_members,
+            }
+        )
+
+    if not rows:
+        return pl.DataFrame()
+
+    result = pl.DataFrame(rows).with_columns(pl.lit(session).alias("session"))
+
+    # Join vote metadata
+    result = result.join(
+        chamber_rollcalls.select("vote_id", "vote_date", "motion", "bill_number"),
+        on="vote_id",
+        how="left",
+    )
+
+    # Summary
+    for party in ["Republican", "Democrat"]:
+        party_df = result.filter(pl.col("party") == party)
+        if party_df.height > 0:
+            mean_carey = float(party_df["carey_unity"].mean())
+            mean_absent = float(party_df["n_absent"].mean())
+            print(
+                f"  {chamber} {party}: mean Carey UNITY={mean_carey:.3f}, "
+                f"mean absent={mean_absent:.1f}"
+            )
+
+    return result
 
 
 def plot_rice_distribution(
@@ -1682,6 +1784,16 @@ def main() -> None:
             chamber_results["rice_summary"] = rice_summary
             chamber_results["rice_by_type"] = rice_by_type
             chamber_results["fractured_votes"] = fractured
+
+            # Carey UNITY (Rice variant penalizing abstentions)
+            carey_df = compute_carey_unity(
+                votes, rollcalls, legislators, chamber, args.session
+            )
+            if carey_df.height > 0:
+                carey_df.write_parquet(
+                    ctx.data_dir / f"carey_unity_{chamber.lower()}.parquet"
+                )
+            chamber_results["carey_unity"] = carey_df
 
             # Rice plots
             plot_rice_distribution(rice_df, rice_summary, chamber, ctx.plots_dir)
