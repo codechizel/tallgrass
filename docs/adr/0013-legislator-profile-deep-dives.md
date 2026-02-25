@@ -24,11 +24,16 @@ Add a new analysis phase `profiles` (three files + tests) that produces per-legi
 | `analysis/profiles_data.py` | Pure data logic (no plotting, no I/O) |
 | `analysis/profiles.py` | CLI, data loading, 5 plotting functions, orchestration |
 | `analysis/profiles_report.py` | HTML report builder (intro + per-legislator sections) |
-| `tests/test_profiles.py` | 23 tests across 6 test classes |
+| `tests/test_profiles.py` | 36 tests across 7 test classes |
 
 ### Target Selection
 
-Reuses `detect_all()` from `synthesis_detect.py` — no new detection logic. Adds optional `--slugs` CLI flag for user-requested extras. Deduplicates and caps at 8 targets.
+Reuses `detect_all()` from `synthesis_detect.py` — no new detection logic. Two ways to request specific legislators:
+
+- `--slugs rep_alcala_john_1` — exact slug lookup (opaque but precise)
+- `--names "Masterson,Blake Carpenter"` — name-based lookup with multi-stage matching (exact full name → last name → first-name disambiguation). Reuses `normalize_name()` from `cross_session_data`. Ambiguous matches include all candidates.
+
+Both flags can be combined. Deduplicates and caps at 8 targets.
 
 ### Per-Legislator Analysis (6 views)
 
@@ -58,7 +63,7 @@ Raw vote CSVs use title-case chamber names ("House", "Senate") while `leg_dfs` k
 
 **Positive:**
 - All 6 analysis views are fully data-driven — different sessions surface different legislators with different stories.
-- Pure data logic in `profiles_data.py` is independently testable (23 tests).
+- Pure data logic in `profiles_data.py` is independently testable (36 tests).
 - Sections degrade gracefully: no defections → skip defection table; no surprising votes → skip table.
 - Reuses existing infrastructure (synthesis loading, RunContext, report system) — no new dependencies.
 - Scorecard uses only 0-1 metrics, avoiding the scale-mixing problem where raw PCA/UMAP/IRT values dominate the chart.
@@ -70,8 +75,8 @@ Raw vote CSVs use title-case chamber names ("House", "Senate") while `leg_dfs` k
 - Position plot is very tall for the House (~95 Republicans). Functional but the labels are small.
 
 **Files created:**
-- `analysis/profiles_data.py` — ~280 lines. Pure data logic.
-- `analysis/profiles.py` — ~410 lines. CLI + plotting + orchestration.
+- `analysis/profiles_data.py` — ~560 lines. Pure data logic + name resolution.
+- `analysis/profiles.py` — ~490 lines. CLI + plotting + orchestration.
 - `analysis/profiles_report.py` — ~215 lines. HTML report builder.
-- `tests/test_profiles.py` — ~280 lines. 23 tests.
+- `tests/test_profiles.py` — ~430 lines. 36 tests.
 - `analysis/design/profiles.md` — Design choices document.

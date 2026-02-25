@@ -56,6 +56,14 @@
 
 **Alternatives:** Normalize upstream in the scraper. This was rejected because it would change the scraper's output format (CLAUDE.md rule: "ETL is separate from analysis").
 
+### 6. Name-based legislator lookup
+
+**Decision:** Add `--names` flag as a natural-language alternative to `--slugs`. Multi-stage matching: exact full name (case-insensitive) → last-name-only → first-name disambiguation within last-name matches.
+
+**Alternatives:** (a) Fuzzy matching (Levenshtein distance). Rejected — adds complexity and a dependency for a small set of well-known names. (b) Interactive selection from ambiguous matches. Rejected — profiles runs non-interactively in batch pipelines. Instead, ambiguous matches include all candidates and print a clear message.
+
+**Reuse:** Name normalization uses `normalize_name()` from `cross_session_data` (lowercases, strips leadership suffixes). No new normalization code.
+
 ## Downstream Implications
 
 - **Plot filenames** use the full slug minus the `rep_`/`sen_` prefix (e.g., `scorecard_schreiber_mark_1.png`). These names change across sessions as different legislators are detected.

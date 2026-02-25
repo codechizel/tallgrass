@@ -205,7 +205,7 @@ No dead code. No unused imports. Clean.
 
 ## 3. Test Gaps
 
-The existing 23 tests cover `profiles_data.py` well. The main gaps are:
+The existing 36 tests (24 original + 12 added for name resolution) cover `profiles_data.py` well. The main gaps are:
 
 ### 3.1 Missing Coverage for `profiles.py` Functions
 
@@ -250,11 +250,12 @@ The existing 23 tests cover `profiles_data.py` well. The main gaps are:
 
 | Category | Current | Recommended | New Tests |
 |----------|---------|-------------|-----------|
-| `profiles_data.py` | 23 | 27 | 4 edge cases |
+| `profiles_data.py` (original) | 24 | 28 | 4 edge cases |
+| `profiles_data.py` (name resolution) | 12 | 12 | — (complete) |
 | `profiles.py` (data prep) | 0 | 2 | `prep_votes_long` |
 | `profiles.py` (plotting) | 0 | 5 | smoke tests |
 | `profiles_report.py` | 0 | 2 | report integration |
-| **Total** | **23** | **36** | **+13** |
+| **Total** | **36** | **49** | **+13** |
 
 ---
 

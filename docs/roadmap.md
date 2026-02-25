@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-25 (after synthesis deep dive)
+**Last updated:** 2026-02-25 (after profiles name-based lookup + Justfile docs)
 
 ---
 
@@ -21,7 +21,7 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | 6+ | NLP Bill Text Features | 2026-02-22 | NMF topics on short_title; House temporal AUC 0.90→0.96, Senate 0.86→0.96 |
 | — | Synthesis Report | 2026-02-22 | 29-32-section narrative HTML; joins all 10 phases into one deliverable |
 | — | Synthesis Deep Dive | 2026-02-25 | Code audit, field survey, 9 fixes (dynamic AUC, minority mavericks, data extraction, 47 tests). ADR-0034. |
-| — | Legislator Profiles | 2026-02-22 | Per-legislator deep-dives: scorecard, bill-type breakdown, defections, neighbors, surprising votes |
+| — | Legislator Profiles | 2026-02-22 | Per-legislator deep-dives: scorecard, bill-type breakdown, defections, neighbors, surprising votes. Name-based lookup (`--names`) added 2026-02-25. |
 | 7b | Beta-Binomial Party Loyalty | 2026-02-22 | Bayesian shrinkage on CQ unity; empirical Bayes, closed-form posteriors, 4 plots per chamber |
 | — | Cross-Biennium Portability | 2026-02-22 | Removed all hardcoded legislator names from general phases; full pipeline re-run validated |
 | — | Visualization Improvement Pass | 2026-02-22 | All 6 phases (Network, IRT, Prediction, PCA, Clustering, EDA) retrofitted for nontechnical audience; plain-English titles, annotated findings, data-driven highlights |
@@ -126,7 +126,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-1022 tests exist across scraper (~219) and analysis (~803) modules. All passing. Coverage could be expanded:
+1034 tests exist across scraper (~219) and analysis (~815) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
