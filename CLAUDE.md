@@ -147,6 +147,7 @@ Key references:
 - Synthesis deep dive: `docs/synthesis-deep-dive.md` (field survey, code audit, detection algorithms, test gaps, refactoring)
 - Profiles deep dive: `docs/profiles-deep-dive.md` (code audit, ecosystem survey, name-based lookup)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (bb25, topic modeling, retrieval, open questions)
+- Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
