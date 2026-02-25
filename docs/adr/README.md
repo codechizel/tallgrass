@@ -55,6 +55,7 @@ What are the trade-offs?
 | [0025](0025-external-validation-shor-mccarty.md) | External validation against Shor-McCarty scores | Accepted | 2026-02-24 |
 | [0026](0026-eda-literature-diagnostics.md) | EDA literature-backed diagnostics | Accepted | 2026-02-24 |
 | [0027](0027-umap-validation-and-robustness.md) | UMAP validation and robustness improvements | Accepted | 2026-02-24 |
+| [0028](0028-clustering-deep-dive-improvements.md) | Clustering deep dive improvements | Accepted | 2026-02-24 |
 
 ## Creating a New ADR
 

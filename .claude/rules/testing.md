@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (853)
+just test                    # run all tests (900)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -47,6 +47,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_hierarchical.py` — hierarchical data prep, model structure, variance decomposition (~26 tests)
 - `tests/test_profiles.py` — profile targets, scorecard, bill-type breakdown, defections (~23 tests)
 - `tests/test_cross_session.py` — matching, IRT alignment, shift, stability, prediction transfer (~55 tests)
+- `tests/test_clustering.py` — party loyalty, cross-method ARI, within-party, kappa distance, hierarchical, spectral, HDBSCAN, characterization (~70 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
 
 ## Manual Verification

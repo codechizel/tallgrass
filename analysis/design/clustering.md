@@ -13,7 +13,7 @@
 
 4. **Chambers are independent.** House and Senate are clustered separately. Cross-chamber clustering is not attempted (different bill sets, different dynamics). This is consistent with all upstream phases.
 
-5. **Ward linkage produces the most interpretable dendrograms for legislative data.** Ward minimizes within-cluster variance, producing balanced, compact clusters. This is preferred over single-linkage (chaining artifacts) or complete-linkage (unbalanced clusters) for ~40-130 legislators.
+5. **Average linkage is the correct choice for non-Euclidean Kappa distances.** Ward linkage requires Euclidean distance; our Kappa-derived distance (1 - Kappa) is not guaranteed to be Euclidean. Average linkage is valid for any distance metric and standard in the political science literature for agreement-based clustering. See ADR-0028 and `docs/ward-linkage-non-euclidean.md` for details.
 
 ## Parameters & Constants
 
@@ -21,16 +21,18 @@
 |----------|-------|---------------|---------------|
 | `RANDOM_SEED` | 42 | Reproducibility; consistent with EDA/PCA/IRT | `clustering.py:48` |
 | `K_RANGE` | range(2, 8) | Evaluate k=2 through k=7; covers expected k=3 with margin | `clustering.py:49` |
-| `DEFAULT_K` | 3 | Expected optimal k (conservative R, moderate R, Democrat) | `clustering.py:50` |
-| `LINKAGE_METHOD` | "ward" | Ward minimizes within-cluster variance; produces balanced clusters | `clustering.py:51` |
-| `COPHENETIC_THRESHOLD` | 0.70 | Minimum acceptable cophenetic correlation for dendrogram validity | `clustering.py:52` |
-| `SILHOUETTE_GOOD` | 0.50 | Silhouette > 0.5 indicates "good" cluster structure | `clustering.py:53` |
-| `GMM_COVARIANCE` | "full" | Full covariance for GMM (only ~130 points; diag insufficient) | `clustering.py:54` |
-| `GMM_N_INIT` | 20 | Multiple random restarts for GMM stability | `clustering.py:55` |
-| `MINORITY_THRESHOLD` | 0.025 | Inherited from EDA; for sensitivity re-filtering | `clustering.py:58` |
-| `SENSITIVITY_THRESHOLD` | 0.10 | Alternative minority threshold for sensitivity analysis | `clustering.py:59` |
-| `MIN_VOTES` | 20 | Inherited from EDA; minimum substantive votes per legislator | `clustering.py:60` |
-| `CONTESTED_PARTY_THRESHOLD` | 0.10 | A vote is "contested" for a party if >= 10% of the party dissents | `clustering.py:61` |
+| `COMPARISON_K` | 3 | Forced k=3 cut for downstream comparison (k=2 confirmed optimal) | `clustering.py:195` |
+| `LINKAGE_METHOD` | "average" | Average linkage: valid for non-Euclidean distances (see ADR-0028) | `clustering.py:196` |
+| `COPHENETIC_THRESHOLD` | 0.70 | Minimum acceptable cophenetic correlation for dendrogram validity | `clustering.py:197` |
+| `SILHOUETTE_GOOD` | 0.50 | Silhouette > 0.5 indicates "good" cluster structure | `clustering.py:198` |
+| `GMM_COVARIANCE` | "full" | Full covariance for GMM (only ~130 points; diag insufficient) | `clustering.py:199` |
+| `GMM_N_INIT` | 20 | Multiple random restarts for GMM stability | `clustering.py:200` |
+| `HDBSCAN_MIN_CLUSTER_SIZE` | 5 | Minimum cluster size for HDBSCAN density-based clustering | `clustering.py:201` |
+| `HDBSCAN_MIN_SAMPLES` | 3 | Core distance samples for HDBSCAN noise detection | `clustering.py:202` |
+| `MINORITY_THRESHOLD` | 0.025 | Inherited from EDA; for sensitivity re-filtering | `clustering.py:205` |
+| `SENSITIVITY_THRESHOLD` | 0.10 | Alternative minority threshold for sensitivity analysis | `clustering.py:206` |
+| `MIN_VOTES` | 20 | Inherited from EDA; minimum substantive votes per legislator | `clustering.py:207` |
+| `CONTESTED_PARTY_THRESHOLD` | 0.10 | A vote is "contested" for a party if >= 10% of the party dissents | `clustering.py:208` |
 
 ## Methodological Choices
 
@@ -56,14 +58,16 @@
 - Mavericks: moderate-to-extreme ideology + low loyalty (Tyson, Thompson)
 - Cross-pressured moderates: moderate ideology + moderate loyalty
 
-### Three methods for robustness
+### Five methods for robustness
 
-**Decision:** Run hierarchical clustering (on Kappa distance), k-means (on IRT), and GMM (on IRT) independently. A finding is robust only if all three methods agree.
+**Decision:** Run hierarchical clustering (on Kappa distance), k-means (on IRT), GMM (on IRT), spectral clustering (on Kappa affinity), and HDBSCAN (on PCA embeddings) independently. A finding is robust only if methods agree.
 
-**Why:** Each method has different assumptions:
-- Hierarchical/Ward: agglomerative, based on pairwise agreement distance
-- K-means: centroid-based, assumes spherical clusters of equal size
-- GMM: probabilistic, allows elliptical clusters and soft assignments
+**Why:** Each method has different assumptions and input representations:
+- Hierarchical (average linkage): agglomerative, based on pairwise agreement distance
+- K-means: centroid-based on IRT, assumes spherical clusters of equal size
+- GMM: probabilistic on IRT, allows elliptical clusters and soft assignments
+- Spectral: graph-based on Kappa affinity, captures non-convex cluster structure
+- HDBSCAN: density-based on PCA scores, finds clusters without specifying k and flags outliers
 
 Cross-method agreement (measured by Adjusted Rand Index) validates that the cluster structure is real and not an artifact of a particular algorithm.
 
@@ -75,11 +79,13 @@ Cross-method agreement (measured by Adjusted Rand Index) validates that the clus
 
 **Implementation:** Not a built-in sklearn feature. Implemented by repeating observations proportional to 1/xi_sd (normalized), scaled to an effective sample count of ~3x the original sample size for numerical stability. This approximates importance weighting.
 
-### Ward linkage on Kappa distance
+### Average linkage on Kappa distance (ADR-0028)
 
-**Decision:** Hierarchical clustering uses distance = 1 - Kappa (from EDA agreement matrices), with Ward linkage.
+**Decision:** Hierarchical clustering uses distance = 1 - Kappa (from EDA agreement matrices), with average linkage.
 
-**Why:** Kappa corrects for the 82% Yea base rate (raw agreement is inflated by unanimous votes). Ward produces balanced, compact clusters suited to legislative groupings. The cophenetic correlation coefficient validates that the dendrogram faithfully represents the distance matrix.
+**Why:** Kappa corrects for the 82% Yea base rate (raw agreement is inflated by unanimous votes). Average linkage is the correct choice because our Kappa-derived distance is non-Euclidean — Ward linkage requires Euclidean distance and can produce negative branch heights or distorted merge ordering on non-Euclidean input. Average linkage is valid for any distance metric and standard in political science for agreement-based clustering. See `docs/ward-linkage-non-euclidean.md` for the full analysis.
+
+**Previous choice (Ward):** Ward linkage was used before 2026-02-24. It worked in practice because the Kappa distances are approximately Euclidean for well-behaved Kansas data, but was methodologically impure. The switch to average linkage does not change the k=2 finding or ARI scores.
 
 **NaN handling:** Some legislator pairs have insufficient shared votes to compute Kappa, producing NaN entries (60 in House, 8 in Senate). These are filled with the maximum finite distance, treating unknown pairs as maximally dissimilar. This is conservative — it prevents unknown pairs from being grouped together.
 
@@ -156,7 +162,7 @@ The project's analytic workflow rules prefer "concrete, narrative-friendly visua
 
 ### Solution: Three alternative visualizations
 
-All three alternatives use the same Ward linkage matrix `Z` and IRT ideal points as the dendrograms. The original dendrograms are preserved as supplementary figures.
+All three alternatives use the same average linkage matrix `Z` and IRT ideal points as the dendrograms. The original dendrograms are preserved as supplementary figures.
 
 | Visualization | Best for | Weakness |
 |---------------|----------|----------|

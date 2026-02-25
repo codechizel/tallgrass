@@ -26,7 +26,9 @@ except ModuleNotFoundError:
         make_gt,
     )
 
-# Must match CONTESTED_PARTY_THRESHOLD in clustering.py (circular import prevents direct import)
+# Import CONTESTED_PARTY_THRESHOLD via the lazy import in _add_analysis_parameters.
+# For use in _add_party_loyalty_table, we use a local constant since the import is
+# deferred to avoid circular dependency at module load time.
 _CONTESTED_PARTY_THRESHOLD = 0.10
 
 
@@ -65,6 +67,8 @@ def build_clustering_report(
             _add_gmm_model_selection_figure(report, plots_dir, chamber)
 
     _add_model_selection_interpretation(report)
+
+    _add_hdbscan_summary(report, results)
 
     for chamber, result in results.items():
         _add_cluster_assignments_table(report, result, chamber)
@@ -776,12 +780,58 @@ def _add_cross_method_interpretation(report: ReportBuilder) -> None:
                 "<p>The Adjusted Rand Index (ARI) measures agreement between two sets of "
                 "cluster labels, corrected for chance. ARI = 1.0 means identical "
                 "assignments; ARI = 0 means no better than random.</p>"
-                "<p>High ARI across three fundamentally different methods — hierarchical "
+                "<p>High ARI across multiple fundamentally different methods — hierarchical "
                 "(agglomerative, based on pairwise agreement), k-means (centroid-based, on "
-                "IRT), and GMM (probabilistic, on IRT) — confirms that the 2-cluster "
-                "structure is a real property of the data, not an artifact of any "
-                "particular algorithm or input representation.</p>"
+                "IRT), spectral (graph-based, on agreement affinity), and GMM "
+                "(probabilistic, on IRT) — confirms that the 2-cluster structure is a real "
+                "property of the data, not an artifact of any particular algorithm or "
+                "input representation.</p>"
             ),
+        )
+    )
+
+
+def _add_hdbscan_summary(
+    report: ReportBuilder,
+    results: dict[str, dict],
+) -> None:
+    """Table: HDBSCAN density-based clustering results per chamber."""
+    rows = []
+    for chamber, result in results.items():
+        hdb = result.get("hdbscan")
+        if not hdb:
+            continue
+        rows.append(
+            {
+                "Chamber": chamber,
+                "Clusters Found": hdb["n_clusters"],
+                "Noise Points": hdb["n_noise"],
+                "PCs Used": hdb.get("n_pcs_used", "—"),
+                "Noise Legislators": ", ".join(hdb.get("noise_names", [])) or "None",
+            }
+        )
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="HDBSCAN Density-Based Clustering",
+        subtitle=(
+            "HDBSCAN on standardized PCA scores — finds clusters without specifying k "
+            "and flags outlier legislators as noise"
+        ),
+        source_note=(
+            "Noise points are legislators that don't fit cleanly into any dense cluster. "
+            "These often correspond to mavericks or bridge-builders identified in other phases."
+        ),
+    )
+    report.add(
+        TableSection(
+            id="hdbscan-summary",
+            title="HDBSCAN Density-Based Clustering",
+            html=html,
         )
     )
 
@@ -933,11 +983,13 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
     try:
         from analysis.clustering import (
             CLUSTER_CMAP,
+            COMPARISON_K,
             CONTESTED_PARTY_THRESHOLD,
             COPHENETIC_THRESHOLD,
-            DEFAULT_K,
             GMM_COVARIANCE,
             GMM_N_INIT,
+            HDBSCAN_MIN_CLUSTER_SIZE,
+            HDBSCAN_MIN_SAMPLES,
             K_RANGE,
             LINKAGE_METHOD,
             MIN_VOTES,
@@ -950,11 +1002,13 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
     except ModuleNotFoundError:
         from clustering import (  # type: ignore[no-redef]
             CLUSTER_CMAP,
+            COMPARISON_K,
             CONTESTED_PARTY_THRESHOLD,
             COPHENETIC_THRESHOLD,
-            DEFAULT_K,
             GMM_COVARIANCE,
             GMM_N_INIT,
+            HDBSCAN_MIN_CLUSTER_SIZE,
+            HDBSCAN_MIN_SAMPLES,
             K_RANGE,
             LINKAGE_METHOD,
             MIN_VOTES,
@@ -970,12 +1024,14 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
             "Parameter": [
                 "Random Seed",
                 "K Range",
-                "Default K",
+                "Comparison K",
                 "Linkage Method",
                 "Cophenetic Threshold",
                 "Silhouette 'Good' Threshold",
                 "GMM Covariance Type",
                 "GMM N Initializations",
+                "HDBSCAN Min Cluster Size",
+                "HDBSCAN Min Samples",
                 "Cluster Colormap",
                 "Minority Threshold (Default)",
                 "Minority Threshold (Sensitivity)",
@@ -986,12 +1042,14 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
             "Value": [
                 str(RANDOM_SEED),
                 str(list(K_RANGE)),
-                str(DEFAULT_K),
+                str(COMPARISON_K),
                 LINKAGE_METHOD,
                 str(COPHENETIC_THRESHOLD),
                 str(SILHOUETTE_GOOD),
                 GMM_COVARIANCE,
                 str(GMM_N_INIT),
+                str(HDBSCAN_MIN_CLUSTER_SIZE),
+                str(HDBSCAN_MIN_SAMPLES),
                 CLUSTER_CMAP,
                 f"{MINORITY_THRESHOLD:.3f} ({MINORITY_THRESHOLD * 100:.1f}%)",
                 f"{SENSITIVITY_THRESHOLD:.2f} ({SENSITIVITY_THRESHOLD * 100:.0f}%)",
@@ -1002,12 +1060,14 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
             "Description": [
                 "For reproducible k-means/GMM initialization",
                 "Range of k values evaluated for model selection",
-                "Expected optimal k (conservative R, moderate R, Democrat)",
-                "Ward minimizes within-cluster variance",
+                "Forced k=3 cut for downstream comparison (k=2 confirmed optimal)",
+                "Average linkage: valid for non-Euclidean distances (see ADR-0028)",
                 "Minimum cophenetic correlation for valid dendrogram",
                 "Silhouette > this indicates good cluster structure",
                 "Full covariance allows elliptical clusters",
                 "Multiple GMM restarts for stability",
+                "Minimum cluster size for HDBSCAN density-based clustering",
+                "Core distance samples for HDBSCAN noise detection",
                 "Matplotlib colormap for cluster visualization",
                 "Inherited from EDA; votes with minority < this are filtered",
                 "Alternative threshold for sensitivity analysis",

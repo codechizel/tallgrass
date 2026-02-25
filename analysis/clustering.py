@@ -38,9 +38,10 @@ from scipy.cluster.hierarchy import (
     linkage,
 )
 from scipy.spatial.distance import squareform
-from sklearn.cluster import KMeans
+from sklearn.cluster import HDBSCAN, KMeans, SpectralClustering
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import StandardScaler
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix
@@ -71,9 +72,9 @@ Tyson paradox (see `analysis/design/tyson_paradox.md`).
 
 ### Three Complementary Approaches
 
-1. **Hierarchical clustering** on agreement Kappa distance (Ward linkage)
+1. **Hierarchical clustering** on agreement Kappa distance (average linkage)
    - Input: pairwise Kappa agreement matrices from EDA
-   - Distance = 1 - Kappa; Ward minimizes within-cluster variance
+   - Distance = 1 - Kappa; average linkage (valid for non-Euclidean metrics)
    - Produces dendrogram for visual inspection
 
 2. **K-Means** on IRT ideal points
@@ -191,12 +192,14 @@ All outputs land in `results/<session>/clustering/<date>/`:
 
 RANDOM_SEED = 42
 K_RANGE = range(2, 8)
-DEFAULT_K = 3
-LINKAGE_METHOD = "ward"
+COMPARISON_K = 3  # Forced k=3 cut for downstream comparison (k=2 confirmed optimal)
+LINKAGE_METHOD = "average"  # Average linkage: valid for non-Euclidean distances (see ADR-0028)
 COPHENETIC_THRESHOLD = 0.70
 SILHOUETTE_GOOD = 0.50
 GMM_COVARIANCE = "full"
 GMM_N_INIT = 20
+HDBSCAN_MIN_CLUSTER_SIZE = 5
+HDBSCAN_MIN_SAMPLES = 3
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 CLUSTER_CMAP = "Set2"
 MINORITY_THRESHOLD = 0.025
@@ -204,6 +207,15 @@ SENSITIVITY_THRESHOLD = 0.10
 MIN_VOTES = 20
 CONTESTED_PARTY_THRESHOLD = 0.10
 WITHIN_PARTY_MIN_SIZE = 15
+# Plot sizing constants
+DENDROGRAM_HEIGHT_PER_LEGISLATOR = 0.25
+DENDROGRAM_TRUNCATED_HEIGHT = 10
+VOTING_BLOCS_HEIGHT_PER_LEGISLATOR = 0.12
+POLAR_SIZE_PER_LEGISLATOR = 0.18
+NOTABLE_LOYALTY_THRESHOLD = 0.7
+NOTABLE_XI_THRESHOLD = 3.5
+EXTREME_PERCENTILE = 95
+LABEL_STAGGER_RATIO = 0.8
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -455,19 +467,19 @@ def compute_party_loyalty(
 # ── Phase 3: Hierarchical Clustering ────────────────────────────────────────
 
 
-def run_hierarchical(
+def _kappa_to_distance(
     kappa_matrix: pl.DataFrame,
-    chamber: str,
-) -> tuple[np.ndarray, float, list[str]]:
-    """Run hierarchical clustering on Kappa distance matrix.
+    chamber: str | None = None,
+) -> tuple[np.ndarray, list[str]]:
+    """Convert Kappa agreement matrix to distance matrix.
 
-    Returns (linkage_matrix, cophenetic_r, slug_list).
+    Returns (distance_array, slug_list).
+    NaN entries (insufficient shared votes) filled with max finite distance.
     """
     slug_col = "legislator_slug"
     slugs = kappa_matrix[slug_col].to_list()
     data_cols = [c for c in kappa_matrix.columns if c != slug_col]
 
-    # Convert to numpy distance matrix: distance = 1 - kappa
     kappa_arr = kappa_matrix.select(data_cols).to_numpy()
     distance_arr = 1.0 - kappa_arr
 
@@ -481,10 +493,31 @@ def run_hierarchical(
     if nan_count > 0:
         max_finite = float(np.nanmax(distance_arr))
         distance_arr = np.where(np.isnan(distance_arr), max_finite, distance_arr)
-        print(f"  {chamber}: Filled {nan_count} NaN distances with max={max_finite:.4f}")
+        if chamber:
+            print(f"  {chamber}: Filled {nan_count} NaN distances with max={max_finite:.4f}")
 
     # Clip negative distances (kappa > 1 shouldn't happen, but be safe)
     distance_arr = np.clip(distance_arr, 0.0, None)
+
+    return distance_arr, slugs
+
+
+def _standardize_2d(xi: np.ndarray, loyalty: np.ndarray) -> np.ndarray:
+    """Z-score standardize IRT ideal points and loyalty rates into a 2D array."""
+    xi_std = (xi - xi.mean()) / (xi.std() + 1e-10)
+    loy_std = (loyalty - loyalty.mean()) / (loyalty.std() + 1e-10)
+    return np.column_stack([xi_std, loy_std])
+
+
+def run_hierarchical(
+    kappa_matrix: pl.DataFrame,
+    chamber: str,
+) -> tuple[np.ndarray, float, list[str], np.ndarray]:
+    """Run hierarchical clustering on Kappa distance matrix.
+
+    Returns (linkage_matrix, cophenetic_r, slug_list, distance_array).
+    """
+    distance_arr, slugs = _kappa_to_distance(kappa_matrix, chamber)
 
     # Convert to condensed form for scipy
     condensed = squareform(distance_arr, checks=False)
@@ -500,12 +533,12 @@ def run_hierarchical(
         f"({'OK' if coph_corr >= COPHENETIC_THRESHOLD else 'WARNING'})"
     )
 
-    return Z, float(coph_corr), slugs
+    return Z, float(coph_corr), slugs, distance_arr
 
 
 def find_optimal_k_hierarchical(
     Z: np.ndarray,
-    kappa_matrix: pl.DataFrame,
+    distance_arr: np.ndarray,
     k_range: range,
     chamber: str,
 ) -> tuple[dict[int, float], int]:
@@ -513,19 +546,6 @@ def find_optimal_k_hierarchical(
 
     Returns (scores_dict, optimal_k).
     """
-    slug_col = "legislator_slug"
-    data_cols = [c for c in kappa_matrix.columns if c != slug_col]
-    kappa_arr = kappa_matrix.select(data_cols).to_numpy()
-    distance_arr = 1.0 - kappa_arr
-    distance_arr = (distance_arr + distance_arr.T) / 2
-    np.fill_diagonal(distance_arr, 0.0)
-    # Fill NaN with max finite distance (same as run_hierarchical)
-    if np.isnan(distance_arr).any():
-        distance_arr = np.where(
-            np.isnan(distance_arr), float(np.nanmax(distance_arr)), distance_arr
-        )
-    distance_arr = np.clip(distance_arr, 0.0, None)
-
     scores: dict[int, float] = {}
     for k in k_range:
         labels = cut_tree(Z, n_clusters=k).flatten()
@@ -535,7 +555,7 @@ def find_optimal_k_hierarchical(
         scores[k] = float(sil)
         print(f"    k={k}: silhouette = {sil:.4f}")
 
-    optimal_k = max(scores, key=scores.get) if scores else DEFAULT_K
+    optimal_k = max(scores, key=scores.get) if scores else COMPARISON_K
     print(
         f"  {chamber} optimal k (hierarchical): {optimal_k} "
         f"(silhouette = {scores.get(optimal_k, 0):.4f})"
@@ -567,7 +587,11 @@ def plot_dendrogram(
     labels = [name_map.get(s, s) for s in slugs]
     truncate = chamber == "House"
 
-    fig_height = 10 if truncate else max(14, len(slugs) * 0.25)
+    fig_height = (
+        DENDROGRAM_TRUNCATED_HEIGHT
+        if truncate
+        else max(14, len(slugs) * DENDROGRAM_HEIGHT_PER_LEGISLATOR)
+    )
     fig, ax = plt.subplots(figsize=(14, fig_height))
 
     if truncate:
@@ -663,7 +687,7 @@ def plot_voting_blocs(
     display_labels = _build_display_labels(all_names)
 
     n = len(ordered_slugs)
-    fig, ax = plt.subplots(figsize=(10, max(8, n * 0.12)))
+    fig, ax = plt.subplots(figsize=(10, max(8, n * VOTING_BLOCS_HEIGHT_PER_LEGISLATOR)))
 
     for i in range(n):
         color = PARTY_COLORS.get(ordered_parties[i], "#888888")
@@ -690,7 +714,7 @@ def plot_voting_blocs(
     # Label notable outliers — legislators at IRT extremes within each party
     xi_arr = np.array(ordered_xi)
     for i in range(n):
-        is_extreme = abs(ordered_xi[i]) > np.percentile(np.abs(xi_arr), 95)
+        is_extreme = abs(ordered_xi[i]) > np.percentile(np.abs(xi_arr), EXTREME_PERCENTILE)
         if is_extreme:
             label = display_labels.get(ordered_names[i], ordered_names[i].split()[-1])
             ax.annotate(
@@ -758,7 +782,7 @@ def plot_polar_dendrogram(
     n_leaves = len(leaves)
     max_dist = Z[:, 2].max()
 
-    fig_size = max(14, n_leaves * 0.18)
+    fig_size = max(14, n_leaves * POLAR_SIZE_PER_LEGISLATOR)
     fig, ax = plt.subplots(figsize=(fig_size, fig_size), subplot_kw={"projection": "polar"})
 
     # Map rectangular dendrogram x-coords to angle [0, 2*pi)
@@ -826,7 +850,7 @@ def plot_polar_dendrogram(
         gap = leaf_angles[i] - leaf_angles[i - 1]
         # If this label is closer than 80% of even spacing to the previous,
         # AND the previous was at the inner radius, push this one out
-        if gap < even_sep * 0.8 and label_radii[i - 1] == r_inner_label:
+        if gap < even_sep * LABEL_STAGGER_RATIO and label_radii[i - 1] == r_inner_label:
             label_radii.append(r_outer_label)
         else:
             label_radii.append(r_inner_label)
@@ -1067,12 +1091,10 @@ def run_kmeans_irt(
             how="inner",
         )
         if merged.height >= max(k_range):
-            # Standardize both dimensions
-            xi_2d = merged["xi_mean"].to_numpy()
-            loy_2d = merged["loyalty_rate"].to_numpy()
-            xi_std = (xi_2d - xi_2d.mean()) / (xi_2d.std() + 1e-10)
-            loy_std = (loy_2d - loy_2d.mean()) / (loy_2d.std() + 1e-10)
-            X_2d = np.column_stack([xi_std, loy_std])
+            X_2d = _standardize_2d(
+                merged["xi_mean"].to_numpy(),
+                merged["loyalty_rate"].to_numpy(),
+            )
 
             for k in k_range:
                 km = KMeans(n_clusters=k, random_state=RANDOM_SEED, n_init=10)
@@ -1282,7 +1304,7 @@ def plot_irt_loyalty_clusters(
 
     # Annotate notable legislators (extreme IRT or low loyalty) with callout boxes
     for i in range(merged.height):
-        if loy_vals[i] < 0.7 or abs(xi_vals[i]) > 3.5:
+        if loy_vals[i] < NOTABLE_LOYALTY_THRESHOLD or abs(xi_vals[i]) > NOTABLE_XI_THRESHOLD:
             last_name = names[i].split()[-1] if names[i] else "?"
             ax.annotate(
                 last_name,
@@ -1468,6 +1490,119 @@ def plot_gmm_probabilities(
     save_fig(fig, out_dir / f"gmm_probs_{chamber.lower()}.png")
 
 
+# ── Phase 5b: Spectral Clustering ─────────────────────────────────────────
+
+
+def run_spectral_clustering(
+    kappa_matrix: pl.DataFrame,
+    k_range: range,
+    chamber: str,
+) -> tuple[dict[int, dict], int]:
+    """Run spectral clustering on Kappa agreement matrix.
+
+    Uses the agreement matrix directly as affinity (precomputed).
+    Returns (results_per_k, optimal_k_by_silhouette).
+    """
+    distance_arr, slugs = _kappa_to_distance(kappa_matrix)
+
+    # Convert distance to affinity: affinity = 1 - distance = kappa
+    # Ensure non-negative (clip small negatives from floating point)
+    affinity = np.clip(1.0 - distance_arr, 0.0, None)
+    np.fill_diagonal(affinity, 1.0)
+
+    results: dict[int, dict] = {}
+    for k in k_range:
+        sc = SpectralClustering(
+            n_clusters=k,
+            affinity="precomputed",
+            assign_labels="cluster_qr",
+            random_state=RANDOM_SEED,
+        )
+        labels = sc.fit_predict(affinity)
+        sil = (
+            float(silhouette_score(distance_arr, labels, metric="precomputed"))
+            if len(set(labels)) > 1
+            else -1.0
+        )
+        results[k] = {
+            "labels": labels,
+            "silhouette": sil,
+        }
+        print(f"    k={k}: silhouette = {sil:.4f}")
+
+    optimal_k = max(k_range, key=lambda k: results[k]["silhouette"])
+    print(f"  {chamber} optimal k (spectral): {optimal_k}")
+    return results, optimal_k
+
+
+# ── Phase 5c: HDBSCAN on PCA Embeddings ──────────────────────────────────
+
+
+def run_hdbscan_pca(
+    pca_scores: pl.DataFrame,
+    ideal_points: pl.DataFrame,
+    chamber: str,
+) -> dict:
+    """Run HDBSCAN on PCA embeddings to find density-based clusters.
+
+    Unlike k-based methods, HDBSCAN does not require specifying k and
+    designates noise points (label=-1) for outlier legislators.
+    Returns dict with labels, n_clusters, n_noise, noise_slugs.
+    """
+    slug_col = "legislator_slug"
+
+    # Align PCA scores to ideal_points slug order
+    ip_slugs = ideal_points[slug_col].to_list()
+    pca_slugs = pca_scores[slug_col].to_list()
+    pc_cols = [c for c in pca_scores.columns if c.startswith("PC")]
+
+    # Use available PC columns (typically PC1-PC5 or more)
+    n_pcs = min(len(pc_cols), 10)
+    use_cols = pc_cols[:n_pcs]
+
+    # Filter to legislators present in both datasets
+    common_slugs = [s for s in ip_slugs if s in pca_slugs]
+    pca_filtered = pca_scores.filter(pl.col(slug_col).is_in(common_slugs))
+    pca_filtered = pca_filtered.sort(slug_col)
+
+    X = pca_filtered.select(use_cols).to_numpy().copy()
+
+    # Standardize PCA scores
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    hdb = HDBSCAN(
+        min_cluster_size=HDBSCAN_MIN_CLUSTER_SIZE,
+        min_samples=HDBSCAN_MIN_SAMPLES,
+    )
+    labels = hdb.fit_predict(X_scaled)
+
+    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    n_noise = int((labels == -1).sum())
+    ordered_slugs = pca_filtered[slug_col].to_list()
+    noise_slugs = [ordered_slugs[i] for i in range(len(labels)) if labels[i] == -1]
+
+    # Get noise legislator names for reporting
+    noise_names = []
+    name_map = dict(zip(ip_slugs, ideal_points["full_name"].to_list()))
+    for slug in noise_slugs:
+        noise_names.append(name_map.get(slug, slug))
+
+    print(f"  {chamber}: HDBSCAN found {n_clusters} clusters, {n_noise} noise points")
+    if noise_names:
+        print(f"  Noise legislators: {', '.join(noise_names)}")
+
+    return {
+        "labels": labels,
+        "n_clusters": n_clusters,
+        "n_noise": n_noise,
+        "noise_slugs": noise_slugs,
+        "noise_names": noise_names,
+        "slugs": ordered_slugs,
+        "n_pcs_used": n_pcs,
+    }
+
+
 # ── Phase 6: Cross-Method Comparison ────────────────────────────────────────
 
 
@@ -1536,6 +1671,7 @@ def characterize_clusters(
         n = subset.height
         n_r = subset.filter(pl.col("party") == "Republican").height
         n_d = subset.filter(pl.col("party") == "Democrat").height
+        n_other = n - n_r - n_d
         xi_mean = float(subset["xi_mean"].mean()) if n > 0 else 0.0
         xi_median = float(subset["xi_mean"].median()) if n > 0 else 0.0
         xi_sd = float(subset["xi_sd"].mean()) if n > 0 else 0.0
@@ -1564,6 +1700,7 @@ def characterize_clusters(
                 "n_legislators": n,
                 "n_republican": n_r,
                 "n_democrat": n_d,
+                "n_other": n_other,
                 "pct_republican": n_r / n * 100 if n > 0 else 0,
                 "xi_mean": xi_mean,
                 "xi_median": xi_median,
@@ -1693,11 +1830,10 @@ def run_within_party_clustering(
 
         # Standardize for 2D
         if has_2d:
-            xi_2d = merged["xi_mean"].to_numpy()
-            loy_2d = merged["loyalty_rate"].to_numpy()
-            xi_std = (xi_2d - xi_2d.mean()) / (xi_2d.std() + 1e-10)
-            loy_std = (loy_2d - loy_2d.mean()) / (loy_2d.std() + 1e-10)
-            X_2d = np.column_stack([xi_std, loy_std])
+            X_2d = _standardize_2d(
+                merged["xi_mean"].to_numpy(),
+                merged["loyalty_rate"].to_numpy(),
+            )
 
         # Limit k_range to party size
         max_k = min(max(k_range), party_ip.height - 1)
@@ -2079,16 +2215,7 @@ def run_sensitivity_clustering(
         print(f"    ARI(k={default_k} vs k={alt_k}): {ari:.4f}")
 
     # Re-run hierarchical at alternative k values
-    slug_col = "legislator_slug"
-    data_cols = [c for c in kappa_matrix.columns if c != slug_col]
-    kappa_arr = kappa_matrix.select(data_cols).to_numpy()
-    distance_arr = 1.0 - (kappa_arr + kappa_arr.T) / 2
-    np.fill_diagonal(distance_arr, 0.0)
-    if np.isnan(distance_arr).any():
-        distance_arr = np.where(
-            np.isnan(distance_arr), float(np.nanmax(distance_arr)), distance_arr
-        )
-    distance_arr = np.clip(distance_arr, 0.0, None)
+    distance_arr, _ = _kappa_to_distance(kappa_matrix)
     condensed = squareform(distance_arr, checks=False)
     Z = linkage(condensed, method=LINKAGE_METHOD)
 
@@ -2206,24 +2333,24 @@ def main() -> None:
 
             # ── Phase 3: Hierarchical Clustering ──
             print_header(f"PHASE 3: HIERARCHICAL CLUSTERING — {chamber}")
-            Z, coph_corr, slugs = run_hierarchical(kappa_mat, chamber)
+            Z, coph_corr, slugs, distance_arr = run_hierarchical(kappa_mat, chamber)
             hier_scores, hier_optimal_k = find_optimal_k_hierarchical(
-                Z, kappa_mat, K_RANGE, chamber
+                Z, distance_arr, K_RANGE, chamber
             )
 
             # Use override k if provided
             use_k = args.k if args.k is not None else hier_optimal_k
 
-            # Cut at optimal k and at DEFAULT_K for comparison
+            # Cut at optimal k and at COMPARISON_K for comparison
             hier_labels_optimal = cut_tree(Z, n_clusters=use_k).flatten()
-            hier_labels_default = cut_tree(Z, n_clusters=DEFAULT_K).flatten()
+            hier_labels_default = cut_tree(Z, n_clusters=COMPARISON_K).flatten()
 
             # Save hierarchical assignments
             hier_df = pl.DataFrame(
                 {
                     "legislator_slug": slugs,
                     f"cluster_k{use_k}": hier_labels_optimal.tolist(),
-                    f"cluster_k{DEFAULT_K}": hier_labels_default.tolist(),
+                    f"cluster_k{COMPARISON_K}": hier_labels_default.tolist(),
                 }
             )
             hier_df.write_parquet(
@@ -2340,6 +2467,53 @@ def main() -> None:
             else:
                 print_header(f"PHASE 5: GMM (SKIPPED) — {chamber}")
 
+            # ── Phase 5b: Spectral Clustering ──
+            print_header(f"PHASE 5b: SPECTRAL CLUSTERING — {chamber}")
+            spectral_results, spectral_optimal_k = run_spectral_clustering(
+                kappa_mat, K_RANGE, chamber
+            )
+            spectral_k = args.k if args.k is not None else spectral_optimal_k
+            spectral_labels = spectral_results[spectral_k]["labels"]
+
+            # Save spectral assignments
+            spectral_df = pl.DataFrame(
+                {
+                    "legislator_slug": _kappa_to_distance(kappa_mat)[1],
+                    f"cluster_k{spectral_k}": spectral_labels.tolist(),
+                }
+            )
+            spectral_df.write_parquet(
+                ctx.data_dir / f"spectral_assignments_{chamber.lower()}.parquet"
+            )
+            print(f"  Saved: spectral_assignments_{chamber.lower()}.parquet")
+
+            # Add spectral silhouette to model selection
+            for i, k_val in enumerate(K_RANGE):
+                model_sel_rows[i]["spectral_silhouette"] = spectral_results[k_val]["silhouette"]
+
+            chamber_results["spectral"] = {
+                "results": spectral_results,
+                "optimal_k": spectral_k,
+                "labels": spectral_labels,
+            }
+
+            # ── Phase 5c: HDBSCAN on PCA ──
+            print_header(f"PHASE 5c: HDBSCAN ON PCA — {chamber}")
+            hdbscan_result = run_hdbscan_pca(pca_scores, irt_ip, chamber)
+            chamber_results["hdbscan"] = hdbscan_result
+
+            if hdbscan_result["n_clusters"] > 0:
+                hdb_df = pl.DataFrame(
+                    {
+                        "legislator_slug": hdbscan_result["slugs"],
+                        "cluster": hdbscan_result["labels"].tolist(),
+                    }
+                )
+                hdb_df.write_parquet(
+                    ctx.data_dir / f"hdbscan_assignments_{chamber.lower()}.parquet"
+                )
+                print(f"  Saved: hdbscan_assignments_{chamber.lower()}.parquet")
+
             model_sel_df = pl.DataFrame(model_sel_rows)
             model_sel_df.write_parquet(ctx.data_dir / f"model_selection_{chamber.lower()}.parquet")
 
@@ -2351,9 +2525,17 @@ def main() -> None:
                 [slug_to_hier.get(s, -1) for s in irt_ip["legislator_slug"].to_list()]
             )
 
+            # Align spectral labels to IRT slug order
+            spectral_slugs = _kappa_to_distance(kappa_mat)[1]
+            slug_to_spectral = dict(zip(spectral_slugs, spectral_labels.tolist()))
+            spectral_aligned = np.array(
+                [slug_to_spectral.get(s, -1) for s in irt_ip["legislator_slug"].to_list()]
+            )
+
             method_assignments = {
                 "hierarchical": hier_aligned,
                 "kmeans": km_labels,
+                "spectral": spectral_aligned,
             }
             if gmm_labels is not None:
                 method_assignments["gmm"] = gmm_labels
@@ -2466,7 +2648,7 @@ def main() -> None:
             "constants": {
                 "RANDOM_SEED": RANDOM_SEED,
                 "K_RANGE": list(K_RANGE),
-                "DEFAULT_K": DEFAULT_K,
+                "COMPARISON_K": COMPARISON_K,
                 "LINKAGE_METHOD": LINKAGE_METHOD,
                 "COPHENETIC_THRESHOLD": COPHENETIC_THRESHOLD,
                 "SILHOUETTE_GOOD": SILHOUETTE_GOOD,
@@ -2490,6 +2672,12 @@ def main() -> None:
             manifest[f"{ch}_kmeans_optimal_k"] = result["kmeans"]["optimal_k"]
             if "gmm" in result:
                 manifest[f"{ch}_gmm_optimal_k"] = result["gmm"]["optimal_k"]
+            if "spectral" in result:
+                manifest[f"{ch}_spectral_optimal_k"] = result["spectral"]["optimal_k"]
+            if "hdbscan" in result:
+                manifest[f"{ch}_hdbscan_n_clusters"] = result["hdbscan"]["n_clusters"]
+                manifest[f"{ch}_hdbscan_n_noise"] = result["hdbscan"]["n_noise"]
+                manifest[f"{ch}_hdbscan_noise_legislators"] = result["hdbscan"]["noise_names"]
             if result.get("comparison"):
                 manifest[f"{ch}_cross_method_ari"] = result["comparison"]["ari_matrix"]
                 manifest[f"{ch}_mean_ari"] = result["comparison"]["mean_ari"]
