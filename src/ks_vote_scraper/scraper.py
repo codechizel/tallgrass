@@ -17,6 +17,8 @@ from tqdm import tqdm
 
 from ks_vote_scraper.config import (
     BASE_URL,
+    BILL_TITLE_MAX_LENGTH,
+    CACHE_FILENAME_MAX_LENGTH,
     MAX_RETRIES,
     MAX_WORKERS,
     REQUEST_DELAY,
@@ -165,7 +167,7 @@ class KSVoteScraper:
         # Check cache first (no rate limiting needed)
         cache_key = url.replace("/", "_").replace(":", "_").replace("?", "_")
         cache_ext = ".bin" if binary else ".html"
-        cache_file = self.cache_dir / f"{cache_key[:200]}{cache_ext}"
+        cache_file = self.cache_dir / f"{cache_key[:CACHE_FILENAME_MAX_LENGTH]}{cache_ext}"
         if cache_file.exists():
             if binary:
                 return FetchResult(url=url, html=None, content_bytes=cache_file.read_bytes())
@@ -327,7 +329,11 @@ class KSVoteScraper:
             )
             time.sleep(wave_cooldown)
 
-            # Reduce concurrency and slow rate limit for the retry wave
+            # Reduce concurrency and slow rate limit for the retry wave.
+            # Safe to mutate self.delay here: the initial ThreadPoolExecutor has
+            # fully completed (all futures resolved), so no concurrent threads are
+            # reading self.delay via _rate_limit().  The wave executor below starts
+            # fresh threads that will see the updated value.
             self.delay = WAVE_DELAY
             try:
                 with ThreadPoolExecutor(max_workers=WAVE_WORKERS) as executor:
@@ -493,7 +499,9 @@ class KSVoteScraper:
             return bill_urls, {}
 
         try:
-            assert result.html is not None  # guaranteed by result.ok above
+            if result.html is None:
+                print("  API pre-filter returned empty response, falling back to full scan")
+                return bill_urls, {}
             data = json.loads(result.html)
         except (json.JSONDecodeError, TypeError) as e:
             print(f"  API pre-filter returned invalid JSON ({e}), falling back to full scan")
@@ -1048,11 +1056,19 @@ class KSVoteScraper:
             )
             return
 
+        # Truncate long bill titles with a warning
+        if len(bill_title) > BILL_TITLE_MAX_LENGTH:
+            print(
+                f"  WARNING: {bill_number} title truncated"
+                f" ({len(bill_title)} -> {BILL_TITLE_MAX_LENGTH} chars)"
+            )
+            bill_title = bill_title[:BILL_TITLE_MAX_LENGTH]
+
         # Create RollCall summary
         rollcall = RollCall(
             session=self.session.label,
             bill_number=bill_number,
-            bill_title=bill_title[:500],
+            bill_title=bill_title,
             vote_id=vote_id,
             vote_url=vote_url,
             vote_datetime=vote_datetime,
@@ -1079,7 +1095,7 @@ class KSVoteScraper:
                 iv = IndividualVote(
                     session=self.session.label,
                     bill_number=bill_number,
-                    bill_title=bill_title[:500],
+                    bill_title=bill_title,
                     vote_id=vote_id,
                     vote_datetime=vote_datetime,
                     vote_date=vote_date,

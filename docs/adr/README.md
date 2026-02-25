@@ -63,6 +63,7 @@ What are the trade-offs?
 | [0033](0033-hierarchical-irt-deep-dive-improvements.md) | Hierarchical IRT deep dive improvements (small-group warning, ICC rename, 9 tests) | Accepted | 2026-02-25 |
 | [0034](0034-synthesis-deep-dive-improvements.md) | Synthesis deep dive improvements (data extraction, minority mavericks, dynamic AUC, 47 tests) | Accepted | 2026-02-25 |
 | [0035](0035-cross-session-deep-dive-improvements.md) | Cross-session deep dive improvements (3 bug fixes, affine transform for turnover, 18 new tests) | Accepted | 2026-02-25 |
+| [0036](0036-scraper-hardening.md) | Scraper hardening (assert removal, config constants, title truncation warning, 44 HTTP tests) | Accepted | 2026-02-25 |
 
 ## Creating a New ADR
 

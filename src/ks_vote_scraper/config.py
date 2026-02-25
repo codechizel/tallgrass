@@ -14,6 +14,9 @@ WAVE_COOLDOWN = 90  # seconds to wait between retry waves
 WAVE_WORKERS = 2  # reduced concurrency during retry waves
 WAVE_DELAY = 0.5  # slower rate limit during retry waves (vs 0.15s normal)
 
+CACHE_FILENAME_MAX_LENGTH = 200  # max chars for cached file names (filesystem safety)
+BILL_TITLE_MAX_LENGTH = 500  # truncate bill titles beyond this length
+
 USER_AGENT = (
     "KSLegVoteScraper/0.2 "
     "(Research project; collecting public roll call vote data; "

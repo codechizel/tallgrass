@@ -16,6 +16,7 @@ import zipfile
 from dataclasses import dataclass
 from io import BytesIO
 
+from ks_vote_scraper.config import BILL_TITLE_MAX_LENGTH
 from ks_vote_scraper.models import IndividualVote, RollCall
 
 # Namespace map for ODF content.xml
@@ -105,6 +106,12 @@ def parse_odt_votes(
 
     # Extract bill title from body text (first line often has it)
     bill_title = _extract_bill_title(body_text)
+    if len(bill_title) > BILL_TITLE_MAX_LENGTH:
+        warnings.warn(
+            f"{bill_number} title truncated ({len(bill_title)} -> {BILL_TITLE_MAX_LENGTH} chars)",
+            stacklevel=2,
+        )
+        bill_title = bill_title[:BILL_TITLE_MAX_LENGTH]
 
     total_votes = sum(len(members) for members in categories.values())
 
@@ -118,7 +125,7 @@ def parse_odt_votes(
     rollcall = RollCall(
         session=session_label,
         bill_number=bill_number,
-        bill_title=bill_title[:500],
+        bill_title=bill_title,
         vote_id=vote_id,
         vote_url=vote_url,
         vote_datetime=vote_datetime,
@@ -144,7 +151,7 @@ def parse_odt_votes(
             iv = IndividualVote(
                 session=session_label,
                 bill_number=bill_number,
-                bill_title=bill_title[:500],
+                bill_title=bill_title,
                 vote_id=vote_id,
                 vote_datetime=vote_datetime,
                 vote_date=vote_date,

@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1052)
+just test                    # run all tests (~1096)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -30,6 +30,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_scraper_html.py` — HTML parsing with inline fixtures, pre-2015 party detection, odt_view links (~35 tests)
 - `tests/test_models.py` — dataclass construction and immutability, VoteLink.is_odt (~8 tests)
 - `tests/test_odt_parser.py` — ODT vote parsing: XML, metadata, body text, name resolution (~47 tests)
+- `tests/test_scraper_http.py` — HTTP layer: _get() retries, error classification, cache, _fetch_many() waves, rate limiting, KLISS API (~44 tests)
 - `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip (~10 tests)
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 
