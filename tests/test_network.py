@@ -14,13 +14,18 @@ import pytest
 from analysis.network import (
     KAPPA_THRESHOLD_DEFAULT,
     _community_label,
+    _graph_from_kappa_matrix,
     analyze_community_composition,
     build_kappa_network,
     build_within_party_network,
+    check_extreme_edge_weights,
     compare_communities_to_party,
     compute_centralities,
     compute_network_summary,
+    compute_party_modularity,
+    detect_communities_cpm,
     detect_communities_multi_resolution,
+    disparity_filter,
     find_cross_party_bridge,
     run_threshold_sweep,
 )
@@ -579,3 +584,252 @@ class TestCommunityLabel:
         """None composition → 'Community N'."""
         label = _community_label(3, None)
         assert label == "Community 3"
+
+
+# ── TestCPMDetection ──────────────────────────────────────────────────────────
+
+
+class TestCPMDetection:
+    """Tests for detect_communities_cpm() — CPM resolution-limit-free detection.
+
+    Run: uv run pytest tests/test_network.py::TestCPMDetection -v
+    """
+
+    def test_cpm_returns_all_gammas(self, synthetic_graph: tuple) -> None:
+        """CPM sweep should return one row per gamma value."""
+        G = synthetic_graph[0]
+        gammas = [0.05, 0.10, 0.20]
+        partitions, gamma_df = detect_communities_cpm(G, gammas)
+        assert gamma_df.height == 3
+        assert gamma_df["gamma"].to_list() == gammas
+
+    def test_cpm_partitions_cover_all_nodes(self, synthetic_graph: tuple) -> None:
+        """Every node should be assigned in every CPM partition."""
+        G = synthetic_graph[0]
+        partitions, _ = detect_communities_cpm(G, [0.10])
+        partition = partitions[0.10]
+        assert set(partition.keys()) == set(G.nodes())
+
+    def test_cpm_two_clique_recovery(self) -> None:
+        """Two tight cliques with no inter-clique edges should split into 2 communities."""
+        G = nx.Graph()
+        for i in range(5):
+            for j in range(i + 1, 5):
+                G.add_edge(f"a{i}", f"a{j}", weight=0.8)
+        for i in range(5):
+            for j in range(i + 1, 5):
+                G.add_edge(f"b{i}", f"b{j}", weight=0.8)
+        for n in G.nodes():
+            G.nodes[n]["party"] = "R" if n.startswith("a") else "D"
+        partitions, _ = detect_communities_cpm(G, [0.10])
+        partition = partitions[0.10]
+        n_comms = len(set(partition.values()))
+        assert n_comms == 2
+
+
+# ── TestPartyModularity ───────────────────────────────────────────────────────
+
+
+class TestPartyModularity:
+    """Tests for compute_party_modularity() — polarization metric.
+
+    Run: uv run pytest tests/test_network.py::TestPartyModularity -v
+    """
+
+    def test_party_modularity_range(self, synthetic_graph: tuple) -> None:
+        """Party modularity should be between -0.5 and 1.0."""
+        G = synthetic_graph[0]
+        mod = compute_party_modularity(G)
+        assert mod is not None
+        assert -0.5 <= mod <= 1.0
+
+    def test_high_modularity_for_separated_parties(self) -> None:
+        """Two party cliques with no inter-party edges → high modularity."""
+        G = nx.Graph()
+        for i in range(4):
+            for j in range(i + 1, 4):
+                G.add_edge(f"r{i}", f"r{j}", weight=0.8)
+        for i in range(4):
+            for j in range(i + 1, 4):
+                G.add_edge(f"d{i}", f"d{j}", weight=0.8)
+        for n in G.nodes():
+            G.nodes[n]["party"] = "Republican" if n.startswith("r") else "Democrat"
+        mod = compute_party_modularity(G)
+        assert mod is not None
+        assert mod > 0.3
+
+    def test_single_party_returns_none(self) -> None:
+        """Only one party → None."""
+        G = nx.Graph()
+        G.add_edge("a", "b", weight=0.5)
+        G.nodes["a"]["party"] = "Republican"
+        G.nodes["b"]["party"] = "Republican"
+        assert compute_party_modularity(G) is None
+
+    def test_empty_graph_returns_none(self) -> None:
+        """No edges → None."""
+        G = nx.Graph()
+        G.add_node("a", party="Republican")
+        G.add_node("b", party="Democrat")
+        assert compute_party_modularity(G) is None
+
+
+# ── TestDisparityFilter ───────────────────────────────────────────────────────
+
+
+class TestDisparityFilter:
+    """Tests for disparity_filter() — backbone extraction.
+
+    Run: uv run pytest tests/test_network.py::TestDisparityFilter -v
+    """
+
+    def test_backbone_is_subgraph(self, synthetic_graph: tuple) -> None:
+        """Backbone edges should be a subset of the original graph edges."""
+        G = synthetic_graph[0]
+        backbone = disparity_filter(G, alpha=0.05)
+        for u, v in backbone.edges():
+            assert G.has_edge(u, v)
+
+    def test_backbone_preserves_all_nodes(self, synthetic_graph: tuple) -> None:
+        """Backbone should keep all nodes (even if some lose edges)."""
+        G = synthetic_graph[0]
+        backbone = disparity_filter(G, alpha=0.05)
+        assert set(backbone.nodes()) == set(G.nodes())
+
+    def test_backbone_preserves_weights(self, synthetic_graph: tuple) -> None:
+        """Retained edges should have the same weight as in the original graph."""
+        G = synthetic_graph[0]
+        backbone = disparity_filter(G, alpha=0.05)
+        for u, v, data in backbone.edges(data=True):
+            assert data["weight"] == G[u][v]["weight"]
+
+    def test_strict_alpha_reduces_edges(self) -> None:
+        """Very strict alpha should retain fewer edges than lenient alpha."""
+        G = nx.Graph()
+        # Complete graph with varied weights
+        nodes = [f"n{i}" for i in range(6)]
+        for i, n in enumerate(nodes):
+            G.add_node(n, party="R")
+        for i in range(6):
+            for j in range(i + 1, 6):
+                G.add_edge(nodes[i], nodes[j], weight=0.3 + 0.1 * ((i + j) % 4))
+        b_strict = disparity_filter(G, alpha=0.001)
+        b_lenient = disparity_filter(G, alpha=0.5)
+        assert b_strict.number_of_edges() <= b_lenient.number_of_edges()
+
+    def test_single_edge_node_retained(self) -> None:
+        """Degree-1 nodes should always retain their single edge."""
+        G = nx.Graph()
+        G.add_edge("a", "b", weight=0.5)
+        G.add_edge("b", "c", weight=0.8)
+        for n in G.nodes():
+            G.nodes[n]["party"] = "R"
+        backbone = disparity_filter(G, alpha=0.05)
+        assert backbone.has_edge("a", "b")
+
+
+# ── TestCheckExtremeEdgeWeights ───────────────────────────────────────────────
+
+
+class TestCheckExtremeEdgeWeights:
+    """Tests for check_extreme_edge_weights() — ADR-0010 function.
+
+    Run: uv run pytest tests/test_network.py::TestCheckExtremeEdgeWeights -v
+    """
+
+    def test_returns_dict_with_enough_nodes(self) -> None:
+        """Should return a dict when there are enough majority-party nodes."""
+        G = nx.Graph()
+        for i in range(6):
+            G.add_node(f"r{i}", party="Republican", xi_mean=float(i) * 0.5)
+        for i in range(6):
+            for j in range(i + 1, 6):
+                G.add_edge(f"r{i}", f"r{j}", weight=0.5 + i * 0.01)
+        result = check_extreme_edge_weights(G, "House", top_n=2)
+        assert result is not None
+        assert result["majority_party"] == "Republican"
+        assert len(result["legislators"]) == 2
+
+    def test_returns_none_for_small_graph(self) -> None:
+        """Should return None for graphs with < 3 majority-party nodes."""
+        G = nx.Graph()
+        G.add_node("r0", party="Republican", xi_mean=1.0)
+        G.add_node("r1", party="Republican", xi_mean=2.0)
+        G.add_edge("r0", "r1", weight=0.5)
+        result = check_extreme_edge_weights(G, "House")
+        assert result is None
+
+    def test_returns_none_for_empty_graph(self) -> None:
+        """Should return None for empty graphs."""
+        G = nx.Graph()
+        assert check_extreme_edge_weights(G, "House") is None
+
+
+# ── TestExceptTupleSyntax ─────────────────────────────────────────────────────
+
+
+class TestExceptTupleSyntax:
+    """Regression test: ensure except clauses catch all specified exception types.
+
+    Run: uv run pytest tests/test_network.py::TestExceptTupleSyntax -v
+    """
+
+    def test_network_summary_catches_zero_division(self) -> None:
+        """compute_network_summary should not raise ZeroDivisionError."""
+        G = nx.Graph()
+        G.add_node("a", party="R")
+        G.add_node("b", party="R")
+        # Graph with nodes but no edges — potential ZeroDivisionError in assortativity
+        summary = compute_network_summary(G)
+        assert summary["assortativity_party"] is None or isinstance(
+            summary["assortativity_party"], float
+        )
+
+
+# ── TestGraphFromKappaMatrix ──────────────────────────────────────────────────
+
+
+class TestGraphFromKappaMatrix:
+    """Tests for _graph_from_kappa_matrix() shared helper.
+
+    Run: uv run pytest tests/test_network.py::TestGraphFromKappaMatrix -v
+    """
+
+    def test_basic_construction(self) -> None:
+        """Should create graph with correct nodes and edges."""
+        kappa = np.array(
+            [
+                [1.0, 0.8, 0.2],
+                [0.8, 1.0, 0.3],
+                [0.2, 0.3, 1.0],
+            ]
+        )
+        slugs = ["a", "b", "c"]
+        ip_dict = {
+            "a": {"party": "R", "xi_mean": 1.0, "full_name": "Alice"},
+            "b": {"party": "R", "xi_mean": 0.5, "full_name": "Bob"},
+            "c": {"party": "D", "xi_mean": -1.0, "full_name": "Carol"},
+        }
+        G = _graph_from_kappa_matrix(kappa, slugs, ip_dict, threshold=0.25)
+        assert G.number_of_nodes() == 3
+        assert G.has_edge("a", "b")
+        assert G.has_edge("b", "c")
+        assert not G.has_edge("a", "c")  # 0.2 < 0.25
+
+    def test_extra_attrs_applied(self) -> None:
+        """Extra attributes should be merged into node attributes."""
+        kappa = np.array([[1.0, 0.8], [0.8, 1.0]])
+        slugs = ["a", "b"]
+        ip_dict = {"a": {"party": "R"}, "b": {"party": "D"}}
+        extra = {"a": {"cluster": 0, "loyalty_rate": 0.9}}
+        G = _graph_from_kappa_matrix(kappa, slugs, ip_dict, 0.5, extra)
+        assert G.nodes["a"]["cluster"] == 0
+        assert G.nodes["a"]["loyalty_rate"] == 0.9
+
+    def test_nan_kappa_no_edge(self) -> None:
+        """NaN Kappa values should not create edges."""
+        kappa = np.array([[1.0, np.nan], [np.nan, 1.0]])
+        slugs = ["a", "b"]
+        ip_dict = {"a": {"party": "R"}, "b": {"party": "D"}}
+        G = _graph_from_kappa_matrix(kappa, slugs, ip_dict, 0.0)
+        assert G.number_of_edges() == 0

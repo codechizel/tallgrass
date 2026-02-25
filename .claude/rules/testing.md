@@ -48,6 +48,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_profiles.py` — profile targets, scorecard, bill-type breakdown, defections (~23 tests)
 - `tests/test_cross_session.py` — matching, IRT alignment, shift, stability, prediction transfer (~55 tests)
 - `tests/test_clustering.py` — party loyalty, cross-method ARI, within-party, kappa distance, hierarchical, spectral, HDBSCAN, characterization (~70 tests)
+- `tests/test_network.py` — network construction, centrality, Leiden/CPM community detection, bridges, threshold sweep, polarization, disparity filter backbone, extreme edge weights (~53 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
 
 ## Manual Verification

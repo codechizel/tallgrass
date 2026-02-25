@@ -21,7 +21,8 @@
 |----------|-------|---------------|---------------|
 | `KAPPA_THRESHOLD_DEFAULT` | 0.40 | "Substantial" on Landis-Koch scale; keeps only meaningful agreement | `network.py:45` |
 | `KAPPA_THRESHOLD_SENSITIVITY` | [0.30, 0.40, 0.50, 0.60] | Sweeps from "fair" to "almost perfect" agreement | `network.py:46` |
-| `LOUVAIN_RESOLUTIONS` | [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0] | Sub-1.0 merges communities; >1.0 splits them; wide range for exploration | `network.py:47` |
+| `LEIDEN_RESOLUTIONS` | [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0] | Sub-1.0 merges communities; >1.0 splits them; wide range for exploration | `network.py:47` |
+| `CPM_GAMMAS` | [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50] | CPM resolution-limit-free sweep; gamma = expected internal edge density | `network.py:48` |
 | `HIGH_DISC_THRESHOLD` | 1.5 | \|beta\| > 1.5 matches IRT design doc recommendation for discriminating bills | `network.py:48` |
 | `TOP_BRIDGE_N` | 15 | Top bridge legislators to report; ~10% of House caucus | `network.py:49` |
 | `TOP_LABEL_N` | 10 | Nodes to label on network plots; balances readability with coverage | `network.py:50` |
@@ -50,13 +51,15 @@
 
 **Why:** In clustering (distance matrix), NaN must be filled because every pair needs a distance. Max-distance fill was conservative. In networks, absence of an edge is a natural representation of "no data." This avoids injecting artificial structure. The consequence is that legislators with many NaN Kappa values (low participation overlap) may appear as low-degree nodes or isolates, which is informative.
 
-### Community detection: Louvain only
+### Community detection: Leiden + CPM
 
-**Decision:** Use Louvain community detection (`python-louvain` package) with multi-resolution parameter sweep. Skip Leiden algorithm.
+**Decision:** Use Leiden community detection (`leidenalg` via `igraph`) with both modularity optimization (RBConfigurationVertexPartition) and CPM (CPMVertexPartition) sweeps. Replaced Louvain (ADR-0029).
 
-**Why:** For ~170 nodes, Louvain and Leiden produce nearly identical results. Leiden (via `leidenalg`) requires `igraph`, a C-library dependency that complicates installation. Louvain is pure Python (via `python-louvain`), sufficient for our scale, and well-understood.
+**Why Leiden over Louvain:** Leiden (Traag et al., 2019) is strictly superior — faster, better quality, and guarantees well-connected communities. Louvain can produce up to 25% badly connected communities. The prior concern about igraph being a C-library dependency is obsolete: igraph has been pip-installable since v0.10 (2022).
 
-**Multi-resolution:** Resolution < 1.0 merges communities (fewer, larger groups); resolution > 1.0 splits them (more, smaller groups). Sweeping 8 values from 0.5 to 3.0 lets us observe how community structure changes from coarse (party-level) to fine (potential subcaucuses).
+**Modularity sweep:** Resolution < 1.0 merges communities (fewer, larger groups); resolution > 1.0 splits them (more, smaller groups). Sweeping 8 values from 0.5 to 3.0 lets us observe how community structure changes from coarse (party-level) to fine (potential subcaucuses).
+
+**CPM sweep:** The Constant Potts Model (Traag et al., 2011) is resolution-limit-free — it can detect communities of any size, including subcaucuses smaller than sqrt(2m) edges. This is critical for Kansas, where the moderate Republican wing (~30-40 legislators) falls below modularity's theoretical detection floor (Fortunato & Barthelemy, 2007). Gamma sets the expected internal edge density; higher gamma → more, smaller communities.
 
 ### Path centrality distance: 1/Kappa
 
@@ -82,6 +85,20 @@
 - `top_n=2` — Number of extreme legislators to analyze. Keeps the output focused while surfacing the most prominent outliers.
 - Majority party determined by node count in the graph (handles any party composition).
 - Reports per-legislator mean/median/min intra-party edge weight and gap vs party median.
+
+### Polarization metric: Party modularity
+
+**Decision:** Compute modularity of the party-labeled partition (Waugh et al., 2009) as a quantitative measure of partisan polarization.
+
+**Why:** Party assortativity (Newman's attribute assortativity) measures whether edges are preferentially within-party, but modularity captures how well the party labels partition the graph into dense communities. Higher party modularity = stronger polarization. This is a single number that can be tracked across bienniums.
+
+### Backbone extraction: Disparity filter
+
+**Decision:** Apply the disparity filter (Serrano et al., 2009) to extract the statistically significant backbone of the network.
+
+**Why:** The full Kappa network at threshold 0.40 can have thousands of edges, making visualization cluttered. The disparity filter tests whether each edge weight is anomalously high given the node's degree distribution. At α=0.05, it retains only edges that are statistically significant for at least one endpoint. This preserves the structurally important connections while removing redundant ones.
+
+**Algorithm:** For each node with degree k, compute the p-value for each edge: p = (1 - w/s)^(k-1), where w is the edge weight and s is the total weight (strength). Edges with p < α for at least one endpoint are retained.
 
 ### Bipartite network: Skipped
 

@@ -3,8 +3,9 @@ Kansas Legislature — Network Analysis (Phase 6)
 
 Transforms Cohen's Kappa agreement matrices into weighted graphs, computes
 centrality measures to identify structurally important legislators, and runs
-Louvain community detection at multiple resolutions to test whether network-based
-grouping finds finer structure than the k=2 party split from clustering.
+Leiden community detection (modularity + CPM) at multiple resolutions to test
+whether network-based grouping finds finer structure than the k=2 party split
+from clustering.
 
 Usage:
   uv run python analysis/network.py [--session 2025-26] [--kappa-threshold 0.40]
@@ -27,7 +28,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import community as community_louvain  # python-louvain
+import igraph as ig
+import leidenalg
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -52,7 +54,8 @@ except ModuleNotFoundError:
 KAPPA_THRESHOLD_DEFAULT = 0.40
 KAPPA_THRESHOLD_SENSITIVITY = [0.30, 0.40, 0.50, 0.60]
 CROSS_PARTY_BRIDGE_THRESHOLD = 0.30
-LOUVAIN_RESOLUTIONS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
+LEIDEN_RESOLUTIONS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
+CPM_GAMMAS = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50]
 HIGH_DISC_THRESHOLD = 1.5
 TOP_BRIDGE_N = 15
 TOP_LABEL_N = 10
@@ -104,10 +107,21 @@ Five centrality measures identify structurally important legislators:
 - **PageRank:** Random-walk importance (robust to disconnected graphs)
 
 ### Community Detection
-Louvain algorithm at 8 resolution parameters (0.5 to 3.0). Lower resolutions
-produce fewer, larger communities (party-level); higher resolutions split into
-potential subcaucuses. Communities compared to party labels and clustering
-assignments via NMI and ARI.
+Two complementary algorithms via Leiden (Traag et al., 2019):
+- **Modularity optimization** at 8 resolution parameters (0.5 to 3.0). Lower
+  resolutions produce fewer, larger communities; higher resolutions split into
+  potential subcaucuses.
+- **CPM (Constant Potts Model)** at 8 gamma values (0.05 to 0.50). Resolution-
+  limit-free — can detect subcaucuses of any size, including moderate Republican
+  wings that fall below modularity's theoretical floor.
+Communities compared to party labels and clustering assignments via NMI and ARI.
+
+### Polarization and Backbone
+- **Party modularity** (Waugh et al., 2009): modularity of the party-labeled
+  partition — higher values indicate stronger partisan polarization.
+- **Disparity filter** (Serrano et al., 2009): statistically significant edge
+  extraction, keeping only edges whose weight is anomalously high for the node's
+  degree. Reduces visual clutter while preserving structurally important connections.
 
 ### Subnetwork Analyses
 - **Within-party:** Separate networks per party caucus
@@ -134,11 +148,12 @@ assignments via NMI and ARI.
 | `centrality_{chamber}.parquet` | All centrality measures per legislator |
 | `communities_{chamber}.parquet` | Community assignments at best resolution |
 | `community_composition_{chamber}.parquet` | Community demographics |
-| `community_resolution_{chamber}.parquet` | Modularity at each resolution |
+| `community_resolution_{chamber}.parquet` | Leiden modularity at each resolution |
+| `cpm_resolution_{chamber}.parquet` | CPM results at each gamma |
 | `bridge_legislators_{chamber}.parquet` | Top betweenness bridge legislators |
 | `threshold_sweep_{chamber}.parquet` | Network stats at each Kappa threshold |
 | `within_party_{party}_{chamber}.parquet` | Within-party community results |
-| `network_summary.parquet` | Summary statistics per chamber |
+| `network_summary.parquet` | Summary statistics per chamber (incl. party modularity) |
 | `network_report.html` | Self-contained HTML report |
 
 ## Interpretation Guide
@@ -153,7 +168,7 @@ assignments via NMI and ARI.
 
 - Network topology is threshold-dependent; always check sensitivity sweep
 - NaN Kappa entries (60 House, 8 Senate) reduce graph completeness
-- Louvain is stochastic; seed is fixed but results may vary across versions
+- Leiden is stochastic; seed is fixed but results may vary across versions
 - ~170 nodes is small for network analysis; interpret cautiously
 """
 
@@ -207,6 +222,47 @@ def _build_ip_lookup(ideal_points: pl.DataFrame) -> dict[str, dict]:
     return {row["legislator_slug"]: row for row in ideal_points.iter_rows(named=True)}
 
 
+def _graph_from_kappa_matrix(
+    kappa_mat: np.ndarray,
+    slugs: list[str],
+    ip_dict: dict[str, dict],
+    threshold: float,
+    extra_attrs: dict[str, dict[str, object]] | None = None,
+) -> nx.Graph:
+    """Build a weighted NetworkX graph from a kappa matrix and slug list.
+
+    Shared by build_kappa_network() and _build_network_from_vote_subset().
+
+    Args:
+        kappa_mat: n×n symmetric matrix of pairwise Kappa values (NaN = missing).
+        slugs: List of legislator slugs corresponding to matrix rows/columns.
+        ip_dict: Mapping slug → {party, xi_mean, full_name, ...} from ideal points.
+        threshold: Minimum Kappa for edge creation.
+        extra_attrs: Optional per-slug additional node attributes.
+    """
+    n = len(slugs)
+    G = nx.Graph()
+    for slug in slugs:
+        ip = ip_dict.get(slug, {})
+        attrs = {
+            "party": ip.get("party", "Unknown"),
+            "xi_mean": ip.get("xi_mean", 0.0),
+            "full_name": ip.get("full_name", slug),
+        }
+        if extra_attrs and slug in extra_attrs:
+            attrs.update(extra_attrs[slug])
+        G.add_node(slug, **attrs)
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            k = kappa_mat[i, j]
+            if np.isnan(k) or k <= threshold:
+                continue
+            G.add_edge(slugs[i], slugs[j], weight=float(k), distance=1.0 / float(k))
+
+    return G
+
+
 def _build_network_from_vote_subset(
     vote_matrix: pl.DataFrame,
     vote_ids: set[str],
@@ -248,26 +304,8 @@ def _build_network_from_vote_subset(
             except ValueError, ZeroDivisionError:
                 pass
 
-    # Build graph
     ip_dict = _build_ip_lookup(ideal_points)
-    G = nx.Graph()
-    for slug in slugs:
-        ip = ip_dict.get(slug, {})
-        G.add_node(
-            slug,
-            party=ip.get("party", "Unknown"),
-            xi_mean=ip.get("xi_mean", 0.0),
-            full_name=ip.get("full_name", slug),
-        )
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            k = kappa_mat[i, j]
-            if np.isnan(k) or k <= kappa_threshold:
-                continue
-            G.add_edge(slugs[i], slugs[j], weight=float(k), distance=1.0 / float(k))
-
-    return G
+    return _graph_from_kappa_matrix(kappa_mat, slugs, ip_dict, kappa_threshold)
 
 
 # ── Phase 1: Load Data ──────────────────────────────────────────────────────
@@ -364,14 +402,13 @@ def build_kappa_network(
     Edge attr 'distance' = 1/weight for path-based centrality.
     """
     mat, slugs = _kappa_matrix_to_numpy(kappa_df)
-    n = len(slugs)
-
-    # Build lookup dicts from upstream data
     ip_dict = _build_ip_lookup(ideal_points)
+
+    # Build extra attributes from cluster assignments and loyalty
+    extra_attrs: dict[str, dict[str, object]] = {}
 
     cluster_dict: dict[str, int] = {}
     if cluster_assignments is not None:
-        # Find the cluster column (cluster_k2, cluster_k3, etc.)
         cluster_cols = [c for c in cluster_assignments.columns if c.startswith("cluster_k")]
         cluster_col = cluster_cols[0] if cluster_cols else None
         if cluster_col:
@@ -383,36 +420,16 @@ def build_kappa_network(
         for row in loyalty.iter_rows(named=True):
             loyalty_dict[row["legislator_slug"]] = row["loyalty_rate"]
 
-    G = nx.Graph()
-
-    # Add nodes with attributes
     for slug in slugs:
         ip = ip_dict.get(slug, {})
-        attrs = {
-            "party": ip.get("party", "Unknown"),
+        extra_attrs[slug] = {
             "chamber": ip.get("chamber", "Unknown"),
-            "xi_mean": ip.get("xi_mean", 0.0),
             "xi_sd": ip.get("xi_sd", 1.0),
-            "full_name": ip.get("full_name", slug),
             "cluster": cluster_dict.get(slug, -1),
             "loyalty_rate": loyalty_dict.get(slug, None),
         }
-        G.add_node(slug, **attrs)
 
-    # Add edges above threshold
-    for i in range(n):
-        for j in range(i + 1, n):
-            kappa = mat[i, j]
-            if np.isnan(kappa) or kappa <= threshold:
-                continue
-            G.add_edge(
-                slugs[i],
-                slugs[j],
-                weight=float(kappa),
-                distance=1.0 / float(kappa),
-            )
-
-    return G
+    return _graph_from_kappa_matrix(mat, slugs, ip_dict, threshold, extra_attrs)
 
 
 def compute_network_summary(G: nx.Graph) -> dict:
@@ -445,6 +462,26 @@ def compute_network_summary(G: nx.Graph) -> dict:
             round(assortativity_party, 4) if assortativity_party is not None else None
         ),
     }
+
+
+def compute_party_modularity(G: nx.Graph) -> float | None:
+    """Compute modularity of the party-labeled partition (Waugh et al., 2009).
+
+    Measures political polarization: high modularity means parties form distinct
+    network clusters. Returns None if the graph has no edges or only one party.
+    """
+    if G.number_of_edges() == 0:
+        return None
+
+    party_communities: dict[str, set[str]] = {}
+    for node in G.nodes():
+        party = G.nodes[node].get("party", "Unknown")
+        party_communities.setdefault(party, set()).add(node)
+
+    if len(party_communities) < 2:
+        return None
+
+    return round(nx.community.modularity(G, party_communities.values(), weight="weight"), 4)
 
 
 # ── Phase 3: Centrality ─────────────────────────────────────────────────────
@@ -568,30 +605,61 @@ def compute_party_centrality_summary(centralities: pl.DataFrame) -> pl.DataFrame
 # ── Phase 4: Community Detection ─────────────────────────────────────────────
 
 
+def _nx_to_igraph(G: nx.Graph) -> ig.Graph:
+    """Convert a NetworkX Graph to igraph, preserving node names and edge weights."""
+    G_ig = ig.Graph.from_networkx(G)
+    return G_ig
+
+
+def _leiden_partition_to_dict(
+    G_ig: ig.Graph, partition: leidenalg.VertexPartition
+) -> dict[str, int]:
+    """Convert a leidenalg partition back to {node_name: community_id} dict."""
+    return {G_ig.vs[i]["_nx_name"]: partition.membership[i] for i in range(G_ig.vcount())}
+
+
+def _compute_modularity(G: nx.Graph, partition: dict[str, int]) -> float:
+    """Compute modularity of a partition on a NetworkX graph."""
+    communities: dict[int, set[str]] = {}
+    for node, comm_id in partition.items():
+        communities.setdefault(comm_id, set()).add(node)
+    return nx.community.modularity(G, communities.values(), weight="weight")
+
+
 def detect_communities_multi_resolution(
     G: nx.Graph,
     resolutions: list[float] | None = None,
 ) -> tuple[dict[float, dict[str, int]], pl.DataFrame]:
-    """Run Louvain community detection at multiple resolution parameters.
+    """Run Leiden community detection at multiple resolution parameters.
+
+    Uses RBConfigurationVertexPartition (modularity optimization), the direct
+    replacement for Louvain. Leiden guarantees well-connected communities
+    (Traag et al., 2019).
 
     Returns:
         partitions_dict: {resolution: {node: community_id}}
         resolution_df: DataFrame with (resolution, n_communities, modularity)
     """
     if resolutions is None:
-        resolutions = LOUVAIN_RESOLUTIONS
+        resolutions = LEIDEN_RESOLUTIONS
 
+    G_ig = _nx_to_igraph(G)
     partitions_dict: dict[float, dict[str, int]] = {}
     resolution_rows = []
 
     for res in resolutions:
-        partition = community_louvain.best_partition(
-            G, weight="weight", resolution=res, random_state=RANDOM_SEED
+        part = leidenalg.find_partition(
+            G_ig,
+            leidenalg.RBConfigurationVertexPartition,
+            weights="weight",
+            resolution_parameter=res,
+            seed=RANDOM_SEED,
         )
+        partition = _leiden_partition_to_dict(G_ig, part)
         partitions_dict[res] = partition
 
         n_communities = len(set(partition.values()))
-        modularity = community_louvain.modularity(partition, G, weight="weight")
+        modularity = _compute_modularity(G, partition)
 
         resolution_rows.append(
             {
@@ -604,6 +672,58 @@ def detect_communities_multi_resolution(
 
     resolution_df = pl.DataFrame(resolution_rows)
     return partitions_dict, resolution_df
+
+
+def detect_communities_cpm(
+    G: nx.Graph,
+    gammas: list[float] | None = None,
+) -> tuple[dict[float, dict[str, int]], pl.DataFrame]:
+    """Run Leiden with CPM (Constant Potts Model) at multiple gamma values.
+
+    CPM is resolution-limit-free: it can detect communities of any size,
+    including subcaucuses smaller than sqrt(2m) — the theoretical floor
+    for modularity-based methods (Fortunato & Barthelemy, 2007).
+
+    Gamma sets the expected internal edge density: communities must have
+    internal density exceeding gamma to be retained. Higher gamma → more,
+    smaller communities.
+
+    Returns:
+        partitions_dict: {gamma: {node: community_id}}
+        gamma_df: DataFrame with (gamma, n_communities, modularity)
+    """
+    if gammas is None:
+        gammas = CPM_GAMMAS
+
+    G_ig = _nx_to_igraph(G)
+    partitions_dict: dict[float, dict[str, int]] = {}
+    gamma_rows = []
+
+    for gamma in gammas:
+        part = leidenalg.find_partition(
+            G_ig,
+            leidenalg.CPMVertexPartition,
+            weights="weight",
+            resolution_parameter=gamma,
+            seed=RANDOM_SEED,
+        )
+        partition = _leiden_partition_to_dict(G_ig, part)
+        partitions_dict[gamma] = partition
+
+        n_communities = len(set(partition.values()))
+        modularity = _compute_modularity(G, partition)
+
+        gamma_rows.append(
+            {
+                "gamma": gamma,
+                "n_communities": n_communities,
+                "modularity": round(modularity, 4),
+            }
+        )
+        print(f"    CPM γ={gamma:.2f}: {n_communities} communities, modularity={modularity:.4f}")
+
+    gamma_df = pl.DataFrame(gamma_rows)
+    return partitions_dict, gamma_df
 
 
 def analyze_community_composition(
@@ -781,23 +901,29 @@ def analyze_within_party_communities(
     party: str = "",
     chamber: str = "",
 ) -> dict:
-    """Run community detection on a within-party subnetwork."""
+    """Run Leiden community detection on a within-party subnetwork."""
     if resolutions is None:
-        resolutions = LOUVAIN_RESOLUTIONS
+        resolutions = LEIDEN_RESOLUTIONS
 
     if G_party.number_of_edges() == 0:
         return {"skipped": True, "reason": "No edges in party subnetwork"}
 
+    G_ig = _nx_to_igraph(G_party)
     best_mod = -1.0
     best_res = resolutions[0]
     best_partition: dict[str, int] = {}
     all_results = []
 
     for res in resolutions:
-        partition = community_louvain.best_partition(
-            G_party, weight="weight", resolution=res, random_state=RANDOM_SEED
+        part = leidenalg.find_partition(
+            G_ig,
+            leidenalg.RBConfigurationVertexPartition,
+            weights="weight",
+            resolution_parameter=res,
+            seed=RANDOM_SEED,
         )
-        mod = community_louvain.modularity(partition, G_party, weight="weight")
+        partition = _leiden_partition_to_dict(G_ig, part)
+        mod = _compute_modularity(G_party, partition)
         n_comm = len(set(partition.values()))
         all_results.append(
             {"resolution": res, "n_communities": n_comm, "modularity": round(mod, 4)}
@@ -916,10 +1042,16 @@ def run_threshold_sweep(
         # Compute modularity at default resolution
         modularity = 0.0
         if G.number_of_edges() > 0:
-            partition = community_louvain.best_partition(
-                G, weight="weight", resolution=1.0, random_state=RANDOM_SEED
+            G_ig = _nx_to_igraph(G)
+            part = leidenalg.find_partition(
+                G_ig,
+                leidenalg.RBConfigurationVertexPartition,
+                weights="weight",
+                resolution_parameter=1.0,
+                seed=RANDOM_SEED,
             )
-            modularity = community_louvain.modularity(partition, G, weight="weight")
+            partition = _leiden_partition_to_dict(G_ig, part)
+            modularity = _compute_modularity(G, partition)
 
         rows.append(
             {
@@ -939,6 +1071,48 @@ def run_threshold_sweep(
         )
 
     return pl.DataFrame(rows)
+
+
+def disparity_filter(
+    G: nx.Graph,
+    alpha: float = 0.05,
+) -> nx.Graph:
+    """Extract the network backbone using the disparity filter (Serrano et al., 2009).
+
+    For each node, tests whether each edge weight is statistically significant
+    given the node's degree. An edge is retained if it is significant for
+    at least one of its endpoints (p < alpha under the null hypothesis of
+    uniform weight distribution).
+
+    Returns a new graph containing only the statistically significant edges.
+    """
+    backbone = nx.Graph()
+    backbone.add_nodes_from(G.nodes(data=True))
+
+    for u in G.nodes():
+        k = G.degree(u)
+        if k < 2:
+            # Single-edge nodes: always retain
+            for v, data in G[u].items():
+                if not backbone.has_edge(u, v):
+                    backbone.add_edge(u, v, **data)
+            continue
+
+        # Total weight for this node
+        strength = sum(d["weight"] for _, _, d in G.edges(u, data=True))
+        if strength == 0:
+            continue
+
+        for v, data in G[u].items():
+            w = data["weight"]
+            p_ij = w / strength  # normalized weight
+            # Disparity filter p-value: (1 - p_ij)^(k-1)
+            p_value = (1.0 - p_ij) ** (k - 1)
+            if p_value < alpha:
+                if not backbone.has_edge(u, v):
+                    backbone.add_edge(u, v, **data)
+
+    return backbone
 
 
 # ── Phase 7: High-Discrimination Subnetwork ──────────────────────────────────
@@ -1690,7 +1864,7 @@ def plot_multi_resolution(
     ax2.set_title("Modularity vs Resolution", fontsize=12, fontweight="bold")
     ax2.grid(True, alpha=0.3)
 
-    fig.suptitle(f"{chamber} — Multi-Resolution Louvain", fontsize=14, fontweight="bold")
+    fig.suptitle(f"{chamber} — Multi-Resolution Leiden", fontsize=14, fontweight="bold")
     fig.tight_layout()
 
     save_fig(fig, out_path)
@@ -2347,6 +2521,11 @@ def main() -> None:
             print(f"  Transitivity: {summary['transitivity']}")
             print(f"  Party assortativity: {summary['assortativity_party']}")
 
+            # Party modularity (polarization metric, Waugh et al. 2009)
+            party_mod = compute_party_modularity(G)
+            chamber_results["party_modularity"] = party_mod
+            print(f"  Party modularity (polarization): {party_mod}")
+
             # ── Phase 3: Centrality ──
             print_header(f"PHASE 3: CENTRALITY MEASURES — {chamber}")
             centralities = compute_centralities(G)
@@ -2423,10 +2602,20 @@ def main() -> None:
                     f"  Communities vs Clusters: NMI={clust_comparison.get('nmi')}, "
                     f"ARI={clust_comparison.get('ari')}"
                 )
+
+                # CPM sweep (resolution-limit-free)
+                print("  CPM sweep (resolution-limit-free):")
+                cpm_partitions, cpm_df = detect_communities_cpm(G)
+                cpm_df.write_parquet(ctx.data_dir / f"cpm_resolution_{chamber.lower()}.parquet")
+                print(f"  Saved: cpm_resolution_{chamber.lower()}.parquet")
+                chamber_results["cpm_partitions"] = cpm_partitions
+                chamber_results["cpm_df"] = cpm_df
             else:
                 print("  No edges — skipping community detection")
                 chamber_results["best_partition"] = {}
                 chamber_results["resolution_df"] = pl.DataFrame()
+                chamber_results["cpm_partitions"] = {}
+                chamber_results["cpm_df"] = pl.DataFrame()
 
             # ── Phase 5: Within-Party Subnetworks ──
             print_header(f"PHASE 5: WITHIN-PARTY SUBNETWORKS — {chamber}")
@@ -2486,6 +2675,21 @@ def main() -> None:
             sweep.write_parquet(ctx.data_dir / f"threshold_sweep_{chamber.lower()}.parquet")
             print(f"  Saved: threshold_sweep_{chamber.lower()}.parquet")
             chamber_results["threshold_sweep"] = sweep
+
+            # Backbone extraction (disparity filter, Serrano et al. 2009)
+            if G.number_of_edges() > 0:
+                backbone = disparity_filter(G, alpha=0.05)
+                backbone_summary = compute_network_summary(backbone)
+                chamber_results["backbone"] = backbone
+                chamber_results["backbone_summary"] = backbone_summary
+                pct_retained = backbone.number_of_edges() / G.number_of_edges() * 100
+                print(
+                    f"  Backbone (α=0.05): {backbone.number_of_edges()} / "
+                    f"{G.number_of_edges()} edges retained ({pct_retained:.1f}%)"
+                )
+            else:
+                chamber_results["backbone"] = None
+                chamber_results["backbone_summary"] = None
 
             # ── Phase 7: High-Discrimination Subnetwork ──
             if not args.skip_high_disc:
@@ -2658,7 +2862,8 @@ def main() -> None:
             "constants": {
                 "KAPPA_THRESHOLD_DEFAULT": KAPPA_THRESHOLD_DEFAULT,
                 "KAPPA_THRESHOLD_SENSITIVITY": KAPPA_THRESHOLD_SENSITIVITY,
-                "LOUVAIN_RESOLUTIONS": LOUVAIN_RESOLUTIONS,
+                "LEIDEN_RESOLUTIONS": LEIDEN_RESOLUTIONS,
+                "CPM_GAMMAS": CPM_GAMMAS,
                 "HIGH_DISC_THRESHOLD": HIGH_DISC_THRESHOLD,
                 "TOP_BRIDGE_N": TOP_BRIDGE_N,
                 "RANDOM_SEED": RANDOM_SEED,
@@ -2678,6 +2883,11 @@ def main() -> None:
             manifest[f"{ch}_density"] = r.get("summary", {}).get("density")
             manifest[f"{ch}_n_components"] = r.get("summary", {}).get("n_components")
             manifest[f"{ch}_assortativity_party"] = r.get("summary", {}).get("assortativity_party")
+            manifest[f"{ch}_party_modularity"] = r.get("party_modularity")
+            if r.get("backbone_summary"):
+                bs = r["backbone_summary"]
+                manifest[f"{ch}_backbone_edges"] = bs["n_edges"]
+                manifest[f"{ch}_backbone_density"] = bs["density"]
             if "community_vs_party" in r:
                 manifest[f"{ch}_community_vs_party_nmi"] = r["community_vs_party"]["nmi"]
                 manifest[f"{ch}_community_vs_party_ari"] = r["community_vs_party"]["ari"]

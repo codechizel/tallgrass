@@ -175,10 +175,12 @@ def _add_how_to_read(report: ReportBuilder) -> None:
     connected by an edge. Default 0.40 = "substantial" agreement.</li>
     <li><strong>Centrality:</strong> Measures of structural importance. High betweenness
     = legislator lies on many shortest paths between others (a "bridge").</li>
-    <li><strong>Community:</strong> Louvain algorithm finds groups with dense internal
+    <li><strong>Community:</strong> Leiden algorithm finds groups with dense internal
     connections. Compared to party labels and clustering assignments.</li>
-    <li><strong>Resolution:</strong> Louvain parameter controlling granularity.
+    <li><strong>Resolution:</strong> Leiden parameter controlling granularity.
     Low resolution = fewer communities; high = more communities.</li>
+    <li><strong>CPM:</strong> Constant Potts Model — resolution-limit-free community detection
+    that can find subcaucuses of any size (e.g., moderate Republican wings).</li>
     </ul>
     """
     report.add(TextSection(id="how-to-read", title="How to Read This Report", html=html))
@@ -533,7 +535,7 @@ def _add_multi_resolution_table(
 
     html = make_gt(
         res_df,
-        title=f"{chamber} — Multi-Resolution Louvain",
+        title=f"{chamber} — Multi-Resolution Leiden",
         subtitle="Community count and modularity at each resolution parameter",
         column_labels={
             "resolution": "Resolution",
@@ -564,7 +566,7 @@ def _add_multi_resolution_figure(
                 f"{chamber} Multi-Resolution",
                 path,
                 caption=(
-                    f"Number of communities and modularity vs Louvain resolution for {chamber}."
+                    f"Number of communities and modularity vs Leiden resolution for {chamber}."
                 ),
             )
         )
@@ -642,7 +644,7 @@ def _add_community_vs_party(
     html = make_gt(
         df,
         title="Communities vs Party Labels",
-        subtitle="NMI and ARI comparing Louvain communities to party membership",
+        subtitle="NMI and ARI comparing Leiden communities to party membership",
         number_formats={"NMI": ".4f", "ARI": ".4f"},
     )
     report.add(
@@ -669,7 +671,7 @@ def _add_community_vs_clusters(
     html = make_gt(
         df,
         title="Communities vs Clustering Assignments",
-        subtitle="NMI and ARI comparing Louvain communities to k-means clusters",
+        subtitle="NMI and ARI comparing Leiden communities to k-means clusters",
         number_formats={"NMI": ".4f", "ARI": ".4f"},
     )
     report.add(
@@ -694,7 +696,7 @@ def _add_community_network_figure(
                 f"{chamber} Community Network",
                 path,
                 caption=(
-                    f"Side-by-side: party coloring (left) vs Louvain community coloring "
+                    f"Side-by-side: party coloring (left) vs Leiden community coloring "
                     f"(right) for {chamber}. Community labels show party composition "
                     "(e.g., Mostly Republican, Mostly Democrat, or Mixed)."
                 ),
@@ -795,7 +797,7 @@ def _add_within_party_communities(
         html = make_gt(
             df,
             title=f"{chamber} — Within-Party Communities",
-            subtitle="Louvain community detection run separately on each party caucus",
+            subtitle="Leiden community detection run separately on each party caucus",
             number_formats={"Best Resolution": ".2f", "Modularity": ".4f"},
         )
         report.add(
@@ -1109,7 +1111,8 @@ def _add_analysis_parameters(
 ) -> None:
     rows = [
         {"Parameter": "Kappa Threshold", "Value": str(kappa_threshold)},
-        {"Parameter": "Louvain Resolutions", "Value": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0"},
+        {"Parameter": "Leiden Resolutions", "Value": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0"},
+        {"Parameter": "CPM Gammas", "Value": "0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50"},
         {"Parameter": "High-Disc Beta Threshold", "Value": "1.5"},
         {"Parameter": "Top Bridge N", "Value": "15"},
         {"Parameter": "Random Seed", "Value": "42"},
