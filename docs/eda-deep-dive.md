@@ -1,7 +1,7 @@
 # EDA Deep Dive: Implementation Review & Literature Comparison
 
 **Date:** 2026-02-24
-**Scope:** `analysis/eda.py` (~2,120 lines), `analysis/eda_report.py` (~730 lines), `tests/test_eda.py` (~710 lines)
+**Scope:** `analysis/01_eda/eda.py` (~2,120 lines), `analysis/01_eda/eda_report.py` (~730 lines), `tests/test_eda.py` (~710 lines)
 **Status:** All recommendations implemented (2026-02-24). 788 tests passing.
 
 This document steps back from the implementation to ask: are we doing EDA right? It surveys the political science literature, evaluates open-source alternatives, audits our code for correctness and completeness, and identifies concrete improvements.

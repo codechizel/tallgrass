@@ -1,7 +1,7 @@
 # PCA Deep Dive: Implementation Review & Literature Comparison
 
 **Date:** 2026-02-24
-**Scope:** `analysis/pca.py` (1,191 lines), `analysis/pca_report.py` (570 lines), `tests/test_pca.py` (610 lines)
+**Scope:** `analysis/02_pca/pca.py` (1,191 lines), `analysis/02_pca/pca_report.py` (570 lines), `tests/test_pca.py` (610 lines)
 
 This document steps back from the implementation to ask: are we doing PCA right? It surveys the political science literature, evaluates Python alternatives, audits our code for correctness and completeness, and identifies concrete improvements.
 

@@ -1,7 +1,7 @@
 # Prediction Design Choices
 
-**Script:** `analysis/prediction.py`
-**Constants defined at:** `analysis/prediction.py:48-60`
+**Script:** `analysis/08_prediction/prediction.py`
+**Constants defined at:** `analysis/08_prediction/prediction.py:48-60`
 
 ## Assumptions
 

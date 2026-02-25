@@ -1,7 +1,7 @@
 # EDA Design Choices
 
-**Script:** `analysis/eda.py`
-**Constants defined at:** `analysis/eda.py:149-168`
+**Script:** `analysis/01_eda/eda.py`
+**Constants defined at:** `analysis/01_eda/eda.py:149-168`
 
 ## Assumptions
 

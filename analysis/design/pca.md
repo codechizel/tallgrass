@@ -1,7 +1,7 @@
 # PCA Design Choices
 
-**Script:** `analysis/pca.py`
-**Constants defined at:** `analysis/pca.py:149-160`
+**Script:** `analysis/02_pca/pca.py`
+**Constants defined at:** `analysis/02_pca/pca.py:149-160`
 **ADR:** `docs/adr/0005-pca-implementation-choices.md`
 **Deep dive:** `docs/pca-deep-dive.md`
 

@@ -1,7 +1,7 @@
 # UMAP Design Choices
 
-**Script:** `analysis/umap_viz.py`
-**Constants defined at:** `analysis/umap_viz.py:176-184`
+**Script:** `analysis/03_umap/umap_viz.py`
+**Constants defined at:** `analysis/03_umap/umap_viz.py:176-184`
 **Deep dive:** `docs/umap-deep-dive.md`
 **ADR:** `docs/adr/0011-umap-implementation-choices.md`
 **Method doc:** `Analytic_Methods/11_DIM_umap_tsne_visualization.md`

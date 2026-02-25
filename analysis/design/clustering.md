@@ -1,7 +1,7 @@
 # Clustering Design Choices
 
-**Script:** `analysis/clustering.py`
-**Constants defined at:** `analysis/clustering.py:48-62`
+**Script:** `analysis/05_clustering/clustering.py`
+**Constants defined at:** `analysis/05_clustering/clustering.py:48-62`
 
 ## Assumptions
 

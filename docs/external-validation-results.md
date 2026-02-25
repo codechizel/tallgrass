@@ -163,5 +163,5 @@ For readers who want the specifics:
 - **Our data**: Bayesian 2PL IRT ideal points estimated via PyMC (4 chains, 2000 tuning + 2000 draws). PCA-informed chain initialization per ADR-0023.
 - **Matching**: Two-phase name normalization. Phase 1: exact match on lowercase "first last" + chamber. Phase 2: last-name-only + district number tiebreaker. Overall match rate: 99.4% (168/169).
 - **Correlation method**: Pearson r for linear agreement, Spearman ρ for rank agreement. 95% confidence intervals via Fisher z-transformation.
-- **Code**: `analysis/external_validation.py` (runner), `analysis/external_validation_data.py` (pure logic), `analysis/external_validation_report.py` (HTML report builder). Design doc at `analysis/design/external_validation.md`. ADR-0025.
+- **Code**: `analysis/14_external_validation/external_validation.py` (runner), `analysis/14_external_validation/external_validation_data.py` (pure logic), `analysis/14_external_validation/external_validation_report.py` (HTML report builder). Design doc at `analysis/design/external_validation.md`. ADR-0025.
 - **Reference**: Shor, B. and N. McCarty. 2011. "The Ideological Mapping of American Legislatures." *American Political Science Review* 105(3): 530-551.

@@ -16,7 +16,7 @@ The question is not "what sounds interesting?" but "what would actually improve 
 
 ## The Recommendation: External Validation with Shor-McCarty Scores
 
-**Status:** Implemented and validated (2026-02-24). See `analysis/external_validation.py`, ADR-0025, and `analysis/design/external_validation.md`. Results: flat IRT House r=0.981, flat IRT Senate r=0.929, hierarchical House r=0.984 (all "Strong"). Hierarchical Senate r=-0.541 due to J=2 over-shrinkage with 11 Democrats — documented in `docs/hierarchical-shrinkage-deep-dive.md`. General-audience writeup in `docs/external-validation-results.md`.
+**Status:** Implemented and validated (2026-02-24). See `analysis/14_external_validation/external_validation.py`, ADR-0025, and `analysis/design/external_validation.md`. Results: flat IRT House r=0.981, flat IRT Senate r=0.929, hierarchical House r=0.984 (all "Strong"). Hierarchical Senate r=-0.541 due to J=2 over-shrinkage with 11 Democrats — documented in `docs/hierarchical-shrinkage-deep-dive.md`. General-audience writeup in `docs/external-validation-results.md`.
 
 ### The Gap
 
@@ -56,7 +56,7 @@ The comparison also tests our PCA-informed initialization and non-centered hiera
 
 ### Proposed Implementation
 
-A lightweight new phase: `analysis/external_validation.py`. No MCMC, no heavy computation — just data download, name matching, correlation analysis, and a few plots:
+A lightweight new phase: `analysis/14_external_validation/external_validation.py`. No MCMC, no heavy computation — just data download, name matching, correlation analysis, and a few plots:
 
 1. **Download** Shor-McCarty `.tab` file from Harvard Dataverse (one-time, cached)
 2. **Filter** to Kansas (`st == "KS"`) and relevant bienniums
