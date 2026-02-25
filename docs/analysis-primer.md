@@ -383,3 +383,10 @@ Any analysis can look impressive on the data it was built from. The real test is
 - **The second and third dimensions.** Our primary model is one-dimensional (left-right). Real politics has multiple dimensions — fiscal vs. social policy, urban vs. rural interests, institutional vs. anti-establishment attitudes. The one-dimensional model captures the dominant pattern, but it simplifies the rest.
 
 These limitations aren't failures — they're the honest boundaries of what quantitative analysis of roll-call votes can achieve. The value is in what the data *does* reveal: a clear, replicable, evidence-based picture of how the Kansas Legislature actually votes, free from anecdote and selective memory.
+
+---
+
+## Further Reading
+
+- **[External Validation Results](external-validation-results.md)** — How we checked our ideology scores against an independent national dataset (Shor-McCarty), and what we found (r = 0.93-0.98 for the flat IRT model).
+- **[Hierarchical Shrinkage Deep Dive](hierarchical-shrinkage-deep-dive.md)** — Why the hierarchical model struggles with the Kansas Senate's small Democrat caucus, with references to the statistics literature.

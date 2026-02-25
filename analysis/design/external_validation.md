@@ -65,3 +65,5 @@ Both are reported because SM's career-level score may not scale linearly with ou
 3. **Name matching infrastructure.** The `NICKNAME_MAP` and normalization functions can be reused by any future external dataset integration.
 
 4. **Outlier investigation.** High-discrepancy legislators may warrant individual investigation — are they genuinely different, or is there a data issue? This feeds back into the profiles phase.
+
+5. **Hierarchical model diagnostic.** The 88th biennium validation revealed that the per-chamber hierarchical model over-shrinks Senate ideal points (r = -0.541 vs flat r = +0.929), while the House works excellently (hierarchical r = 0.984). Root cause: only 11 Senate Democrats — too few for reliable partial pooling (J=2 small-group problem). See `docs/hierarchical-shrinkage-deep-dive.md` for full analysis. Implication: per-chamber hierarchical results should carry a minimum group size warning (n < 20).

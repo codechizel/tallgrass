@@ -494,6 +494,13 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** Either veto overrides were rare in these sessions, or they are coded differently in the historical data (different motion text patterns, or lumped into "Unknown" vote type). The 84th-85th had 57.9% "Unknown" vote types — some may be overrides.
 - **Downstream:** Override-specific analyses (override subnetwork, override Rice, override clustering) are skipped for all historical sessions. Cross-session comparison of override behavior is not possible.
 
+### 88th (2019-20) — Hierarchical Senate Over-Shrinkage (External Validation)
+
+- **Phase:** Hierarchical IRT, External Validation
+- **Observation:** The 88th is marked "Clean" for flat IRT (both chambers converge), but the hierarchical per-chamber model catastrophically fails for the Senate: R-hat = 1.83, ESS = 3, ICC = 0.41 [0.00, 0.88]. External validation against Shor-McCarty scores confirms the failure: hierarchical Senate r = -0.541 (inverted), while flat Senate r = +0.929 (strong). The hierarchical House validates excellently at r = 0.984.
+- **Explanation:** The Senate has only 11 Democrats and 30 Republicans. With 13 parameters to estimate for the Democrat group (1 party mean + 1 within-party spread + 11 offsets) from only 11 legislators, the model cannot identify the group-level parameters. The MCMC sampler oscillates between two modes (small sigma_within with large offsets vs. large sigma_within with small offsets), producing R-hat = 1.83. This is a textbook J=2 small-group problem documented by Gelman (2006, 2015) and Peress (2009). See `docs/hierarchical-shrinkage-deep-dive.md` for a full analysis with literature references.
+- **Downstream:** For the 88th Senate, use flat IRT `xi_mean` (r = 0.929 vs. Shor-McCarty), not hierarchical `hier_xi_mean`. The hierarchical House results are trustworthy (r = 0.984). The joint cross-chamber model (3-level, 168 legislators combined) also converges cleanly and may be preferred for Senate hierarchical estimates. A minimum group size threshold of ~20 legislators should be enforced before trusting per-chamber hierarchical results.
+
 ## Template
 
 ```

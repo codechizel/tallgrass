@@ -16,7 +16,7 @@ The question is not "what sounds interesting?" but "what would actually improve 
 
 ## The Recommendation: External Validation with Shor-McCarty Scores
 
-**Status:** Implemented (2026-02-24). See `analysis/external_validation.py`, ADR-0025, and `analysis/design/external_validation.md`.
+**Status:** Implemented and validated (2026-02-24). See `analysis/external_validation.py`, ADR-0025, and `analysis/design/external_validation.md`. Results: flat IRT House r=0.981, flat IRT Senate r=0.929, hierarchical House r=0.984 (all "Strong"). Hierarchical Senate r=-0.541 due to J=2 over-shrinkage with 11 Democrats — documented in `docs/hierarchical-shrinkage-deep-dive.md`. General-audience writeup in `docs/external-validation-results.md`.
 
 ### The Gap
 

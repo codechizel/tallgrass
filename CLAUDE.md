@@ -126,6 +126,8 @@ Key references:
 - Design docs: `analysis/design/README.md`
 - ADRs: `docs/adr/README.md` (25 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
+- External validation: `docs/external-validation-results.md` (general-audience results article)
+- Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
