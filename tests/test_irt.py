@@ -19,12 +19,22 @@ import pytest
 # Add project root to path so we can import analysis.irt
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import arviz as az
+import xarray as xr
+
 from analysis.irt import (
+    ESS_THRESHOLD,
     HOLDOUT_FRACTION,
     HOLDOUT_SEED,
+    MAX_DIVERGENCES,
     PARADOX_YEA_GAP,
+    RHAT_THRESHOLD,
     _detect_forest_highlights,
     build_joint_vote_matrix,
+    check_convergence,
+    equate_chambers,
+    extract_bill_parameters,
+    extract_ideal_points,
     filter_vote_matrix_for_sensitivity,
     find_paradox_legislator,
     prepare_irt_data,
@@ -1073,3 +1083,432 @@ class TestFindParadoxLegislator:
             "n_high_disc", "n_low_disc", "gap",
         }
         assert set(result.keys()) == expected_keys
+
+
+# ── Mock InferenceData helper ────────────────────────────────────────────────
+
+
+def _make_irt_idata(
+    n_legislators: int = 6,
+    n_votes: int = 5,
+    n_chains: int = 2,
+    n_draws: int = 100,
+    xi_values: np.ndarray | None = None,
+    alpha_values: np.ndarray | None = None,
+    beta_values: np.ndarray | None = None,
+    leg_slugs: list[str] | None = None,
+    vote_ids: list[str] | None = None,
+    n_divergences: int = 0,
+) -> az.InferenceData:
+    """Create synthetic InferenceData for testing convergence and extraction."""
+    if leg_slugs is None:
+        leg_slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(n_legislators)]
+    if vote_ids is None:
+        vote_ids = [f"v{i + 1}" for i in range(n_votes)]
+
+    rng = np.random.default_rng(42)
+
+    if xi_values is None:
+        base = np.linspace(2.0, -2.0, n_legislators)
+        xi_values = np.tile(base, (n_chains, n_draws, 1)) + rng.normal(
+            0, 0.05, (n_chains, n_draws, n_legislators)
+        )
+    if alpha_values is None:
+        alpha_values = rng.normal(0, 1, (n_chains, n_draws, n_votes))
+    if beta_values is None:
+        # Mix of positive and negative discrimination
+        base_betas = np.array([1.5, -1.2, 0.8, -0.5, 2.0])[:n_votes]
+        beta_values = np.tile(base_betas, (n_chains, n_draws, 1)) + rng.normal(
+            0, 0.1, (n_chains, n_draws, n_votes)
+        )
+
+    posterior = xr.Dataset(
+        {
+            "xi": xr.DataArray(
+                xi_values,
+                dims=["chain", "draw", "legislator"],
+                coords={"legislator": leg_slugs},
+            ),
+            "alpha": xr.DataArray(
+                alpha_values,
+                dims=["chain", "draw", "vote"],
+                coords={"vote": vote_ids},
+            ),
+            "beta": xr.DataArray(
+                beta_values,
+                dims=["chain", "draw", "vote"],
+                coords={"vote": vote_ids},
+            ),
+        }
+    )
+
+    # Sample stats with divergences
+    diverging = np.zeros((n_chains, n_draws), dtype=bool)
+    if n_divergences > 0:
+        flat_indices = rng.choice(n_chains * n_draws, size=n_divergences, replace=False)
+        for idx in flat_indices:
+            c, d = divmod(idx, n_draws)
+            diverging[c, d] = True
+
+    # Energy values for E-BFMI
+    energy = rng.normal(0, 1, (n_chains, n_draws))
+
+    sample_stats = xr.Dataset(
+        {
+            "diverging": xr.DataArray(diverging, dims=["chain", "draw"]),
+            "energy": xr.DataArray(energy, dims=["chain", "draw"]),
+        }
+    )
+
+    return az.InferenceData(posterior=posterior, sample_stats=sample_stats)
+
+
+# ── check_convergence tests ──────────────────────────────────────────────────
+
+
+class TestCheckConvergence:
+    """Test MCMC convergence diagnostics with synthetic InferenceData."""
+
+    def test_well_converged_passes(self) -> None:
+        """Well-behaved chains should pass all convergence checks."""
+        idata = _make_irt_idata(n_draws=500)
+        diag = check_convergence(idata, "Senate")
+        assert diag["all_ok"] is True
+
+    def test_rhat_reported(self) -> None:
+        """Diagnostics should include R-hat for all parameter types."""
+        idata = _make_irt_idata()
+        diag = check_convergence(idata, "Senate")
+        assert "xi_rhat_max" in diag
+        assert "alpha_rhat_max" in diag
+        assert "beta_rhat_max" in diag
+
+    def test_bulk_ess_reported(self) -> None:
+        """Diagnostics should include bulk ESS for all parameter types."""
+        idata = _make_irt_idata()
+        diag = check_convergence(idata, "Senate")
+        assert "xi_ess_min" in diag
+        assert "alpha_ess_min" in diag
+        assert "beta_ess_min" in diag
+
+    def test_tail_ess_reported(self) -> None:
+        """Diagnostics should include tail ESS for all parameter types."""
+        idata = _make_irt_idata()
+        diag = check_convergence(idata, "Senate")
+        assert "xi_tail_ess_min" in diag
+        assert "alpha_tail_ess_min" in diag
+        assert "beta_tail_ess_min" in diag
+
+    def test_divergences_counted(self) -> None:
+        """Divergences should be counted correctly."""
+        idata = _make_irt_idata(n_divergences=5)
+        diag = check_convergence(idata, "Senate")
+        assert diag["divergences"] == 5
+
+    def test_high_divergences_fails(self) -> None:
+        """More than MAX_DIVERGENCES should fail convergence."""
+        idata = _make_irt_idata(n_divergences=MAX_DIVERGENCES + 5)
+        diag = check_convergence(idata, "Senate")
+        assert diag["all_ok"] is False
+
+    def test_ebfmi_reported(self) -> None:
+        """E-BFMI values should be reported per chain."""
+        idata = _make_irt_idata(n_chains=2)
+        diag = check_convergence(idata, "Senate")
+        assert "ebfmi" in diag
+        assert len(diag["ebfmi"]) == 2
+
+    def test_mode_split_detected(self) -> None:
+        """Chains in different modes should produce high R-hat."""
+        n_leg = 6
+        n_chains = 2
+        n_draws = 100
+        rng = np.random.default_rng(42)
+
+        # Chain 0: positive values. Chain 1: negative (mirror image)
+        xi_vals = np.zeros((n_chains, n_draws, n_leg))
+        base = np.linspace(2, -2, n_leg)
+        xi_vals[0] = base + rng.normal(0, 0.05, (n_draws, n_leg))
+        xi_vals[1] = -base + rng.normal(0, 0.05, (n_draws, n_leg))
+
+        idata = _make_irt_idata(xi_values=xi_vals)
+        diag = check_convergence(idata, "Senate")
+        # R-hat should be very high due to mode-splitting
+        assert diag["xi_rhat_max"] > RHAT_THRESHOLD
+        assert diag["all_ok"] is False
+
+    def test_rhat_threshold_applied(self) -> None:
+        """R-hat below threshold should be OK."""
+        idata = _make_irt_idata(n_draws=500)
+        diag = check_convergence(idata, "Senate")
+        assert diag["xi_rhat_max"] < RHAT_THRESHOLD
+
+
+# ── extract_ideal_points tests ───────────────────────────────────────────────
+
+
+class TestExtractIdealPoints:
+    """Test posterior extraction for legislator ideal points."""
+
+    @pytest.fixture
+    def extraction_legislators(self) -> pl.DataFrame:
+        return pl.DataFrame(
+            {
+                "name": ["A", "B", "C", "D", "E", "F"],
+                "full_name": ["A A", "B B", "C C", "D D", "E E", "F F"],
+                "slug": [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)],
+                "chamber": ["Senate"] * 6,
+                "party": ["Republican"] * 3 + ["Democrat"] * 3,
+                "district": list(range(1, 7)),
+                "member_url": [""] * 6,
+            }
+        )
+
+    def test_output_schema(self, extraction_legislators: pl.DataFrame) -> None:
+        """Output should have all required columns."""
+        idata = _make_irt_idata()
+        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        data = {"leg_slugs": slugs}
+        df = extract_ideal_points(idata, data, extraction_legislators)
+        required = {"legislator_slug", "xi_mean", "xi_sd", "xi_hdi_2.5", "xi_hdi_97.5"}
+        assert required.issubset(set(df.columns))
+
+    def test_correct_legislator_count(self, extraction_legislators: pl.DataFrame) -> None:
+        """Should return one row per legislator."""
+        idata = _make_irt_idata()
+        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        data = {"leg_slugs": slugs}
+        df = extract_ideal_points(idata, data, extraction_legislators)
+        assert df.height == 6
+
+    def test_sorted_descending(self, extraction_legislators: pl.DataFrame) -> None:
+        """Output should be sorted by xi_mean descending."""
+        idata = _make_irt_idata()
+        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        data = {"leg_slugs": slugs}
+        df = extract_ideal_points(idata, data, extraction_legislators)
+        means = df["xi_mean"].to_list()
+        assert means == sorted(means, reverse=True)
+
+    def test_hdi_contains_mean(self, extraction_legislators: pl.DataFrame) -> None:
+        """HDI bounds should contain the posterior mean."""
+        idata = _make_irt_idata()
+        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        data = {"leg_slugs": slugs}
+        df = extract_ideal_points(idata, data, extraction_legislators)
+        for row in df.iter_rows(named=True):
+            assert row["xi_hdi_2.5"] <= row["xi_mean"] <= row["xi_hdi_97.5"]
+
+    def test_positive_sd(self, extraction_legislators: pl.DataFrame) -> None:
+        """Standard deviations should be positive."""
+        idata = _make_irt_idata()
+        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        data = {"leg_slugs": slugs}
+        df = extract_ideal_points(idata, data, extraction_legislators)
+        assert (df["xi_sd"] > 0).all()
+
+    def test_metadata_joined(self, extraction_legislators: pl.DataFrame) -> None:
+        """Legislator metadata (party, name) should be joined."""
+        idata = _make_irt_idata()
+        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        data = {"leg_slugs": slugs}
+        df = extract_ideal_points(idata, data, extraction_legislators)
+        assert "full_name" in df.columns
+        assert "party" in df.columns
+        parties = set(df["party"].to_list())
+        assert "Republican" in parties
+        assert "Democrat" in parties
+
+
+# ── extract_bill_parameters tests ────────────────────────────────────────────
+
+
+class TestExtractBillParameters:
+    """Test posterior extraction for bill parameters."""
+
+    def test_output_schema(self, rollcalls: pl.DataFrame) -> None:
+        """Output should have all required columns."""
+        idata = _make_irt_idata()
+        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        df = extract_bill_parameters(idata, data, rollcalls)
+        required = {"vote_id", "alpha_mean", "alpha_sd", "beta_mean", "beta_sd"}
+        assert required.issubset(set(df.columns))
+
+    def test_correct_vote_count(self, rollcalls: pl.DataFrame) -> None:
+        """Should return one row per vote."""
+        idata = _make_irt_idata()
+        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        df = extract_bill_parameters(idata, data, rollcalls)
+        assert df.height == 5
+
+    def test_positive_sd(self, rollcalls: pl.DataFrame) -> None:
+        """Standard deviations should be positive."""
+        idata = _make_irt_idata()
+        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        df = extract_bill_parameters(idata, data, rollcalls)
+        assert (df["alpha_sd"] > 0).all()
+        assert (df["beta_sd"] > 0).all()
+
+    def test_negative_beta_allowed(self, rollcalls: pl.DataFrame) -> None:
+        """With unconstrained beta, some bills should have negative discrimination."""
+        idata = _make_irt_idata()
+        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        df = extract_bill_parameters(idata, data, rollcalls)
+        # Our fixture has mix of positive and negative betas
+        has_negative = (df["beta_mean"] < 0).any()
+        has_positive = (df["beta_mean"] > 0).any()
+        assert has_negative, "Should have some negative discrimination (D-Yea bills)"
+        assert has_positive, "Should have some positive discrimination (R-Yea bills)"
+
+    def test_sorted_by_beta_descending(self, rollcalls: pl.DataFrame) -> None:
+        """Output should be sorted by beta_mean descending."""
+        idata = _make_irt_idata()
+        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        df = extract_bill_parameters(idata, data, rollcalls)
+        betas = df["beta_mean"].to_list()
+        assert betas == sorted(betas, reverse=True)
+
+    def test_rollcall_metadata_joined(self, rollcalls: pl.DataFrame) -> None:
+        """Roll call metadata should be joined when available."""
+        idata = _make_irt_idata()
+        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        df = extract_bill_parameters(idata, data, rollcalls)
+        assert "bill_number" in df.columns
+
+
+# ── equate_chambers tests ────────────────────────────────────────────────────
+
+
+class TestEquateChambers:
+    """Test cross-chamber test equating."""
+
+    @pytest.fixture
+    def equating_data(self, tmp_path: Path) -> dict:
+        """Create per-chamber results, mapping info, and legislators for equating."""
+        house_ip = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_x_x_1"],
+                "xi_mean": [2.0, 1.0, -1.0, 0.5],
+                "xi_sd": [0.1, 0.1, 0.1, 0.1],
+                "xi_hdi_2.5": [1.8, 0.8, -1.2, 0.3],
+                "xi_hdi_97.5": [2.2, 1.2, -0.8, 0.7],
+                "full_name": ["A A", "B B", "C C", "X X"],
+                "party": ["Republican", "Republican", "Democrat", "Republican"],
+                "district": [1, 2, 3, 4],
+                "chamber": ["House"] * 4,
+            }
+        )
+        senate_ip = pl.DataFrame(
+            {
+                "legislator_slug": ["sen_d_d_1", "sen_e_e_1", "sen_x_x_1"],
+                "xi_mean": [1.5, -1.5, 0.4],
+                "xi_sd": [0.1, 0.1, 0.1],
+                "xi_hdi_2.5": [1.3, -1.7, 0.2],
+                "xi_hdi_97.5": [1.7, -1.3, 0.6],
+                "full_name": ["D D", "E E", "X X"],
+                "party": ["Republican", "Democrat", "Republican"],
+                "district": [5, 6, 7],
+                "chamber": ["Senate"] * 3,
+            }
+        )
+        house_bp = pl.DataFrame(
+            {
+                "vote_id": ["hv1", "hv2", "hv3"],
+                "beta_mean": [1.5, -1.0, 0.8],
+                "alpha_mean": [0.0, 0.0, 0.0],
+            }
+        )
+        senate_bp = pl.DataFrame(
+            {
+                "vote_id": ["sv1", "sv2", "sv3"],
+                "beta_mean": [2.0, -1.3, 1.1],
+                "alpha_mean": [0.0, 0.0, 0.0],
+            }
+        )
+        per_chamber_results = {
+            "House": {"ideal_points": house_ip, "bill_params": house_bp},
+            "Senate": {"ideal_points": senate_ip, "bill_params": senate_bp},
+        }
+        mapping_info = {
+            "matched_bills": [
+                {"bill_number": "SB 1", "house_vote_id": "hv1", "senate_vote_id": "sv1"},
+                {"bill_number": "SB 2", "house_vote_id": "hv2", "senate_vote_id": "sv2"},
+                {"bill_number": "SB 3", "house_vote_id": "hv3", "senate_vote_id": "sv3"},
+            ],
+            "bridging_legislators": [
+                {
+                    "full_name": "X X",
+                    "house_slug": "rep_x_x_1",
+                    "senate_slug": "sen_x_x_1",
+                }
+            ],
+        }
+        legislators = pl.DataFrame(
+            {
+                "slug": [
+                    "rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_x_x_1",
+                    "sen_d_d_1", "sen_e_e_1", "sen_x_x_1",
+                ],
+                "full_name": ["A A", "B B", "C C", "X X", "D D", "E E", "X X"],
+                "chamber": ["House"] * 4 + ["Senate"] * 3,
+                "party": ["Republican", "Republican", "Democrat", "Republican",
+                          "Republican", "Democrat", "Republican"],
+                "district": list(range(1, 8)),
+            }
+        )
+        return {
+            "per_chamber_results": per_chamber_results,
+            "mapping_info": mapping_info,
+            "legislators": legislators,
+            "out_dir": tmp_path,
+        }
+
+    def test_returns_equated_ideal_points(self, equating_data: dict) -> None:
+        """Should return equated ideal points DataFrame."""
+        result = equate_chambers(**equating_data)
+        assert "equated_ideal_points" in result
+        df = result["equated_ideal_points"]
+        assert df.height == 7  # 4 House + 3 Senate
+
+    def test_transformation_has_a_and_b(self, equating_data: dict) -> None:
+        """Transformation dict should have A (scale) and B (location)."""
+        result = equate_chambers(**equating_data)
+        t = result["transformation"]
+        assert "A" in t
+        assert "B" in t
+        assert isinstance(t["A"], float)
+        assert isinstance(t["B"], float)
+
+    def test_a_is_positive_for_concordant_betas(self, equating_data: dict) -> None:
+        """A should be positive when shared bills have concordant discrimination signs."""
+        result = equate_chambers(**equating_data)
+        assert result["transformation"]["A"] > 0
+
+    def test_bridging_method_used(self, equating_data: dict) -> None:
+        """When bridging legislators exist, method should be bridging_legislators."""
+        result = equate_chambers(**equating_data)
+        assert result["transformation"]["b_method"] == "bridging_legislators"
+
+    def test_no_bridging_fallback(self, equating_data: dict) -> None:
+        """Without bridging legislators, B should fall back to 0.0."""
+        equating_data["mapping_info"]["bridging_legislators"] = []
+        result = equate_chambers(**equating_data)
+        assert result["transformation"]["B"] == 0.0
+        assert result["transformation"]["b_method"] == "fallback_zero"
+
+    def test_house_ideal_points_unchanged(self, equating_data: dict) -> None:
+        """House ideal points should remain unchanged (reference scale)."""
+        result = equate_chambers(**equating_data)
+        equated = result["equated_ideal_points"]
+        house_orig = equating_data["per_chamber_results"]["House"]["ideal_points"]
+        for row in house_orig.iter_rows(named=True):
+            equated_row = equated.filter(
+                pl.col("legislator_slug") == row["legislator_slug"]
+            )
+            assert equated_row["xi_mean"][0] == pytest.approx(row["xi_mean"], abs=1e-6)
+
+    def test_correlations_computed(self, equating_data: dict) -> None:
+        """Should compute Pearson correlations for each chamber."""
+        result = equate_chambers(**equating_data)
+        assert "correlations" in result
+        assert "House" in result["correlations"]

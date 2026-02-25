@@ -40,7 +40,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 
 - `eda.md` — Binary encoding, filtering thresholds, agreement metrics, literature diagnostics (ADR-0026)
 - `pca.md` — Imputation, standardization, sign convention, holdout design
-- `irt.md` — Priors, MCMC settings, PCA-informed chain initialization
+- `irt.md` — Priors, MCMC settings, PCA-informed chain initialization, convergence diagnostics (R-hat, bulk/tail-ESS, E-BFMI)
 - `clustering.md` — Three methods for robustness, k=2 finding
 - `prediction.md` — XGBoost primary, IRT features dominate, NLP topic features
 - `beta_binomial.md` — Empirical Bayes, per-party-per-chamber priors, shrinkage

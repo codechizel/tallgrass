@@ -654,6 +654,10 @@ def extract_hierarchical_ideal_points(
             )
         else:
             slope = 1.0
+            print(
+                f"  WARNING: Only {len(matched)} matched legislators for shrinkage "
+                "rescaling (need >2). Falling back to slope=1.0 (no rescaling)."
+            )
             df = df.with_columns(
                 pl.col("flat_xi_mean").alias("flat_xi_rescaled"),
             )

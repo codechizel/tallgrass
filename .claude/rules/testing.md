@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (777)
+just test                    # run all tests (853)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -38,7 +38,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, lifecycle (~41 tests)
 - `tests/test_eda.py` — vote matrix, filtering, agreement, Rice, party-line, integrity, new diagnostics (~28 tests)
 - `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt, elapsed (~38 tests)
-- `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity, forest, paradox detection (~45 tests)
+- `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity, forest, paradox detection, convergence diagnostics, posterior extraction, equating (~73 tests)
 - `tests/test_umap_viz.py` — imputation, orientation, embedding, Procrustes, validation, trustworthiness, sensitivity sweep, stability, three-party (~40 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names (~16 tests)
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)

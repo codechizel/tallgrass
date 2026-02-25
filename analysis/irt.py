@@ -205,6 +205,7 @@ MAX_DIVERGENCES = 10
 
 # Plot constants
 N_TRACE_LEGISLATORS = 5
+N_CONVERGENCE_SUMMARY = 4
 TOP_DISCRIMINATING = 15
 
 
@@ -249,11 +250,6 @@ def parse_args() -> argparse.Namespace:
         "--no-pca-init",
         action="store_true",
         help="Disable PCA-informed chain initialization (on by default)",
-    )
-    parser.add_argument(
-        "--sign-constraint",
-        action="store_true",
-        help="Add soft sign constraint via pm.Potential (convergence experiment)",
     )
     return parser.parse_args()
 
@@ -1099,7 +1095,6 @@ def build_and_sample(
     n_chains: int,
     target_accept: float = TARGET_ACCEPT,
     xi_initvals: np.ndarray | None = None,
-    sign_constraint_parties: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[az.InferenceData, float]:
     """Build 2PL IRT model with anchor constraints and sample with NUTS.
 
@@ -1114,8 +1109,6 @@ def build_and_sample(
         target_accept: NUTS target acceptance probability.
         xi_initvals: Optional initial xi values for free parameters (from PCA).
             If provided, all chains start near these values with small jitter.
-        sign_constraint_parties: Optional (r_indices, d_indices) arrays for a soft
-            sign constraint that penalizes mean(xi_D) > mean(xi_R).
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -1159,15 +1152,6 @@ def build_and_sample(
         # --- Likelihood ---
         eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
         pm.Bernoulli("obs", logit_p=eta, observed=y, dims="obs_id")
-
-        # --- Optional soft sign constraint (Experiment 4) ---
-        if sign_constraint_parties is not None:
-            r_idx, d_idx = sign_constraint_parties
-            mean_r = xi[r_idx].mean()
-            mean_d = xi[d_idx].mean()
-            # Light penalty: mean(xi_R) should be > mean(xi_D)
-            pm.Potential("sign_constraint", -(mean_d - mean_r))
-            print("  Sign constraint: pm.Potential active (lambda=1.0)")
 
         # --- Sample ---
         print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
@@ -1226,7 +1210,7 @@ def check_convergence(idata: az.InferenceData, chamber: str) -> dict:
     print(f"  R-hat (alpha): max = {alpha_rhat_max:.4f}  {alpha_rhat_status}")
     print(f"  R-hat (beta):  max = {beta_rhat_max:.4f}  {beta_rhat_status}")
 
-    # ESS
+    # Bulk ESS
     ess = az.ess(idata)
     xi_ess_min = float(ess["xi"].min())
     alpha_ess_min = float(ess["alpha"].min())
@@ -1239,9 +1223,26 @@ def check_convergence(idata: az.InferenceData, chamber: str) -> dict:
     xi_ess_status = "OK" if xi_ess_min > ESS_THRESHOLD else "WARNING"
     alpha_ess_status = "OK" if alpha_ess_min > ESS_THRESHOLD else "WARNING"
     beta_ess_status = "OK" if beta_ess_min > ESS_THRESHOLD else "WARNING"
-    print(f"  ESS (xi):      min = {xi_ess_min:.0f}  {xi_ess_status}")
-    print(f"  ESS (alpha):   min = {alpha_ess_min:.0f}  {alpha_ess_status}")
-    print(f"  ESS (beta):    min = {beta_ess_min:.0f}  {beta_ess_status}")
+    print(f"  Bulk ESS (xi):      min = {xi_ess_min:.0f}  {xi_ess_status}")
+    print(f"  Bulk ESS (alpha):   min = {alpha_ess_min:.0f}  {alpha_ess_status}")
+    print(f"  Bulk ESS (beta):    min = {beta_ess_min:.0f}  {beta_ess_status}")
+
+    # Tail ESS (Vehtari et al. 2021) — catches poor mixing in posterior tails
+    ess_tail = az.ess(idata, method="tail")
+    xi_tail_min = float(ess_tail["xi"].min())
+    alpha_tail_min = float(ess_tail["alpha"].min())
+    beta_tail_min = float(ess_tail["beta"].min())
+    diag["xi_tail_ess_min"] = xi_tail_min
+    diag["alpha_tail_ess_min"] = alpha_tail_min
+    diag["beta_tail_ess_min"] = beta_tail_min
+
+    tail_ok = min(xi_tail_min, alpha_tail_min, beta_tail_min) > ESS_THRESHOLD
+    xi_tail_status = "OK" if xi_tail_min > ESS_THRESHOLD else "WARNING"
+    alpha_tail_status = "OK" if alpha_tail_min > ESS_THRESHOLD else "WARNING"
+    beta_tail_status = "OK" if beta_tail_min > ESS_THRESHOLD else "WARNING"
+    print(f"  Tail ESS (xi):      min = {xi_tail_min:.0f}  {xi_tail_status}")
+    print(f"  Tail ESS (alpha):   min = {alpha_tail_min:.0f}  {alpha_tail_status}")
+    print(f"  Tail ESS (beta):    min = {beta_tail_min:.0f}  {beta_tail_status}")
 
     # Divergences
     divergences = int(idata.sample_stats["diverging"].sum().values)
@@ -1256,7 +1257,7 @@ def check_convergence(idata: az.InferenceData, chamber: str) -> dict:
     for i, v in enumerate(bfmi_values):
         print(f"  E-BFMI chain {i}: {v:.3f}  {'OK' if v > 0.3 else 'WARNING'}")
 
-    diag["all_ok"] = rhat_ok and ess_ok and div_ok and bfmi_ok
+    diag["all_ok"] = rhat_ok and ess_ok and tail_ok and div_ok and bfmi_ok
     if diag["all_ok"]:
         print("  CONVERGENCE: ALL CHECKS PASSED")
     else:
@@ -1986,7 +1987,7 @@ def plot_convergence_summary(
     Shows that all independent model runs agree, validating the results.
     """
     slugs = data["leg_slugs"]
-    n = min(4, len(slugs))
+    n = min(N_CONVERGENCE_SUMMARY, len(slugs))
     indices = np.linspace(0, len(slugs) - 1, n, dtype=int)
     selected_slugs = [slugs[i] for i in indices]
 
@@ -2569,38 +2570,6 @@ def main() -> None:
                     f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
                 )
 
-            # Experiment: soft sign constraint
-            sign_parties = None
-            if args.sign_constraint:
-                slug_col = (
-                    "slug" if "slug" in legislators.columns
-                    else "legislator_slug"
-                )
-                leg_df = legislators.filter(
-                    pl.col(slug_col).is_in(data["leg_slugs"])
-                )
-                slug_to_idx = {
-                    s: i for i, s in enumerate(data["leg_slugs"])
-                }
-                r_slugs = leg_df.filter(
-                    pl.col("party") == "Republican"
-                )[slug_col].to_list()
-                d_slugs = leg_df.filter(
-                    pl.col("party") == "Democrat"
-                )[slug_col].to_list()
-                r_idx = np.array([
-                    slug_to_idx[s] for s in r_slugs if s in slug_to_idx
-                ])
-                d_idx = np.array([
-                    slug_to_idx[s] for s in d_slugs if s in slug_to_idx
-                ])
-                if len(r_idx) > 0 and len(d_idx) > 0:
-                    sign_parties = (r_idx, d_idx)
-                    print(
-                        f"  Sign constraint: "
-                        f"{len(r_idx)} R, {len(d_idx)} D legislators"
-                    )
-
             idata, sampling_time = build_and_sample(
                 data,
                 chamber_anchors,
@@ -2608,7 +2577,6 @@ def main() -> None:
                 args.n_tune,
                 args.n_chains,
                 xi_initvals=xi_init,
-                sign_constraint_parties=sign_parties,
             )
 
             # ── Phase 4: Convergence diagnostics ──

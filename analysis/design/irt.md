@@ -51,9 +51,12 @@
 
 | Threshold | Value | Meaning |
 |-----------|-------|---------|
-| `RHAT_THRESHOLD` | 1.01 | R-hat must be < 1.01 for all parameters. Standard in Bayesian literature. |
-| `ESS_THRESHOLD` | 400 | Effective sample size > 400 for reliable inference. Vehtari et al. recommendation. |
+| `RHAT_THRESHOLD` | 1.01 | Rank-normalized R-hat must be < 1.01 for all parameters. Vehtari et al. (2021). |
+| `ESS_THRESHOLD` | 400 | Bulk-ESS and tail-ESS > 400 for reliable inference. 100 per chain minimum. |
 | `MAX_DIVERGENCES` | 10 | < 10 divergent transitions across all chains. More indicates posterior geometry problems. |
+| `N_CONVERGENCE_SUMMARY` | 4 | Number of extreme-R-hat parameters shown in convergence summary output. |
+
+**Convergence diagnostics checked:** R-hat (rank-normalized), bulk-ESS, tail-ESS, divergent transitions, E-BFMI (> 0.3). Tail-ESS (Vehtari et al. 2021) catches poor mixing in posterior tails that bulk-ESS alone can miss — particularly relevant for credible interval estimation.
 
 ## Methodological Choices
 
@@ -100,7 +103,7 @@
 **Alternatives considered:**
 - Random initialization (PyMC default) — caused 5/16 convergence failures
 - Extended tuning (3000 draws) — zero effect; trapped chains don't cross the energy barrier
-- Soft sign constraint (`pm.Potential`) — zero effect; likelihood overwhelms the penalty
+- Soft sign constraint (`pm.Potential`) — zero effect; likelihood overwhelms the penalty. Code removed (2026-02-25).
 - 4 chains — partial fix; masks the problem via majority vote but destroys credible interval precision
 
 **Impact:** Eliminates all 5 convergence failures. No known downsides when PC1 cleanly separates the ideological dimension (true for all Kansas sessions, with PCA-IRT r > 0.93 when converged).
@@ -117,7 +120,7 @@
 
 **Decision:** Default to 2 MCMC chains instead of the textbook 4. Chains run in parallel (`cores=n_chains`).
 
-**Why:** Runtime. Each chain takes ~5-10 minutes per chamber. With parallel chain sampling, 2 chains complete in roughly the time of 1 (~5-10 min) instead of running sequentially (~15-20 min). The model is well-identified (anchored, positive-constrained discrimination), so 2 chains are typically sufficient.
+**Why:** Runtime. Each chain takes ~5-10 minutes per chamber. With parallel chain sampling, 2 chains complete in roughly the time of 1 (~5-10 min) instead of running sequentially (~15-20 min). The model is well-identified (anchored, PCA-initialized), so 2 chains are typically sufficient.
 
 **Parallel safety:** PyMC uses multiprocessing (not threading) for parallel chains. Each chain gets its own process, its own memory, and a deterministic per-chain seed derived from `random_seed`. Results are mathematically identical to sequential execution.
 

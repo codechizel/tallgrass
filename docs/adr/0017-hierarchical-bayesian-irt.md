@@ -50,3 +50,7 @@ A cross-biennium results audit discovered that the 3-level joint model lacked an
 **Confirmed in:** 90th biennium (2023-24), where the joint model Senate showed r=-0.9999 vs the per-chamber model (perfect sign inversion for Senate while House was correct).
 
 **Fix:** Apply `pt.sort` to each chamber's pair of group offsets (`group_offset_raw[:2]` for House, `group_offset_raw[2:]` for Senate) before computing `mu_group`. This enforces D < R within each chamber independently, consistent with the per-chamber model's identification strategy.
+
+## Update: Shrinkage Rescaling Fallback Warning (2026-02-25)
+
+The shrinkage comparison requires rescaling flat IRT ideal points to the hierarchical scale via `np.polyfit` on matched legislators. When fewer than 3 legislators match (e.g., due to anchor filtering), the rescaling silently fell back to `slope=1.0` (identity transform), producing misleading shrinkage comparisons. A warning is now emitted when this fallback occurs, making the limitation visible in the output. See `docs/irt-deep-dive.md` for the code audit that identified this issue.

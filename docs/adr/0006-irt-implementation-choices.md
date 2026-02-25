@@ -57,3 +57,4 @@ Bayesian IRT is the canonical baseline analysis per the analytic workflow rules:
 - 2026-02-20: Added joint cross-chamber model (Decision 5 updated from per-chamber-only to per-chamber + joint).
 - 2026-02-20: Changed from joint MCMC to test equating after convergence failure. See `analysis/design/irt.md` "Why Not a Joint MCMC Model?"
 - 2026-02-23: Added `cores=n_chains` for parallel chain sampling (Decision 3 updated). See ADR-0022.
+- 2026-02-25: Removed `--sign-constraint` flag and associated dead code (experimental soft sign constraint via `pm.Potential`). Hard anchors + PCA init make it unnecessary; 0/16 chamber-sessions needed it. Added tail-ESS to convergence diagnostics per Vehtari et al. (2021). Extracted `N_CONVERGENCE_SUMMARY` constant. See `docs/irt-deep-dive.md` for the code audit that motivated these changes.

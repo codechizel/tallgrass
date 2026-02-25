@@ -409,3 +409,5 @@ These limitations aren't failures — they're the honest boundaries of what quan
 - **[External Validation Results](external-validation-results.md)** — How we checked our ideology scores against an independent national dataset (Shor-McCarty), and what we found (r = 0.93-0.98 for the flat IRT model).
 - **[Hierarchical Shrinkage Deep Dive](hierarchical-shrinkage-deep-dive.md)** — Why the hierarchical model struggles with the Kansas Senate's small Democrat caucus, with references to the statistics literature.
 - **[PCA Deep Dive](pca-deep-dive.md)** — Literature comparison, open-source landscape survey, and code audit of our PCA implementation.
+- **[IRT Deep Dive](irt-deep-dive.md)** — Field survey of IRT implementations, code audit against best practices, and test gap analysis.
+- **[IRT Field Survey](irt-field-survey.md)** — The IRT identification problem, how the field solves it, our unconstrained β contribution, and why Python has no production IRT package for legislative analysis.

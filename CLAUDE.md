@@ -131,6 +131,8 @@ Key references:
 - PCA deep dive: `docs/pca-deep-dive.md` (literature review, code audit, implementation recommendations)
 - UMAP deep dive: `docs/umap-deep-dive.md` (literature survey, code review, implementation recommendations)
 - IRT deep dive: `docs/irt-deep-dive.md` (field survey, code audit, test gaps, recommendations)
+- IRT field survey: `docs/irt-field-survey.md` (identification problem, unconstrained β contribution, Python ecosystem gap)
+- Clustering deep dive: `docs/clustering-deep-dive.md` (literature survey, code audit, test gaps, recommendations)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
@@ -144,7 +146,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 825 tests
+just test                    # 853 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

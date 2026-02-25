@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-24 (after method evaluation and landscape survey)
+**Last updated:** 2026-02-25 (after IRT deep dive and field survey)
 
 ---
 
@@ -40,6 +40,7 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | External Validation (Shor-McCarty) | 2026-02-24 | Shor-McCarty external validation phase: name matching, Pearson/Spearman correlations, scatter plots, outlier analysis. 5 overlapping bienniums (84th-88th). ADR-0025. |
 | — | External Validation Results Article | 2026-02-24 | `docs/external-validation-results.md`: general-audience article explaining SM validation results (flat House r=0.981, flat Senate r=0.929, hierarchical Senate r=-0.541) |
 | — | Hierarchical Shrinkage Deep Dive | 2026-02-24 | `docs/hierarchical-shrinkage-deep-dive.md`: literature-grounded analysis of J=2 over-shrinkage problem (Gelman 2006/2015, James-Stein, Peress 2009), 6 remedies proposed |
+| — | IRT Deep Dive & Field Survey | 2026-02-25 | `docs/irt-deep-dive.md` and `docs/irt-field-survey.md`: field survey of IRT implementations, code audit, identification problem, unconstrained β contribution, Python ecosystem gap. Implemented: tail-ESS, shrinkage warning, sign-constraint removal, 28 new tests (853 total). |
 
 ---
 
@@ -124,7 +125,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-777 tests exist across scraper (219) and analysis (558) modules. All passing. Coverage could be expanded:
+853 tests exist across scraper (219) and analysis (634) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
