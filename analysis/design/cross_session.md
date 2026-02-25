@@ -24,8 +24,8 @@
 | `SHIFT_THRESHOLD_SD` | 1.0 | A legislator who moved > 1 SD (in aligned scale) is flagged as a significant mover. Balances sensitivity vs false positives. | `cross_session_data.py` |
 | `ALIGNMENT_TRIM_PCT` | 10 | Trim 10% most extreme residuals from affine fit. Prevents genuine movers from distorting the alignment. | `cross_session_data.py` |
 | `CORRELATION_WARN` | 0.70 | If cross-session Pearson r < 0.70, warn that alignment may be unreliable. | `cross_session_data.py` |
-| `FEATURE_IMPORTANCE_TOP_K` | 10 | Compare top 10 SHAP features across sessions. | `cross_session.py` |
-| `PREDICTION_STANDARDIZE` | True | Z-score normalize all numeric features before cross-session prediction. | `cross_session.py` |
+| `FEATURE_IMPORTANCE_TOP_K` | 10 | Compare top 10 SHAP features across sessions. | `cross_session_data.py` |
+| `XGBOOST_PARAMS` | n_estimators=200, max_depth=6, lr=0.1 | Fixed hyperparameters for cross-session prediction. Same for A→B and B→A. | `cross_session.py` |
 
 ## Methodological Choices
 
@@ -69,7 +69,7 @@
 **Decision:** Three complementary metrics per legislator:
 
 1. **Point estimate shift:** `delta_xi = xi_b_aligned - xi_a_aligned` (simple, interpretable).
-2. **Posterior overlap:** If MCMC traces are available, compute `wasserstein_distance(posterior_a_aligned, posterior_b_aligned)` for Bayesian shift quantification that accounts for uncertainty.
+2. **Posterior overlap (deferred):** If MCMC traces are available, compute `wasserstein_distance(posterior_a_aligned, posterior_b_aligned)` for Bayesian shift quantification that accounts for uncertainty. Deferred — requires loading ArviZ InferenceData from both sessions and aligning full posterior chains. Revisit when 3+ sessions make dynamic IRT worthwhile.
 3. **Rank shift:** Change in within-chamber percentile rank. More robust to scale issues than absolute shift.
 
 **Significant mover threshold:** `|delta_xi| > SHIFT_THRESHOLD_SD * std(delta_xi)` among all returners. This adapts to the overall session-to-session variability.

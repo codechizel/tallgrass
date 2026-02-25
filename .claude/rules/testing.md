@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1034)
+just test                    # run all tests (~1052)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -46,7 +46,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_beta_binomial.py` — method of moments, posteriors, shrinkage, edge cases (~26 tests)
 - `tests/test_hierarchical.py` — hierarchical data prep, model structure, variance decomposition, small-group warning, joint ordering, rescaling fallback, Independent exclusion (~35 tests)
 - `tests/test_profiles.py` — profile targets, scorecard, bill-type breakdown, defections, name resolution (~36 tests)
-- `tests/test_cross_session.py` — matching, IRT alignment, shift, stability, prediction transfer (~55 tests)
+- `tests/test_cross_session.py` — matching, IRT alignment, shift, stability, prediction transfer, detection, plot smoke tests, report (~73 tests)
 - `tests/test_clustering.py` — party loyalty, cross-method ARI, within-party, kappa distance, hierarchical, spectral, HDBSCAN, characterization (~70 tests)
 - `tests/test_network.py` — network construction, centrality, Leiden/CPM community detection, bridges, threshold sweep, polarization, disparity filter backbone, extreme edge weights (~53 tests)
 - `tests/test_indices.py` — Rice formula, party votes, ENP, unity/maverick, co-defection, Carey UNITY, fractured votes (~37 tests)

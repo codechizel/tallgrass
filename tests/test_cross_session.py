@@ -6,11 +6,14 @@ Run:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import polars as pl
 import pytest
 
 from analysis.cross_session_data import (
+    SHIFT_THRESHOLD_SD,
     align_feature_columns,
     align_irt_scales,
     classify_turnover,
@@ -758,3 +761,425 @@ class TestCompareFeatureImportance:
         df, tau = compare_feature_importance(shap_vals, shap_vals, ["only"])
         assert np.isnan(tau)
         assert df.height == 1
+
+    def test_asymmetry_swapping_sessions(self) -> None:
+        """Swapping session A/B SHAP values should produce different tau.
+
+        The function selects top-K features by session A's ranking, then
+        computes tau against session B's ranks for those features.  If
+        the two sessions have asymmetrically overlapping top features,
+        swapping which session is "A" changes the feature selection and
+        therefore the tau.
+
+        Run: uv run pytest tests/test_cross_session.py::TestCompareFeatureImportance::test_asymmetry_swapping_sessions -v
+        """
+        n_features = 10
+        # Session A: first 5 features important, last 5 negligible
+        shap_a = np.zeros((200, n_features))
+        for i in range(5):
+            shap_a[:, i] = np.random.default_rng(i).normal(0, (5 - i) * 1.0, size=200)
+        for i in range(5, n_features):
+            shap_a[:, i] = np.random.default_rng(i).normal(0, 0.01, size=200)
+
+        # Session B: last 5 features important, first 5 less so (partial overlap)
+        shap_b = np.zeros((200, n_features))
+        for i in range(5):
+            shap_b[:, i] = np.random.default_rng(i + 10).normal(0, 0.1 * (i + 1), size=200)
+        for i in range(5, n_features):
+            shap_b[:, i] = np.random.default_rng(i + 10).normal(0, (i - 4) * 1.0, size=200)
+
+        names = [f"f{i}" for i in range(n_features)]
+        # top_k=5: when A is "source", picks features 0-4; when B is "source", picks 5-9
+        _, tau_ab = compare_feature_importance(shap_a, shap_b, names, top_k=5)
+        _, tau_ba = compare_feature_importance(shap_b, shap_a, names, top_k=5)
+        # The two tau values should differ because different features are selected
+        assert tau_ab != pytest.approx(tau_ba, abs=0.05)
+
+
+# ── TestNormalizeNameEdgeCases ──────────────────────────────────────────────
+
+
+class TestNormalizeNameEdgeCases:
+    """Additional edge case tests for normalize_name.
+
+    Run: uv run pytest tests/test_cross_session.py::TestNormalizeNameEdgeCases -v
+    """
+
+    def test_hyphen_dash_distinction(self) -> None:
+        """Hyphenated surname preserved; leadership suffix stripped."""
+        # Hyphenated name (no space before hyphen) — should be preserved
+        assert normalize_name("Mary Smith-Jones") == "mary smith-jones"
+        # Leadership suffix (space-dash-space) — should be stripped
+        assert normalize_name("Mary Smith - Chair") == "mary smith"
+
+    def test_multiple_dashes_only_first_stripped(self) -> None:
+        """Suffix regex matches from the first ' - ' to end of string."""
+        result = normalize_name("Bob Jones - Vice Chair - Emeritus")
+        assert result == "bob jones"
+
+
+# ── TestTurnoverImpactScale ────────────────────────────────────────────────
+
+
+class TestTurnoverImpactScale:
+    """Tests ensuring turnover impact analysis uses consistent scales.
+
+    Run: uv run pytest tests/test_cross_session.py::TestTurnoverImpactScale -v
+    """
+
+    def test_affine_transformed_departing_matches_returning_scale(self) -> None:
+        """Departing xi values should be transformed before comparison.
+
+        If we have xi_a values and a known affine transform (A=2, B=1),
+        the transformed departing values should be 2*xi + 1.
+        """
+        # Simulate: session A has xi values, affine transform is A=2, B=1
+        xi_dep_raw = np.array([0.0, 0.5, 1.0])
+        a_coef, b_coef = 2.0, 1.0
+        xi_dep_aligned = xi_dep_raw * a_coef + b_coef
+
+        # After transform, values should be [1.0, 2.0, 3.0]
+        expected = np.array([1.0, 2.0, 3.0])
+        np.testing.assert_allclose(xi_dep_aligned, expected)
+
+        # Now compare against returning legislators on session B scale
+        xi_ret = np.array([1.5, 2.5, 3.5])
+        result = compute_turnover_impact(xi_ret, xi_dep_aligned, np.array([2.0, 3.0]))
+        assert result["departing_mean"] == pytest.approx(2.0)
+        assert result["returning_mean"] == pytest.approx(2.5)
+
+    def test_untransformed_departing_gives_wrong_answer(self) -> None:
+        """Without affine transform, departing mean would be wrong."""
+        xi_dep_raw = np.array([0.0, 0.5, 1.0])  # Session A scale
+        xi_ret = np.array([1.5, 2.5, 3.5])  # Session B scale
+        a_coef, b_coef = 2.0, 1.0
+
+        # Wrong: using raw values
+        result_wrong = compute_turnover_impact(xi_ret, xi_dep_raw, np.array([]))
+        # Correct: using transformed values
+        xi_dep_aligned = xi_dep_raw * a_coef + b_coef
+        result_correct = compute_turnover_impact(xi_ret, xi_dep_aligned, np.array([]))
+
+        # The raw departing mean (0.5) is very different from the aligned (2.0)
+        assert result_wrong["departing_mean"] == pytest.approx(0.5)
+        assert result_correct["departing_mean"] == pytest.approx(2.0)
+
+
+# ── TestShiftThresholdConsistency ──────────────────────────────────────────
+
+
+class TestShiftThresholdConsistency:
+    """Tests verifying threshold consistency between classification and display.
+
+    Run: uv run pytest tests/test_cross_session.py::TestShiftThresholdConsistency -v
+    """
+
+    def test_ddof_consistency(self) -> None:
+        """Classification and visualization thresholds should use same ddof."""
+        rng = np.random.default_rng(42)
+        n = 50
+        deltas = rng.normal(0, 0.5, n).tolist()
+
+        aligned = pl.DataFrame(
+            {
+                "name_norm": [f"m {i}" for i in range(n)],
+                "slug_a": [f"a_{i}" for i in range(n)],
+                "slug_b": [f"b_{i}" for i in range(n)],
+                "full_name": [f"Member {i}" for i in range(n)],
+                "party": ["Republican"] * n,
+                "chamber": ["House"] * n,
+                "xi_a": [float(i) for i in range(n)],
+                "xi_b": [float(i) + d for i, d in enumerate(deltas)],
+                "xi_a_aligned": [float(i) for i in range(n)],
+                "delta_xi": deltas,
+                "abs_delta_xi": [abs(d) for d in deltas],
+            }
+        )
+
+        # Classification threshold (Polars std, ddof=1)
+        result = compute_ideology_shift(aligned)
+        polars_std = aligned["delta_xi"].std()
+        classification_threshold = SHIFT_THRESHOLD_SD * polars_std
+
+        # Visualization threshold should match (np.std with ddof=1)
+        numpy_std = float(np.std(np.array(deltas), ddof=1))
+        viz_threshold = SHIFT_THRESHOLD_SD * numpy_std
+
+        assert classification_threshold == pytest.approx(viz_threshold, rel=1e-10)
+
+        # Verify mover count matches between the two thresholds
+        movers_classification = int(result["is_significant_mover"].sum())
+        movers_viz = int(np.sum(np.abs(np.array(deltas)) > viz_threshold))
+        assert movers_classification == movers_viz
+
+
+# ── TestValidateDetection ──────────────────────────────────────────────────
+
+
+class TestValidateDetection:
+    """Tests for the detection validation helper.
+
+    Run: uv run pytest tests/test_cross_session.py::TestValidateDetection -v
+    """
+
+    def test_basic_detection_returns_dict(self) -> None:
+        """validate_detection should return a dict with all expected keys."""
+        from analysis.cross_session import validate_detection
+
+        # Build minimal leg_df with required columns for detection functions
+        n = 30
+        leg_df = pl.DataFrame(
+            {
+                "legislator_slug": [f"rep_{i}" for i in range(n)],
+                "full_name": [f"Member {i}" for i in range(n)],
+                "party": ["Republican"] * 20 + ["Democrat"] * 10,
+                "chamber": ["House"] * n,
+                "district": list(range(1, n + 1)),
+                "xi_mean": [float(i) / n for i in range(n)],
+                "unity_score": [0.9] * 19 + [0.3] + [0.85] * 10,
+                "maverick_rate": [0.1] * 19 + [0.7] + [0.15] * 10,
+                "weighted_maverick": [0.05] * 19 + [0.6] + [0.1] * 10,
+                "betweenness": [0.01] * 19 + [0.5] + [0.02] * 10,
+                "eigenvector": [0.1] * n,
+                "loyalty_rate": [0.9] * 19 + [0.4] + [0.85] * 10,
+            }
+        )
+
+        result = validate_detection(leg_df, leg_df, "House")
+        expected_keys = {
+            "maverick_a",
+            "maverick_b",
+            "bridge_a",
+            "bridge_b",
+            "paradox_a",
+            "paradox_b",
+        }
+        assert set(result.keys()) == expected_keys
+
+
+# ── TestMajorityParty ──────────────────────────────────────────────────────
+
+
+class TestMajorityParty:
+    """Tests for the _majority_party helper.
+
+    Run: uv run pytest tests/test_cross_session.py::TestMajorityParty -v
+    """
+
+    def test_returns_largest_party(self) -> None:
+        """Should return the party with the most members."""
+        from analysis.cross_session import _majority_party
+
+        df = pl.DataFrame({"party": ["Republican"] * 5 + ["Democrat"] * 3})
+        assert _majority_party(df) == "Republican"
+
+    def test_empty_dataframe_returns_none(self) -> None:
+        """Empty DataFrame should return None."""
+        from analysis.cross_session import _majority_party
+
+        df = pl.DataFrame({"party": []}, schema={"party": pl.Utf8})
+        assert _majority_party(df) is None
+
+
+# ── TestExtractName ────────────────────────────────────────────────────────
+
+
+class TestExtractName:
+    """Tests for the _extract_name helper.
+
+    Run: uv run pytest tests/test_cross_session.py::TestExtractName -v
+    """
+
+    def test_strips_suffix(self) -> None:
+        """Should extract last name, ignoring leadership suffix."""
+        from analysis.cross_session import _extract_name
+
+        assert _extract_name("Bob Jones - Speaker") == "Jones"
+
+    def test_single_word_name(self) -> None:
+        """Single-word name should be returned as-is."""
+        from analysis.cross_session import _extract_name
+
+        assert _extract_name("Cher") == "Cher"
+
+
+# ── TestPlotSmoke ──────────────────────────────────────────────────────────
+
+
+class TestPlotSmoke:
+    """Smoke tests for all cross-session plot functions.
+
+    These verify plots don't crash and produce output files.
+    They do NOT verify visual correctness.
+
+    Run: uv run pytest tests/test_cross_session.py::TestPlotSmoke -v
+    """
+
+    @staticmethod
+    def _make_shifted(n: int = 30) -> pl.DataFrame:
+        """Build a shifted DataFrame for plot tests."""
+        rng = np.random.default_rng(42)
+        xi_a = rng.normal(0, 1, n)
+        deltas = rng.normal(0, 0.3, n)
+        xi_b = xi_a + deltas
+        return pl.DataFrame(
+            {
+                "full_name": [f"Member {i}" for i in range(n)],
+                "party": ["Republican"] * (n // 2) + ["Democrat"] * (n - n // 2),
+                "xi_a_aligned": xi_a.tolist(),
+                "xi_b": xi_b.tolist(),
+                "delta_xi": deltas.tolist(),
+                "abs_delta_xi": np.abs(deltas).tolist(),
+                "is_significant_mover": ([True] * 3 + [False] * (n - 3)),
+                "shift_direction": (["rightward"] * 2 + ["leftward"] + ["stable"] * (n - 3)),
+                "rank_a": list(range(1, n + 1)),
+                "rank_b": list(range(1, n + 1)),
+                "rank_shift": [0] * n,
+            }
+        )
+
+    def test_plot_ideology_shift_scatter(self, tmp_path: Path) -> None:
+        """Ideology scatter plot should produce a PNG."""
+        from analysis.cross_session import plot_ideology_shift_scatter
+
+        shifted = self._make_shifted()
+        plot_ideology_shift_scatter(shifted, "House", tmp_path, "2023-24", "2025-26")
+        assert (tmp_path / "ideology_shift_scatter_house.png").exists()
+
+    def test_plot_biggest_movers(self, tmp_path: Path) -> None:
+        """Biggest movers bar chart should produce a PNG."""
+        from analysis.cross_session import plot_biggest_movers
+
+        shifted = self._make_shifted()
+        plot_biggest_movers(shifted, "House", tmp_path)
+        assert (tmp_path / "biggest_movers_house.png").exists()
+
+    def test_plot_shift_distribution(self, tmp_path: Path) -> None:
+        """Shift distribution histogram should produce a PNG."""
+        from analysis.cross_session import plot_shift_distribution
+
+        shifted = self._make_shifted()
+        plot_shift_distribution(shifted, "House", tmp_path)
+        assert (tmp_path / "shift_distribution_house.png").exists()
+
+    def test_plot_turnover_impact(self, tmp_path: Path) -> None:
+        """Turnover strip plot should produce a PNG."""
+        from analysis.cross_session import plot_turnover_impact
+
+        rng = np.random.default_rng(42)
+        plot_turnover_impact(
+            rng.normal(0, 1, 20),
+            rng.normal(-0.5, 1, 10),
+            rng.normal(0.5, 1, 10),
+            "House",
+            tmp_path,
+            "2023-24",
+            "2025-26",
+        )
+        assert (tmp_path / "turnover_impact_house.png").exists()
+
+    def test_plot_prediction_comparison(self, tmp_path: Path) -> None:
+        """Prediction AUC bar chart should produce a PNG."""
+        from analysis.cross_session import plot_prediction_comparison
+
+        plot_prediction_comparison(
+            0.98, 0.97, 0.90, 0.88, "House", tmp_path, "2023-24", "2025-26"
+        )
+        assert (tmp_path / "prediction_comparison_house.png").exists()
+
+    def test_plot_feature_importance_comparison(self, tmp_path: Path) -> None:
+        """Feature importance side-by-side chart should produce a PNG."""
+        from analysis.cross_session import plot_feature_importance_comparison
+
+        comp_df = pl.DataFrame(
+            {
+                "feature": ["xi_mean", "beta_mean", "party_binary"],
+                "importance_a": [0.5, 0.3, 0.2],
+                "importance_b": [0.4, 0.35, 0.25],
+                "rank_a": [1, 2, 3],
+                "rank_b": [2, 1, 3],
+            }
+        )
+        plot_feature_importance_comparison(comp_df, "House", tmp_path, "2023-24", "2025-26")
+        assert (tmp_path / "feature_importance_comparison_house.png").exists()
+
+
+# ── TestBuildCrossSessionReport ────────────────────────────────────────────
+
+
+class TestBuildCrossSessionReport:
+    """Tests for the cross-session report builder.
+
+    Run: uv run pytest tests/test_cross_session.py::TestBuildCrossSessionReport -v
+    """
+
+    def test_report_adds_sections(self, tmp_path: Path) -> None:
+        """Building a report should add sections without crashing."""
+        from analysis.cross_session_report import build_cross_session_report
+        from analysis.report import ReportBuilder
+
+        rng = np.random.default_rng(42)
+        n = 25
+        shifted = pl.DataFrame(
+            {
+                "full_name": [f"Member {i}" for i in range(n)],
+                "party": ["Republican"] * n,
+                "xi_a_aligned": rng.normal(0, 1, n).tolist(),
+                "xi_b": rng.normal(0, 1, n).tolist(),
+                "delta_xi": rng.normal(0, 0.3, n).tolist(),
+                "abs_delta_xi": np.abs(rng.normal(0, 0.3, n)).tolist(),
+                "shift_direction": ["stable"] * n,
+                "is_significant_mover": [False] * n,
+                "rank_shift": [0] * n,
+            }
+        )
+        stability = pl.DataFrame(
+            {
+                "metric": ["unity_score"],
+                "pearson_r": [0.85],
+                "spearman_rho": [0.82],
+                "n_legislators": [25],
+            }
+        )
+        matched = pl.DataFrame(
+            {
+                "name_norm": [f"member {i}" for i in range(n)],
+                "is_chamber_switch": [False] * n,
+                "is_party_switch": [False] * n,
+                "chamber_b": ["House"] * n,
+            }
+        )
+
+        results = {
+            "matched": matched,
+            "n_departing": 5,
+            "n_new": 5,
+            "n_matched": n,
+            "chambers": ["house"],
+            "alignment_coefficients": {"House": {"A": 1.0, "B": 0.0}},
+            "house": {
+                "shifted": shifted,
+                "stability": stability,
+                "turnover": {},
+                "detection": {
+                    "maverick_a": "Alice",
+                    "maverick_b": "Bob",
+                    "bridge_a": None,
+                    "bridge_b": None,
+                    "paradox_a": None,
+                    "paradox_b": None,
+                },
+                "r_value": 0.92,
+                "prediction": None,
+            },
+        }
+
+        report = ReportBuilder("Test Cross-Session Report")
+        build_cross_session_report(
+            report,
+            results=results,
+            plots_dir=tmp_path,
+            session_a_label="90th_2023-2024",
+            session_b_label="91st_2025-2026",
+        )
+        assert len(report._sections) > 0

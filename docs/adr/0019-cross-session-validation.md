@@ -73,3 +73,5 @@ Use the same affine transformation approach already proven for cross-chamber equ
 - Legislator name matching is fragile to name changes, typos, or suffix differences between sessions — needs robust normalization
 - Cross-session prediction comparison is imperfect: different bills, different political context, different base rates may confound AUC differences
 - This phase reads from both sessions' results directories, breaking the single-session assumption of RunContext — requires manual path construction for the second session
+
+**Post-implementation fixes (ADR-0035):** A deep dive audit found and fixed three bugs: (1) turnover impact compared IRT values on different scales — departing cohort now affine-transformed, (2) ddof mismatch between classification and visualization thresholds, (3) prediction tested all legislators instead of returning-only as specified above. See `docs/cross-session-deep-dive.md` for the full audit.

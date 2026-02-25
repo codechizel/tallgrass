@@ -103,6 +103,15 @@ PARTY_COLORS: dict[str, str] = {
 }
 TOP_MOVERS_N: int = 15
 ANNOTATE_N: int = 5
+XGBOOST_PARAMS: dict = {
+    "n_estimators": 200,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "random_state": 42,
+    "eval_metric": "logloss",
+    "verbosity": 0,
+    "n_jobs": -1,
+}
 
 # ── Primer ───────────────────────────────────────────────────────────────────
 
@@ -317,7 +326,7 @@ def plot_shift_distribution(
 ) -> None:
     """Histogram of ideology shifts with threshold lines."""
     deltas = shifted["delta_xi"].to_numpy()
-    std = float(np.std(deltas))
+    std = float(np.std(deltas, ddof=1))  # Match Polars std() (ddof=1) used in compute_ideology_shift
     threshold = SHIFT_THRESHOLD_SD * std
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -572,11 +581,16 @@ def _run_cross_prediction(
     ctx: RunContext,
     session_a_label: str,
     session_b_label: str,
+    matched: pl.DataFrame | None = None,
 ) -> dict | None:
     """Run cross-session prediction transfer for one chamber.
 
     Trains XGBoost on session A features, tests on session B
     (and vice versa). Compares SHAP feature importance.
+
+    When *matched* is provided, vote features are filtered to returning
+    legislators only — ensuring the cross-session test measures
+    generalization on the *same* people in a new context.
 
     Returns dict with prediction metrics, or None if data is missing.
     """
@@ -596,6 +610,13 @@ def _run_cross_prediction(
             missing.append(session_b_label)
         print(f"    SKIP: vote features not found for {', '.join(missing)}")
         return None
+
+    # Filter to returning legislators only (design doc §5, Experiment A)
+    if matched is not None:
+        ret_slugs_a = set(matched["slug_a"].to_list())
+        ret_slugs_b = set(matched["slug_b"].to_list())
+        vf_a = vf_a.filter(pl.col("legislator_slug").is_in(ret_slugs_a))
+        vf_b = vf_b.filter(pl.col("legislator_slug").is_in(ret_slugs_b))
 
     # Align columns (intersection of features)
     vf_a, vf_b, feature_cols = align_feature_columns(vf_a, vf_b)
@@ -618,15 +639,7 @@ def _run_cross_prediction(
 
     # Train A → predict B
     print(f"    Training on {session_a_label}, testing on {session_b_label}...")
-    model_ab = XGBClassifier(
-        n_estimators=200,
-        max_depth=6,
-        learning_rate=0.1,
-        random_state=42,
-        eval_metric="logloss",
-        verbosity=0,
-        n_jobs=-1,
-    )
+    model_ab = XGBClassifier(**XGBOOST_PARAMS)
     model_ab.fit(X_a, y_a)
     y_pred_ab = model_ab.predict(X_b)
     y_prob_ab = model_ab.predict_proba(X_b)[:, 1]
@@ -637,15 +650,7 @@ def _run_cross_prediction(
 
     # Train B → predict A
     print(f"    Training on {session_b_label}, testing on {session_a_label}...")
-    model_ba = XGBClassifier(
-        n_estimators=200,
-        max_depth=6,
-        learning_rate=0.1,
-        random_state=42,
-        eval_metric="logloss",
-        verbosity=0,
-        n_jobs=-1,
-    )
+    model_ba = XGBClassifier(**XGBOOST_PARAMS)
     model_ba.fit(X_b, y_b)
     y_pred_ba = model_ba.predict(X_a)
     y_prob_ba = model_ba.predict_proba(X_a)[:, 1]
@@ -871,10 +876,16 @@ def main() -> None:
                 .to_list()
             )
 
-            # Get xi values for each cohort from the raw IRT DataFrames
+            # Get xi values for each cohort — all on Session B's scale.
+            # Returning and new legislators come from irt_b directly.
+            # Departing legislators come from irt_a and must be affine-transformed
+            # onto Session B's scale using the alignment coefficients.
             ret_slugs = set(chamber_matched["slug_b"].to_list())
             xi_ret = irt_b.filter(pl.col("legislator_slug").is_in(ret_slugs))["xi_mean"].to_numpy()
-            xi_dep = irt_a.filter(pl.col("legislator_slug").is_in(dep_slugs))["xi_mean"].to_numpy()
+            xi_dep_raw = (
+                irt_a.filter(pl.col("legislator_slug").is_in(dep_slugs))["xi_mean"].to_numpy()
+            )
+            xi_dep = xi_dep_raw * a_coef + b_coef  # Transform to Session B scale
             xi_new = irt_b.filter(pl.col("legislator_slug").is_in(new_slugs))["xi_mean"].to_numpy()
 
             turnover_impact = compute_turnover_impact(xi_ret, xi_dep, xi_new)
@@ -934,6 +945,7 @@ def main() -> None:
                     ctx,
                     session_a_label,
                     session_b_label,
+                    matched=matched,
                 )
 
             # ── Save data ──

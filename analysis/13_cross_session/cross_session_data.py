@@ -500,6 +500,14 @@ def compare_feature_importance(
 ) -> tuple[pl.DataFrame, float]:
     """Compare SHAP importance rankings across sessions.
 
+    .. note::
+
+       Kendall's tau is computed **asymmetrically**: the top-K features
+       are selected by session A's importance ranking, then tau measures
+       how well session B preserves that ranking.  Swapping sessions
+       may produce a different tau.  This is intentional — session A is
+       the "training" session in the A→B prediction direction.
+
     Args:
         shap_a: SHAP values from session A model (n_samples x n_features).
         shap_b: SHAP values from session B model.
