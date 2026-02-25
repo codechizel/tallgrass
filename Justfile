@@ -1,5 +1,13 @@
-# KS Vote Scraper — Command Runner
-
+# KS Vote Scraper — Command Runner (Just: https://github.com/casey/just)
+#
+# Thin aliases over `uv run` commands. The main value-adds:
+#   1. `just check` sequences lint + typecheck + tests as a single quality gate
+#   2. OMP/OPENBLAS thread caps below prevent E-core spillover on Apple Silicon
+#   3. `just --list` documents every runnable command in the project
+#
+# All recipes pass *args through, so `just profiles --names "Masterson"`
+# is equivalent to `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
+#
 # Cap thread pools to P-core count (6) to prevent E-core spillover on Apple Silicon.
 # See ADR-0022 and results/experiments/2026-02-23_parallel-chains-performance/.
 export OMP_NUM_THREADS := "6"

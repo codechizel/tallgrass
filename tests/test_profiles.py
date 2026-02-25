@@ -14,6 +14,7 @@ import pytest
 
 from analysis.profiles_data import (
     MAX_PROFILE_TARGETS,
+    NameMatch,
     ProfileTarget,
     build_scorecard,
     compute_bill_type_breakdown,
@@ -21,6 +22,7 @@ from analysis.profiles_data import (
     find_legislator_surprising_votes,
     find_voting_neighbors,
     gather_profile_targets,
+    resolve_names,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -426,3 +428,155 @@ class TestFindLegislatorSurprisingVotes:
         """Should return None when surprising_votes_df is None."""
         result = find_legislator_surprising_votes("rep_a", None)
         assert result is None
+
+
+# ── Fixtures: Name Resolution ───────────────────────────────────────────────
+
+
+def _stub_columns(n: int) -> dict:
+    """Return dummy metric columns for n legislators."""
+    return {
+        "xi_mean": [1.0] * n,
+        "xi_sd": [0.2] * n,
+        "unity_score": [0.9] * n,
+        "loyalty_rate": [0.9] * n,
+        "maverick_rate": [0.1] * n,
+        "weighted_maverick": [0.05] * n,
+        "betweenness": [0.03] * n,
+        "eigenvector": [0.1] * n,
+        "accuracy": [0.9] * n,
+        "n_defections": [2] * n,
+        "loyalty_zscore": [0.5] * n,
+        "PC1": [1.0] * n,
+        "PC2": [0.1] * n,
+        "xi_mean_percentile": [0.5] * n,
+        "betweenness_percentile": [0.3] * n,
+    }
+
+
+@pytest.fixture
+def leg_dfs_with_dupes() -> dict[str, pl.DataFrame]:
+    """leg_dfs with known duplicate last names for name-resolution tests.
+
+    House: Alice Smith, Bob Smith, Carol Jones, Dave Carpenter, Eve Carpenter.
+    Senate: Frank Jones, Gina Unique.
+    """
+    house_data = {
+        "legislator_slug": [
+            "rep_smith_alice_1", "rep_smith_bob_1", "rep_jones_carol_1",
+            "rep_carpenter_dave_1", "rep_carpenter_eve_1",
+        ],
+        "full_name": [
+            "Alice Smith", "Bob Smith", "Carol Jones",
+            "Dave Carpenter", "Eve Carpenter",
+        ],
+        "party": ["Republican", "Republican", "Democrat", "Republican", "Democrat"],
+        "district": ["1", "2", "3", "4", "5"],
+        "chamber": ["house"] * 5,
+        **_stub_columns(5),
+    }
+    senate_data = {
+        "legislator_slug": ["sen_jones_frank_1", "sen_unique_gina_1"],
+        "full_name": ["Frank Jones", "Gina Unique"],
+        "party": ["Republican", "Democrat"],
+        "district": ["10", "11"],
+        "chamber": ["senate"] * 2,
+        **_stub_columns(2),
+    }
+    return {
+        "house": pl.DataFrame(house_data),
+        "senate": pl.DataFrame(senate_data),
+    }
+
+
+# ── Tests: Resolve Names ───────────────────────────────────────────────────
+
+
+class TestResolveNames:
+    """Tests for the resolve_names() function."""
+
+    def test_exact_full_name_match(self, leg_dfs_with_dupes):
+        """Exact full name (case-insensitive) returns ok with one match."""
+        result = resolve_names(["Alice Smith"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ok"
+        assert result[0].matches[0]["slug"] == "rep_smith_alice_1"
+
+    def test_exact_full_name_case_insensitive(self, leg_dfs_with_dupes):
+        """Case should not matter for full-name matching."""
+        result = resolve_names(["alice smith"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ok"
+        assert result[0].matches[0]["full_name"] == "Alice Smith"
+
+    def test_last_name_unique_match(self, leg_dfs_with_dupes):
+        """A unique last name returns ok."""
+        result = resolve_names(["Unique"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ok"
+        assert result[0].matches[0]["slug"] == "sen_unique_gina_1"
+
+    def test_last_name_ambiguous(self, leg_dfs_with_dupes):
+        """Last name with multiple matches returns ambiguous with all matches."""
+        result = resolve_names(["Smith"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ambiguous"
+        assert len(result[0].matches) == 2
+        slugs = {m["slug"] for m in result[0].matches}
+        assert slugs == {"rep_smith_alice_1", "rep_smith_bob_1"}
+
+    def test_first_name_disambiguates(self, leg_dfs_with_dupes):
+        """Full name disambiguates among same-last-name legislators."""
+        result = resolve_names(["Dave Carpenter"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ok"
+        assert result[0].matches[0]["slug"] == "rep_carpenter_dave_1"
+
+    def test_no_match(self, leg_dfs_with_dupes):
+        """Non-existent name returns no_match."""
+        result = resolve_names(["Nobody"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "no_match"
+        assert result[0].matches == []
+
+    def test_cross_chamber_same_last_name(self, leg_dfs_with_dupes):
+        """Last name present in both chambers returns ambiguous."""
+        result = resolve_names(["Jones"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ambiguous"
+        assert len(result[0].matches) == 2
+        chambers = {m["chamber"] for m in result[0].matches}
+        assert chambers == {"house", "senate"}
+
+    def test_cross_chamber_disambiguated_by_full_name(self, leg_dfs_with_dupes):
+        """Full name disambiguates across chambers."""
+        result = resolve_names(["Frank Jones"], leg_dfs_with_dupes)
+        assert len(result) == 1
+        assert result[0].status == "ok"
+        assert result[0].matches[0]["chamber"] == "senate"
+
+    def test_multiple_queries(self, leg_dfs_with_dupes):
+        """Multiple queries return one NameMatch each."""
+        result = resolve_names(["Alice Smith", "Nobody", "Unique"], leg_dfs_with_dupes)
+        assert len(result) == 3
+        assert result[0].status == "ok"
+        assert result[1].status == "no_match"
+        assert result[2].status == "ok"
+
+    def test_empty_list_returns_empty(self, leg_dfs_with_dupes):
+        """Empty input returns empty output."""
+        result = resolve_names([], leg_dfs_with_dupes)
+        assert result == []
+
+    def test_preserves_original_query(self, leg_dfs_with_dupes):
+        """NameMatch.query should preserve the exact original input string."""
+        result = resolve_names(["  Alice Smith  "], leg_dfs_with_dupes)
+        assert result[0].query == "  Alice Smith  "
+
+    def test_resolved_slugs_work_with_gather(self, leg_dfs_with_dupes):
+        """Resolved slugs should be accepted by gather_profile_targets()."""
+        matches = resolve_names(["Gina Unique"], leg_dfs_with_dupes)
+        slugs = [m["slug"] for nm in matches for m in nm.matches]
+        targets = gather_profile_targets(leg_dfs_with_dupes, extra_slugs=slugs)
+        target_slugs = [t.slug for t in targets]
+        assert "sen_unique_gina_1" in target_slugs

@@ -14,6 +14,11 @@ from dataclasses import dataclass
 import polars as pl
 
 try:
+    from analysis.cross_session_data import normalize_name
+except ModuleNotFoundError:
+    from cross_session_data import normalize_name  # type: ignore[no-redef]
+
+try:
     from analysis.synthesis_detect import detect_all
 except ModuleNotFoundError:
     from synthesis_detect import detect_all  # type: ignore[no-redef]
@@ -54,6 +59,15 @@ class ProfileTarget:
     role: str  # "Maverick", "Bridge-Builder", "Paradox", "Requested"
     title: str  # "Mark Schreiber (R-60)"
     subtitle: str  # one-sentence data-driven explanation
+
+
+@dataclass(frozen=True)
+class NameMatch:
+    """Result of resolving a user-supplied name query to legislator slug(s)."""
+
+    query: str  # original input, e.g., "Masterson"
+    status: str  # "ok" | "ambiguous" | "no_match"
+    matches: list[dict]  # [{slug, full_name, party, district, chamber}, ...]
 
 
 @dataclass(frozen=True)
@@ -156,6 +170,102 @@ def _build_slug_lookup(leg_dfs: dict[str, pl.DataFrame]) -> dict[str, dict]:
                 "chamber": chamber,
             }
     return lookup
+
+
+def _build_name_lookup(
+    leg_dfs: dict[str, pl.DataFrame],
+) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+    """Build full-name and last-name lookup tables from leg_dfs.
+
+    Returns (full_name_lookup, last_name_lookup) where both map normalized names
+    to lists of info dicts (to handle cross-chamber duplicates).
+    """
+    full_name_lookup: dict[str, list[dict]] = {}
+    last_name_lookup: dict[str, list[dict]] = {}
+    for chamber, df in leg_dfs.items():
+        for row in df.select("legislator_slug", "full_name", "party", "district").to_dicts():
+            info = {
+                "slug": row["legislator_slug"],
+                "full_name": row["full_name"],
+                "party": row["party"],
+                "district": row["district"],
+                "chamber": chamber,
+            }
+            norm_full = normalize_name(row["full_name"])
+            full_name_lookup.setdefault(norm_full, []).append(info)
+
+            # Last name = last token of normalized full name
+            last = norm_full.split()[-1] if norm_full else ""
+            if last:
+                last_name_lookup.setdefault(last, []).append(info)
+    return full_name_lookup, last_name_lookup
+
+
+def resolve_names(
+    names: list[str],
+    leg_dfs: dict[str, pl.DataFrame],
+) -> list[NameMatch]:
+    """Resolve user-supplied name queries to legislator slugs.
+
+    Multi-stage matching:
+    1. Exact case-insensitive match on full name
+    2. Last-name-only match
+    3. First-name disambiguation within last-name matches
+
+    Returns one NameMatch per query.
+    """
+    if not names:
+        return []
+
+    full_lookup, last_lookup = _build_name_lookup(leg_dfs)
+    results: list[NameMatch] = []
+
+    for raw_query in names:
+        query_norm = normalize_name(raw_query)
+        if not query_norm:
+            results.append(NameMatch(query=raw_query, status="no_match", matches=[]))
+            continue
+
+        # Stage 1: exact full-name match
+        if query_norm in full_lookup:
+            matches = full_lookup[query_norm]
+            status = "ok" if len(matches) == 1 else "ambiguous"
+            results.append(NameMatch(query=raw_query, status=status, matches=matches))
+            continue
+
+        # Stage 2: last-name-only match
+        query_parts = query_norm.split()
+        last_name = query_parts[-1]
+        candidates = last_lookup.get(last_name, [])
+
+        if not candidates:
+            results.append(NameMatch(query=raw_query, status="no_match", matches=[]))
+            continue
+
+        if len(candidates) == 1:
+            results.append(NameMatch(query=raw_query, status="ok", matches=candidates))
+            continue
+
+        # Stage 3: first-name disambiguation (if query has 2+ tokens)
+        if len(query_parts) >= 2:
+            first_name = query_parts[0]
+            narrowed = [
+                c for c in candidates if normalize_name(c["full_name"]).split()[0] == first_name
+            ]
+            if len(narrowed) == 1:
+                results.append(NameMatch(query=raw_query, status="ok", matches=narrowed))
+                continue
+            if narrowed:
+                # Still ambiguous but narrowed
+                results.append(
+                    NameMatch(query=raw_query, status="ambiguous", matches=narrowed)
+                )
+                continue
+
+        # Multiple last-name matches, no disambiguation possible
+        results.append(NameMatch(query=raw_query, status="ambiguous", matches=candidates))
+
+    return results
 
 
 def _abs_xi(leg_dfs: dict[str, pl.DataFrame], target: ProfileTarget) -> float:

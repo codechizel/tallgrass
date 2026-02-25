@@ -12,21 +12,27 @@ Scrapes Kansas Legislature roll call votes from kslegislature.gov into CSV files
 
 ## Commands
 
+[Just](https://github.com/casey/just) is used as a command runner — thin aliases over `uv run` commands. The `Justfile` also sets `OMP_NUM_THREADS=6` and `OPENBLAS_NUM_THREADS=6` globally to cap thread pools on Apple Silicon (ADR-0022). Run `just --list` to see all recipes, or use the underlying `uv run` commands directly.
+
 ```bash
-just scrape 2025                             # scrape (cached)
-just scrape-fresh 2025                       # scrape (fresh)
-just lint                                    # lint + format
-just lint-check                              # check only
-just typecheck                               # ty type check (src + analysis)
-just sessions                                # list available sessions
-just check                                   # full check (lint + typecheck + tests)
-just test                                    # run all tests (~1022)
-just test-scraper                            # scraper tests only
-uv run ks-vote-scraper 2023                  # historical session
-uv run ks-vote-scraper 2024 --special        # special session
+just scrape 2025                             # → uv run ks-vote-scraper 2025
+just scrape-fresh 2025                       # → uv run ks-vote-scraper --clear-cache 2025
+just lint                                    # → ruff check --fix + ruff format
+just lint-check                              # → ruff check + ruff format --check
+just typecheck                               # → ty check src/ + ty check analysis/
+just sessions                                # → uv run ks-vote-scraper --list-sessions
+just check                                   # → lint-check + typecheck + test (quality gate)
+just test                                    # → uv run pytest tests/ -v (~1034 tests)
+just test-scraper                            # → pytest on scraper test files only
+uv run ks-vote-scraper 2023                  # historical session (direct)
+uv run ks-vote-scraper 2024 --special        # special session (direct)
 ```
 
-Analysis recipes: `just eda`, `just pca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
+Analysis recipes (all pass `*args` through to the underlying script):
+
+`just eda`, `just pca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
+
+Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
 ## Build Philosophy
 
@@ -139,6 +145,7 @@ Key references:
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
 - Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)
 - Synthesis deep dive: `docs/synthesis-deep-dive.md` (field survey, code audit, detection algorithms, test gaps, refactoring)
+- Profiles deep dive: `docs/profiles-deep-dive.md` (code audit, ecosystem survey, name-based lookup)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (bb25, topic modeling, retrieval, open questions)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
@@ -154,7 +161,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 1022 tests
+just test                    # 1034 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

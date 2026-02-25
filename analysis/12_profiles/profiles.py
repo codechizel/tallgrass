@@ -7,7 +7,7 @@ Reads upstream parquets (via synthesis.py infrastructure) and raw CSVs. Produces
 a standalone HTML report with 5 plots per legislator.
 
 Usage:
-  uv run python analysis/profiles.py [--session 2025-26] [--slugs slug1,slug2]
+  uv run python analysis/profiles.py [--session 2025-26] [--slugs slug1,slug2] [--names "Masterson,Carpenter"]
 
 Outputs (in results/<session>/profiles/<date>/):
   - data/:   ProfileTarget list, per-legislator data as parquet
@@ -41,6 +41,7 @@ try:
         find_legislator_surprising_votes,
         find_voting_neighbors,
         gather_profile_targets,
+        resolve_names,
     )
 except ModuleNotFoundError:
     from profiles_data import (  # type: ignore[no-redef]
@@ -53,6 +54,7 @@ except ModuleNotFoundError:
         find_legislator_surprising_votes,
         find_voting_neighbors,
         gather_profile_targets,
+        resolve_names,
     )
 
 try:
@@ -117,6 +119,12 @@ Each legislator profile includes:
 4. **Defection Votes** — Specific bills where they broke from party
 5. **Surprising Votes** — Votes the prediction model got most wrong
 6. **Voting Neighbors** — Who they vote most/least like
+
+## Selecting Specific Legislators
+
+Use `--names` to request profiles by legislator name (case-insensitive, supports
+last name only or full name). Ambiguous matches (e.g., two "Carpenter"s) include
+all matches. Use `--slugs` for exact legislator slug lookup. Both can be combined.
 
 ## Caveats
 
@@ -585,12 +593,62 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--slugs",
         default=None,
-        help="Comma-separated legislator slugs for extra profiles (e.g., rep_smith,sen_jones)",
+        help="Comma-separated legislator slugs for extra profiles (e.g., rep_alcala_john_1)",
+    )
+    parser.add_argument(
+        "--names",
+        default=None,
+        help=(
+            "Comma-separated legislator names to profile "
+            '(e.g., "Masterson,Blake Carpenter,Dietrich")'
+        ),
     )
     return parser.parse_args()
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+
+
+def _resolve_name_args(
+    names_arg: str | None,
+    leg_dfs: dict[str, pl.DataFrame],
+) -> list[str]:
+    """Resolve --names argument to slugs, printing status for each query.
+
+    Returns list of resolved slugs (may be empty).
+    """
+    if not names_arg:
+        return []
+
+    queries = [q.strip() for q in names_arg.split(",") if q.strip()]
+    if not queries:
+        return []
+
+    matches = resolve_names(queries, leg_dfs)
+    resolved_slugs: list[str] = []
+
+    for match in matches:
+        if match.status == "ok":
+            m = match.matches[0]
+            print(
+                f"  Resolved '{match.query}' -> "
+                f"{m['full_name']} ({m['party'][0]}-{m['district']}, {m['chamber']})"
+            )
+            resolved_slugs.append(m["slug"])
+        elif match.status == "ambiguous":
+            print(
+                f"  NOTE: '{match.query}' matched {len(match.matches)} "
+                "legislators (all included):"
+            )
+            for m in match.matches:
+                print(
+                    f"    - {m['full_name']} ({m['party'][0]}-{m['district']}, {m['chamber']})"
+                )
+                resolved_slugs.append(m["slug"])
+        else:
+            print(f"  WARNING: No legislator found matching '{match.query}'")
+
+    return resolved_slugs
 
 
 def main() -> None:
@@ -618,6 +676,15 @@ def main() -> None:
             df = build_legislator_df(upstream, chamber)
             leg_dfs[chamber] = df
             print(f"  {chamber}: {df.height} legislators, {df.width} columns")
+
+        # ── Resolve --names to slugs ──────────────────────────────────
+        if args.names:
+            print("\nResolving legislator names...")
+            name_slugs = _resolve_name_args(args.names, leg_dfs)
+            if extra_slugs:
+                extra_slugs.extend(name_slugs)
+            elif name_slugs:
+                extra_slugs = name_slugs
 
         # ── Gather profile targets ────────────────────────────────────
         print("\nSelecting legislators for profiling...")
