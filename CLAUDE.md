@@ -124,7 +124,7 @@ See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (25 decisions)
+- ADRs: `docs/adr/README.md` (26 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -141,7 +141,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 777 tests
+just test                    # 788 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

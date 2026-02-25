@@ -62,7 +62,17 @@ Those unanimous votes are a problem for analysis. If every single legislator vot
 
 After filtering, we're left with about 120 active House members voting on roughly 200 contested bills, and 40 Senators on about 150 contested bills. This cleaned-up dataset is what every subsequent step works with.
 
-### One more thing: measuring agreement
+### Deeper diagnostics
+
+Beyond the basic counts, EDA runs several diagnostics drawn from the political science literature:
+
+- **Party Unity Score** — For each legislator, what fraction of party-line votes did they vote with their party? A score of 1.0 means perfect loyalty; 0.5 means they broke ranks half the time. This is the bread-and-butter metric in political journalism.
+- **Eigenvalue preview** — A quick peek at the vote data's structure. If one dimension dominates (the party split), the ratio of the first to second eigenvalue will be large (>5). If there's a meaningful second dimension, the ratio will be smaller. This tells us how much of the story is "just party" before we build any models.
+- **Strategic absence check** — Are absences random, or do some legislators conveniently miss the controversial votes? We compare each legislator's absence rate on party-line votes vs. all votes. A ratio above 2x gets flagged.
+- **Rice correction** — The Rice Cohesion Index measures how unified a party is on each vote. But smaller parties (like Kansas Democrats at ~28% of seats) look artificially more unified just because they have fewer members. The Desposato correction resamples the larger party down to match, giving an apples-to-apples comparison.
+- **Item-total correlations** — Some roll calls don't distinguish liberals from conservatives at all (procedural votes, cross-cutting issues). We flag these so downstream models can focus on the votes that carry real ideological signal.
+
+### Measuring agreement
 
 We also compute how often every pair of legislators votes the same way. But there's a trap. If 84% of all votes are Yea, then two legislators who both just vote Yea on everything would appear to "agree" 84% of the time — even if they have nothing in common besides following the herd. To correct for this, we use a measure called Cohen's Kappa, which adjusts for the rate of agreement you'd expect by chance. Think of it as asking not "how often did they agree?" but "how often did they agree *beyond what you'd expect from random chance*?"
 

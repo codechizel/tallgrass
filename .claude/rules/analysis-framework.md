@@ -38,7 +38,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 
 Each phase has a design doc in `analysis/design/` — **read before interpreting results or adding a new phase:**
 
-- `eda.md` — Binary encoding, filtering thresholds, agreement metrics
+- `eda.md` — Binary encoding, filtering thresholds, agreement metrics, literature diagnostics (ADR-0026)
 - `pca.md` — Imputation, standardization, sign convention, holdout design
 - `irt.md` — Priors, MCMC settings, PCA-informed chain initialization
 - `clustering.md` — Three methods for robustness, k=2 finding

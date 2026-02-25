@@ -31,9 +31,13 @@ def build_eda_report(
     integrity_findings: dict,
     stat_findings: dict,
     participation: pl.DataFrame,
+    party_unity: pl.DataFrame | None = None,
+    eigenvalue_findings: dict | None = None,
+    desposato_findings: dict | None = None,
+    item_total_findings: dict | None = None,
     plots_dir: Path,
 ) -> None:
-    """Build the full EDA HTML report by adding ~19 sections to the ReportBuilder."""
+    """Build the full EDA HTML report by adding sections to the ReportBuilder."""
     _add_session_overview(report, votes, rollcalls, legislators)
     _add_chamber_party_composition(report, legislators)
     _add_vote_categories(report, votes)
@@ -43,11 +47,19 @@ def build_eda_report(
     _add_margin_stats(report, rollcalls)
     _add_vote_alignment(report, votes, rollcalls, legislators)
     _add_rice_cohesion(report, stat_findings)
+    if desposato_findings:
+        _add_desposato_rice(report, desposato_findings)
     _add_temporal_figure(report, plots_dir)
     _add_party_breakdown_figure(report, plots_dir)
     _add_participation_summary(report, participation)
     _add_participation_figure(report, plots_dir, "House")
     _add_participation_figure(report, plots_dir, "Senate")
+    if party_unity is not None and not party_unity.is_empty():
+        _add_party_unity(report, party_unity)
+    if eigenvalue_findings:
+        _add_eigenvalue_preview(report, eigenvalue_findings)
+    if item_total_findings:
+        _add_item_total_summary(report, item_total_findings)
     _add_filtering_decisions(report, manifests)
     _add_heatmap_figure(report, plots_dir, "House")
     _add_heatmap_figure(report, plots_dir, "Senate")
@@ -537,24 +549,188 @@ def _add_integrity_results(report: ReportBuilder, integrity_findings: dict) -> N
     report.add(TableSection(id="integrity-results", title="Data Integrity Results", html=html))
 
 
+def _add_party_unity(report: ReportBuilder, party_unity: pl.DataFrame) -> None:
+    """Table: Party Unity Scores — lowest-unity legislators."""
+    # Show all legislators sorted by unity score
+    display = (
+        party_unity.select(
+            "full_name", "chamber", "party", "party_unity_score", "n_party_line_votes"
+        )
+        .with_columns(
+            (pl.col("party_unity_score") * 100).alias("party_unity_score"),
+        )
+        .sort("party_unity_score")
+    )
+
+    html = make_gt(
+        display,
+        title="Party Unity Scores",
+        subtitle=(
+            "Fraction of party-line votes where legislator voted with party majority. "
+            "Lower = more independent."
+        ),
+        column_labels={
+            "full_name": "Legislator",
+            "chamber": "Chamber",
+            "party": "Party",
+            "party_unity_score": "Unity (%)",
+            "n_party_line_votes": "Party-Line Votes",
+        },
+        number_formats={"party_unity_score": ".1f", "n_party_line_votes": ",.0f"},
+    )
+    report.add(TableSection(id="party-unity", title="Party Unity Scores", html=html))
+
+
+def _add_eigenvalue_preview(report: ReportBuilder, eigenvalue_findings: dict) -> None:
+    """Table: Eigenvalue preview — dimensionality diagnostic."""
+    rows = []
+    for chamber, ev_data in eigenvalue_findings.items():
+        eigenvalues = ev_data.get("eigenvalues", [])
+        ratio = ev_data.get("lambda_ratio")
+        if eigenvalues:
+            total = sum(eigenvalues)
+            for i, ev in enumerate(eigenvalues):
+                rows.append(
+                    {
+                        "chamber": chamber,
+                        "component": f"λ{i + 1}",
+                        "eigenvalue": ev,
+                        "pct_variance": 100 * ev / total if total > 0 else 0,
+                    }
+                )
+            if ratio is not None:
+                rows.append(
+                    {
+                        "chamber": chamber,
+                        "component": "λ1/λ2",
+                        "eigenvalue": ratio,
+                        "pct_variance": None,
+                    }
+                )
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Eigenvalue Preview (Dimensionality Diagnostic)",
+        subtitle="Top eigenvalues of the filtered vote matrix correlation matrix.",
+        column_labels={
+            "chamber": "Chamber",
+            "component": "Component",
+            "eigenvalue": "Value",
+            "pct_variance": "% Variance",
+        },
+        number_formats={"eigenvalue": ".2f", "pct_variance": ".1f"},
+        source_note="λ1/λ2 > 5 = strongly 1D. < 3 = second dimension may be meaningful.",
+    )
+    report.add(TableSection(id="eigenvalue-preview", title="Eigenvalue Preview", html=html))
+
+
+def _add_desposato_rice(report: ReportBuilder, desposato_findings: dict) -> None:
+    """Table: Desposato (2005) small-party correction for Rice index."""
+    raw = desposato_findings.get("raw", {})
+    corrected = desposato_findings.get("corrected", {})
+    if not raw:
+        return
+
+    rows = []
+    for party in sorted(raw.keys()):
+        r = raw[party]
+        c = corrected.get(party, r)
+        rows.append(
+            {
+                "party": party,
+                "raw_rice": r,
+                "corrected_rice": c,
+                "delta": c - r,
+            }
+        )
+
+    df = pl.DataFrame(rows)
+    min_party = desposato_findings.get("min_party", "?")
+    min_size = desposato_findings.get("min_size", "?")
+    html = make_gt(
+        df,
+        title="Desposato Rice Correction",
+        subtitle=(
+            f"Bootstrap correction for small-party inflation. "
+            f"Larger parties resampled to n={min_size} (size of {min_party})."
+        ),
+        column_labels={
+            "party": "Party",
+            "raw_rice": "Raw Mean Rice",
+            "corrected_rice": "Corrected Mean Rice",
+            "delta": "Δ",
+        },
+        number_formats={"raw_rice": ".3f", "corrected_rice": ".3f", "delta": "+.3f"},
+        source_note="Desposato (2005). Negative Δ = raw score was inflated by party size.",
+    )
+    report.add(TableSection(id="desposato-rice", title="Desposato Rice Correction", html=html))
+
+
+def _add_item_total_summary(report: ReportBuilder, item_total_findings: dict) -> None:
+    """Table: Item-total correlation summary per chamber."""
+    rows = []
+    for chamber, data in item_total_findings.items():
+        n_analyzed = data.get("n_analyzed", 0)
+        n_flagged = data.get("n_flagged", 0)
+        pct_flagged = 100 * n_flagged / n_analyzed if n_analyzed > 0 else 0
+        rows.append(
+            {
+                "chamber": chamber,
+                "n_analyzed": n_analyzed,
+                "n_flagged": n_flagged,
+                "pct_flagged": pct_flagged,
+            }
+        )
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Item-Total Correlation Screening",
+        subtitle="Roll calls with |r| < 0.1 are non-discriminating (procedural or cross-cutting).",
+        column_labels={
+            "chamber": "Chamber",
+            "n_analyzed": "Contested Votes",
+            "n_flagged": "Non-Discriminating",
+            "pct_flagged": "% Flagged",
+        },
+        number_formats={"pct_flagged": ".1f"},
+    )
+    report.add(
+        TableSection(id="item-total-corr", title="Item-Total Correlation Screening", html=html)
+    )
+
+
 def _add_analysis_parameters(report: ReportBuilder) -> None:
-    """Table 19: Analysis constants used in this run."""
+    """Table: Analysis constants used in this run."""
     # Import the constants from eda.py
     try:
         from analysis.eda import (
             HOUSE_SEATS,
+            ITEM_TOTAL_CORRELATION_THRESHOLD,
             MIN_SHARED_VOTES,
             MIN_VOTES,
             MINORITY_THRESHOLD,
+            RICE_BOOTSTRAP_ITERATIONS,
             SENATE_SEATS,
+            STRATEGIC_ABSENCE_RATIO,
         )
     except ModuleNotFoundError:
         from eda import (  # type: ignore[no-redef]
             HOUSE_SEATS,
+            ITEM_TOTAL_CORRELATION_THRESHOLD,
             MIN_SHARED_VOTES,
             MIN_VOTES,
             MINORITY_THRESHOLD,
+            RICE_BOOTSTRAP_ITERATIONS,
             SENATE_SEATS,
+            STRATEGIC_ABSENCE_RATIO,
         )
 
     df = pl.DataFrame(
@@ -565,6 +741,9 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
                 "Min Shared Votes (Agreement)",
                 "House Seats",
                 "Senate Seats",
+                "Rice Bootstrap Iterations",
+                "Strategic Absence Ratio",
+                "Item-Total Correlation Threshold",
             ],
             "Value": [
                 f"{MINORITY_THRESHOLD:.3f} ({MINORITY_THRESHOLD * 100:.1f}%)",
@@ -572,6 +751,9 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
                 str(MIN_SHARED_VOTES),
                 str(HOUSE_SEATS),
                 str(SENATE_SEATS),
+                str(RICE_BOOTSTRAP_ITERATIONS),
+                f"{STRATEGIC_ABSENCE_RATIO:.1f}x",
+                str(ITEM_TOTAL_CORRELATION_THRESHOLD),
             ],
             "Description": [
                 "Drop votes where minority side < this fraction",
@@ -579,6 +761,9 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
                 "Minimum shared votes for pairwise agreement",
                 "Constitutional House seat count",
                 "Constitutional Senate seat count",
+                "Desposato bootstrap iterations for Rice correction",
+                "Flag if party-line absence rate >= this × overall rate",
+                "Flag roll calls with |r| below this as non-discriminating",
             ],
         }
     )

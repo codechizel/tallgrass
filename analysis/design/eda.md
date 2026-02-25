@@ -24,6 +24,9 @@
 | `VOTE_CATEGORIES` | 5 categories | Yea, Nay, Present and Passing, Absent and Not Voting, Not Voting. Exactly these five; anything else triggers an integrity warning. | `eda.py:155-157` |
 | `MIN_SHARED_VOTES` | 10 | Minimum shared votes between two legislators to compute pairwise agreement. Below this, agreement is too noisy to be meaningful. | `eda.py:168` |
 | `HOUSE_SEATS` / `SENATE_SEATS` | 125 / 40 | Constitutional seat counts. Used as integrity guardrails — exceeding these indicates mid-session replacements or scraping bugs. | `eda.py:163-164` |
+| `RICE_BOOTSTRAP_ITERATIONS` | 100 | Iterations for Desposato small-party Rice correction bootstrap. | `eda.py:169` |
+| `STRATEGIC_ABSENCE_RATIO` | 2.0 | Threshold for flagging strategic absences (absence on party-line votes / overall absence). | `eda.py:170` |
+| `ITEM_TOTAL_CORRELATION_THRESHOLD` | 0.1 | Point-biserial correlation below which a roll call is flagged as non-discriminating. | `eda.py:171` |
 
 ## Methodological Choices
 
@@ -57,6 +60,22 @@
 **Why:** The ~82% Yea base rate in Kansas means two random legislators would agree ~70% of the time just by both voting Yea on most bills. Raw agreement inflates apparent similarity. Kappa corrects for this chance agreement: K = (observed - expected) / (1 - expected).
 
 **Impact:** Kappa values are lower and have more spread than raw agreement. A Kappa of 0.5 is actually strong agreement; 0.0 is chance-level. Downstream clustering should use Kappa, not raw agreement.
+
+### Additional Diagnostics (Added 2026-02-24)
+
+Five functions were added based on the literature review in `docs/eda-deep-dive.md`:
+
+| Function | Reference | Output |
+|----------|-----------|--------|
+| `compute_party_unity_scores()` | Carey Legislative Voting Data Project | Per-legislator loyalty rate on party-line votes. Saved to `party_unity_{chamber}.parquet`. |
+| `compute_eigenvalue_preview()` | Standard PCA pre-check | Top 5 eigenvalues + lambda1/lambda2 ratio. Saved to manifest. |
+| `compute_strategic_absence()` | Rosas & Shomer 2008 | Per-legislator absence rate on party-line vs all votes. Saved to `strategic_absence_{chamber}.parquet`. |
+| `compute_desposato_rice_correction()` | Desposato 2005 | Bootstrap-corrected Rice for cross-party comparison. Saved to manifest. |
+| `compute_item_total_correlations()` | Classical psychometrics | Point-biserial correlation per roll call. Saved to `item_total_{chamber}.parquet`. |
+
+All five are purely additive diagnostics — they do not change the vote matrices, filtering, or any downstream data. They run between party-line classification and the agreement matrix computation in `main()`.
+
+The `numpy_matrix_to_polars()` helper was extracted from `main()` to module level for testability.
 
 ### Party-line classification: 90% threshold
 

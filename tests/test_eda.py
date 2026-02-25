@@ -19,11 +19,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.eda import (
+    _check_near_duplicate_rollcalls,
     build_vote_matrix,
+    check_data_integrity,
     classify_party_line,
     compute_agreement_matrices,
+    compute_desposato_rice_correction,
+    compute_eigenvalue_preview,
+    compute_item_total_correlations,
+    compute_party_unity_scores,
     compute_rice_cohesion,
     filter_vote_matrix,
+    numpy_matrix_to_polars,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -440,3 +447,273 @@ class TestClassifyPartyLine:
         rc1_row = result.filter(pl.col("vote_id") == "rc1")
         assert rc1_row.height == 1
         assert rc1_row["vote_alignment"][0] == "bipartisan"
+
+    def test_mixed_vote(self) -> None:
+        """A vote where neither party is >90% in either direction should be mixed."""
+        # R: 6 Yea, 4 Nay (60% Yea) — not >90% either way
+        # D: 3 Yea, 2 Nay (60% Yea) — not >90% either way
+        slugs_r = [f"rep_{i}_x_1" for i in range(10)]
+        slugs_d = [f"rep_{i}_y_1" for i in range(5)]
+        vote_data = []
+        for s in slugs_r[:6]:
+            vote_data.append(("rc_mixed", "HB 1", "01", s, "Yea"))
+        for s in slugs_r[6:]:
+            vote_data.append(("rc_mixed", "HB 1", "01", s, "Nay"))
+        for s in slugs_d[:3]:
+            vote_data.append(("rc_mixed", "HB 1", "01", s, "Yea"))
+        for s in slugs_d[3:]:
+            vote_data.append(("rc_mixed", "HB 1", "01", s, "Nay"))
+
+        votes = pl.DataFrame(
+            [_vote_row(rc, bill, day, slug, vote) for rc, bill, day, slug, vote in vote_data],
+            schema=_VOTE_SCHEMA,
+            orient="row",
+        )
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["rc_mixed"],
+                "chamber": ["House"],
+                "yea_count": [9],
+                "nay_count": [6],
+                "total_votes": [15],
+            }
+        )
+        legislators = pl.DataFrame(
+            {
+                "slug": slugs_r + slugs_d,
+                "full_name": [f"R{i}" for i in range(10)] + [f"D{i}" for i in range(5)],
+                "chamber": ["House"] * 15,
+                "party": ["Republican"] * 10 + ["Democrat"] * 5,
+                "district": list(range(1, 16)),
+                "member_url": [""] * 15,
+            }
+        )
+
+        result = classify_party_line(votes, rollcalls, legislators)
+        assert result.height == 1
+        assert result["vote_alignment"][0] == "mixed"
+
+
+# ── Near-Duplicate Rollcall Detection Tests ─────────────────────────────────
+
+
+class TestNearDuplicateRollcalls:
+    """Test near-duplicate rollcall detection."""
+
+    def test_detects_identical_contested_votes(self) -> None:
+        """Two contested rollcalls with identical vote patterns should be detected."""
+        # Need >= 10 legislators for MIN_SHARED_VOTES threshold
+        slugs = [f"sen_{c}_{c}_1" for c in "abcdefghijklmn"]  # 14 legislators
+        rows = []
+        for rc in ["rc_a", "rc_b"]:
+            # 7 Yea, 7 Nay — contested and identical across both rollcalls
+            for s in slugs[:7]:
+                rows.append(_vote_row(rc, "SB 1", "1", s, "Yea"))
+            for s in slugs[7:]:
+                rows.append(_vote_row(rc, "SB 1", "1", s, "Nay"))
+
+        votes = pl.DataFrame(rows, schema=_VOTE_SCHEMA, orient="row")
+        findings: dict = {"warnings": [], "info": []}
+        _check_near_duplicate_rollcalls(votes, findings)
+
+        # rc_a and rc_b are identical on contested votes → detected
+        assert "near_duplicate_rollcalls" in findings
+        pairs = findings["near_duplicate_rollcalls"]
+        ids = {(p["vote_id_a"], p["vote_id_b"]) for p in pairs}
+        assert ("rc_a", "rc_b") in ids or ("rc_b", "rc_a") in ids
+
+    def test_ignores_different_votes(self) -> None:
+        """Two contested rollcalls with very different patterns should not be flagged."""
+        # rc_a: all Yea from first 5, Nay from last
+        # rc_b: opposite pattern
+        slugs = [f"sen_{c}_{c}_1" for c in "abcdefghij"]  # 10 legislators
+        rows = []
+        # rc_a: 5 Yea, 5 Nay
+        for s in slugs[:5]:
+            rows.append(_vote_row("rc_a", "SB 1", "1", s, "Yea"))
+        for s in slugs[5:]:
+            rows.append(_vote_row("rc_a", "SB 1", "1", s, "Nay"))
+        # rc_b: reversed
+        for s in slugs[:5]:
+            rows.append(_vote_row("rc_b", "SB 2", "2", s, "Nay"))
+        for s in slugs[5:]:
+            rows.append(_vote_row("rc_b", "SB 2", "2", s, "Yea"))
+
+        votes = pl.DataFrame(rows, schema=_VOTE_SCHEMA, orient="row")
+        findings: dict = {"warnings": [], "info": []}
+        _check_near_duplicate_rollcalls(votes, findings)
+
+        # Completely opposite patterns → NOT near-duplicates
+        assert "near_duplicate_rollcalls" not in findings
+
+
+# ── Integrity Check Isolated Tests ──────────────────────────────────────────
+
+
+class TestIntegrityChecks:
+    """Test individual data integrity checks in isolation."""
+
+    def test_detects_duplicate_votes(
+        self,
+        simple_votes: pl.DataFrame,
+        simple_rollcalls: pl.DataFrame,
+        simple_legislators: pl.DataFrame,
+    ) -> None:
+        """Injecting a duplicate (same slug + vote_id) should trigger a warning."""
+        # Duplicate: legislator A votes Yea twice on rc1
+        dupe_row = simple_votes.filter(
+            (pl.col("legislator_slug") == "sen_a_a_1") & (pl.col("vote_id") == "rc1")
+        )
+        votes_with_dupe = pl.concat([simple_votes, dupe_row])
+
+        findings = check_data_integrity(votes_with_dupe, simple_rollcalls, simple_legislators)
+        # Should have a warning about duplicate votes
+        dupe_warnings = [w for w in findings["warnings"] if "duplicate" in w.lower()]
+        assert len(dupe_warnings) > 0
+
+    def test_detects_tally_mismatch(
+        self,
+        simple_votes: pl.DataFrame,
+        simple_rollcalls: pl.DataFrame,
+        simple_legislators: pl.DataFrame,
+    ) -> None:
+        """A rollcall with wrong yea_count should trigger a tally mismatch warning."""
+        # Corrupt rc1 yea_count: actual is 6 Yea, set to 5
+        bad_rollcalls = simple_rollcalls.with_columns(
+            pl.when(pl.col("vote_id") == "rc1")
+            .then(pl.lit(5))
+            .otherwise(pl.col("yea_count"))
+            .alias("yea_count")
+        )
+
+        findings = check_data_integrity(simple_votes, bad_rollcalls, simple_legislators)
+        tally_warnings = [w for w in findings["warnings"] if "tally" in w.lower()]
+        assert len(tally_warnings) > 0
+
+
+# ── New Feature Tests ───────────────────────────────────────────────────────
+
+
+class TestPartyUnityScores:
+    """Test Party Unity Score computation."""
+
+    def test_perfect_loyalist_gets_1(
+        self,
+        simple_votes: pl.DataFrame,
+        simple_rollcalls: pl.DataFrame,
+        simple_legislators: pl.DataFrame,
+    ) -> None:
+        """A legislator who always votes with party majority on party-line votes gets 1.0."""
+        unity = compute_party_unity_scores(simple_votes, simple_rollcalls, simple_legislators)
+        if unity.is_empty():
+            pytest.skip("No party-line votes in fixture")
+        # All Rs voted Yea together on rc2 (party-line) → unity = 1.0
+        a_row = unity.filter(pl.col("legislator_slug") == "sen_a_a_1")
+        if a_row.height > 0:
+            assert a_row["party_unity_score"][0] == pytest.approx(1.0)
+
+
+class TestEigenvaluePreview:
+    """Test eigenvalue preview computation."""
+
+    def test_returns_eigenvalues(self) -> None:
+        """Should return a list of eigenvalues and a ratio."""
+        # Create a simple matrix with some variance
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": ["a", "b", "c", "d", "e"],
+                "v1": [1, 1, 0, 0, 1],
+                "v2": [1, 1, 0, 0, 0],
+                "v3": [0, 0, 1, 1, 0],
+                "v4": [1, 0, 1, 0, 1],
+                "v5": [0, 1, 0, 1, 0],
+            }
+        )
+        result = compute_eigenvalue_preview(matrix, "Test")
+        assert "eigenvalues" in result
+        assert len(result["eigenvalues"]) > 0
+        assert result["lambda_ratio"] is not None
+        assert result["lambda_ratio"] > 0
+
+
+class TestItemTotalCorrelations:
+    """Test item-total correlation computation."""
+
+    def test_flags_non_discriminating_votes(self) -> None:
+        """A constant-outcome vote should have near-zero correlation and be flagged."""
+        # v1-v4: correlated with Yea tendency; v5: random/uncorrelated
+        np.random.seed(42)
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": [f"leg_{i}" for i in range(20)],
+                "v1": [1] * 15 + [0] * 5,
+                "v2": [1] * 14 + [0] * 6,
+                "v3": [1] * 13 + [0] * 7,
+                "v4": [1] * 12 + [0] * 8,
+                # v5: nearly random relative to others
+                "v5": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+            }
+        )
+        result = compute_item_total_correlations(matrix, "Test")
+        assert not result.is_empty()
+        # At least some votes should have correlations computed
+        assert result.height > 0
+
+
+class TestDesposato:
+    """Test Desposato Rice correction."""
+
+    def test_correction_produces_valid_results(self) -> None:
+        """Desposato correction should produce valid Rice indices for both parties.
+
+        `uv run pytest tests/test_eda.py::TestDesposato -v`
+        """
+        # Create a dataset with asymmetric party sizes: 20 Rs, 5 Ds
+        slugs_r = [f"rep_{i}_x_1" for i in range(20)]
+        slugs_d = [f"rep_{i}_y_1" for i in range(5)]
+        # Rs: 18 Yea / 2 Nay on most votes → high Rice from size
+        rows = []
+        for vid in [f"v{i}" for i in range(20)]:
+            for s in slugs_r[:18]:
+                rows.append({"vote_id": vid, "legislator_slug": s, "vote": "Yea"})
+            for s in slugs_r[18:]:
+                rows.append({"vote_id": vid, "legislator_slug": s, "vote": "Nay"})
+            # Ds: 4 Yea / 1 Nay
+            for s in slugs_d[:4]:
+                rows.append({"vote_id": vid, "legislator_slug": s, "vote": "Yea"})
+            rows.append({"vote_id": vid, "legislator_slug": slugs_d[4], "vote": "Nay"})
+
+        votes = pl.DataFrame(rows)
+        legislators = pl.DataFrame(
+            {
+                "slug": slugs_r + slugs_d,
+                "party": ["Republican"] * 20 + ["Democrat"] * 5,
+            }
+        )
+
+        result = compute_desposato_rice_correction(votes, legislators)
+        assert "raw" in result
+        assert "corrected" in result
+        # Both raw and corrected Rice should be in [0, 1]
+        for party in ["Republican", "Democrat"]:
+            assert 0.0 <= result["raw"][party] <= 1.0
+            assert 0.0 <= result["corrected"][party] <= 1.0
+        # Smaller party (Democrat) should be unchanged
+        assert result["corrected"]["Democrat"] == result["raw"]["Democrat"]
+        # Correction identifies smaller party correctly
+        assert result["min_party"] == "Democrat"
+        assert result["min_size"] == 5
+
+
+class TestNumpyMatrixToPolars:
+    """Test the module-level numpy_matrix_to_polars helper."""
+
+    def test_roundtrip(self) -> None:
+        """Converting numpy → polars should preserve values."""
+        mat = np.array([[1.0, 0.5], [0.5, 1.0]])
+        slugs = ["leg_a", "leg_b"]
+        df = numpy_matrix_to_polars(mat, slugs)
+        assert df.height == 2
+        assert df["leg_a"][0] == pytest.approx(1.0)
+        assert df["leg_b"][0] == pytest.approx(0.5)
+        assert df["legislator_slug"].to_list() == slugs

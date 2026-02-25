@@ -53,6 +53,7 @@ What are the trade-offs?
 | [0023](0023-pca-informed-irt-initialization.md) | PCA-informed IRT chain initialization (default) | Accepted | 2026-02-23 |
 | [0024](0024-instruction-file-restructure.md) | Instruction file restructure | Accepted | 2026-02-24 |
 | [0025](0025-external-validation-shor-mccarty.md) | External validation against Shor-McCarty scores | Accepted | 2026-02-24 |
+| [0026](0026-eda-literature-diagnostics.md) | EDA literature-backed diagnostics | Accepted | 2026-02-24 |
 
 ## Creating a New ADR
 

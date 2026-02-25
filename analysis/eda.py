@@ -165,6 +165,15 @@ SENATE_SEATS = 40
 # meaningful pairwise agreement score. Below this, agreement is too noisy.
 MIN_SHARED_VOTES = 10
 
+# Desposato Rice correction bootstrap iterations (Desposato 2005)
+RICE_BOOTSTRAP_ITERATIONS = 100
+
+# Strategic absence: flag if absence rate on party-line votes >= 2× overall rate
+STRATEGIC_ABSENCE_RATIO = 2.0
+
+# Item-total correlation: flag roll calls with |r| below this threshold
+ITEM_TOTAL_CORRELATION_THRESHOLD = 0.1
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -188,6 +197,13 @@ def save_fig(fig: plt.Figure, path: Path, dpi: int = 150) -> None:
     fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"  Saved: {path.name}")
+
+
+def numpy_matrix_to_polars(mat: np.ndarray, slugs: list[str]) -> pl.DataFrame:
+    """Convert a square numpy matrix to a polars DataFrame with slug labels."""
+    cols = {slug: mat[:, i].tolist() for i, slug in enumerate(slugs)}
+    cols["legislator_slug"] = slugs
+    return pl.DataFrame(cols).select(["legislator_slug", *slugs])
 
 
 # ── 1. Data Loading ─────────────────────────────────────────────────────────
@@ -338,7 +354,7 @@ def check_data_integrity(
         .sort("chamber", "district")
     )
 
-    if district_counts.height > 0:
+    if not district_counts.is_empty():
         print(f"\n  Districts with multiple legislators ({district_counts.height} found):")
         for row in district_counts.iter_rows(named=True):
             names = row["names"]
@@ -396,7 +412,7 @@ def check_data_integrity(
     # ── 4. Duplicate vote check ──
     # Same legislator voting twice on the same rollcall is impossible.
     dupes = votes.group_by("vote_id", "legislator_slug").agg(pl.len()).filter(pl.col("len") > 1)
-    if dupes.height > 0:
+    if not dupes.is_empty():
         msg = f"{dupes.height} duplicate votes (same legislator + rollcall)"
         print(f"  [WARN] {msg}")
         findings["warnings"].append(msg)
@@ -435,7 +451,7 @@ def check_data_integrity(
         (pl.col("yea_count") != pl.col("detail_yea"))
         | (pl.col("nay_count") != pl.col("detail_nay"))
     )
-    if tally_mismatches.height > 0:
+    if not tally_mismatches.is_empty():
         msg = (
             f"{tally_mismatches.height} rollcalls with tally mismatches "
             f"(summary ≠ individual vote details)"
@@ -462,7 +478,7 @@ def check_data_integrity(
         .alias("chamber_size")
     ).filter(pl.col("total_votes") > pl.col("chamber_size"))
 
-    if overcount.height > 0:
+    if not overcount.is_empty():
         msg = f"{overcount.height} rollcalls exceed chamber seat count"
         print(f"  [WARN] {msg}")
         for row in overcount.head(5).iter_rows(named=True):
@@ -482,7 +498,7 @@ def check_data_integrity(
         (pl.col("legislator_slug").str.starts_with("sen_") & (pl.col("chamber") == "House"))
         | (pl.col("legislator_slug").str.starts_with("rep_") & (pl.col("chamber") == "Senate"))
     )
-    if cross_chamber.height > 0:
+    if not cross_chamber.is_empty():
         n_affected = cross_chamber["vote_id"].n_unique()
         msg = (
             f"{cross_chamber.height} votes with chamber-slug mismatch across {n_affected} rollcalls"
@@ -539,6 +555,10 @@ def _check_near_duplicate_rollcalls(votes: pl.DataFrame, findings: dict) -> None
         chamber_votes = votes.filter(
             pl.col("vote").is_in(["Yea", "Nay"]) & pl.col("legislator_slug").str.starts_with(prefix)
         ).with_columns(pl.when(pl.col("vote") == "Yea").then(1).otherwise(0).alias("vote_binary"))
+
+        # Deduplicate: if a legislator appears twice for the same vote (data error),
+        # keep the first occurrence to prevent pivot from crashing.
+        chamber_votes = chamber_votes.unique(subset=["vote_id", "legislator_slug"], keep="first")
 
         binary = chamber_votes.pivot(on="vote_id", index="legislator_slug", values="vote_binary")
         vote_ids = [c for c in binary.columns if c != "legislator_slug"]
@@ -712,7 +732,7 @@ def check_statistical_quality(
     # name defaulted to a category. Flag for manual review.
     perfect, unity = _detect_perfect_partisans(votes, legislators)
 
-    if perfect.height > 0:
+    if not perfect.is_empty():
         print("\n  Perfect partisans (100% party-line, >=50 contested votes):")
         for row in perfect.iter_rows(named=True):
             name_row = legislators.filter(pl.col("slug") == row["legislator_slug"])
@@ -795,6 +815,408 @@ def _detect_perfect_partisans(
     )
 
     return perfect, unity
+
+
+def compute_party_unity_scores(
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+) -> pl.DataFrame:
+    """Compute per-legislator Party Unity Score.
+
+    PUS = (votes with party majority on party-line votes) / (total party-line votes
+    participated in). This measures a *legislator's* loyalty across party-line votes,
+    as distinct from Rice which measures a *party's* cohesion on a single vote.
+
+    Returns DataFrame with columns: legislator_slug, full_name, chamber, party,
+    party_unity_score, n_party_line_votes.
+    """
+    print_header("PARTY UNITY SCORES")
+
+    # Get party-line classification
+    vote_with_party = votes.join(
+        legislators.select("slug", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
+    )
+    substantive = vote_with_party.filter(pl.col("vote").is_in(["Yea", "Nay"]))
+
+    # Compute party majority direction per rollcall
+    party_agg = (
+        substantive.group_by("vote_id", "party")
+        .agg(
+            (pl.col("vote") == "Yea").sum().alias("party_yea"),
+            (pl.col("vote") == "Nay").sum().alias("party_nay"),
+        )
+        .with_columns(
+            (pl.col("party_yea") / (pl.col("party_yea") + pl.col("party_nay"))).alias("yea_rate")
+        )
+    )
+
+    # Identify party-line votes (both parties >90% in opposite directions)
+    pivoted = party_agg.pivot(on="party", index="vote_id", values="yea_rate")
+    r_col = "Republican" if "Republican" in pivoted.columns else None
+    d_col = "Democrat" if "Democrat" in pivoted.columns else None
+
+    if not (r_col and d_col):
+        print("  Skipping: need both Republican and Democrat parties")
+        return pl.DataFrame()
+
+    party_line_ids = pivoted.filter(
+        ((pl.col(r_col) > 0.9) & (pl.col(d_col) < 0.1))
+        | ((pl.col(r_col) < 0.1) & (pl.col(d_col) > 0.9))
+    )["vote_id"].to_list()
+
+    if not party_line_ids:
+        print("  No party-line votes found")
+        return pl.DataFrame()
+
+    # Get party majority direction for party-line votes
+    party_majority = (
+        party_agg.filter(pl.col("vote_id").is_in(party_line_ids))
+        .with_columns(
+            pl.when(pl.col("party_yea") >= pl.col("party_nay"))
+            .then(pl.lit("Yea"))
+            .otherwise(pl.lit("Nay"))
+            .alias("party_direction")
+        )
+        .select("vote_id", "party", "party_direction")
+    )
+
+    # Join: did each legislator vote with their party on party-line votes?
+    pl_votes = substantive.filter(pl.col("vote_id").is_in(party_line_ids)).join(
+        party_majority, on=["vote_id", "party"]
+    )
+    pl_votes = pl_votes.with_columns(
+        (pl.col("vote") == pl.col("party_direction")).alias("with_party")
+    )
+
+    # Aggregate per legislator
+    unity = (
+        pl_votes.group_by("legislator_slug")
+        .agg(
+            pl.col("with_party").mean().alias("party_unity_score"),
+            pl.len().alias("n_party_line_votes"),
+        )
+        .join(
+            legislators.select("slug", "full_name", "chamber", "party"),
+            left_on="legislator_slug",
+            right_on="slug",
+        )
+        .sort("party_unity_score")
+    )
+
+    print(f"\n  Party-line votes: {len(party_line_ids)}")
+    print("\n  Lowest unity (most independent):")
+    for row in unity.head(10).iter_rows(named=True):
+        print(
+            f"    {row['full_name']:30s}  {row['party']:12s}  "
+            f"{100 * row['party_unity_score']:.1f}%  "
+            f"({row['n_party_line_votes']} votes)"
+        )
+
+    print("\n  Mean by party:")
+    for row in (
+        unity.group_by("party")
+        .agg(
+            pl.col("party_unity_score").mean().alias("mean"),
+            pl.col("party_unity_score").std().alias("std"),
+        )
+        .sort("party")
+        .iter_rows(named=True)
+    ):
+        std_val = 100 * (row["std"] or 0)
+        print(f"    {row['party']:12s}  mean={100 * row['mean']:.1f}%  std={std_val:.1f}%")
+
+    return unity
+
+
+def compute_eigenvalue_preview(matrix: pl.DataFrame, chamber: str) -> dict:
+    """Compute top eigenvalues of the filtered vote matrix correlation matrix.
+
+    Reports lambda1/lambda2 ratio as a dimensionality diagnostic. Ratio > 5
+    suggests the data is essentially 1D; ratio < 3 suggests a meaningful second
+    dimension worth modeling.
+
+    Returns dict with eigenvalues and ratio for the manifest.
+    """
+    slug_col = "legislator_slug"
+    vote_cols = [c for c in matrix.columns if c != slug_col]
+
+    if len(vote_cols) < 2 or matrix.height < 2:
+        return {"chamber": chamber, "eigenvalues": [], "lambda_ratio": None}
+
+    # Convert to numpy, impute nulls with row-mean (same as PCA phase)
+    arr = matrix.select(vote_cols).to_numpy().astype(np.float64)
+    row_means = np.nanmean(arr, axis=1, keepdims=True)
+    # Handle all-NaN rows
+    row_means = np.where(np.isnan(row_means), 0.5, row_means)
+    mask = np.isnan(arr)
+    arr[mask] = np.broadcast_to(row_means, arr.shape)[mask]
+
+    # Compute correlation matrix and eigenvalues
+    corr = np.corrcoef(arr.T)
+    # Handle NaN in correlation matrix (constant columns)
+    corr = np.nan_to_num(corr, nan=0.0)
+    eigenvalues = np.sort(np.linalg.eigvalsh(corr))[::-1]
+
+    top_5 = eigenvalues[:5].tolist()
+    ratio = float(top_5[0] / top_5[1]) if len(top_5) >= 2 and top_5[1] > 0 else float("inf")
+
+    print(f"\n  {chamber} eigenvalue preview:")
+    for i, ev in enumerate(top_5):
+        pct = 100 * ev / eigenvalues.sum()
+        print(f"    λ{i + 1} = {ev:.2f}  ({pct:.1f}% of variance)")
+    print(f"    λ1/λ2 ratio: {ratio:.2f}", end="")
+    if ratio > 5:
+        print("  (strongly 1D)")
+    elif ratio > 3:
+        print("  (primarily 1D)")
+    else:
+        print("  (second dimension may be meaningful)")
+
+    return {
+        "chamber": chamber,
+        "eigenvalues": top_5,
+        "lambda_ratio": ratio,
+    }
+
+
+def compute_strategic_absence(
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+    vote_alignment: pl.DataFrame,
+) -> pl.DataFrame:
+    """Test whether absences correlate with vote contentiousness.
+
+    For each legislator, compares their absence rate on party-line votes vs
+    their overall absence rate. A ratio >= STRATEGIC_ABSENCE_RATIO (2x) suggests
+    absences are not random — the legislator may be strategically avoiding
+    party-line votes.
+
+    Returns DataFrame with per-legislator absence analysis.
+    """
+    print_header("STRATEGIC ABSENCE DIAGNOSTIC")
+
+    if vote_alignment.is_empty():
+        print("  Skipping: no vote alignment data")
+        return pl.DataFrame()
+
+    party_line_ids = set(
+        vote_alignment.filter(pl.col("vote_alignment") == "party-line")["vote_id"].to_list()
+    )
+    if not party_line_ids:
+        print("  Skipping: no party-line votes found")
+        return pl.DataFrame()
+
+    # For each legislator, count absences on party-line votes vs all votes
+    # "Absent" = any non-Yea/Nay vote
+    v = votes.join(
+        legislators.select("slug", "full_name", "chamber", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
+    )
+    v = v.with_columns(
+        (~pl.col("vote").is_in(["Yea", "Nay"])).alias("is_absent"),
+        pl.col("vote_id").is_in(party_line_ids).alias("is_party_line"),
+    )
+
+    absence = (
+        v.group_by("legislator_slug", "full_name", "chamber", "party")
+        .agg(
+            pl.col("is_absent").mean().alias("overall_absence_rate"),
+            (pl.col("is_absent") & pl.col("is_party_line")).sum().alias("absent_on_pl"),
+            pl.col("is_party_line").sum().alias("total_pl_votes"),
+            pl.len().alias("total_votes"),
+        )
+        .with_columns(
+            pl.when(pl.col("total_pl_votes") > 0)
+            .then(pl.col("absent_on_pl") / pl.col("total_pl_votes"))
+            .otherwise(0.0)
+            .alias("pl_absence_rate")
+        )
+        .with_columns(
+            pl.when(pl.col("overall_absence_rate") > 0)
+            .then(pl.col("pl_absence_rate") / pl.col("overall_absence_rate"))
+            .otherwise(0.0)
+            .alias("absence_ratio")
+        )
+        .sort("absence_ratio", descending=True)
+    )
+
+    flagged = absence.filter(
+        (pl.col("absence_ratio") >= STRATEGIC_ABSENCE_RATIO) & (pl.col("absent_on_pl") >= 3)
+    )
+
+    if not flagged.is_empty():
+        print(f"\n  {flagged.height} legislators with disproportionate party-line absences:")
+        for row in flagged.iter_rows(named=True):
+            print(
+                f"    {row['full_name']:30s}  {row['party']:12s}  "
+                f"overall={100 * row['overall_absence_rate']:.1f}%  "
+                f"party-line={100 * row['pl_absence_rate']:.1f}%  "
+                f"ratio={row['absence_ratio']:.1f}x"
+            )
+    else:
+        print("  No legislators with disproportionate party-line absences")
+
+    return absence
+
+
+def compute_desposato_rice_correction(votes: pl.DataFrame, legislators: pl.DataFrame) -> dict:
+    """Compute Desposato (2005) small-party correction for Rice index.
+
+    The Rice Cohesion Index is inflated for smaller parties. The correction:
+    resample the larger party to match the smaller party's size, recompute Rice,
+    and compare. This gives an apples-to-apples comparison.
+
+    Returns dict with raw and corrected mean Rice per party.
+    """
+    print_header("DESPOSATO RICE CORRECTION")
+
+    substantive = votes.filter(pl.col("vote").is_in(["Yea", "Nay"])).join(
+        legislators.select("slug", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
+    )
+
+    # Count party sizes
+    party_sizes = dict(
+        substantive.select("legislator_slug", "party")
+        .unique()
+        .group_by("party")
+        .agg(pl.len().alias("n"))
+        .iter_rows()
+    )
+
+    # Need at least 2 parties
+    parties = sorted(party_sizes.keys())
+    if len(parties) < 2:
+        print("  Skipping: fewer than 2 parties")
+        return {}
+
+    # Find smaller/larger party
+    min_party = min(parties, key=lambda p: party_sizes[p])
+    min_size = party_sizes[min_party]
+
+    results: dict = {"raw": {}, "corrected": {}, "min_party": min_party, "min_size": min_size}
+
+    # Compute raw Rice per party
+    rice_raw = compute_rice_cohesion(votes, legislators)
+    for party in parties:
+        party_rice = rice_raw.filter(pl.col("party") == party)
+        results["raw"][party] = float(party_rice["rice_index"].mean())
+
+    # Bootstrap correction: for each larger party, resample to min_size
+    rng = np.random.default_rng(seed=42)
+
+    for party in parties:
+        if party_sizes[party] <= min_size:
+            results["corrected"][party] = results["raw"][party]
+            continue
+
+        # Get unique slugs for this party
+        party_slugs = (
+            substantive.filter(pl.col("party") == party)["legislator_slug"].unique().to_list()
+        )
+
+        boot_means = []
+        for _ in range(RICE_BOOTSTRAP_ITERATIONS):
+            # Resample to match smaller party's size
+            sampled_slugs = rng.choice(party_slugs, size=min_size, replace=False).tolist()
+            sampled_votes = substantive.filter(
+                (pl.col("party") == party) & pl.col("legislator_slug").is_in(sampled_slugs)
+            )
+
+            # Compute Rice for the subsample
+            party_rice = (
+                sampled_votes.group_by("vote_id")
+                .agg(
+                    (pl.col("vote") == "Yea").sum().cast(pl.Int64).alias("yea"),
+                    (pl.col("vote") == "Nay").sum().cast(pl.Int64).alias("nay"),
+                    pl.len().alias("n"),
+                )
+                .filter(pl.col("n") > 0)
+                .with_columns(((pl.col("yea") - pl.col("nay")).abs() / pl.col("n")).alias("rice"))
+            )
+            if not party_rice.is_empty():
+                boot_means.append(float(party_rice["rice"].mean()))
+
+        corrected = float(np.mean(boot_means)) if boot_means else results["raw"][party]
+        results["corrected"][party] = corrected
+
+    print(f"  Smaller party: {min_party} (n={min_size})")
+    print(f"  Bootstrap iterations: {RICE_BOOTSTRAP_ITERATIONS}\n")
+    print(f"  {'Party':12s}  {'Raw Rice':>10s}  {'Corrected':>10s}  {'Δ':>8s}")
+    print(f"  {'─' * 44}")
+    for party in parties:
+        raw = results["raw"][party]
+        corr = results["corrected"][party]
+        delta = corr - raw
+        print(f"  {party:12s}  {raw:10.3f}  {corr:10.3f}  {delta:+8.3f}")
+
+    return results
+
+
+def compute_item_total_correlations(matrix: pl.DataFrame, chamber: str) -> pl.DataFrame:
+    """Compute point-biserial correlation between each roll call and legislator Yea rate.
+
+    Roll calls with |r| < ITEM_TOTAL_CORRELATION_THRESHOLD are flagged as
+    non-discriminating (procedural or cross-cutting).
+
+    Returns DataFrame with columns: vote_id, correlation, flagged.
+    """
+    slug_col = "legislator_slug"
+    vote_cols = [c for c in matrix.columns if c != slug_col]
+
+    if len(vote_cols) < 2 or matrix.height < 3:
+        return pl.DataFrame()
+
+    # Convert to numpy
+    arr = matrix.select(vote_cols).to_numpy().astype(np.float64)
+
+    # Compute each legislator's overall Yea rate (ignoring nulls)
+    yea_rates = np.nanmean(arr, axis=1)
+
+    results = []
+    for col_idx, vote_id in enumerate(vote_cols):
+        col = arr[:, col_idx]
+        valid = ~np.isnan(col) & ~np.isnan(yea_rates)
+        if valid.sum() < 5:
+            continue
+
+        x = col[valid]
+        y = yea_rates[valid]
+
+        # Point-biserial correlation (Pearson on binary x continuous)
+        if x.std() == 0 or y.std() == 0:
+            r = 0.0
+        else:
+            r = float(np.corrcoef(x, y)[0, 1])
+
+        results.append(
+            {
+                "vote_id": vote_id,
+                "correlation": r,
+                "flagged": abs(r) < ITEM_TOTAL_CORRELATION_THRESHOLD,
+            }
+        )
+
+    if not results:
+        return pl.DataFrame()
+
+    df = pl.DataFrame(results)
+
+    n_flagged = df.filter(pl.col("flagged")).height
+    print(f"\n  {chamber} item-total correlations:")
+    print(f"    Roll calls analyzed: {len(results)}")
+    print(f"    Flagged (|r| < {ITEM_TOTAL_CORRELATION_THRESHOLD}): {n_flagged}")
+    if n_flagged > 0:
+        pct = 100 * n_flagged / len(results)
+        print(f"    ({pct:.1f}% of contested votes are non-discriminating)")
+
+    return df
 
 
 # ── 2. Vote Matrix Construction ─────────────────────────────────────────────
@@ -1151,7 +1573,7 @@ def analyze_participation(
     # In Kansas, it's rare (~22 instances) and almost always in the Senate.
     pnp = votes.filter(pl.col("vote") == "Present and Passing")
     print(f"\n  'Present and Passing' instances: {pnp.height}")
-    if pnp.height > 0:
+    if not pnp.is_empty():
         pnp_detail = (
             pnp.join(
                 legislators.select("slug", "full_name", "party"),
@@ -1634,7 +2056,43 @@ def main() -> None:
 
         # ── 3. Descriptive stats ──
         print_descriptive_stats(rollcalls)
-        classify_party_line(votes, rollcalls, legislators)
+        vote_alignment = classify_party_line(votes, rollcalls, legislators)
+
+        # ── 3b. Party Unity Scores ──
+        party_unity = compute_party_unity_scores(votes, rollcalls, legislators)
+        if not party_unity.is_empty():
+            party_unity.write_parquet(ctx.data_dir / "party_unity_scores.parquet")
+            print("  Saved: party_unity_scores.parquet")
+
+        # ── 3c. Eigenvalue preview ──
+        eigenvalue_findings = {}
+        for label, filtered in [("House", house_filtered), ("Senate", senate_filtered)]:
+            if filtered.height >= 2:
+                ev = compute_eigenvalue_preview(filtered, label)
+                eigenvalue_findings[label] = ev
+
+        # ── 3d. Strategic absence diagnostic ──
+        strategic_absence = compute_strategic_absence(votes, rollcalls, legislators, vote_alignment)
+        if not strategic_absence.is_empty():
+            strategic_absence.write_parquet(ctx.data_dir / "strategic_absence.parquet")
+            print("  Saved: strategic_absence.parquet")
+
+        # ── 3e. Desposato Rice correction ──
+        desposato_findings = compute_desposato_rice_correction(votes, legislators)
+
+        # ── 3f. Item-total correlations ──
+        item_total_findings = {}
+        for label, filtered in [("House", house_filtered), ("Senate", senate_filtered)]:
+            if filtered.height >= 3:
+                itc = compute_item_total_correlations(filtered, label)
+                if not itc.is_empty():
+                    fname = f"item_total_correlations_{label.lower()}.parquet"
+                    itc.write_parquet(ctx.data_dir / fname)
+                    print(f"  Saved: item_total_correlations_{label.lower()}.parquet")
+                    item_total_findings[label] = {
+                        "n_analyzed": itc.height,
+                        "n_flagged": itc.filter(pl.col("flagged")).height,
+                    }
 
         # ── 4. Participation analysis ──
         participation = analyze_participation(votes, rollcalls, legislators)
@@ -1650,14 +2108,7 @@ def main() -> None:
             agreement, kappa = compute_agreement_matrices(filtered)
 
             # Save as parquet — convert numpy matrix to polars DataFrame
-            slug_col = "legislator_slug"
-            slugs = filtered[slug_col].to_list()
-
-            def numpy_matrix_to_polars(mat: np.ndarray, slugs: list[str]) -> pl.DataFrame:
-                """Convert a square numpy matrix to a polars DataFrame with slug labels."""
-                cols = {slug: mat[:, i].tolist() for i, slug in enumerate(slugs)}
-                cols["legislator_slug"] = slugs
-                return pl.DataFrame(cols).select(["legislator_slug", *slugs])
+            slugs = filtered["legislator_slug"].to_list()
 
             agree_pl = numpy_matrix_to_polars(agreement, slugs)
             kappa_pl = numpy_matrix_to_polars(kappa, slugs)
@@ -1683,6 +2134,9 @@ def main() -> None:
         print_header("FILTERING MANIFEST")
         manifests["data_integrity"] = integrity_findings
         manifests["statistical_quality"] = stat_findings
+        manifests["eigenvalue_preview"] = eigenvalue_findings
+        manifests["desposato_rice"] = desposato_findings
+        manifests["item_total_correlations"] = item_total_findings
         save_filtering_manifest(manifests, ctx.run_dir)
 
         # ── 8. HTML report ──
@@ -1696,6 +2150,10 @@ def main() -> None:
             integrity_findings=integrity_findings,
             stat_findings=stat_findings,
             participation=participation,
+            party_unity=party_unity,
+            eigenvalue_findings=eigenvalue_findings,
+            desposato_findings=desposato_findings,
+            item_total_findings=item_total_findings,
             plots_dir=ctx.plots_dir,
         )
 

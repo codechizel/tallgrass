@@ -36,6 +36,7 @@ uv run pytest tests/ -v      # pytest directly
 ## Analysis Test Files
 
 - `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, lifecycle (~41 tests)
+- `tests/test_eda.py` — vote matrix, filtering, agreement, Rice, party-line, integrity, new diagnostics (~28 tests)
 - `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt, elapsed (~38 tests)
 - `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity, forest, paradox detection (~45 tests)
 - `tests/test_umap_viz.py` — imputation, orientation, embedding, Procrustes, validation (~21 tests)
