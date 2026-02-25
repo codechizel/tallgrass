@@ -14,11 +14,15 @@ import pytest
 from analysis.nlp_features import fit_topic_features
 from analysis.prediction import (
     HARDEST_N,
+    _compute_day_of_session,
+    _get_feature_cols,
+    _temporal_split_eval,
     build_bill_features,
     build_vote_features,
     compute_per_legislator_accuracy,
     compute_shap_values,
     detect_hardest_legislators,
+    evaluate_holdout,
     find_surprising_bills,
     find_surprising_votes,
     train_passage_models,
@@ -940,3 +944,226 @@ class TestDetectHardestLegislators:
         assert h.xi_mean == 1.5
         assert h.accuracy == 0.75
         assert h.n_votes == 100
+
+
+# ── Tests: Evaluate Holdout ─────────────────────────────────────────────────
+
+
+class TestEvaluateHoldout:
+    """Tests for evaluate_holdout().
+
+    Run: uv run pytest tests/test_prediction.py::TestEvaluateHoldout -v
+    """
+
+    def test_returns_all_models(self, trained_models):
+        """Results include all three models."""
+        results = evaluate_holdout(
+            trained_models["models"],
+            trained_models["X_test"],
+            trained_models["y_test"],
+        )
+        assert len(results) == 3
+        model_names = {r["model"] for r in results}
+        assert model_names == {"Logistic Regression", "XGBoost", "Random Forest"}
+
+    def test_metrics_in_range(self, trained_models):
+        """All metrics are in valid ranges."""
+        results = evaluate_holdout(
+            trained_models["models"],
+            trained_models["X_test"],
+            trained_models["y_test"],
+        )
+        for r in results:
+            assert 0 <= r["accuracy"] <= 1
+            assert 0 <= r["auc"] <= 1
+            assert 0 <= r["brier"] <= 1
+            assert r["logloss"] >= 0
+
+    def test_has_proper_scoring_rules(self, trained_models):
+        """Holdout results include Brier score and log-loss."""
+        results = evaluate_holdout(
+            trained_models["models"],
+            trained_models["X_test"],
+            trained_models["y_test"],
+        )
+        for r in results:
+            assert "brier" in r
+            assert "logloss" in r
+
+
+# ── Tests: Compute Day of Session ───────────────────────────────────────────
+
+
+class TestComputeDayOfSession:
+    """Tests for _compute_day_of_session().
+
+    Run: uv run pytest tests/test_prediction.py::TestComputeDayOfSession -v
+    """
+
+    def test_yyyy_mm_dd_format(self):
+        """Handles ISO date format (YYYY-MM-DD)."""
+        dates = pl.Series(["2025-01-10", "2025-01-11", "2025-01-15"])
+        result = _compute_day_of_session(dates)
+        assert result.to_list() == [0, 1, 5]
+
+    def test_mm_dd_yyyy_format(self):
+        """Handles US date format (MM/DD/YYYY)."""
+        dates = pl.Series(["01/10/2025", "01/11/2025", "01/15/2025"])
+        result = _compute_day_of_session(dates)
+        assert result.to_list() == [0, 1, 5]
+
+    def test_single_date_is_day_zero(self):
+        """A single date produces day 0."""
+        dates = pl.Series(["2025-03-15"])
+        result = _compute_day_of_session(dates)
+        assert result.to_list() == [0]
+
+
+# ── Tests: Baselines ────────────────────────────────────────────────────────
+
+
+class TestBaselines:
+    """Tests for baseline computations in train_vote_models().
+
+    Run: uv run pytest tests/test_prediction.py::TestBaselines -v
+    """
+
+    def test_majority_baseline_above_50(self, trained_models):
+        """Majority-class baseline should be ≥50% by definition."""
+        baselines = trained_models["baselines"]
+        assert baselines["majority_class_acc"] >= 0.5
+
+    def test_party_baseline_above_majority(self, trained_models):
+        """Party-only should beat majority-class on polarized data."""
+        baselines = trained_models["baselines"]
+        assert baselines["party_only_acc"] >= baselines["majority_class_acc"]
+
+    def test_party_baseline_auc_above_random(self, trained_models):
+        """Party-only AUC should beat random (0.5) on polarized data."""
+        baselines = trained_models["baselines"]
+        assert baselines["party_only_auc"] > 0.5
+
+
+# ── Tests: CV Results Include Proper Scoring Rules ──────────────────────────
+
+
+class TestProperScoringRules:
+    """Tests that CV results include Brier score and log-loss.
+
+    Run: uv run pytest tests/test_prediction.py::TestProperScoringRules -v
+    """
+
+    def test_cv_has_brier_and_logloss(self, trained_models):
+        """Every CV fold includes Brier score and log-loss for all models."""
+        for fold in trained_models["cv_results"]:
+            for name in ["Logistic Regression", "XGBoost", "Random Forest"]:
+                assert f"{name}_brier" in fold, f"Missing {name}_brier"
+                assert f"{name}_logloss" in fold, f"Missing {name}_logloss"
+
+    def test_brier_in_valid_range(self, trained_models):
+        """Brier score should be in [0, 1]."""
+        for fold in trained_models["cv_results"]:
+            for name in ["Logistic Regression", "XGBoost", "Random Forest"]:
+                brier = fold[f"{name}_brier"]
+                assert 0 <= brier <= 1
+
+    def test_logloss_is_positive(self, trained_models):
+        """Log-loss should be non-negative."""
+        for fold in trained_models["cv_results"]:
+            for name in ["Logistic Regression", "XGBoost", "Random Forest"]:
+                ll = fold[f"{name}_logloss"]
+                assert ll >= 0
+
+
+# ── Tests: Test Indices ─────────────────────────────────────────────────────
+
+
+class TestTestIndices:
+    """Tests that train_vote_models returns test_indices for holdout evaluation.
+
+    Run: uv run pytest tests/test_prediction.py::TestTestIndices -v
+    """
+
+    def test_test_indices_present(self, trained_models):
+        """train_vote_models returns test_indices array."""
+        assert "test_indices" in trained_models
+        assert len(trained_models["test_indices"]) > 0
+
+    def test_test_indices_match_test_size(self, trained_models, vote_features):
+        """test_indices length matches TEST_SIZE proportion."""
+        n_test = len(trained_models["test_indices"])
+        n_total = vote_features.height
+        ratio = n_test / n_total
+        # Should be approximately TEST_SIZE (0.20) ± 0.05
+        assert 0.15 <= ratio <= 0.25
+
+
+# ── Tests: Surprising Votes Empty Schema ────────────────────────────────────
+
+
+class TestSurprisingVotesEmptySchema:
+    """Tests that find_surprising_votes returns typed empty DataFrame.
+
+    Run: uv run pytest tests/test_prediction.py::TestSurprisingVotesEmptySchema -v
+    """
+
+    def test_empty_schema_has_columns(self):
+        """A perfect model produces empty DataFrame with proper column schema."""
+
+        class PerfectModel:
+            def predict_proba(self, X):
+                probs = np.zeros((len(X), 2))
+                probs[:, 1] = (X[:, 0] > 0).astype(float)
+                return probs
+
+            def predict(self, X):
+                return (X[:, 0] > 0).astype(int)
+
+        features_df = pl.DataFrame({
+            "vote_id": ["v1", "v2"],
+            "legislator_slug": ["rep_a_1", "rep_b_1"],
+            "vote_binary": [1, 0],
+            "feat1": [1.0, -1.0],
+        })
+        rollcalls = pl.DataFrame({
+            "vote_id": ["v1", "v2"],
+            "bill_number": ["HB1", "HB2"],
+            "motion": ["Final Action", "Final Action"],
+        })
+        ideal_points = pl.DataFrame({
+            "legislator_slug": ["rep_a_1", "rep_b_1"],
+            "full_name": ["Alice", "Bob"],
+            "party": ["Republican", "Democrat"],
+        })
+
+        result = find_surprising_votes(
+            PerfectModel(), features_df, ["feat1"], rollcalls, ideal_points
+        )
+        assert result.height == 0
+        assert len(result.columns) > 0, "Empty DataFrame should have column schema"
+        assert "vote_id" in result.columns
+        assert "confidence_error" in result.columns
+
+
+# ── Tests: Temporal Split ───────────────────────────────────────────────────
+
+
+class TestTemporalSplit:
+    """Tests for _temporal_split_eval().
+
+    Run: uv run pytest tests/test_prediction.py::TestTemporalSplit -v
+    """
+
+    def test_returns_results(self, synthetic_rollcalls, synthetic_bill_params):
+        """Temporal split returns results for all 3 models."""
+        features = build_bill_features(synthetic_rollcalls, synthetic_bill_params, "House")
+        feature_cols = _get_feature_cols(
+            features, "passed_binary", ["vote_id", "bill_number", "vote_date"]
+        )
+        results = _temporal_split_eval(features, feature_cols, "House")
+        if results:  # May be empty if too few rows
+            assert len(results) == 3
+            assert all("train_size" in r for r in results)
+            assert all("test_size" in r for r in results)
+            assert all("brier" in r for r in results)
+            assert all("logloss" in r for r in results)

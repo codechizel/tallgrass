@@ -2,6 +2,8 @@
 
 **Script:** `analysis/08_prediction/prediction.py`
 **Constants defined at:** `analysis/08_prediction/prediction.py:48-60`
+**Deep dive:** `docs/prediction-deep-dive.md`
+**ADRs:** ADR-0012 (NLP features), ADR-0031 (holdout eval, Brier/log-loss, IRT caveat)
 
 ## Assumptions
 
@@ -101,11 +103,25 @@
 
 **Why:** In practice, passage prediction would be used for future bills. Temporal validation tests whether early-session patterns generalize to late-session votes. With ~500 rows, the test set is small (~150 rows) but sufficient for directional assessment.
 
-### Base rate: AUC-ROC mandatory
+### Holdout-only evaluation for per-legislator and surprising votes
 
-**Decision:** Report AUC-ROC alongside accuracy for all models. Include a majority-class baseline.
+**Decision:** Per-legislator accuracy and surprising votes are computed on the 20% holdout test set only, not the full dataset.
 
-**Why:** The 82% Yea base rate means a "predict all Yea" classifier achieves 82% accuracy. Accuracy alone is misleading. AUC-ROC measures discrimination independent of the base rate. A party-only baseline (predict by party median) provides a more informative comparison than majority-class.
+**Why:** Evaluating on training data inflates accuracy (the model has seen these observations). Per-legislator accuracy and surprising vote identification are diagnostic — they must reflect out-of-sample behavior. `train_vote_models()` returns `test_indices` for this purpose.
+
+**Impact:** Reduces per-legislator evaluation from ~60K to ~12K observations. Some legislators with few holdout votes will have noisier accuracy estimates. This is methodologically correct.
+
+### Base rate: AUC-ROC mandatory, plus proper scoring rules
+
+**Decision:** Report AUC-ROC alongside accuracy for all models. Include a majority-class baseline. Report Brier score and log-loss as proper scoring rules.
+
+**Why:** The 82% Yea base rate means a "predict all Yea" classifier achieves 82% accuracy. Accuracy alone is misleading. AUC-ROC measures discrimination independent of the base rate. A party-only baseline (predict by party median) provides a more informative comparison than majority-class. Brier score and log-loss evaluate calibration — how well the model's probability estimates match observed frequencies.
+
+### IRT circularity caveat
+
+**Decision:** The HTML report includes a methodological note explaining that IRT features are estimated from the same vote matrix used for prediction.
+
+**Why:** The high AUC (~0.98) reflects *explanatory power* (how well IRT + party + network features describe voting patterns), not true out-of-sample prediction. For genuine prediction of future votes, ideal points would need to be estimated from prior sessions only. This circularity is ubiquitous in the literature (DW-NOMINATE scores are routinely used in analyses of the same votes they were estimated from), but it should be explicitly acknowledged.
 
 ### NLP topic features: NMF on bill short_title
 

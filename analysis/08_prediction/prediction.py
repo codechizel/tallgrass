@@ -1,5 +1,5 @@
 """
-Kansas Legislature — Vote & Bill Passage Prediction (Phase 7)
+Kansas Legislature — Vote & Bill Passage Prediction (Phase 8)
 
 Trains XGBoost, Logistic Regression, and Random Forest models to predict
 individual legislator votes (Yea/Nay) and bill passage outcomes.  Features
@@ -39,8 +39,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     auc,
+    brier_score_loss,
     confusion_matrix,
     f1_score,
+    log_loss,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -548,10 +550,13 @@ def train_vote_models(
     X = features_df.select(feature_cols).to_numpy().astype(np.float64)
     y = features_df["vote_binary"].to_numpy()
 
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y
+    # Train/test split — use indices so callers can reconstruct the holdout DataFrame
+    all_indices = np.arange(len(y))
+    train_indices, test_indices = train_test_split(
+        all_indices, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y
     )
+    X_train, X_test = X[train_indices], X[test_indices]
+    y_train, y_test = y[train_indices], y[test_indices]
 
     # Baselines
     majority_class = int(np.bincount(y_train).argmax())
@@ -590,6 +595,8 @@ def train_vote_models(
             fold_results[f"{name}_precision"] = precision_score(y_val, y_pred, zero_division=0)
             fold_results[f"{name}_recall"] = recall_score(y_val, y_pred, zero_division=0)
             fold_results[f"{name}_f1"] = f1_score(y_val, y_pred, zero_division=0)
+            fold_results[f"{name}_brier"] = brier_score_loss(y_val, y_prob)
+            fold_results[f"{name}_logloss"] = log_loss(y_val, y_prob)
 
         cv_results.append(fold_results)
 
@@ -606,6 +613,7 @@ def train_vote_models(
         "X_test": X_test,
         "y_train": y_train,
         "y_test": y_test,
+        "test_indices": test_indices,
         "feature_names": feature_cols,
         "baselines": baselines,
     }
@@ -630,6 +638,8 @@ def evaluate_holdout(
                 "precision": precision_score(y_test, y_pred, zero_division=0),
                 "recall": recall_score(y_test, y_pred, zero_division=0),
                 "f1": f1_score(y_test, y_pred, zero_division=0),
+                "brier": brier_score_loss(y_test, y_prob),
+                "logloss": log_loss(y_test, y_prob),
             }
         )
 
@@ -705,6 +715,8 @@ def train_passage_models(
             fold_results[f"{name}_precision"] = precision_score(y_val, y_pred, zero_division=0)
             fold_results[f"{name}_recall"] = recall_score(y_val, y_pred, zero_division=0)
             fold_results[f"{name}_f1"] = f1_score(y_val, y_pred, zero_division=0)
+            fold_results[f"{name}_brier"] = brier_score_loss(y_val, y_prob)
+            fold_results[f"{name}_logloss"] = log_loss(y_val, y_prob, labels=[0, 1])
 
         cv_results.append(fold_results)
 
@@ -777,6 +789,8 @@ def _temporal_split_eval(
         row["precision"] = precision_score(y_test, y_pred, zero_division=0)
         row["recall"] = recall_score(y_test, y_pred, zero_division=0)
         row["f1"] = f1_score(y_test, y_pred, zero_division=0)
+        row["brier"] = brier_score_loss(y_test, y_prob)
+        row["logloss"] = log_loss(y_test, y_prob, labels=[0, 1])
         row["train_size"] = split_idx
         row["test_size"] = n - split_idx
         results.append(row)
@@ -951,7 +965,20 @@ def find_surprising_votes(
     # Only look at wrong predictions
     wrong_mask = y_pred != y
     if wrong_mask.sum() == 0:
-        return pl.DataFrame()
+        return pl.DataFrame(
+            schema={
+                "legislator_slug": pl.Utf8,
+                "full_name": pl.Utf8,
+                "party": pl.Utf8,
+                "vote_id": pl.Utf8,
+                "bill_number": pl.Utf8,
+                "motion": pl.Utf8,
+                "actual": pl.Int64,
+                "predicted": pl.Int64,
+                "y_prob": pl.Float64,
+                "confidence_error": pl.Float64,
+            }
+        )
 
     wrong_df = features_df.filter(pl.Series(wrong_mask)).with_columns(
         pl.Series("y_prob", y_prob[wrong_mask]),
@@ -1677,9 +1704,16 @@ def main() -> None:
             # ── Phase 7: Per-Legislator Accuracy ────────────────────────
             print_header(f"PHASE 7: PER-LEGISLATOR ACCURACY — {chamber.upper()}")
 
+            # Evaluate on holdout only to avoid in-sample inflation (ADR-0031)
+            holdout_features = vote_features[vote_result["test_indices"].tolist()]
+            print(
+                f"  Evaluating on holdout set: {holdout_features.height:,} observations "
+                f"(out of {vote_features.height:,} total)"
+            )
+
             leg_accuracy = compute_per_legislator_accuracy(
                 xgb_model,
-                vote_features,
+                holdout_features,
                 vote_result["feature_names"],
                 cd["ideal_points"],
             )
@@ -1702,16 +1736,17 @@ def main() -> None:
             # ── Phase 8: Surprising Votes ───────────────────────────────
             print_header(f"PHASE 8: SURPRISING VOTES — {chamber.upper()}")
 
+            # Evaluate on holdout only — in-sample predictions are biased (ADR-0031)
             surprising = find_surprising_votes(
                 xgb_model,
-                vote_features,
+                holdout_features,
                 vote_result["feature_names"],
                 rollcalls,
                 cd["ideal_points"],
                 top_n=TOP_SURPRISING_N,
             )
             surprising.write_parquet(ctx.data_dir / f"surprising_votes_{chamber.lower()}.parquet")
-            print(f"  Top {surprising.height} surprising votes identified")
+            print(f"  Top {surprising.height} surprising votes identified (holdout only)")
 
             # ── Phase 9: Plots ──────────────────────────────────────────
             print_header(f"PHASE 9: PLOTS — {chamber.upper()}")

@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~942)
+just test                    # run all tests (~958)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -42,7 +42,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_umap_viz.py` — imputation, orientation, embedding, Procrustes, validation, trustworthiness, sensitivity sweep, stability, three-party (~40 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names (~16 tests)
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)
-- `tests/test_prediction.py` — vote/bill features, model training, SHAP, NLP integration (~38 tests)
+- `tests/test_prediction.py` — vote/bill features, model training, SHAP, NLP integration, holdout eval, baselines, proper scoring rules (~54 tests)
 - `tests/test_beta_binomial.py` — method of moments, posteriors, shrinkage, edge cases (~26 tests)
 - `tests/test_hierarchical.py` — hierarchical data prep, model structure, variance decomposition (~26 tests)
 - `tests/test_profiles.py` — profile targets, scorecard, bill-type breakdown, defections (~23 tests)

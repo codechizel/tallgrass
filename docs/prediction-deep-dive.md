@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-25
 **Scope:** `analysis/08_prediction/prediction.py` (~1,988 lines), `analysis/08_prediction/prediction_report.py` (~960 lines), `analysis/08_prediction/nlp_features.py` (~238 lines), `tests/test_prediction.py` (~943 lines)
-**Status:** Audit complete. Findings and recommendations below.
+**Status:** All recommendations implemented (2026-02-25). ADR-0031. 958 tests passing.
 
 This document steps back from the implementation to ask: are we doing prediction right? It surveys the political science and machine learning literature, evaluates open-source alternatives, audits our code for correctness and completeness, and identifies concrete improvements.
 
@@ -353,18 +353,19 @@ The function returns an untyped empty DataFrame when no predictions are wrong. T
 
 `prediction_report.py` has no dedicated test file. The 25 section builders are tested only by running the full pipeline. At minimum, `_add_data_summary()` and `_add_model_comparison_table()` should have unit tests to catch regressions in table formatting.
 
-### 4.3 Recommended New Test Count
+### 4.3 Tests Added (2026-02-25)
 
-| Gap | Tests to Add | Priority |
-|-----|-------------|----------|
-| `evaluate_holdout()` | 2 | Medium |
-| Temporal split | 1 | Medium |
-| `_compute_day_of_session()` | 2 | Low |
-| Baselines | 3 | Medium |
-| Surprising votes empty schema | 1 | High (bug) |
-| Report builder basics | 2-3 | Low |
+| Class | Tests | What It Covers |
+|-------|-------|---------------|
+| `TestEvaluateHoldout` | 3 | All models returned, metrics in range, proper scoring rules |
+| `TestComputeDayOfSession` | 3 | ISO format, US format, single-date edge case |
+| `TestBaselines` | 3 | Majority ≥50%, party > majority, party AUC > random |
+| `TestProperScoringRules` | 3 | Brier + log-loss present in CV, valid ranges |
+| `TestTestIndices` | 2 | test_indices present, proportion matches TEST_SIZE |
+| `TestSurprisingVotesEmptySchema` | 1 | Perfect model returns typed empty DataFrame |
+| `TestTemporalSplit` | 1 | Returns results for all 3 models with expected keys |
 
-Total: ~11-12 new tests. Current: 38. Post-update: ~50.
+Total added: 16 new tests. Current: 54 prediction tests (958 total).
 
 ---
 
@@ -415,14 +416,24 @@ This is not comparable to our setup. We predict individual votes from legislator
 
 ### What Needs Attention
 
-| Finding | Severity | Action Required |
-|---------|----------|----------------|
-| IRT circularity caveat missing from report | **High** (interpretation) | Add caveat to report and design doc |
-| Surprising votes/per-legislator accuracy on full data | **Moderate** | Evaluate on holdout only |
-| `find_surprising_votes()` empty DataFrame has no schema | **Low** (bug) | Add typed schema like `find_surprising_bills()` |
-| Missing Brier score / log-loss | **Low** | Add to CV and holdout evaluations |
-| Phase number "7" vs directory "08" | **Cosmetic** | Update docstring |
-| ~12 test gaps | **Medium** | Add tests for holdout, temporal, baselines, day-of-session |
+| Finding | Severity | Status |
+|---------|----------|--------|
+| IRT circularity caveat missing from report | **High** (interpretation) | **Implemented.** Caveat added to report + design doc. |
+| Surprising votes/per-legislator accuracy on full data | **Moderate** | **Implemented.** Now evaluated on 20% holdout only via `test_indices`. |
+| `find_surprising_votes()` empty DataFrame has no schema | **Low** (bug) | **Fixed.** Returns typed schema matching `find_surprising_bills()`. |
+| Missing Brier score / log-loss | **Low** | **Implemented.** Added to vote CV, holdout, passage CV, temporal split, and report tables. |
+| Phase number "7" vs directory "08" | **Cosmetic** | **Fixed.** Docstring updated. |
+| ~12 test gaps | **Medium** | **Implemented.** 16 new tests added (54 total, up from 38). |
+
+### Expected Output Changes After Implementation
+
+These changes will cause the following differences when re-running the prediction phase:
+
+1. **Per-legislator accuracy values will decrease slightly.** Previously computed on all ~60K observations (including training data); now computed on ~12K holdout observations only. This removes in-sample inflation.
+2. **Surprising votes may differ.** Previously drawn from all observations; now drawn from holdout only. Some previously-flagged surprising votes were surprising because the model memorized them, not because they were genuinely unexpected.
+3. **Report tables gain two columns.** BRIER and LOGLOSS appear in vote CV, holdout, passage CV, and temporal split tables. Lower is better for both.
+4. **Report includes a new caveat paragraph** in the Vote Prediction Interpretation section explaining the IRT circularity.
+5. **No changes to bill passage results.** Passage models were already small enough that holdout-only was the only option.
 
 ### What We Explicitly Chose Not To Do (and Why)
 

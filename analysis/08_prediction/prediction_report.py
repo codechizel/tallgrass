@@ -234,11 +234,12 @@ def _add_model_comparison_table(
     rows = []
     for name in ["Logistic Regression", "XGBoost", "Random Forest"]:
         row = {"Model": name}
-        for metric in ["accuracy", "auc", "precision", "recall", "f1"]:
+        for metric in ["accuracy", "auc", "precision", "recall", "f1", "brier", "logloss"]:
             key = f"{name}_{metric}"
-            vals = cv_df[key].to_numpy()
-            row[f"{metric.upper()} Mean"] = float(np.mean(vals))
-            row[f"{metric.upper()} Std"] = float(np.std(vals))
+            if key in cv_df.columns:
+                vals = cv_df[key].to_numpy()
+                row[f"{metric.upper()} Mean"] = float(np.mean(vals))
+                row[f"{metric.upper()} Std"] = float(np.std(vals))
         rows.append(row)
 
     df = pl.DataFrame(rows)
@@ -256,6 +257,7 @@ def _add_model_comparison_table(
             f"{result['vote_result']['baselines']['majority_class_acc']:.3f}"
             f", Party-only: "
             f"{result['vote_result']['baselines']['party_only_acc']:.3f}"
+            f". Brier: lower is better (0=perfect). Log-loss: lower is better."
         ),
     )
     report.add(
@@ -354,6 +356,15 @@ def _add_vote_interpretation(
         "bill parameters, and other features capture significant predictive signal beyond party "
         "affiliation alone. The high AUC indicates strong discrimination between Yea and Nay "
         "votes.</p>"
+    )
+    parts.append(
+        '<p class="caveat"><strong>Methodological note:</strong> IRT features (ideal points, '
+        "bill parameters) are estimated from the same vote matrix used for prediction. "
+        "The high AUC therefore reflects <em>explanatory power</em> (how well these features "
+        "describe voting patterns) rather than true out-of-sample predictive accuracy. "
+        "For genuine prediction of future votes, ideal points would need to be estimated "
+        "from prior sessions only. Per-legislator accuracy and surprising votes are evaluated "
+        "on the 20% holdout set to mitigate in-sample bias.</p>"
     )
 
     report.add(
@@ -633,7 +644,7 @@ def _add_passage_model_table(
     rows = []
     for name in ["Logistic Regression", "XGBoost", "Random Forest"]:
         row = {"Model": name}
-        for metric in ["accuracy", "auc", "precision", "recall", "f1"]:
+        for metric in ["accuracy", "auc", "precision", "recall", "f1", "brier", "logloss"]:
             key = f"{name}_{metric}"
             if key in passage_cv.columns:
                 vals = passage_cv[key].drop_nulls().drop_nans().to_numpy()
@@ -648,6 +659,7 @@ def _add_passage_model_table(
         df,
         title=f"{chamber} — Bill Passage: CV Results",
         number_formats=number_fmts,
+        source_note="Brier: lower is better (0=perfect). Log-loss: lower is better.",
     )
     report.add(
         TableSection(
