@@ -106,6 +106,8 @@ allowed-unresolved-imports = [
     "synthesis",
     "profiles_data",
     "profiles_report",
+    "external_validation_data",
+    "external_validation_report",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

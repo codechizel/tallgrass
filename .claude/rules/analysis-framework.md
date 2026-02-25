@@ -10,6 +10,7 @@ paths:
 EDA -> PCA -> UMAP -> IRT -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles
 
 Cross-session validation compares across bienniums (separate from the per-session pipeline).
+External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only).
 
 ## Technology Preferences
 
@@ -23,7 +24,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 
 - `analysis/report.py` — Generic: `TableSection`, `FigureSection`, `TextSection`, `ReportBuilder`, `make_gt()`, Jinja2 template + CSS
 - `analysis/run_context.py` — `RunContext` context manager: structured output, elapsed timing, auto-primers, `strip_leadership_suffix()` utility
-- Phase-specific report builders: `eda_report.py`, `umap_report.py`, `beta_binomial_report.py`, `hierarchical_report.py`, `synthesis_report.py`, `profiles_report.py`, `cross_session_report.py`
+- Phase-specific report builders: `eda_report.py`, `umap_report.py`, `beta_binomial_report.py`, `hierarchical_report.py`, `synthesis_report.py`, `profiles_report.py`, `cross_session_report.py`, `external_validation_report.py`
 
 ## Key Data Modules (Pure Logic, No I/O)
 
@@ -31,6 +32,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 - `analysis/synthesis_detect.py` — Notable legislator detection (mavericks, bridge-builders, paradoxes)
 - `analysis/profiles_data.py` — Profile targets, scorecards, bill-type breakdown, defections
 - `analysis/cross_session_data.py` — Legislator matching, IRT alignment, shift metrics, prediction transfer
+- `analysis/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
 
 ## Design Documents
 
@@ -44,6 +46,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `beta_binomial.md` — Empirical Bayes, per-party-per-chamber priors, shrinkage
 - `synthesis.md` — Data-driven detection thresholds, graceful degradation
 - `cross_session.md` — Affine IRT alignment, name matching, prediction transfer
+- `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
 
 ## Key Data Structures
 

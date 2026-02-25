@@ -87,6 +87,10 @@ cross-session *args:
 profiles *args:
     uv run python analysis/profiles.py {{args}}
 
+# Run external validation against Shor-McCarty scores
+external-validation *args:
+    uv run python analysis/external_validation.py {{args}}
+
 # Run all tests
 test *args:
     uv run pytest tests/ {{args}} -v

@@ -16,6 +16,8 @@ The question is not "what sounds interesting?" but "what would actually improve 
 
 ## The Recommendation: External Validation with Shor-McCarty Scores
 
+**Status:** Implemented (2026-02-24). See `analysis/external_validation.py`, ADR-0025, and `analysis/design/external_validation.md`.
+
 ### The Gap
 
 Every validation in our pipeline is internal:
@@ -173,7 +175,7 @@ If the scraper is ever extended to capture cosponsor data, this becomes a natura
 
 | Method | Verdict | Rationale |
 |--------|---------|-----------|
-| **Shor-McCarty external validation** | **Recommended** | Addresses biggest credibility gap; low effort, high value |
+| **Shor-McCarty external validation** | **Implemented** | Addresses biggest credibility gap; low effort, high value (ADR-0025) |
 | DIME/CFscores validation | Deferred | Lower within-party resolution; do after Shor-McCarty |
 | Vote-type-stratified IRT | Rejected | Data doesn't support it (party-line overrides, small N) |
 | W-NOMINATE benchmarking | Deferred | Published studies already show PCA ≈ NOMINATE; requires R |

@@ -37,38 +37,15 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | — | Parallelism Experiment (Complete) | 2026-02-24 | 88th Legislature 4-run experiment: parallel 1.83-1.89x faster; convergence bit-identical; OMP_NUM_THREADS=6 cap applied (ADR-0022) |
 | — | Full 91st Pipeline with Joint Model | 2026-02-24 | 12/12 phases succeeded including hierarchical joint cross-chamber model (93 min, 0 divergences, all checks passed); first complete run with joint model |
 | — | Landscape Survey & Method Evaluation | 2026-02-24 | `docs/landscape-legislative-vote-analysis.md` and `docs/method-evaluation.md`: surveyed the field, evaluated all major methods, identified external validation as the priority gap |
+| — | External Validation (Shor-McCarty) | 2026-02-24 | Shor-McCarty external validation phase: name matching, Pearson/Spearman correlations, scatter plots, outlier analysis. 5 overlapping bienniums (84th-88th). ADR-0025. |
 
 ---
 
 ## Next Up
 
-### 1. External Validation with Shor-McCarty Scores
+### 1. Cross-Session Validation (Feature Complete)
 
-**Priority:** High — the single biggest credibility gap in the pipeline.
-**Status:** Not started. Data identified and validated; implementation plan ready.
-
-Every validation in the pipeline is internal (PCA vs IRT correlation, holdout accuracy, cross-session alignment). We have never compared our ideal points to an independent external measure. Every published ideal point paper does this.
-
-**Data source:** Shor-McCarty Individual State Legislator Ideology Data (April 2023), [Harvard Dataverse](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/NWSYOS). CC0 license, 6 MB. 610 Kansas legislators with ideology scores (`np_score`) covering 1996-2020. Full "Last, First" names, district numbers, chamber indicators per year.
-
-**Overlap with our data:** Five bienniums (84th-88th, 2011-2020). This gives five independent correlation estimates.
-
-**Limitation:** `np_score` is fixed per legislator's career (does not vary by session). Our IRT `xi_mean` varies by biennium. The comparison tests rank ordering agreement, not scale equivalence.
-
-**Implementation:** Lightweight new phase (`analysis/external_validation.py`). No MCMC — just data download, name matching, correlation analysis, scatter plots, and outlier identification. Estimated development time: modest. See `docs/method-evaluation.md` for full rationale.
-
-**Success criteria:**
-- r > 0.90: Strong external validation. Our scores are essentially interchangeable with the field standard.
-- r = 0.85-0.90: Good agreement. Differences likely reflect session-specific dynamics.
-- r < 0.85: Investigate — could be data quality, convergence failures (84th House), or methodological differences.
-
-**References:**
-- Shor, B. and N. McCarty. 2011. "The Ideological Mapping of American Legislatures." *APSR* 105(3): 530-551.
-- See `docs/landscape-legislative-vote-analysis.md` for full field context and `docs/method-evaluation.md` for evaluation of this and alternative approaches.
-
-### 2. Cross-Session Validation (Feature Complete)
-
-**Priority:** High — the single biggest gap in current results.
+**Priority:** High — the biggest remaining gap in current results.
 **Status:** All 7 implementation steps complete (data layer, plots, report builder, CLI, prediction transfer, detection validation, docs). 55 tests. Ready for first real run once both sessions' upstream phases are complete.
 
 Four distinct analyses become possible now that both bienniums are scraped:
@@ -78,7 +55,7 @@ Four distinct analyses become possible now that both bienniums are scraped:
 - **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. SHAP feature importance rankings compared via Kendall's tau.
 - **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
 
-### 3. MCA (Multiple Correspondence Analysis)
+### 2. MCA (Multiple Correspondence Analysis)
 
 **Priority:** Medium — alternative view on the vote matrix.
 
@@ -89,7 +66,7 @@ Method documented in `Analytic_Methods/10_DIM_correspondence_analysis.md`. MCA t
 - `prince` library already in `pyproject.toml`
 - Compare MCA dimensions to PCA PC1/PC2 — if they agree, PCA's linear assumption is validated
 
-### 4. Time Series Analysis
+### 3. Time Series Analysis
 
 **Priority:** Medium — adds temporal depth to static snapshots.
 
@@ -100,7 +77,7 @@ Two methods documented but not yet implemented:
 
 Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
 
-### 5. 2D Bayesian IRT Model
+### 4. 2D Bayesian IRT Model
 
 **Priority:** Medium — solves the Tyson paradox properly.
 
@@ -145,7 +122,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-712 tests exist across scraper (219) and analysis (493) modules. All passing. Coverage could be expanded:
+777 tests exist across scraper (219) and analysis (558) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

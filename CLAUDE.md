@@ -26,7 +26,7 @@ uv run ks-vote-scraper 2023                  # historical session
 uv run ks-vote-scraper 2024 --special        # special session
 ```
 
-Analysis recipes: `just eda`, `just pca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`.
+Analysis recipes: `just eda`, `just pca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
 
 ## Build Philosophy
 
@@ -112,6 +112,7 @@ Three CSVs in `data/kansas/{legislature}_{start}-{end}/`:
 
 Directory naming: `(start_year - 1879) // 2 + 18` -> legislature number. Special sessions: `{year}s`.
 Cache: `data/kansas/{name}/.cache/`. Failed fetches -> `failure_manifest.json` + `missing_votes.md`.
+External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downloaded from Harvard Dataverse).
 
 ## Results Directory
 
@@ -123,7 +124,7 @@ See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (23 decisions)
+- ADRs: `docs/adr/README.md` (25 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
@@ -138,7 +139,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 712 tests
+just test                    # 777 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```
