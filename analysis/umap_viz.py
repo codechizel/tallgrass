@@ -36,6 +36,7 @@ import polars as pl
 from matplotlib.patches import Patch
 from scipy.spatial import procrustes
 from scipy.stats import spearmanr
+from sklearn.manifold import trustworthiness as sklearn_trustworthiness
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix
@@ -178,7 +179,9 @@ DEFAULT_MIN_DIST = 0.1
 DEFAULT_METRIC = "cosine"
 RANDOM_STATE = 42
 SENSITIVITY_N_NEIGHBORS = [5, 15, 30, 50]
+STABILITY_SEEDS = [42, 123, 456, 789, 1337]
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
+HIGH_IMPUTATION_PCT = 50.0
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -224,6 +227,17 @@ def save_fig(fig: plt.Figure, path: Path, dpi: int = 150) -> None:
     print(f"  Saved: {path.name}")
 
 
+def find_irt_column(df: pl.DataFrame) -> str | None:
+    """Find the IRT ideal point column name in a DataFrame.
+
+    Tries xi_mean first (our IRT output), then common alternatives.
+    """
+    for candidate in ["xi_mean", "ideal_point", "theta", "xi"]:
+        if candidate in df.columns:
+            return candidate
+    return None
+
+
 # ── Phase 1: Load Data ──────────────────────────────────────────────────────
 
 
@@ -257,11 +271,11 @@ def load_pca_scores(pca_dir: Path) -> tuple[pl.DataFrame | None, pl.DataFrame | 
     house, senate = None, None
     try:
         house = pl.read_parquet(pca_dir / "data" / "pc_scores_house.parquet")
-    except FileNotFoundError, OSError:
+    except OSError:
         pass
     try:
         senate = pl.read_parquet(pca_dir / "data" / "pc_scores_senate.parquet")
-    except FileNotFoundError, OSError:
+    except OSError:
         pass
     return house, senate
 
@@ -273,11 +287,11 @@ def load_irt_ideal_points(
     house, senate = None, None
     try:
         house = pl.read_parquet(irt_dir / "data" / "ideal_points_house.parquet")
-    except FileNotFoundError, OSError:
+    except OSError:
         pass
     try:
         senate = pl.read_parquet(irt_dir / "data" / "ideal_points_senate.parquet")
-    except FileNotFoundError, OSError:
+    except OSError:
         pass
     return house, senate
 
@@ -403,6 +417,23 @@ def compute_procrustes_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return 1.0 - disparity
 
 
+def compute_trustworthiness(
+    X: np.ndarray,
+    embedding: np.ndarray,
+    n_neighbors: int,
+) -> float:
+    """Compute trustworthiness: fraction of embedding neighbors that were true neighbors.
+
+    Uses sklearn.manifold.trustworthiness. Score > 0.80 is good; > 0.95 is excellent.
+    n_neighbors is clamped to n_samples // 2 - 1 (sklearn requirement).
+    """
+    max_k = X.shape[0] // 2 - 1
+    if max_k < 1:
+        return float("nan")
+    k = min(n_neighbors, max_k)
+    return float(sklearn_trustworthiness(X, embedding, n_neighbors=k))
+
+
 def compute_validation_correlations(
     embedding_df: pl.DataFrame,
     pca_scores: pl.DataFrame | None,
@@ -415,13 +446,9 @@ def compute_validation_correlations(
     results: dict = {}
 
     if pca_scores is not None and "PC1" in pca_scores.columns:
-        # Match by legislator_slug
-        slug_col = "legislator_slug"
-        pca_slug_col = slug_col if slug_col in pca_scores.columns else "legislator_slug"
         merged = embedding_df.join(
-            pca_scores.select(pca_slug_col, "PC1"),
-            left_on="legislator_slug",
-            right_on=pca_slug_col,
+            pca_scores.select("legislator_slug", "PC1"),
+            on="legislator_slug",
             how="inner",
         )
         if merged.height >= 5:
@@ -435,20 +462,11 @@ def compute_validation_correlations(
             print(f"    UMAP1 vs PCA PC1: rho={rho:.4f} (n={merged.height})")
 
     if irt_points is not None:
-        # IRT ideal points column name varies
-        ip_col = None
-        for candidate in ["xi_mean", "ideal_point", "theta", "xi"]:
-            if candidate in irt_points.columns:
-                ip_col = candidate
-                break
-
+        ip_col = find_irt_column(irt_points)
         if ip_col is not None:
-            slug_col = "legislator_slug"
-            irt_slug_col = slug_col if slug_col in irt_points.columns else "legislator_slug"
             merged = embedding_df.join(
-                irt_points.select(irt_slug_col, ip_col),
-                left_on="legislator_slug",
-                right_on=irt_slug_col,
+                irt_points.select("legislator_slug", ip_col),
+                on="legislator_slug",
                 how="inner",
             )
             if merged.height >= 5:
@@ -462,6 +480,21 @@ def compute_validation_correlations(
                 print(f"    UMAP1 vs IRT ideal point: rho={rho:.4f} (n={merged.height})")
 
     return results
+
+
+def compute_imputation_pct(matrix: pl.DataFrame) -> pl.DataFrame:
+    """Compute per-legislator imputation percentage from the raw vote matrix.
+
+    Returns a DataFrame with columns: legislator_slug, imputation_pct.
+    """
+    vote_cols = [c for c in matrix.columns if c != "legislator_slug"]
+    n_votes = len(vote_cols)
+    return matrix.select(
+        "legislator_slug",
+        (pl.sum_horizontal(pl.col(c).is_null() for c in vote_cols) / n_votes * 100)
+        .round(1)
+        .alias("imputation_pct"),
+    )
 
 
 def run_umap_for_chamber(
@@ -482,10 +515,20 @@ def run_umap_for_chamber(
     print(f"  Matrix: {matrix.height} legislators x {len(matrix.columns) - 1} votes")
     print(f"  Parameters: n_neighbors={n_neighbors}, min_dist={min_dist}, metric={DEFAULT_METRIC}")
 
+    # Compute imputation rates before imputation
+    imputation_df = compute_imputation_pct(matrix)
+
     X, slugs, vote_ids = impute_vote_matrix(matrix)
     embedding = compute_umap(X, n_neighbors=n_neighbors, min_dist=min_dist)
     embedding = orient_umap1(embedding, slugs, legislators)
     embedding_df = build_embedding_df(embedding, slugs, legislators)
+
+    # Add imputation percentage to embedding DataFrame
+    embedding_df = embedding_df.join(imputation_df, on="legislator_slug", how="left")
+
+    # Trustworthiness score
+    trust = compute_trustworthiness(X, embedding, n_neighbors)
+    print(f"\n  Trustworthiness (k={n_neighbors}): {trust:.4f}")
 
     # Print top/bottom UMAP1 legislators
     sorted_df = embedding_df.sort("UMAP1", descending=True)
@@ -499,6 +542,7 @@ def run_umap_for_chamber(
     # Validation correlations
     print("\n  Validation correlations:")
     validation = compute_validation_correlations(embedding_df, pca_scores, irt_points)
+    validation["trustworthiness"] = trust
     if not validation:
         print("    No upstream data available for validation")
 
@@ -584,8 +628,13 @@ def plot_umap_landscape(
                 if is_cross_party and slug not in labeled:
                     labeled.add(slug)
                     name = row.get("full_name", slug)
+                    imp_pct = row.get("imputation_pct", 0.0) or 0.0
+                    if imp_pct >= HIGH_IMPUTATION_PCT:
+                        note = f"(imputation artifact — {party},\n{imp_pct:.0f}% votes imputed)"
+                    else:
+                        note = f"(cross-party voter — {party})"
                     ax.annotate(
-                        f"{name}\n(imputation artifact — {party},\nlow participation)",
+                        f"{name}\n{note}",
                         (umap1, row["UMAP2"]),
                         fontsize=8,
                         fontweight="bold",
@@ -608,18 +657,70 @@ def plot_umap_landscape(
         f"{chamber} -- UMAP Ideological Landscape\n"
         "Nearby legislators vote alike; distance = voting dissimilarity"
     )
-    ax.legend(
-        handles=[
-            Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
-            Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
-        ],
-        loc="best",
+    # Build legend from parties present in the data
+    parties_present = (
+        embedding_df["party"].unique().sort().to_list() if "party" in embedding_df.columns else []
     )
+    legend_handles = [
+        Patch(facecolor=PARTY_COLORS.get(p, "#999999"), label=p)
+        for p in parties_present
+        if p in PARTY_COLORS
+    ]
+    if legend_handles:
+        ax.legend(handles=legend_handles, loc="best")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
     fig.tight_layout()
     save_fig(fig, out_dir / f"umap_landscape_{chamber.lower()}.png")
+
+
+def plot_umap_gradient(
+    embedding_df: pl.DataFrame,
+    color_source: pl.DataFrame,
+    color_col: str,
+    chamber: str,
+    out_dir: Path,
+    *,
+    colorbar_label: str,
+    filename_suffix: str,
+    title_method: str,
+    title_detail: str,
+) -> None:
+    """UMAP scatter colored by a continuous score (RdBu_r gradient).
+
+    Unified function for PCA PC1 and IRT ideal point gradient plots.
+    """
+    merged = embedding_df.join(
+        color_source.select("legislator_slug", color_col),
+        on="legislator_slug",
+        how="inner",
+    )
+    if merged.height < 3:
+        print(f"  Skipping {title_method} gradient for {chamber}: too few matched legislators")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+    scatter = ax.scatter(
+        merged["UMAP1"].to_numpy(),
+        merged["UMAP2"].to_numpy(),
+        c=merged[color_col].to_numpy(),
+        cmap="RdBu_r",
+        s=60,
+        alpha=0.8,
+        edgecolors="black",
+        linewidth=0.5,
+    )
+    plt.colorbar(scatter, ax=ax, label=colorbar_label)
+
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+    ax.set_title(f"{chamber} -- UMAP Colored by {title_method}\n{title_detail}")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"umap_{filename_suffix}_{chamber.lower()}.png")
 
 
 def plot_umap_colored_by_pc1(
@@ -629,42 +730,17 @@ def plot_umap_colored_by_pc1(
     out_dir: Path,
 ) -> None:
     """UMAP scatter colored by PCA PC1 scores (RdBu_r gradient)."""
-    slug_col = "legislator_slug"
-    pca_slug_col = slug_col if slug_col in pca_scores.columns else "legislator_slug"
-    merged = embedding_df.join(
-        pca_scores.select(pca_slug_col, "PC1"),
-        left_on="legislator_slug",
-        right_on=pca_slug_col,
-        how="inner",
+    plot_umap_gradient(
+        embedding_df,
+        pca_scores,
+        "PC1",
+        chamber,
+        out_dir,
+        colorbar_label="PCA PC1 Score (red = conservative, blue = liberal)",
+        filename_suffix="pc1_gradient",
+        title_method="PCA PC1",
+        title_detail="Smooth gradient validates that UMAP captures the same ideological dimension",
     )
-    if merged.height < 3:
-        print(f"  Skipping PC1 gradient for {chamber}: too few matched legislators")
-        return
-
-    fig, ax = plt.subplots(figsize=(12, 10))
-    scatter = ax.scatter(
-        merged["UMAP1"].to_numpy(),
-        merged["UMAP2"].to_numpy(),
-        c=merged["PC1"].to_numpy(),
-        cmap="RdBu_r",
-        s=60,
-        alpha=0.8,
-        edgecolors="black",
-        linewidth=0.5,
-    )
-    plt.colorbar(scatter, ax=ax, label="PCA PC1 Score (red = conservative, blue = liberal)")
-
-    ax.set_xlabel("UMAP1")
-    ax.set_ylabel("UMAP2")
-    ax.set_title(
-        f"{chamber} -- UMAP Colored by PCA PC1\n"
-        "Smooth gradient validates that UMAP captures the same ideological dimension"
-    )
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    fig.tight_layout()
-    save_fig(fig, out_dir / f"umap_pc1_gradient_{chamber.lower()}.png")
 
 
 def plot_umap_colored_by_irt(
@@ -674,55 +750,59 @@ def plot_umap_colored_by_irt(
     out_dir: Path,
 ) -> None:
     """UMAP scatter colored by IRT ideal points (RdBu_r gradient)."""
-    # Find the ideal point column
-    ip_col = None
-    for candidate in ["xi_mean", "ideal_point", "theta", "xi"]:
-        if candidate in irt_points.columns:
-            ip_col = candidate
-            break
+    ip_col = find_irt_column(irt_points)
     if ip_col is None:
         print(f"  Skipping IRT gradient for {chamber}: no ideal_point column found")
         return
-
-    slug_col = "legislator_slug"
-    irt_slug_col = slug_col if slug_col in irt_points.columns else "legislator_slug"
-    merged = embedding_df.join(
-        irt_points.select(irt_slug_col, ip_col),
-        left_on="legislator_slug",
-        right_on=irt_slug_col,
-        how="inner",
+    plot_umap_gradient(
+        embedding_df,
+        irt_points,
+        ip_col,
+        chamber,
+        out_dir,
+        colorbar_label="IRT Ideal Point (red = conservative, blue = liberal)",
+        filename_suffix="irt_gradient",
+        title_method="IRT Ideal Point",
+        title_detail="Smooth gradient validates that UMAP aligns with Bayesian ideal points",
     )
-    if merged.height < 3:
-        print(f"  Skipping IRT gradient for {chamber}: too few matched legislators")
-        return
-
-    fig, ax = plt.subplots(figsize=(12, 10))
-    scatter = ax.scatter(
-        merged["UMAP1"].to_numpy(),
-        merged["UMAP2"].to_numpy(),
-        c=merged[ip_col].to_numpy(),
-        cmap="RdBu_r",
-        s=60,
-        alpha=0.8,
-        edgecolors="black",
-        linewidth=0.5,
-    )
-    plt.colorbar(scatter, ax=ax, label="IRT Ideal Point (red = conservative, blue = liberal)")
-
-    ax.set_xlabel("UMAP1")
-    ax.set_ylabel("UMAP2")
-    ax.set_title(
-        f"{chamber} -- UMAP Colored by IRT Ideal Point\n"
-        "Smooth gradient validates that UMAP aligns with Bayesian ideal points"
-    )
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    fig.tight_layout()
-    save_fig(fig, out_dir / f"umap_irt_gradient_{chamber.lower()}.png")
 
 
 # ── Phase 4: Sensitivity Analysis ───────────────────────────────────────────
+
+
+def run_stability_sweep(
+    X: np.ndarray,
+    slugs: list[str],
+    legislators: pl.DataFrame,
+    chamber: str,
+    n_neighbors: int,
+    min_dist: float,
+) -> dict:
+    """Run UMAP with multiple random seeds, compare via Procrustes.
+
+    Tests whether embedding structure is robust to stochastic variation.
+    Returns dict with per-pair Procrustes similarities.
+    """
+    print(f"\n  {chamber} multi-seed stability: seeds = {STABILITY_SEEDS}")
+
+    embeddings: dict[int, np.ndarray] = {}
+    for seed in STABILITY_SEEDS:
+        emb = compute_umap(X, n_neighbors=n_neighbors, min_dist=min_dist, random_state=seed)
+        emb = orient_umap1(emb, slugs, legislators)
+        embeddings[seed] = emb
+
+    pairs: list[dict] = []
+    seeds = STABILITY_SEEDS
+    for i in range(len(seeds)):
+        for j in range(i + 1, len(seeds)):
+            sim = compute_procrustes_similarity(embeddings[seeds[i]], embeddings[seeds[j]])
+            pairs.append({"seed_a": seeds[i], "seed_b": seeds[j], "procrustes_similarity": sim})
+
+    mean_sim = np.mean([p["procrustes_similarity"] for p in pairs])
+    min_sim = min(p["procrustes_similarity"] for p in pairs)
+    print(f"    Mean Procrustes similarity: {mean_sim:.4f} (min: {min_sim:.4f})")
+
+    return {"pairs": pairs, "mean_similarity": float(mean_sim), "min_similarity": float(min_sim)}
 
 
 def run_sensitivity_sweep(
@@ -736,18 +816,26 @@ def run_sensitivity_sweep(
     """Run UMAP with multiple n_neighbors values, compare via Procrustes.
 
     Returns dict with per-pair Procrustes similarities and per-setting embeddings.
+    n_neighbors values exceeding n_samples are skipped.
     """
-    print(f"\n  {chamber} sensitivity sweep: n_neighbors = {SENSITIVITY_N_NEIGHBORS}")
+    n_samples = X.shape[0]
+    nn_values = [nn for nn in SENSITIVITY_N_NEIGHBORS if nn < n_samples]
+    skipped = [nn for nn in SENSITIVITY_N_NEIGHBORS if nn >= n_samples]
+    if skipped:
+        print(f"\n  {chamber} sensitivity sweep: n_neighbors = {nn_values}")
+        print(f"    Skipped n_neighbors {skipped} (>= {n_samples} legislators)")
+    else:
+        print(f"\n  {chamber} sensitivity sweep: n_neighbors = {nn_values}")
 
     embeddings: dict[int, np.ndarray] = {}
-    for nn in SENSITIVITY_N_NEIGHBORS:
+    for nn in nn_values:
         emb = compute_umap(X, n_neighbors=nn, min_dist=min_dist)
         emb = orient_umap1(emb, slugs, legislators)
         embeddings[nn] = emb
 
     # Compute pairwise Procrustes similarities
     pairs: list[dict] = []
-    nn_list = SENSITIVITY_N_NEIGHBORS
+    nn_list = nn_values
     for i in range(len(nn_list)):
         for j in range(i + 1, len(nn_list)):
             sim = compute_procrustes_similarity(embeddings[nn_list[i]], embeddings[nn_list[j]])
@@ -933,6 +1021,7 @@ def main() -> None:
 
         # ── Phase 4: Sensitivity analysis ──
         sensitivity_findings: dict[str, dict] = {}
+        stability_findings: dict[str, dict] = {}
         if not args.skip_sensitivity:
             print_header("SENSITIVITY ANALYSIS")
             for label, result in results.items():
@@ -955,6 +1044,29 @@ def main() -> None:
                 sweep_df = pl.DataFrame(all_pairs)
                 sweep_df.write_parquet(ctx.data_dir / "sensitivity_sweep.parquet")
                 print("  Saved: sensitivity_sweep.parquet")
+
+            # Multi-seed stability
+            print_header("MULTI-SEED STABILITY")
+            for label, result in results.items():
+                stability = run_stability_sweep(
+                    result["X_imputed"],
+                    result["slugs"],
+                    legislators,
+                    label,
+                    args.n_neighbors,
+                    args.min_dist,
+                )
+                stability_findings[label] = stability
+
+            # Save stability parquet
+            stab_rows: list[dict] = []
+            for label, stab in stability_findings.items():
+                for pair in stab["pairs"]:
+                    stab_rows.append({"chamber": label, **pair})
+            if stab_rows:
+                stab_df = pl.DataFrame(stab_rows)
+                stab_df.write_parquet(ctx.data_dir / "stability_sweep.parquet")
+                print("  Saved: stability_sweep.parquet")
         else:
             print_header("SENSITIVITY ANALYSIS (SKIPPED)")
 
@@ -968,6 +1080,7 @@ def main() -> None:
             "min_dist": args.min_dist,
             "metric": DEFAULT_METRIC,
             "random_state": RANDOM_STATE,
+            "stability_seeds": STABILITY_SEEDS,
             "impute_method": "row_mean",
         }
         for label, result in results.items():
@@ -977,6 +1090,13 @@ def main() -> None:
         if sensitivity_findings:
             for label, sweep in sensitivity_findings.items():
                 manifest[f"{label.lower()}_sensitivity_pairs"] = sweep["pairs"]
+        if stability_findings:
+            for label, stab in stability_findings.items():
+                manifest[f"{label.lower()}_stability"] = {
+                    "mean_similarity": stab["mean_similarity"],
+                    "min_similarity": stab["min_similarity"],
+                    "n_seeds": len(STABILITY_SEEDS),
+                }
         save_filtering_manifest(manifest, ctx.run_dir)
 
         # ── Phase 6: HTML report ──
@@ -985,6 +1105,7 @@ def main() -> None:
             ctx.report,
             results=results,
             sensitivity_findings=sensitivity_findings,
+            stability_findings=stability_findings,
             plots_dir=ctx.plots_dir,
             n_neighbors=args.n_neighbors,
             min_dist=args.min_dist,

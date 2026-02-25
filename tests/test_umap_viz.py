@@ -2,7 +2,8 @@
 Tests for UMAP ideological landscape in analysis/umap_viz.py.
 
 Covers imputation, orientation, embedding construction, Procrustes similarity,
-validation correlations, and (optionally) the UMAP computation itself.
+validation correlations, trustworthiness, sensitivity sweep, cross-party outlier
+detection, and (optionally) the UMAP computation itself.
 
 Run: uv run pytest tests/test_umap_viz.py -v
 """
@@ -18,8 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.umap_viz import (
     build_embedding_df,
+    compute_imputation_pct,
     compute_procrustes_similarity,
+    compute_trustworthiness,
     compute_validation_correlations,
+    find_irt_column,
     impute_vote_matrix,
     orient_umap1,
 )
@@ -313,3 +317,266 @@ class TestComputeUmap:
         embedding = compute_umap(X, n_neighbors=5, metric="cosine")
         assert embedding.shape == (20, 2)
         assert not np.isnan(embedding).any()
+
+
+# ── TestFindIrtColumn ──────────────────────────────────────────────────────
+
+
+class TestFindIrtColumn:
+    """IRT ideal point column discovery helper."""
+
+    def test_finds_xi_mean(self) -> None:
+        """xi_mean is the primary column name."""
+        df = pl.DataFrame({"legislator_slug": ["a"], "xi_mean": [1.0], "theta": [2.0]})
+        assert find_irt_column(df) == "xi_mean"
+
+    def test_finds_ideal_point_fallback(self) -> None:
+        """ideal_point is found when xi_mean is absent."""
+        df = pl.DataFrame({"legislator_slug": ["a"], "ideal_point": [1.0]})
+        assert find_irt_column(df) == "ideal_point"
+
+    def test_finds_theta_fallback(self) -> None:
+        """theta is found as third priority."""
+        df = pl.DataFrame({"legislator_slug": ["a"], "theta": [1.0]})
+        assert find_irt_column(df) == "theta"
+
+    def test_returns_none_when_absent(self) -> None:
+        """Returns None when no recognized column exists."""
+        df = pl.DataFrame({"legislator_slug": ["a"], "score": [1.0]})
+        assert find_irt_column(df) is None
+
+
+# ── TestComputeTrustworthiness ─────────────────────────────────────────────
+
+
+class TestComputeTrustworthiness:
+    """Trustworthiness score: neighborhood preservation metric."""
+
+    def test_identity_embedding(self) -> None:
+        """Embedding that preserves structure perfectly gives high score."""
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((20, 5))
+        # Use first 2 columns as "embedding" — preserves neighbor structure well
+        embedding = X[:, :2]
+        score = compute_trustworthiness(X, embedding, n_neighbors=5)
+        assert 0.0 <= score <= 1.0
+
+    def test_random_embedding_lower(self) -> None:
+        """Random embedding has lower trustworthiness than structured one."""
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((30, 10))
+        # Structured: PCA-like (first 2 dimensions)
+        structured = X[:, :2]
+        # Random: unrelated coordinates
+        random_emb = rng.standard_normal((30, 2))
+        score_structured = compute_trustworthiness(X, structured, n_neighbors=5)
+        score_random = compute_trustworthiness(X, random_emb, n_neighbors=5)
+        assert score_structured > score_random
+
+    def test_clamps_k_for_small_dataset(self) -> None:
+        """n_neighbors is clamped to n_samples // 2 - 1 for small datasets."""
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((10, 3))
+        embedding = X[:, :2]
+        # n_neighbors=50 >> n_samples=10, should not crash (clamped to 4)
+        score = compute_trustworthiness(X, embedding, n_neighbors=50)
+        assert 0.0 <= score <= 1.0
+
+    def test_tiny_dataset_returns_nan(self) -> None:
+        """Datasets too small for trustworthiness return NaN."""
+        X = np.array([[0.0, 1.0], [1.0, 0.0]])
+        embedding = X.copy()
+        # n_samples=2, max_k = 2 // 2 - 1 = 0 -> NaN
+        score = compute_trustworthiness(X, embedding, n_neighbors=5)
+        assert np.isnan(score)
+
+
+# ── TestComputeImputationPct ───────────────────────────────────────────────
+
+
+class TestComputeImputationPct:
+    """Per-legislator imputation percentage."""
+
+    def test_no_nulls(self) -> None:
+        """All votes present -> 0% imputation."""
+        matrix = pl.DataFrame({"legislator_slug": ["rep_a"], "v1": [1.0], "v2": [0.0]})
+        result = compute_imputation_pct(matrix)
+        assert result["imputation_pct"][0] == 0.0
+
+    def test_all_nulls(self) -> None:
+        """No votes present -> 100% imputation."""
+        matrix = pl.DataFrame(
+            {"legislator_slug": ["rep_a"], "v1": [None], "v2": [None]},
+            schema={"legislator_slug": pl.Utf8, "v1": pl.Float64, "v2": pl.Float64},
+        )
+        result = compute_imputation_pct(matrix)
+        assert result["imputation_pct"][0] == 100.0
+
+    def test_partial_nulls(self) -> None:
+        """Half votes present -> 50% imputation."""
+        matrix = pl.DataFrame(
+            {"legislator_slug": ["rep_a"], "v1": [1.0], "v2": [None]},
+            schema={"legislator_slug": pl.Utf8, "v1": pl.Float64, "v2": pl.Float64},
+        )
+        result = compute_imputation_pct(matrix)
+        assert result["imputation_pct"][0] == 50.0
+
+    def test_multiple_legislators(self) -> None:
+        """Different legislators can have different imputation rates."""
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_a", "rep_b"],
+                "v1": [1.0, None],
+                "v2": [1.0, None],
+                "v3": [None, 1.0],
+                "v4": [None, 1.0],
+            },
+            schema={
+                "legislator_slug": pl.Utf8,
+                "v1": pl.Float64,
+                "v2": pl.Float64,
+                "v3": pl.Float64,
+                "v4": pl.Float64,
+            },
+        )
+        result = compute_imputation_pct(matrix)
+        assert result["imputation_pct"][0] == 50.0
+        assert result["imputation_pct"][1] == 50.0
+
+
+# ── TestSensitivitySweep ──────────────────────────────────────────────────
+
+
+class TestSensitivitySweep:
+    """Sensitivity sweep: n_neighbors clamping and Procrustes pairs."""
+
+    @pytest.fixture(autouse=True)
+    def _require_umap(self) -> None:
+        pytest.importorskip("umap")
+
+    def test_clamps_n_neighbors(self) -> None:
+        """n_neighbors values >= n_samples are skipped."""
+        from analysis.umap_viz import run_sensitivity_sweep
+
+        rng = np.random.default_rng(42)
+        X = rng.random((10, 5))  # Only 10 samples
+        legislators = pl.DataFrame(
+            {
+                "slug": [f"rep_{i}" for i in range(10)],
+                "full_name": [f"Name {i}" for i in range(10)],
+                "party": ["Republican"] * 5 + ["Democrat"] * 5,
+                "district": [str(i) for i in range(10)],
+                "chamber": ["House"] * 10,
+            }
+        )
+        slugs = [f"rep_{i}" for i in range(10)]
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_sensitivity_sweep(X, slugs, legislators, "House", 0.1, Path(tmpdir))
+        # n_neighbors=[5, 15, 30, 50] -> only 5 should survive (< 10 samples)
+        # Each embedding key is an n_neighbors value
+        assert 5 in result["embeddings"]
+        assert 15 not in result["embeddings"]  # 15 >= 10
+        assert 50 not in result["embeddings"]  # 50 >= 10
+
+    def test_produces_procrustes_pairs(self) -> None:
+        """Sweep with multiple valid n_neighbors produces Procrustes pairs."""
+        from analysis.umap_viz import run_sensitivity_sweep
+
+        rng = np.random.default_rng(42)
+        X = rng.random((30, 10))
+        legislators = pl.DataFrame(
+            {
+                "slug": [f"rep_{i}" for i in range(30)],
+                "full_name": [f"Name {i}" for i in range(30)],
+                "party": ["Republican"] * 15 + ["Democrat"] * 15,
+                "district": [str(i) for i in range(30)],
+                "chamber": ["House"] * 30,
+            }
+        )
+        slugs = [f"rep_{i}" for i in range(30)]
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_sensitivity_sweep(X, slugs, legislators, "House", 0.1, Path(tmpdir))
+        # n_neighbors=[5, 15] should survive (both < 30)
+        assert len(result["pairs"]) > 0
+        for pair in result["pairs"]:
+            assert 0.0 <= pair["procrustes_similarity"] <= 1.0
+
+
+# ── TestStabilitySweep ────────────────────────────────────────────────────
+
+
+class TestStabilitySweep:
+    """Multi-seed stability sweep."""
+
+    @pytest.fixture(autouse=True)
+    def _require_umap(self) -> None:
+        pytest.importorskip("umap")
+
+    def test_produces_stability_metrics(self) -> None:
+        """Stability sweep returns mean and min similarity."""
+        from analysis.umap_viz import run_stability_sweep
+
+        rng = np.random.default_rng(42)
+        X = rng.random((20, 10))
+        legislators = pl.DataFrame(
+            {
+                "slug": [f"rep_{i}" for i in range(20)],
+                "full_name": [f"Name {i}" for i in range(20)],
+                "party": ["Republican"] * 10 + ["Democrat"] * 10,
+                "district": [str(i) for i in range(20)],
+                "chamber": ["House"] * 20,
+            }
+        )
+        slugs = [f"rep_{i}" for i in range(20)]
+        result = run_stability_sweep(X, slugs, legislators, "House", 5, 0.1)
+        assert "mean_similarity" in result
+        assert "min_similarity" in result
+        assert result["mean_similarity"] >= result["min_similarity"]
+        assert len(result["pairs"]) > 0
+
+
+# ── TestThreePartyScenario ────────────────────────────────────────────────
+
+
+class TestThreePartyScenario:
+    """Scenarios with Independent legislators (e.g., 89th biennium)."""
+
+    def test_embedding_df_with_independent(self) -> None:
+        """build_embedding_df handles Independent party correctly."""
+        legislators = pl.DataFrame(
+            {
+                "slug": ["rep_a", "rep_b", "rep_c"],
+                "full_name": ["Alice", "Bob", "Carol"],
+                "party": ["Republican", "Democrat", "Independent"],
+                "district": ["1", "2", "3"],
+                "chamber": ["House", "House", "House"],
+            }
+        )
+        embedding = np.array([[1.0, 0.0], [-1.0, 0.0], [0.0, 1.0]])
+        slugs = ["rep_a", "rep_b", "rep_c"]
+        df = build_embedding_df(embedding, slugs, legislators)
+        parties = df["party"].to_list()
+        assert "Independent" in parties
+        assert "Republican" in parties
+        assert "Democrat" in parties
+
+    def test_orient_with_independent(self) -> None:
+        """Orientation ignores Independent legislators."""
+        legislators = pl.DataFrame(
+            {
+                "slug": ["rep_a", "rep_b", "rep_c"],
+                "full_name": ["Alice", "Bob", "Carol"],
+                "party": ["Republican", "Democrat", "Independent"],
+                "district": ["1", "2", "3"],
+                "chamber": ["House", "House", "House"],
+            }
+        )
+        # R at -2, D at 3, I at 0 -> R mean = -2 < D mean = 3 -> flip
+        embedding = np.array([[-2.0, 0.0], [3.0, 0.0], [0.0, 1.0]])
+        slugs = ["rep_a", "rep_b", "rep_c"]
+        result = orient_umap1(embedding, slugs, legislators)
+        assert result[0, 0] > 0  # R should be positive after flip

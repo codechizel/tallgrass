@@ -51,3 +51,5 @@ UMAP (Uniform Manifold Approximation and Projection) is added as Phase 2b — a 
 - Senate (n=42) is at the lower end of UMAP's effective range. The n_neighbors=50 setting in the sensitivity sweep is truncated to n=41 by umap-learn, and the small sample makes the embedding less stable than the House.
 - Duplicated imputation means a bug fix must be applied in both `pca.py` and `umap_viz.py` independently.
 - The `umap-learn` package adds `pynndescent` as a transitive dependency.
+
+**Superseded in part by ADR-0027:** Trustworthiness validation, multi-seed stability, imputation-aware annotation, sensitivity sweep clamping, and dynamic legend were added in ADR-0027 based on a literature review (`docs/umap-deep-dive.md`).

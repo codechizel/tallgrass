@@ -124,11 +124,13 @@ See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (26 decisions)
+- ADRs: `docs/adr/README.md` (27 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
 - PCA deep dive: `docs/pca-deep-dive.md` (literature review, code audit, implementation recommendations)
+- UMAP deep dive: `docs/umap-deep-dive.md` (literature survey, code review, implementation recommendations)
+- IRT deep dive: `docs/irt-deep-dive.md` (field survey, code audit, test gaps, recommendations)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
@@ -142,7 +144,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 788 tests
+just test                    # 825 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

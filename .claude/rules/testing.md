@@ -39,7 +39,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_eda.py` — vote matrix, filtering, agreement, Rice, party-line, integrity, new diagnostics (~28 tests)
 - `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt, elapsed (~38 tests)
 - `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity, forest, paradox detection (~45 tests)
-- `tests/test_umap_viz.py` — imputation, orientation, embedding, Procrustes, validation (~21 tests)
+- `tests/test_umap_viz.py` — imputation, orientation, embedding, Procrustes, validation, trustworthiness, sensitivity sweep, stability, three-party (~40 tests)
 - `tests/test_nlp_features.py` — TF-IDF + NMF fitting, edge cases, display names (~16 tests)
 - `tests/test_pca.py` — imputation, PC1 orientation, extreme PC2 detection (~16 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, NLP integration (~38 tests)

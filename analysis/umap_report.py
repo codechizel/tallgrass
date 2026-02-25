@@ -26,11 +26,12 @@ def build_umap_report(
     *,
     results: dict[str, dict],
     sensitivity_findings: dict[str, dict],
+    stability_findings: dict[str, dict] | None = None,
     plots_dir: Path,
     n_neighbors: int,
     min_dist: float,
 ) -> None:
-    """Build the full UMAP HTML report by adding ~12 sections to the ReportBuilder."""
+    """Build the full UMAP HTML report by adding sections to the ReportBuilder."""
     for chamber, result in results.items():
         _add_umap_parameters(report, result, chamber)
         _add_landscape_figure(report, plots_dir, chamber)
@@ -43,6 +44,9 @@ def build_umap_report(
         for chamber in results:
             _add_sensitivity_figure(report, plots_dir, chamber)
         _add_sensitivity_table(report, sensitivity_findings)
+
+    if stability_findings:
+        _add_stability_table(report, stability_findings)
 
     _add_analysis_config(report, n_neighbors, min_dist)
     print(f"  Report: {len(report._sections)} sections added")
@@ -155,28 +159,34 @@ def _add_validation_table(
     result: dict,
     chamber: str,
 ) -> None:
-    """Table: Spearman correlations of UMAP1 vs upstream methods."""
+    """Table: Spearman correlations of UMAP1 vs upstream methods + trustworthiness."""
     validation = result.get("validation", {})
     if not validation:
         return
 
     rows = []
+    if "trustworthiness" in validation:
+        rows.append(
+            {
+                "metric": "Trustworthiness",
+                "value": validation["trustworthiness"],
+                "detail": "Fraction of embedding neighbors that were true neighbors",
+            }
+        )
     if "pca_pc1_spearman" in validation:
         rows.append(
             {
-                "comparison": "UMAP1 vs PCA PC1",
-                "spearman_rho": validation["pca_pc1_spearman"],
-                "p_value": validation["pca_pc1_pvalue"],
-                "n_shared": validation["pca_n_shared"],
+                "metric": "UMAP1 vs PCA PC1 (Spearman)",
+                "value": validation["pca_pc1_spearman"],
+                "detail": f"n={validation['pca_n_shared']}, p={validation['pca_pc1_pvalue']:.2e}",
             }
         )
     if "irt_spearman" in validation:
         rows.append(
             {
-                "comparison": "UMAP1 vs IRT Ideal Point",
-                "spearman_rho": validation["irt_spearman"],
-                "p_value": validation["irt_pvalue"],
-                "n_shared": validation["irt_n_shared"],
+                "metric": "UMAP1 vs IRT Ideal Point (Spearman)",
+                "value": validation["irt_spearman"],
+                "detail": f"n={validation['irt_n_shared']}, p={validation['irt_pvalue']:.2e}",
             }
         )
 
@@ -186,19 +196,20 @@ def _add_validation_table(
     df = pl.DataFrame(rows)
     html = make_gt(
         df,
-        title=f"{chamber} -- Validation Correlations",
-        subtitle="Spearman rank correlation (not Pearson -- UMAP is nonlinear)",
+        title=f"{chamber} -- Validation Metrics",
+        subtitle=(
+            "Trustworthiness measures neighborhood preservation; Spearman measures rank agreement"
+        ),
         column_labels={
-            "comparison": "Comparison",
-            "spearman_rho": "Spearman rho",
-            "p_value": "p-value",
-            "n_shared": "N Shared",
+            "metric": "Metric",
+            "value": "Value",
+            "detail": "Detail",
         },
-        number_formats={
-            "spearman_rho": ".4f",
-            "p_value": ".2e",
-        },
-        source_note="Spearman rho > 0.85 indicates strong alignment with upstream methods.",
+        number_formats={"value": ".4f"},
+        source_note=(
+            "Trustworthiness > 0.80 is good, > 0.95 is excellent. "
+            "Spearman rho > 0.85 indicates strong alignment with upstream methods."
+        ),
     )
     report.add(
         TableSection(
@@ -317,6 +328,57 @@ def _add_sensitivity_table(
     )
 
 
+def _add_stability_table(
+    report: ReportBuilder,
+    stability_findings: dict[str, dict],
+) -> None:
+    """Table: Multi-seed Procrustes stability summary."""
+    rows = []
+    for chamber, stab in stability_findings.items():
+        rows.append(
+            {
+                "chamber": chamber,
+                "n_seeds": len(stab["pairs"]) * 2
+                - len(stab["pairs"]),  # not quite right, use the constant
+                "mean_similarity": stab["mean_similarity"],
+                "min_similarity": stab["min_similarity"],
+            }
+        )
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title="Multi-Seed Stability",
+        subtitle=(
+            "Procrustes similarity across 5 random seeds (same parameters, different randomness)"
+        ),
+        column_labels={
+            "chamber": "Chamber",
+            "n_seeds": "Seeds",
+            "mean_similarity": "Mean Similarity",
+            "min_similarity": "Min Similarity",
+        },
+        number_formats={
+            "mean_similarity": ".4f",
+            "min_similarity": ".4f",
+        },
+        source_note=(
+            "Similarity > 0.7 indicates stable structure. High mean + high min = "
+            "robust embedding that does not depend on random initialization."
+        ),
+    )
+    report.add(
+        TableSection(
+            id="stability-seeds",
+            title="Multi-Seed Stability",
+            html=html,
+        )
+    )
+
+
 def _add_analysis_config(
     report: ReportBuilder,
     n_neighbors: int,
@@ -330,6 +392,7 @@ def _add_analysis_config(
             DEFAULT_N_NEIGHBORS,
             RANDOM_STATE,
             SENSITIVITY_N_NEIGHBORS,
+            STABILITY_SEEDS,
         )
     except ModuleNotFoundError:
         from umap_viz import (  # type: ignore[no-redef]
@@ -338,6 +401,7 @@ def _add_analysis_config(
             DEFAULT_N_NEIGHBORS,
             RANDOM_STATE,
             SENSITIVITY_N_NEIGHBORS,
+            STABILITY_SEEDS,
         )
 
     df = pl.DataFrame(
@@ -349,6 +413,7 @@ def _add_analysis_config(
                 "Random State",
                 "Imputation Method",
                 "Sensitivity N Neighbors",
+                "Stability Seeds",
             ],
             "Value": [
                 str(n_neighbors),
@@ -357,6 +422,7 @@ def _add_analysis_config(
                 str(RANDOM_STATE),
                 "Row mean (legislator Yea rate)",
                 str(SENSITIVITY_N_NEIGHBORS),
+                str(STABILITY_SEEDS),
             ],
             "Description": [
                 f"Controls local vs global focus (default: {DEFAULT_N_NEIGHBORS})",
@@ -365,6 +431,7 @@ def _add_analysis_config(
                 "Fixed seed for reproducibility",
                 "Missing votes filled with each legislator's average Yea rate",
                 "Values tested in sensitivity sweep",
+                "Random seeds tested in multi-seed stability analysis",
             ],
         }
     )

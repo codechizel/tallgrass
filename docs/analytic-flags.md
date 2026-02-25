@@ -401,7 +401,7 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 ### Senate UMAP Instability at n=42
 
 - **Phase:** UMAP
-- **Observation:** Senate has only 42 legislators. The n_neighbors=50 setting is truncated to n=41 by umap-learn (warning emitted). Senate Procrustes similarities (0.91-0.96) are higher than House (0.78-0.98) paradoxically because the small sample constrains possible layouts.
+- **Observation:** Senate has only 42 legislators. As of ADR-0027, n_neighbors values >= n_samples are now explicitly skipped in the sensitivity sweep (previously silently clamped by umap-learn). Senate Procrustes similarities (0.91-0.96) are higher than House (0.78-0.98) paradoxically because the small sample constrains possible layouts. Multi-seed stability analysis (ADR-0027) provides additional confirmation of structural robustness independent of n_neighbors sensitivity.
 - **Downstream:** Senate UMAP results should be presented with the caveat that n=42 is at the lower end of UMAP's effective range. The House (n=130) embedding is more reliable.
 
 ## Flagged Patterns — NLP Bill Text Features

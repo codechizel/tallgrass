@@ -1,7 +1,8 @@
 # UMAP Design Choices
 
 **Script:** `analysis/umap_viz.py`
-**Constants defined at:** `analysis/umap_viz.py:131-137`
+**Constants defined at:** `analysis/umap_viz.py:176-184`
+**Deep dive:** `docs/umap-deep-dive.md`
 **ADR:** `docs/adr/0011-umap-implementation-choices.md`
 **Method doc:** `Analytic_Methods/11_DIM_umap_tsne_visualization.md`
 
@@ -17,13 +18,15 @@
 
 ## Parameters & Constants
 
-| Constant | Value | Justification | Code location |
-|----------|-------|---------------|---------------|
-| `DEFAULT_N_NEIGHBORS` | 15 | Per UMAP docs: good default for medium datasets (100-200 points). Balances local and global structure. | `umap_viz.py:131` |
-| `DEFAULT_MIN_DIST` | 0.1 | Per UMAP docs: allows moderate cluster tightness without collapsing structure. | `umap_viz.py:132` |
-| `DEFAULT_METRIC` | `"cosine"` | Recommended for binary vote data (see Assumption 2). | `umap_viz.py:133` |
-| `RANDOM_STATE` | 42 | Fixed seed for reproducibility. UMAP is stochastic. | `umap_viz.py:134` |
-| `SENSITIVITY_N_NEIGHBORS` | [5, 15, 30, 50] | Standard range from method doc. 5 = very local, 50 = global. | `umap_viz.py:135` |
+| Constant | Value | Justification |
+|----------|-------|---------------|
+| `DEFAULT_N_NEIGHBORS` | 15 | Per UMAP docs: good default for medium datasets (100-200 points). Balances local and global structure. |
+| `DEFAULT_MIN_DIST` | 0.1 | Per UMAP docs: allows moderate cluster tightness without collapsing structure. |
+| `DEFAULT_METRIC` | `"cosine"` | Recommended for binary vote data (see Assumption 2). |
+| `RANDOM_STATE` | 42 | Fixed seed for reproducibility. UMAP is stochastic. |
+| `SENSITIVITY_N_NEIGHBORS` | [5, 15, 30, 50] | Standard range from method doc. 5 = very local, 50 = global. Clamped to n_samples for small chambers. |
+| `STABILITY_SEEDS` | [42, 123, 456, 789, 1337] | 5 seeds for multi-seed stability analysis via Procrustes. |
+| `HIGH_IMPUTATION_PCT` | 50.0 | Threshold for labeling cross-party outliers as imputation artifacts vs genuine mavericks. |
 
 ## Methodological Choices
 
@@ -72,6 +75,18 @@
 **Decision:** The UMAP script duplicates the row-mean imputation logic from PCA rather than importing it.
 
 **Why:** Self-containment, following the PCA precedent. Changes to EDA or PCA imputation won't silently alter UMAP results. The duplication is intentional and documented.
+
+### Trustworthiness validation
+
+**Decision:** Compute sklearn's `trustworthiness()` score as a quantitative measure of local neighborhood preservation.
+
+**Why:** Procrustes and Spearman measure stability and rank agreement with other methods. Trustworthiness directly measures whether UMAP's core promise — preserving local neighborhoods — is fulfilled. Score > 0.80 is good; > 0.95 is excellent. Clamped to `n_samples // 2 - 1` for small chambers (sklearn requirement).
+
+### Multi-seed stability
+
+**Decision:** Run UMAP with 5 different random seeds, compute pairwise Procrustes similarity to demonstrate robustness to stochastic variation.
+
+**Why:** UMAP is stochastic — different random seeds produce different embeddings. The multi-seed stability analysis directly addresses the criticism that "UMAP results depend on random initialization." High mean Procrustes similarity (> 0.7) across seeds indicates that the structure is real, not an artifact of a particular seed.
 
 ### Data-driven annotation
 
