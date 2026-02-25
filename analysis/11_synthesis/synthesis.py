@@ -1,9 +1,10 @@
 """
 Kansas Legislature — Synthesis Report
 
-Combines results from all 8 analysis phases (EDA, PCA, IRT, Clustering, Network,
-Prediction, Indices, UMAP) into a single narrative-driven HTML report for nontechnical
-audiences: journalists, policymakers, citizens.
+Combines results from all 10 upstream analysis phases (EDA, PCA, IRT, Clustering,
+Network, Prediction, Indices, UMAP, Beta-Binomial, Hierarchical) into a single
+narrative-driven HTML report for nontechnical audiences: journalists, policymakers,
+citizens.
 
 Reads from upstream parquets and manifests; does not recompute anything from raw CSVs.
 
@@ -12,7 +13,7 @@ Usage:
 
 Outputs (in results/<session>/synthesis/<date>/):
   - data/:   Unified legislator DataFrames (house, senate) as parquet
-  - plots/:  8 new PNGs (dashboards, profiles, paradox, pipeline)
+  - plots/:  4-8 new PNGs (dashboards, profiles, paradox, pipeline)
   - filtering_manifest.json, run_info.json, run_log.txt
   - synthesis_report.html
 """
@@ -43,6 +44,15 @@ except ModuleNotFoundError:
     from synthesis_detect import ParadoxCase, detect_all  # type: ignore[no-redef]
 
 try:
+    from analysis.synthesis_data import UPSTREAM_PHASES, build_legislator_df, load_all_upstream
+except ModuleNotFoundError:
+    from synthesis_data import (  # type: ignore[no-redef]
+        UPSTREAM_PHASES,
+        build_legislator_df,
+        load_all_upstream,
+    )
+
+try:
     from analysis.synthesis_report import build_synthesis_report
 except ModuleNotFoundError:
     from synthesis_report import build_synthesis_report  # type: ignore[no-redef]
@@ -55,7 +65,7 @@ SYNTHESIS_PRIMER = """\
 ## Purpose
 
 Narrative summary of Kansas Legislature voting patterns, combining findings
-from eight analysis phases into a single deliverable for nontechnical audiences.
+from ten upstream analysis phases into a single deliverable for nontechnical audiences.
 
 ## Method
 
@@ -66,8 +76,8 @@ metric paradoxes) are detected from data, not hardcoded.
 
 ## Inputs
 
-Parquet files from: IRT, Indices, Network, Clustering, Prediction, PCA, EDA, UMAP.
-Filtering manifests from each phase for headline statistics.
+Parquet files from: IRT, Indices, Network, Clustering, Prediction, PCA, EDA, UMAP,
+Beta-Binomial, Hierarchical. Filtering manifests from each phase for headline statistics.
 
 ## Outputs
 
@@ -98,231 +108,6 @@ statistical training.
 
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 PARTY_COLORS_LIGHT = {"Republican": "#F5A0A5", "Democrat": "#8090E0", "Independent": "#CCCCCC"}
-
-UPSTREAM_PHASES = [
-    "eda",
-    "pca",
-    "irt",
-    "clustering",
-    "network",
-    "prediction",
-    "indices",
-    "umap",
-    "beta_binomial",
-    "hierarchical",
-]
-
-
-# ── Data Loading ─────────────────────────────────────────────────────────────
-
-
-def _read_parquet_safe(path: Path) -> pl.DataFrame | None:
-    """Read a parquet file, returning None if it doesn't exist."""
-    if path.exists():
-        return pl.read_parquet(path)
-    print(f"  WARNING: missing {path}")
-    return None
-
-
-def _read_manifest(path: Path) -> dict:
-    """Read a JSON manifest, returning empty dict if missing."""
-    if path.exists():
-        return json.loads(path.read_text())
-    print(f"  WARNING: missing manifest {path}")
-    return {}
-
-
-def load_all_upstream(results_base: Path) -> dict:
-    """Read all parquets and manifests from the 8 upstream phases.
-
-    Returns a dict with keys: manifests, and per-chamber parquet DataFrames.
-    """
-    upstream: dict = {"manifests": {}, "house": {}, "senate": {}, "plots": {}}
-
-    for phase in UPSTREAM_PHASES:
-        phase_dir = results_base / phase / "latest"
-        data_dir = phase_dir / "data"
-        plots_dir = phase_dir / "plots"
-
-        # Manifests
-        manifest_path = phase_dir / "filtering_manifest.json"
-        upstream["manifests"][phase] = _read_manifest(manifest_path)
-
-        # Per-chamber parquets
-        for chamber in ("house", "senate"):
-            if phase == "irt":
-                df = _read_parquet_safe(data_dir / f"ideal_points_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["irt"] = df
-            elif phase == "indices":
-                df = _read_parquet_safe(data_dir / f"maverick_scores_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["maverick"] = df
-            elif phase == "network":
-                df = _read_parquet_safe(data_dir / f"centrality_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["centrality"] = df
-            elif phase == "clustering":
-                df = _read_parquet_safe(data_dir / f"kmeans_assignments_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["kmeans"] = df
-                df2 = _read_parquet_safe(data_dir / f"party_loyalty_{chamber}.parquet")
-                if df2 is not None:
-                    upstream[chamber]["loyalty"] = df2
-            elif phase == "prediction":
-                df = _read_parquet_safe(data_dir / f"per_legislator_accuracy_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["accuracy"] = df
-                sv = _read_parquet_safe(data_dir / f"surprising_votes_{chamber}.parquet")
-                if sv is not None:
-                    upstream[chamber]["surprising_votes"] = sv
-                hr = _read_parquet_safe(data_dir / f"holdout_results_{chamber}.parquet")
-                if hr is not None:
-                    upstream[chamber]["holdout_results"] = hr
-            elif phase == "pca":
-                df = _read_parquet_safe(data_dir / f"pc_scores_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["pca"] = df
-            elif phase == "umap":
-                df = _read_parquet_safe(data_dir / f"umap_embedding_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["umap"] = df
-            elif phase == "beta_binomial":
-                df = _read_parquet_safe(data_dir / f"posterior_loyalty_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["beta_posterior"] = df
-            elif phase == "hierarchical":
-                df = _read_parquet_safe(data_dir / f"hierarchical_ideal_points_{chamber}.parquet")
-                if df is not None:
-                    upstream[chamber]["hierarchical"] = df
-
-        # Track upstream plot paths
-        upstream["plots"][phase] = plots_dir
-
-    return upstream
-
-
-def build_legislator_df(upstream: dict, chamber: str) -> pl.DataFrame:
-    """Join upstream parquets into a unified legislator DataFrame for one chamber.
-
-    Base table: IRT ideal points. All other tables LEFT JOIN on legislator_slug.
-    """
-    base = upstream[chamber].get("irt")
-    if base is None:
-        msg = f"No IRT ideal points found for {chamber}"
-        raise ValueError(msg)
-
-    df = base.select(
-        "legislator_slug", "xi_mean", "xi_sd", "full_name", "party", "district", "chamber"
-    )
-
-    # Maverick scores (indices)
-    mav = upstream[chamber].get("maverick")
-    if mav is not None:
-        df = df.join(
-            mav.select(
-                "legislator_slug",
-                "unity_score",
-                "maverick_rate",
-                "weighted_maverick",
-                "n_defections",
-                "loyalty_zscore",
-            ),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # Network centrality
-    cent = upstream[chamber].get("centrality")
-    if cent is not None:
-        df = df.join(
-            cent.select("legislator_slug", "betweenness", "eigenvector", "pagerank"),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # Clustering assignments (optimal k varies by session)
-    km = upstream[chamber].get("kmeans")
-    if km is not None:
-        cluster_cols = [
-            c for c in km.columns if c.startswith("cluster_k") and not c.startswith("cluster_2d")
-        ]
-        select_cols = ["legislator_slug", "distance_to_centroid"] + cluster_cols
-        select_cols = [c for c in select_cols if c in km.columns]
-        if select_cols:
-            df = df.join(km.select(select_cols), on="legislator_slug", how="left")
-
-    # Per-legislator prediction accuracy
-    acc = upstream[chamber].get("accuracy")
-    if acc is not None:
-        df = df.join(
-            acc.select("legislator_slug", "accuracy", "n_votes", "n_correct"),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # PCA scores
-    pca = upstream[chamber].get("pca")
-    if pca is not None:
-        df = df.join(
-            pca.select("legislator_slug", "PC1", "PC2"),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # UMAP coordinates
-    umap = upstream[chamber].get("umap")
-    if umap is not None:
-        df = df.join(
-            umap.select("legislator_slug", "UMAP1", "UMAP2"),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # Clustering party loyalty
-    loy = upstream[chamber].get("loyalty")
-    if loy is not None:
-        df = df.join(
-            loy.select("legislator_slug", "loyalty_rate"),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # Beta-Binomial posterior loyalty
-    bp = upstream[chamber].get("beta_posterior")
-    if bp is not None:
-        df = df.join(
-            bp.select("legislator_slug", "posterior_mean", "ci_width", "shrinkage"),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # Hierarchical IRT ideal points
-    hier = upstream[chamber].get("hierarchical")
-    if hier is not None:
-        hier_cols = ["legislator_slug"]
-        rename_map: dict[str, str] = {}
-        for col in ["xi_mean", "xi_sd", "shrinkage_pct"]:
-            if col in hier.columns:
-                hier_cols.append(col)
-                rename_map[col] = f"hier_{col}"
-        df = df.join(
-            hier.select(hier_cols).rename(rename_map),
-            on="legislator_slug",
-            how="left",
-        )
-
-    # Add percentile ranks (within chamber, 0-1 scale)
-    n = df.height
-    for col, ascending in [
-        ("xi_mean", True),
-        ("betweenness", True),
-        ("accuracy", True),
-    ]:
-        if col in df.columns:
-            df = df.with_columns((pl.col(col).rank("ordinal") / n).alias(f"{col}_percentile"))
-
-    return df.sort("xi_mean")
 
 
 # ── Plotting ─────────────────────────────────────────────────────────────────
@@ -366,15 +151,8 @@ def plot_dashboard_scatter(
             zorder=3,
         )
 
-    # Annotate key legislators
+    # Annotate key legislators (caller passes slugs from detect_annotation_slugs)
     slugs = list(annotate_slugs or [])
-    # Also add most extreme per party
-    for party in ["Republican", "Democrat"]:
-        party_df = leg_df.filter(pl.col("party") == party)
-        if party_df.height > 0:
-            most_extreme = party_df.sort("xi_mean", descending=(party == "Republican")).head(2)
-            slugs.extend(most_extreme["legislator_slug"].to_list())
-    slugs = list(dict.fromkeys(slugs))  # deduplicate preserving order
 
     for slug in slugs:
         row = leg_df.filter(pl.col("legislator_slug") == slug)
@@ -548,7 +326,7 @@ def plot_profile_card(
     ax.grid(True, axis="x", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
 
-    slug_short = slug.split("_")[1]  # e.g., "schreiber"
+    slug_short = slug.split("_", 1)[1]  # e.g., "schreiber" or "van_dyk"
     out = plots_dir / f"profile_{slug_short}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
@@ -675,31 +453,45 @@ def plot_metric_paradox(
     return out
 
 
+def _extract_best_auc(upstream: dict) -> float | None:
+    """Extract best XGBoost AUC from holdout_results parquets."""
+    best = None
+    for chamber in ("house", "senate"):
+        hr = upstream.get(chamber, {}).get("holdout_results")
+        if hr is None:
+            continue
+        xgb = hr.filter(pl.col("model") == "XGBoost")
+        if xgb.height > 0 and "auc" in xgb.columns:
+            auc = xgb["auc"].item()
+            if best is None or auc > best:
+                best = auc
+    return best
+
+
 def plot_pipeline_summary(
     manifests: dict,
     plots_dir: Path,
     session: str = "",
+    *,
+    upstream: dict | None = None,
 ) -> Path:
     """Pipeline summary infographic: five boxes connected by arrows."""
     eda = manifests.get("eda", {})
     indices = manifests.get("indices", {})
-    prediction = manifests.get("prediction", {})
+    clustering = manifests.get("clustering", {})
 
-    total_votes = eda.get("All", {}).get("votes_before", 882)
-    contested = eda.get("All", {}).get("votes_after", 491)
-    party_votes = indices.get("house_n_party_votes", 193) + indices.get("senate_n_party_votes", 108)
+    total_votes = eda.get("All", {}).get("votes_before", "?")
+    contested = eda.get("All", {}).get("votes_after", "?")
+    h_party = indices.get("house_n_party_votes", 0)
+    s_party = indices.get("senate_n_party_votes", 0)
+    party_votes = h_party + s_party if (h_party or s_party) else "?"
 
-    # Best AUC across chambers (XGBoost holdout)
-    best_auc = 0.0
-    for ch_data in [
-        prediction.get("chambers", {}).get("House", {}),
-        prediction.get("chambers", {}).get("Senate", {}),
-    ]:
-        # Not stored directly; use hardcoded from holdout_results parquets
-        pass
-    best_auc = 0.98  # Approximate from XGBoost holdout (House 0.984, Senate 0.979)
+    # Best AUC across chambers — extract from holdout_results parquets if available
+    best_auc = _extract_best_auc(upstream) if upstream else None
+    auc_label = f"{best_auc:.2f}" if best_auc is not None else "~0.98"
 
-    k_optimal = 2  # From clustering
+    # Optimal k from clustering manifest
+    k_optimal = clustering.get("house_optimal_k", 2)
 
     boxes = [
         {
@@ -709,7 +501,7 @@ def plot_pipeline_summary(
         {"label": f"{contested}\nContested", "sub": "After removing\nnear-unanimous votes"},
         {"label": f"{party_votes}\nParty Votes", "sub": "Where parties\nformally disagree"},
         {"label": f"k = {k_optimal}\nClusters", "sub": "Party is the only\nstable grouping"},
-        {"label": f"AUC {best_auc:.2f}", "sub": "Model predicts votes\nwith 98% confidence"},
+        {"label": f"AUC {auc_label}", "sub": "Model predicts votes\nwith high confidence"},
     ]
 
     fig, ax = plt.subplots(figsize=(16, 4))
@@ -765,7 +557,7 @@ def plot_pipeline_summary(
             )
 
     ax.set_title(
-        f"From {total_votes} Votes to One Number: {best_auc:.2f}",
+        f"From {total_votes} Votes to One Number: AUC {auc_label}",
         fontsize=16,
         fontweight="bold",
         pad=20,
@@ -831,6 +623,8 @@ def main() -> None:
 
         for chamber, mav in notables["mavericks"].items():
             print(f"  {chamber} maverick: {mav.full_name} ({mav.party})")
+        for chamber, mav in notables.get("minority_mavericks", {}).items():
+            print(f"  {chamber} minority maverick: {mav.full_name} ({mav.party})")
         for chamber, bridge in notables["bridges"].items():
             print(f"  {chamber} bridge: {bridge.full_name} ({bridge.party})")
         for slug, paradox in notables["paradoxes"].items():
@@ -840,7 +634,9 @@ def main() -> None:
         print("\nGenerating new plots...")
 
         # Pipeline summary
-        plot_pipeline_summary(manifests, ctx.plots_dir, session=ctx.session)
+        plot_pipeline_summary(
+            manifests, ctx.plots_dir, session=ctx.session, upstream=upstream
+        )
 
         # Dashboard scatters — pass dynamic annotation slugs
         for chamber in ("house", "senate"):

@@ -61,6 +61,7 @@ What are the trade-offs?
 | [0031](0031-prediction-deep-dive-improvements.md) | Prediction deep dive improvements (holdout eval, Brier/log-loss, IRT caveat) | Accepted | 2026-02-25 |
 | [0032](0032-beta-binomial-deep-dive-improvements.md) | Beta-Binomial deep dive improvements (ddof fix, Tarone's test, output columns) | Accepted | 2026-02-25 |
 | [0033](0033-hierarchical-irt-deep-dive-improvements.md) | Hierarchical IRT deep dive improvements (small-group warning, ICC rename, 9 tests) | Accepted | 2026-02-25 |
+| [0034](0034-synthesis-deep-dive-improvements.md) | Synthesis deep dive improvements (data extraction, minority mavericks, dynamic AUC, 47 tests) | Accepted | 2026-02-25 |
 
 ## Creating a New ADR
 

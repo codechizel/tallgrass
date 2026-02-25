@@ -2,11 +2,22 @@
 
 ## Assumptions
 
-1. **All 8 upstream phases have been run.** Synthesis reads parquets from IRT, Indices, Network, Clustering, Prediction, PCA, EDA, and UMAP. Missing phases produce warnings but the report still generates with available data.
+1. **All 10 upstream phases have been run.** Synthesis reads parquets from EDA, PCA, IRT, Clustering, Network, Prediction, Indices, UMAP, Beta-Binomial, and Hierarchical. Missing phases produce warnings but the report still generates with available data.
 
 2. **IRT ideal points are the base table.** The unified legislator DataFrame is built by LEFT JOINing all other phase outputs onto IRT ideal points. If IRT hasn't been run, synthesis fails.
 
 3. **Notable legislators are session-independent concepts.** The *roles* (maverick, bridge-builder, metric paradox) recur across sessions. The specific legislators who fill those roles are detected from data.
+
+## Module Architecture
+
+```
+synthesis_data.py     — Data loading and joining (pure I/O + DataFrame ops)
+synthesis_detect.py   — Notable legislator detection (pure logic, no plotting)
+synthesis_report.py   — Report building (HTML sections + templates)
+synthesis.py          — Orchestrator (imports from all three, produces plots + report)
+```
+
+`synthesis_data.py` is also imported by `profiles.py` and `cross_session.py` — it is the shared data layer for downstream phases.
 
 ## Parameters & Constants
 
@@ -28,11 +39,11 @@
 
 **Impact:** Option (c) eliminates per-session maintenance and ensures the report works on any biennium. The detection thresholds may need occasional tuning but the concepts themselves are stable.
 
-### 2. Maverick = lowest unity in majority party
+### 2. Maverick = lowest unity in majority *and* minority party
 
-**Decision:** Use `unity_score` (CQ-standard party unity) as the primary maverick indicator, with `weighted_maverick` as tiebreaker.
+**Decision:** Use `unity_score` (CQ-standard party unity) as the primary maverick indicator, with `weighted_maverick` as tiebreaker. Detect mavericks in both the majority party ("most likely to break ranks") and the minority party ("most likely to cross the aisle").
 
-**Alternatives:** Could use `maverick_rate`, `loyalty_rate`, or a composite. Unity score was chosen because it is the standard political science metric and is most interpretable for nontechnical audiences.
+**Alternatives:** Could use `maverick_rate`, `loyalty_rate`, or a composite. Unity score was chosen because it is the standard political science metric and is most interpretable for nontechnical audiences. Originally only the majority-party maverick was detected; minority-party mavericks were added because in a supermajority legislature, a minority member crossing the aisle is arguably more politically interesting.
 
 ### 3. Bridge-builder = betweenness near midpoint
 
@@ -49,6 +60,12 @@
 ### 5. Graceful degradation
 
 **Decision:** Every detection function returns `None` when no suitable candidate is found. Report sections handle `None` by showing brief explanatory text ("no significant metric paradox detected") or by skipping the section entirely (profile cards). The report's section count varies from 29-32 depending on what is detected.
+
+### 6. Dynamic AUC extraction over hardcoded values
+
+**Decision:** Extract the best XGBoost AUC from `holdout_results` parquets at runtime (`_extract_best_auc`), with fallback to `"~0.98"` label if unavailable. All manifest-derived statistics (vote counts, party votes) use `"?"` as fallback, not session-specific numbers.
+
+**Alternatives:** Hardcode session-specific numbers as fallbacks. Rejected because wrong numbers for a nontechnical audience are worse than "not available".
 
 ## Downstream Implications
 

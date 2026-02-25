@@ -1,13 +1,14 @@
 """
 Synthesis report builder — narrative-driven sections.
 
-Assembles findings from all 8 analysis phases into a single HTML report
+Assembles findings from all 10 upstream analysis phases into a single HTML report
 written for nontechnical audiences. Called by synthesis.py.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import polars as pl
 
@@ -16,9 +17,15 @@ try:
 except ModuleNotFoundError:
     from report import FigureSection, TableSection, TextSection, make_gt  # type: ignore[no-redef]
 
+if TYPE_CHECKING:
+    try:
+        from analysis.report import ReportBuilder
+    except ModuleNotFoundError:
+        from report import ReportBuilder  # type: ignore[no-redef]
+
 
 def build_synthesis_report(
-    report: object,
+    report: ReportBuilder,
     *,
     leg_dfs: dict[str, pl.DataFrame],
     manifests: dict[str, dict],
@@ -28,7 +35,7 @@ def build_synthesis_report(
     notables: dict,
     session: str,
 ) -> None:
-    """Build the full synthesis report (27-30 sections depending on detections)."""
+    """Build the full synthesis report (29-32 sections depending on detections)."""
     # 1. intro
     _add_intro(report, manifests, notables)
     # 2. pipeline
@@ -110,8 +117,9 @@ def _notable_names_for(notables: dict, key: str) -> list[str]:
 def _maverick_name_list(notables: dict) -> str:
     """Comma-separated list of maverick full names for prose."""
     names = _notable_names_for(notables, "mavericks")
+    minority_names = _notable_names_for(notables, "minority_mavericks")
     paradox_names = _notable_names_for(notables, "paradoxes")
-    all_names = list(dict.fromkeys(names + paradox_names))
+    all_names = list(dict.fromkeys(names + minority_names + paradox_names))
     if not all_names:
         return "maverick legislators"
     if len(all_names) == 1:
@@ -306,9 +314,10 @@ def _add_mavericks_narrative(report: object, leg_dfs: dict, notables: dict) -> N
     ]
 
     mavericks = notables.get("mavericks", {})
+    minority_mavericks = notables.get("minority_mavericks", {})
     bridges = notables.get("bridges", {})
 
-    if not mavericks and not bridges:
+    if not mavericks and not minority_mavericks and not bridges:
         parts.append(
             "<p>In this session, party discipline is exceptionally uniform — "
             "no legislator stands out as a consistent maverick.</p>"
@@ -339,8 +348,27 @@ def _add_mavericks_narrative(report: object, leg_dfs: dict, notables: dict) -> N
                 "them away from their party's mainstream.</p>"
             )
 
+        # Minority-party mavericks — the ones most likely to cross the aisle
+        for chamber, min_mav in minority_mavericks.items():
+            row = _get_legislator_row(leg_dfs, min_mav.slug, min_mav.chamber)
+            if row is None:
+                continue
+            unity = row.get("unity_score", 0)
+            xi = row.get("xi_mean", 0)
+
+            parts.append(
+                f"<p>On the other side of the aisle, <strong>{min_mav.title}</strong> "
+                f"is the {min_mav.party} most likely to cross party lines in the "
+                f"{chamber.title()}. Their party unity is {unity:.0%} and their IRT "
+                f"ideal point ({xi:.2f}) places them closer to the majority party "
+                "than most of their caucus.</p>"
+            )
+
         for chamber, bridge in bridges.items():
-            if bridge.slug in {m.slug for m in mavericks.values()}:
+            already = {m.slug for m in mavericks.values()} | {
+                m.slug for m in minority_mavericks.values()
+            }
+            if bridge.slug in already:
                 continue  # already covered above
             row = _get_legislator_row(leg_dfs, bridge.slug, bridge.chamber)
             if row is None:
@@ -399,7 +427,7 @@ def _add_dynamic_profile(
     if notable is None:
         return
 
-    slug_short = notable.slug.split("_")[1]
+    slug_short = notable.slug.split("_", 1)[1]
     _add_profile_figure(
         report,
         plots_dir,
@@ -593,7 +621,7 @@ def _add_paradox_profile(report: object, plots_dir: Path, notables: dict) -> Non
     if p.slug in already_profiled:
         return
 
-    slug_short = p.slug.split("_")[1]
+    slug_short = p.slug.split("_", 1)[1]
     _add_profile_figure(
         report,
         plots_dir,

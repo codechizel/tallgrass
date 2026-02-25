@@ -77,9 +77,9 @@ except ModuleNotFoundError:
     from run_context import RunContext, strip_leadership_suffix  # type: ignore[no-redef]
 
 try:
-    from analysis.synthesis import build_legislator_df, load_all_upstream
+    from analysis.synthesis_data import build_legislator_df, load_all_upstream
 except ModuleNotFoundError:
-    from synthesis import build_legislator_df, load_all_upstream  # type: ignore[no-redef]
+    from synthesis_data import build_legislator_df, load_all_upstream  # type: ignore[no-redef]
 
 try:
     from analysis.synthesis_detect import (

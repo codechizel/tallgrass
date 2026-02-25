@@ -40,3 +40,9 @@ Annotation slugs for dashboard scatter plots are also computed dynamically via `
 - `analysis/synthesis_detect.py` — New, ~270 lines. Pure detection logic.
 - `analysis/synthesis.py` — Removed `PROFILE_LEGISLATORS` and `ANNOTATE_SLUGS` constants. Renamed `plot_tyson_paradox` to `plot_metric_paradox`. Updated `main()` to use `detect_all()`.
 - `analysis/synthesis_report.py` — All narrative sections now take a `notables` dict and template from detected legislators. Renamed `_add_tyson_*` functions to `_add_paradox_*`. Added `session` parameter to remove hardcoded session strings.
+
+**Subsequent changes (ADR-0034):**
+- `detect_all()` extended to detect minority-party mavericks (lowest unity in minority party per chamber).
+- Data loading functions extracted to `synthesis_data.py` — shared by profiles and cross-session phases.
+- `_extract_best_auc()` replaces hardcoded AUC fallback.
+- 47 tests added in `test_synthesis.py` covering data loading, joins, detection integration.

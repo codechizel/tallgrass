@@ -20,7 +20,7 @@ just lint-check                              # check only
 just typecheck                               # ty type check (src + analysis)
 just sessions                                # list available sessions
 just check                                   # full check (lint + typecheck + tests)
-just test                                    # run all tests (~966)
+just test                                    # run all tests (~1022)
 just test-scraper                            # scraper tests only
 uv run ks-vote-scraper 2023                  # historical session
 uv run ks-vote-scraper 2024 --special        # special session
@@ -126,7 +126,7 @@ See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (33 decisions)
+- ADRs: `docs/adr/README.md` (34 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -154,7 +154,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 975 tests
+just test                    # 1022 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

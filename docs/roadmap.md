@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
 
-**Last updated:** 2026-02-25 (after IRT deep dive and field survey)
+**Last updated:** 2026-02-25 (after synthesis deep dive)
 
 ---
 
@@ -19,7 +19,8 @@ What's been done, what's next, and what's on the horizon for the KS Vote Scraper
 | 7 | Classical Indices | 2026-02-21 | Rice, CQ unity, ENP, weighted maverick; Schreiber/Dietrich top mavericks |
 | 2b | UMAP | 2026-02-22 | Nonlinear ideological landscape; validates PCA/IRT; most accessible visualization |
 | 6+ | NLP Bill Text Features | 2026-02-22 | NMF topics on short_title; House temporal AUC 0.90→0.96, Senate 0.86→0.96 |
-| — | Synthesis Report | 2026-02-22 | 32-section narrative HTML; joins all 8 phases into one deliverable |
+| — | Synthesis Report | 2026-02-22 | 29-32-section narrative HTML; joins all 10 phases into one deliverable |
+| — | Synthesis Deep Dive | 2026-02-25 | Code audit, field survey, 9 fixes (dynamic AUC, minority mavericks, data extraction, 47 tests). ADR-0034. |
 | — | Legislator Profiles | 2026-02-22 | Per-legislator deep-dives: scorecard, bill-type breakdown, defections, neighbors, surprising votes |
 | 7b | Beta-Binomial Party Loyalty | 2026-02-22 | Bayesian shrinkage on CQ unity; empirical Bayes, closed-form posteriors, 4 plots per chamber |
 | — | Cross-Biennium Portability | 2026-02-22 | Removed all hardcoded legislator names from general phases; full pipeline re-run validated |
@@ -125,7 +126,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-853 tests exist across scraper (219) and analysis (634) modules. All passing. Coverage could be expanded:
+1022 tests exist across scraper (~219) and analysis (~803) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
@@ -144,7 +145,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 | Dynamic IRT within biennium | 2-year window too short; cross-session handles between-biennium |
 | GGUM unfolding models | No extreme-alliance voting pattern in Kansas data |
 | LLM legislative agents | Too experimental; XGBoost already at 0.98 AUC |
-| TBIP text-based ideal points | No full bill text available from scraper |
+| TBIP text-based ideal points | No full bill text available from scraper — revisit if bill text phase lands (see `docs/future-bill-text-analysis.md`) |
 
 See `docs/method-evaluation.md` for detailed rationale on each rejection.
 

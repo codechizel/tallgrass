@@ -66,13 +66,13 @@ except ModuleNotFoundError:
     from run_context import RunContext  # type: ignore[no-redef]
 
 try:
-    from analysis.synthesis import (
+    from analysis.synthesis_data import (
         _read_parquet_safe,
         build_legislator_df,
         load_all_upstream,
     )
 except ModuleNotFoundError:
-    from synthesis import (  # type: ignore[no-redef]
+    from synthesis_data import (  # type: ignore[no-redef]
         _read_parquet_safe,
         build_legislator_df,
         load_all_upstream,

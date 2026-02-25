@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~975)
+just test                    # run all tests (~1022)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -50,6 +50,8 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_clustering.py` — party loyalty, cross-method ARI, within-party, kappa distance, hierarchical, spectral, HDBSCAN, characterization (~70 tests)
 - `tests/test_network.py` — network construction, centrality, Leiden/CPM community detection, bridges, threshold sweep, polarization, disparity filter backbone, extreme edge weights (~53 tests)
 - `tests/test_indices.py` — Rice formula, party votes, ENP, unity/maverick, co-defection, Carey UNITY, fractured votes (~37 tests)
+- `tests/test_synthesis.py` — synthesis data loading, build_legislator_df joins, _extract_best_auc, detect_all integration, minority mavericks, Democrat-majority paradox (~47 tests)
+- `tests/test_synthesis_detect.py` — maverick, bridge-builder, metric paradox detection, annotation slugs (~25 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
 
 ## Manual Verification

@@ -297,6 +297,14 @@ def detect_annotation_slugs(
     return slugs[:max_n]
 
 
+def _minority_parties(leg_df: pl.DataFrame) -> list[str]:
+    """Return all parties except the majority party."""
+    majority = _majority_party(leg_df)
+    if majority is None:
+        return []
+    return [p for p in leg_df["party"].unique().to_list() if p != majority]
+
+
 def detect_all(leg_dfs: dict[str, pl.DataFrame]) -> dict:
     """Run all detection on both chambers. Single entry point.
 
@@ -304,13 +312,15 @@ def detect_all(leg_dfs: dict[str, pl.DataFrame]) -> dict:
         profiles: dict[str, NotableLegislator] — slug → notable (for profile cards)
         paradoxes: dict[str, ParadoxCase] — slug → paradox
         annotations: dict[str, list[str]] — chamber → slugs to annotate
-        mavericks: dict[str, NotableLegislator] — chamber → maverick
+        mavericks: dict[str, NotableLegislator] — chamber → majority-party maverick
+        minority_mavericks: dict[str, NotableLegislator] — chamber → minority-party maverick
         bridges: dict[str, NotableLegislator] — chamber → bridge-builder
     """
     profiles: dict[str, NotableLegislator] = {}
     paradoxes: dict[str, ParadoxCase] = {}
     annotations: dict[str, list[str]] = {}
     mavericks: dict[str, NotableLegislator] = {}
+    minority_mavericks: dict[str, NotableLegislator] = {}
     bridges: dict[str, NotableLegislator] = {}
 
     for chamber, leg_df in leg_dfs.items():
@@ -325,11 +335,21 @@ def detect_all(leg_dfs: dict[str, pl.DataFrame]) -> dict:
                 profiles[mav.slug] = mav
                 chamber_notables.append(mav)
 
+        # Detect maverick in minority party (most likely to cross the aisle)
+        for minority in _minority_parties(leg_df):
+            min_mav = detect_chamber_maverick(leg_df, minority, chamber)
+            if min_mav is not None:
+                minority_mavericks[chamber] = min_mav
+                if min_mav.slug not in profiles:
+                    profiles[min_mav.slug] = min_mav
+                    chamber_notables.append(min_mav)
+                break  # one minority maverick per chamber
+
         # Detect bridge-builder
         bridge = detect_bridge_builder(leg_df, chamber)
         if bridge is not None:
             bridges[chamber] = bridge
-            # Only add as profile if not already the maverick
+            # Only add as profile if not already present
             if bridge.slug not in profiles:
                 profiles[bridge.slug] = bridge
                 chamber_notables.append(bridge)
@@ -365,5 +385,6 @@ def detect_all(leg_dfs: dict[str, pl.DataFrame]) -> dict:
         "paradoxes": paradoxes,
         "annotations": annotations,
         "mavericks": mavericks,
+        "minority_mavericks": minority_mavericks,
         "bridges": bridges,
     }

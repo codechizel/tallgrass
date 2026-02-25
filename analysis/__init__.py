@@ -53,6 +53,7 @@ _MODULE_MAP: dict[str, str] = {
     "hierarchical": "10_hierarchical",
     "hierarchical_report": "10_hierarchical",
     "synthesis": "11_synthesis",
+    "synthesis_data": "11_synthesis",
     "synthesis_report": "11_synthesis",
     "synthesis_detect": "11_synthesis",
     "profiles": "12_profiles",
