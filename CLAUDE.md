@@ -20,7 +20,7 @@ just lint-check                              # check only
 just typecheck                               # ty type check (src + analysis)
 just sessions                                # list available sessions
 just check                                   # full check (lint + typecheck + tests)
-just test                                    # run all tests (~942)
+just test                                    # run all tests (~966)
 just test-scraper                            # scraper tests only
 uv run ks-vote-scraper 2023                  # historical session
 uv run ks-vote-scraper 2024 --special        # special session
@@ -126,7 +126,7 @@ See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (31 decisions)
+- ADRs: `docs/adr/README.md` (32 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -136,6 +136,7 @@ Key references:
 - IRT field survey: `docs/irt-field-survey.md` (identification problem, unconstrained β contribution, Python ecosystem gap)
 - Clustering deep dive: `docs/clustering-deep-dive.md` (literature survey, code audit, test gaps, recommendations)
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
+- Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`

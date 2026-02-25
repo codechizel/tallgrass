@@ -59,6 +59,7 @@ What are the trade-offs?
 | [0029](0029-leiden-community-detection.md) | Leiden community detection (replacing Louvain) | Accepted | 2026-02-24 |
 | [0030](adr-0030-analysis-directory-restructuring.md) | Analysis directory restructuring (numbered subdirs + PEP 302) | Accepted | 2026-02-25 |
 | [0031](0031-prediction-deep-dive-improvements.md) | Prediction deep dive improvements (holdout eval, Brier/log-loss, IRT caveat) | Accepted | 2026-02-25 |
+| [0032](0032-beta-binomial-deep-dive-improvements.md) | Beta-Binomial deep dive improvements (ddof fix, Tarone's test, output columns) | Accepted | 2026-02-25 |
 
 ## Creating a New ADR
 

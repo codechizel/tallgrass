@@ -26,7 +26,8 @@ except ModuleNotFoundError:
         make_gt,
     )
 
-# Constants duplicated to avoid circular import
+# Duplicated from beta_binomial.py — cannot import because beta_binomial.py
+# imports this module at top level, creating a circular dependency.
 MIN_PARTY_VOTES = 3
 CI_LEVEL = 0.95
 
@@ -341,6 +342,7 @@ def _add_cross_chamber_comparison(
                     "N Legislators": party_sub.height,
                     "Prior Alpha": float(party_sub["alpha_prior"][0]),
                     "Prior Beta": float(party_sub["beta_prior"][0]),
+                    "Prior Kappa": float(party_sub["prior_kappa"][0]),
                     "Prior Mean Loyalty": float(party_sub["prior_mean"][0]),
                     "Mean Shrinkage": float(party_sub["shrinkage"].mean()),
                     "Mean CI Width": float(party_sub["ci_width"].mean()),
@@ -358,13 +360,15 @@ def _add_cross_chamber_comparison(
         number_formats={
             "Prior Alpha": ".2f",
             "Prior Beta": ".2f",
+            "Prior Kappa": ".1f",
             "Prior Mean Loyalty": ".3f",
             "Mean Shrinkage": ".3f",
             "Mean CI Width": ".3f",
         },
         source_note=(
             "Alpha and Beta are the empirical Bayes prior parameters. "
-            "Higher alpha+beta = less within-party variance. "
+            "Kappa (alpha+beta) is the effective prior sample size — "
+            "higher = less within-party variance. "
             "Prior mean = alpha / (alpha + beta)."
         ),
     )

@@ -168,7 +168,7 @@ def estimate_beta_params(
 
     rates = y / n
     mu = float(np.mean(rates))
-    var = float(np.var(rates, ddof=0))
+    var = float(np.var(rates, ddof=1))
 
     # Degenerate cases: mu at boundary makes Beta undefined
     if mu <= 0 or mu >= 1:
@@ -191,6 +191,27 @@ def estimate_beta_params(
     beta = (1 - mu) * common
 
     return (max(alpha, 0.5), max(beta, 0.5))
+
+
+def tarone_test(y: np.ndarray, n: np.ndarray) -> tuple[float, float]:
+    """Tarone's score test for Beta-Binomial overdispersion.
+
+    Tests H0: data are Binomial (no overdispersion) against
+    H1: data are Beta-Binomial (overdispersion present).
+
+    Returns (z_statistic, p_value). Large positive Z rejects H0.
+    Reference: Tarone (1979), Biometrika 66(3), 585-590.
+    """
+    p_hat = y.sum() / n.sum()
+    expected = n * p_hat
+    variance = n * p_hat * (1 - p_hat)
+    numerator = float(((y - expected) ** 2 - variance).sum())
+    denominator = float(np.sqrt(2 * (variance**2).sum()))
+    if denominator < 1e-12:
+        return (0.0, 1.0)
+    z = numerator / denominator
+    p_value = float(1 - sp_stats.norm.cdf(z))
+    return (z, p_value)
 
 
 def compute_bayesian_loyalty(
@@ -223,10 +244,19 @@ def compute_bayesian_loyalty(
 
         alpha_prior, beta_prior = estimate_beta_params(y, n)
         prior_mean = alpha_prior / (alpha_prior + beta_prior)
+        prior_kappa = alpha_prior + beta_prior
+
+        # Overdispersion test: is Beta-Binomial justified over plain Binomial?
+        tarone_z, tarone_p = tarone_test(y.astype(int), n.astype(int))
 
         print(
             f"  {chamber} {party}: alpha={alpha_prior:.2f}, beta={beta_prior:.2f}, "
-            f"prior_mean={prior_mean:.4f} (n={party_df.height} legislators)"
+            f"prior_mean={prior_mean:.4f}, kappa={prior_kappa:.1f} "
+            f"(n={party_df.height} legislators)"
+        )
+        print(
+            f"    Tarone's overdispersion test: Z={tarone_z:.2f}, p={tarone_p:.4f}"
+            f"{' — overdispersion confirmed' if tarone_p < 0.05 else ' — not significant'}"
         )
 
         for row in party_df.iter_rows(named=True):
@@ -256,10 +286,12 @@ def compute_bayesian_loyalty(
                     "ci_upper": float(ci_upper),
                     "ci_width": float(ci_upper - ci_lower),
                     "shrinkage": shrinkage,
+                    "votes_with_party": int(yi),
                     "n_party_votes": int(ni),
                     "alpha_prior": alpha_prior,
                     "beta_prior": beta_prior,
                     "prior_mean": prior_mean,
+                    "prior_kappa": prior_kappa,
                 }
             )
 
@@ -460,8 +492,8 @@ def plot_posterior_distributions(
     colors_cycle = ["#E81B23", "#0015BC", "#2CA02C", "#D62728"]
 
     for i, (slug, (label, row)) in enumerate(selected.items()):
-        alpha_post = row["alpha_prior"] + row["n_party_votes"] * row["raw_loyalty"]
-        beta_post = row["beta_prior"] + row["n_party_votes"] * (1 - row["raw_loyalty"])
+        alpha_post = row["alpha_prior"] + row["votes_with_party"]
+        beta_post = row["beta_prior"] + (row["n_party_votes"] - row["votes_with_party"])
 
         pdf = sp_stats.beta.pdf(x, alpha_post, beta_post)
         name = row["full_name"] or slug
@@ -669,7 +701,17 @@ def main() -> None:
                     manifest[f"{ch}_{party.lower()}_alpha"] = float(party_sub["alpha_prior"][0])
                     manifest[f"{ch}_{party.lower()}_beta"] = float(party_sub["beta_prior"][0])
                     manifest[f"{ch}_{party.lower()}_prior_mean"] = float(party_sub["prior_mean"][0])
+                    manifest[f"{ch}_{party.lower()}_prior_kappa"] = float(
+                        party_sub["prior_kappa"][0]
+                    )
                     manifest[f"{ch}_{party.lower()}_n"] = party_sub.height
+
+                    # Tarone's overdispersion test per group
+                    y_arr = party_sub["votes_with_party"].to_numpy()
+                    n_arr = party_sub["n_party_votes"].to_numpy()
+                    t_z, t_p = tarone_test(y_arr, n_arr)
+                    manifest[f"{ch}_{party.lower()}_tarone_z"] = t_z
+                    manifest[f"{ch}_{party.lower()}_tarone_p"] = t_p
 
         manifest_path = ctx.run_dir / "filtering_manifest.json"
         with open(manifest_path, "w") as f:

@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
-
 from analysis.beta_binomial import (
     FALLBACK_ALPHA,
     FALLBACK_BETA,
     compute_bayesian_loyalty,
     estimate_beta_params,
+    tarone_test,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -50,23 +50,20 @@ class TestEstimateBetaParams:
         assert concentration > 50, f"Concentration {concentration} too low for tight data"
 
     def test_high_variance_fallback(self) -> None:
-        """Variance exceeding Beta maximum should trigger fallback to (1, 1)."""
-        # Rates of 0.1 and 0.9 — huge variance
-        y = np.array([10, 90])
+        """Variance exceeding Beta maximum should trigger fallback to (1, 1).
+
+        With ddof=1 (sample variance), two rates [0.0, 1.0] give:
+          mu=0.5, var=0.5 (ddof=1), mu*(1-mu)=0.25
+          var >= mu*(1-mu) → fallback triggered.
+        """
+        # Two rates at opposite extremes: sample variance exceeds Beta maximum
+        y = np.array([0, 100])
         n = np.array([100, 100])
         alpha, beta = estimate_beta_params(y, n)
 
-        # Method of moments: var = 0.16, mu*(1-mu) = 0.5*0.5 = 0.25
-        # var < mu*(1-mu), so it should NOT fall back here. Let's use more extreme:
-        y_extreme = np.array([1, 99])
-        n_extreme = np.array([100, 100])
-        alpha_e, beta_e = estimate_beta_params(y_extreme, n_extreme)
-        # The variance of [0.01, 0.99] is 0.2401, mu*(1-mu) = 0.5*0.5 = 0.25
-        # var < mu*(1-mu), so still valid. Need truly degenerate case.
-
-        # Ensure alpha and beta are valid regardless
-        assert alpha > 0
-        assert beta > 0
+        # mu=0.5, var(ddof=1)=0.5, mu*(1-mu)=0.25 → var >= limit → fallback
+        assert alpha == FALLBACK_ALPHA
+        assert beta == FALLBACK_BETA
 
     def test_all_identical_rates(self) -> None:
         """All legislators with identical rates should produce tight prior around that rate."""
@@ -188,7 +185,8 @@ class TestComputeBayesianLoyalty:
             "legislator_slug", "party", "full_name", "district",
             "raw_loyalty", "posterior_mean", "posterior_median",
             "ci_lower", "ci_upper", "ci_width", "shrinkage",
-            "n_party_votes", "alpha_prior", "beta_prior", "prior_mean",
+            "votes_with_party", "n_party_votes",
+            "alpha_prior", "beta_prior", "prior_mean", "prior_kappa",
         }
         assert set(result.columns) == expected_cols
 
@@ -627,3 +625,156 @@ class TestEdgeCases:
         assert r_prior > d_prior, (
             f"Republican prior {r_prior:.3f} should exceed Democrat prior {d_prior:.3f}"
         )
+
+    def test_output_includes_votes_with_party(self) -> None:
+        """Output should include integer votes_with_party column."""
+        df = _make_unity_df(
+            [
+                {
+                    "legislator_slug": f"rep_{i}",
+                    "party": "Republican",
+                    "full_name": f"Rep {i}",
+                    "district": str(i),
+                    "votes_with_party": 85 + i,
+                    "party_votes_present": 100,
+                    "unity_score": (85 + i) / 100,
+                    "maverick_rate": 1 - (85 + i) / 100,
+                }
+                for i in range(5)
+            ]
+        )
+        result = compute_bayesian_loyalty(df, "House")
+
+        assert "votes_with_party" in result.columns
+        assert "prior_kappa" in result.columns
+        # votes_with_party should match input
+        for row in result.iter_rows(named=True):
+            assert isinstance(row["votes_with_party"], int)
+            expected_y = round(row["raw_loyalty"] * row["n_party_votes"])
+            assert row["votes_with_party"] == expected_y
+
+    def test_prior_kappa_is_alpha_plus_beta(self) -> None:
+        """prior_kappa should equal alpha_prior + beta_prior."""
+        df = _make_unity_df(
+            [
+                {
+                    "legislator_slug": f"rep_{i}",
+                    "party": "Republican",
+                    "full_name": f"Rep {i}",
+                    "district": str(i),
+                    "votes_with_party": 80 + i * 2,
+                    "party_votes_present": 100,
+                    "unity_score": (80 + i * 2) / 100,
+                    "maverick_rate": 1 - (80 + i * 2) / 100,
+                }
+                for i in range(5)
+            ]
+        )
+        result = compute_bayesian_loyalty(df, "House")
+
+        for row in result.iter_rows(named=True):
+            expected_kappa = row["alpha_prior"] + row["beta_prior"]
+            assert abs(row["prior_kappa"] - expected_kappa) < 1e-10
+
+
+# ── TestMethodOfMoments ─────────────────────────────────────────────────────
+
+
+class TestMethodOfMoments:
+    """Tests for statistical correctness of method-of-moments estimation."""
+
+    def test_uses_sample_variance(self) -> None:
+        """Method of moments should use sample variance (ddof=1), not population variance.
+
+        With 5 rates, sample variance (ddof=1) gives a slightly larger variance
+        than population variance (ddof=0), producing a lower concentration.
+        """
+        y = np.array([80, 85, 90, 95, 100])
+        n = np.array([100, 100, 100, 100, 100])
+        rates = y / n
+        sample_var = float(np.var(rates, ddof=1))
+        mu = float(np.mean(rates))
+        expected_concentration = mu * (1 - mu) / sample_var - 1
+
+        alpha, beta = estimate_beta_params(y, n)
+        actual_concentration = alpha + beta
+
+        assert abs(actual_concentration - expected_concentration) < 0.1, (
+            f"Concentration {actual_concentration:.2f} should be near "
+            f"{expected_concentration:.2f} (sample variance)"
+        )
+
+    def test_variable_sample_sizes(self) -> None:
+        """Legislators with different numbers of party votes should all get valid posteriors."""
+        df = _make_unity_df(
+            [
+                {
+                    "legislator_slug": f"rep_{i}",
+                    "party": "Republican",
+                    "full_name": f"Rep {i}",
+                    "district": str(i),
+                    "votes_with_party": int(n_val * 0.85),
+                    "party_votes_present": n_val,
+                    "unity_score": int(n_val * 0.85) / n_val,
+                    "maverick_rate": 1 - int(n_val * 0.85) / n_val,
+                }
+                for i, n_val in enumerate([5, 20, 50, 100, 200])
+            ]
+        )
+        result = compute_bayesian_loyalty(df, "House")
+        assert result.height == 5
+
+        # Legislators with more votes should have narrower CIs
+        sorted_result = result.sort("n_party_votes")
+        ci_widths = sorted_result["ci_width"].to_list()
+        for i in range(len(ci_widths) - 1):
+            assert ci_widths[i] >= ci_widths[i + 1] - 0.001, (
+                f"CI width should decrease with sample size: "
+                f"n={sorted_result['n_party_votes'][i]} width={ci_widths[i]:.3f} vs "
+                f"n={sorted_result['n_party_votes'][i + 1]} width={ci_widths[i + 1]:.3f}"
+            )
+
+
+# ── TestTaroneTest ──────────────────────────────────────────────────────────
+
+
+class TestTaroneTest:
+    """Tests for Tarone's score test for Beta-Binomial overdispersion."""
+
+    def test_overdispersed_data(self) -> None:
+        """Known overdispersed data should produce significant Tarone's Z."""
+        rng = np.random.default_rng(42)
+        # Draw different thetas from Beta(5, 1) — clearly overdispersed
+        thetas = rng.beta(5, 1, size=50)
+        n = np.full(50, 100)
+        y = rng.binomial(n, thetas)
+        z, p = tarone_test(y, n)
+        assert z > 2.0, f"Z={z:.2f} should be large for overdispersed data"
+        assert p < 0.05, f"p={p:.4f} should be significant"
+
+    def test_binomial_data_not_significant(self) -> None:
+        """Pure binomial data (no overdispersion) should not be significant."""
+        rng = np.random.default_rng(42)
+        n = np.full(50, 100)
+        y = rng.binomial(n, 0.9)  # Same theta for all — no overdispersion
+        z, p = tarone_test(y, n)
+        assert p > 0.01, f"p={p:.4f} should not be significant for pure Binomial"
+
+    def test_returns_tuple(self) -> None:
+        """Should return (z_statistic, p_value) tuple."""
+        y = np.array([80, 90, 70, 85])
+        n = np.array([100, 100, 100, 100])
+        result = tarone_test(y, n)
+        assert len(result) == 2
+        z, p = result
+        assert isinstance(z, float)
+        assert isinstance(p, float)
+        assert 0 <= p <= 1
+
+    def test_degenerate_input(self) -> None:
+        """Degenerate data (all same) should not crash."""
+        y = np.array([90, 90, 90])
+        n = np.array([100, 100, 100])
+        z, p = tarone_test(y, n)
+        assert isinstance(z, float)
+        assert isinstance(p, float)

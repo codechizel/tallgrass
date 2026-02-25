@@ -23,6 +23,16 @@
 | `FALLBACK_BETA` | 1.0 | Same |
 | `PARTY_COLORS` | R=#E81B23, D=#0015BC | Consistent with all prior phases |
 
+## Diagnostics
+
+### Tarone's Overdispersion Test
+
+Before applying Beta-Binomial, we test whether overdispersion actually exists using Tarone's Z-statistic (Tarone 1979). This tests H0: "data are Binomial" vs H1: "data are Beta-Binomial." The test is run per party-chamber group, and results are recorded in the filtering manifest. Significant Z confirms that the Beta-Binomial model is justified over plain Binomial.
+
+### Output Schema
+
+The output parquet includes `votes_with_party` (integer y_i) and `prior_kappa` (alpha + beta, the effective prior sample size) alongside the existing columns. `prior_kappa` is directly interpretable as "how many pseudo-observations does the prior contribute?" — comparable to `n_party_votes`.
+
 ## Methodological Choices
 
 ### Empirical Bayes, not full MCMC
@@ -43,9 +53,9 @@
 
 ### Method of moments, not MLE
 
-**Decision:** Use method of moments to estimate alpha and beta from the sample mean and variance of observed rates.
+**Decision:** Use method of moments to estimate alpha and beta from the sample mean and sample variance (ddof=1) of observed rates.
 
-**Rationale:** Simpler, faster, and more transparent than MLE. With the sample sizes we have (~40-90 legislators per group), the difference between MoM and MLE is negligible. MLE also requires optimization, adding complexity.
+**Rationale:** Simpler, faster, and more transparent than MLE. With the sample sizes we have (~40-90 legislators per group), the difference between MoM and MLE is negligible. MLE also requires optimization, adding complexity. Sample variance (ddof=1) is used per Casella (1985) and Gelman BDA3 Ch. 5 — population variance (ddof=0) underestimates by N/(N-1), which matters for small groups like Senate Democrats (N≈10). See ADR-0032.
 
 ### Shrinkage factor definition
 
