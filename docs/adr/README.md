@@ -51,6 +51,7 @@ What are the trade-offs?
 | [0021](0021-independent-party-handling.md) | Independent party handling across analysis pipeline | Accepted | 2026-02-22 |
 | [0022](0022-analysis-parallelism-and-timing.md) | Analysis parallelism and runtime timing | Accepted | 2026-02-23 |
 | [0023](0023-pca-informed-irt-initialization.md) | PCA-informed IRT chain initialization (default) | Accepted | 2026-02-23 |
+| [0024](0024-instruction-file-restructure.md) | Instruction file restructure | Accepted | 2026-02-24 |
 
 ## Creating a New ADR
 
