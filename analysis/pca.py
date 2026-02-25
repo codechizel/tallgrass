@@ -156,6 +156,8 @@ MIN_VOTES = 20  # Minimum substantive votes per legislator
 HOLDOUT_FRACTION = 0.20  # Random 20% of non-null cells
 HOLDOUT_SEED = 42
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
+PARALLEL_ANALYSIS_N_ITER = 100  # Horn's parallel analysis: random data iterations
+RECONSTRUCTION_ERROR_THRESHOLD_SD = 2.0  # Flag legislators with RMSE > mean + 2σ
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -240,18 +242,72 @@ def impute_vote_matrix(matrix: pl.DataFrame) -> tuple[np.ndarray, list[str], lis
     vote_ids = [c for c in matrix.columns if c != slug_col]
     X = matrix.select(vote_ids).to_numpy().astype(np.float64)
 
-    # Impute row-by-row: fill NaN with that legislator's mean Yea rate
-    for i in range(X.shape[0]):
-        row = X[i]
-        valid_mask = ~np.isnan(row)
-        if valid_mask.any():
-            row_mean = row[valid_mask].mean()
-            X[i, ~valid_mask] = row_mean
-        else:
-            # Legislator has no votes at all — fill with 0.5 (uninformative)
-            X[i] = 0.5
+    # Vectorized row-mean imputation: fill NaN with each legislator's mean Yea rate
+    row_means = np.nanmean(X, axis=1, keepdims=True)
+    # All-NaN rows (no votes at all) → fill with 0.5 (uninformative)
+    row_means = np.where(np.isnan(row_means), 0.5, row_means)
+    nan_mask = np.isnan(X)
+    X[nan_mask] = np.broadcast_to(row_means, X.shape)[nan_mask]
 
     return X, slugs, vote_ids
+
+
+def parallel_analysis(
+    n_obs: int,
+    n_vars: int,
+    n_components: int,
+    n_iter: int = PARALLEL_ANALYSIS_N_ITER,
+) -> np.ndarray:
+    """95th-percentile eigenvalues from random data of same shape (Horn 1965).
+
+    Generates n_iter random matrices, computes correlation-matrix eigenvalues,
+    and returns the 95th percentile at each position. Components whose actual
+    eigenvalues exceed these thresholds are statistically significant.
+
+    Returns array of threshold eigenvalues for the first n_components components.
+    """
+    rng = np.random.default_rng(HOLDOUT_SEED)
+    k = min(n_components, n_obs, n_vars)
+    random_evals = np.zeros((n_iter, k))
+    for i in range(n_iter):
+        random_data = rng.standard_normal((n_obs, n_vars))
+        corr = np.corrcoef(random_data, rowvar=False)
+        evals = np.sort(np.linalg.eigvalsh(corr))[::-1][:k]
+        random_evals[i] = evals
+    return np.percentile(random_evals, 95, axis=0)
+
+
+def compute_reconstruction_error(
+    X_imputed: np.ndarray,
+    scores: np.ndarray,
+    pca_obj: PCA,
+    scaler: StandardScaler,
+    slugs: list[str],
+) -> pl.DataFrame:
+    """Per-legislator reconstruction RMSE from the PCA model.
+
+    Legislators with high reconstruction error have voting patterns poorly
+    explained by the dominant dimensions — candidates for IRT convergence issues
+    or synthesis outliers.
+
+    Flags legislators with RMSE > mean + RECONSTRUCTION_ERROR_THRESHOLD_SD × σ.
+    """
+    X_hat_scaled = scores @ pca_obj.components_
+    X_hat = scaler.inverse_transform(X_hat_scaled)
+    per_row_mse = np.mean((X_imputed - X_hat) ** 2, axis=1)
+    per_row_rmse = np.sqrt(per_row_mse)
+
+    mean_rmse = float(np.mean(per_row_rmse))
+    std_rmse = float(np.std(per_row_rmse))
+    threshold = mean_rmse + RECONSTRUCTION_ERROR_THRESHOLD_SD * std_rmse
+
+    return pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "reconstruction_rmse": per_row_rmse.tolist(),
+            "high_error": [bool(v > threshold) for v in per_row_rmse],
+        }
+    )
 
 
 def fit_pca(
@@ -362,6 +418,32 @@ def run_pca_for_chamber(
             f"  cumulative: {100 * cumulative[i]:.1f}%"
         )
 
+    # Eigenvalue ratio (lambda1/lambda2)
+    eigenvalues = pca.explained_variance_
+    has_two = n_comp >= 2 and eigenvalues[1] > 0
+    eigenvalue_ratio = float(eigenvalues[0] / eigenvalues[1]) if has_two else float("inf")
+    print(f"\n  Eigenvalue ratio (λ1/λ2): {eigenvalue_ratio:.2f}")
+    if eigenvalue_ratio > 5:
+        print("    → Strongly one-dimensional (ratio > 5)")
+    elif eigenvalue_ratio > 3:
+        print("    → Predominantly one-dimensional (ratio 3-5)")
+    else:
+        print("    → Meaningful second dimension (ratio < 3)")
+
+    # Parallel analysis (Horn 1965)
+    pa_thresholds = parallel_analysis(X.shape[0], X.shape[1], n_comp)
+    n_significant = int(
+        sum(actual > threshold for actual, threshold in zip(eigenvalues[:n_comp], pa_thresholds))
+    )
+    print("\n  Parallel analysis (95th pct. of random data):")
+    for i in range(n_comp):
+        sig = "✓" if eigenvalues[i] > pa_thresholds[i] else "✗"
+        print(f"    PC{i + 1}: λ={eigenvalues[i]:.2f}  threshold={pa_thresholds[i]:.2f}  {sig}")
+    print(f"    Significant dimensions: {n_significant}")
+
+    # Per-legislator reconstruction error
+    recon_df = compute_reconstruction_error(X, scores, pca, scaler, slugs)
+
     scores_df = build_scores_df(scores, slugs, n_comp, legislators)
     loadings_df = build_loadings_df(loadings, vote_ids, n_comp, rollcalls)
 
@@ -384,14 +466,28 @@ def run_pca_for_chamber(
         "vote_ids": vote_ids,
         "explained_variance": ev.tolist(),
         "n_components": n_comp,
+        "eigenvalue_ratio": eigenvalue_ratio,
+        "parallel_thresholds": pa_thresholds,
+        "n_significant": n_significant,
+        "reconstruction_error_df": recon_df,
     }
 
 
 # ── Phase 3: Plots ──────────────────────────────────────────────────────────
 
 
-def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
-    """Scree plot with individual and cumulative explained variance (2 panels)."""
+def plot_scree(
+    pca_obj: PCA,
+    chamber: str,
+    out_dir: Path,
+    parallel_thresholds: np.ndarray | None = None,
+) -> None:
+    """Scree plot with individual and cumulative explained variance (2 panels).
+
+    If parallel_thresholds is provided, draws a reference line on panel 1 showing
+    the 95th-percentile eigenvalues from random data (Horn's parallel analysis).
+    Components above this line are statistically significant.
+    """
     ev = pca_obj.explained_variance_ratio_
     cumulative = np.cumsum(ev)
     n = len(ev)
@@ -408,6 +504,21 @@ def plot_scree(pca_obj: PCA, chamber: str, out_dir: Path) -> None:
     )
     for i, v in enumerate(ev):
         axes[0].text(i + 1, v + 0.005, f"{100 * v:.1f}%", ha="center", fontsize=9)
+
+    # Parallel analysis threshold line
+    if parallel_thresholds is not None:
+        n_features = pca_obj.n_features_in_
+        threshold_ratios = parallel_thresholds[:n] / n_features
+        axes[0].plot(
+            range(1, n + 1),
+            threshold_ratios,
+            "r--o",
+            markersize=5,
+            alpha=0.7,
+            label="95th pct. random data",
+        )
+        axes[0].legend(loc="upper right")
+
     axes[0].set_xlabel("Principal Component")
     axes[0].set_ylabel("Explained Variance Ratio")
     axes[0].set_title(f"{chamber} \u2014 How Many Dimensions Does Kansas Politics Have?")
@@ -967,8 +1078,12 @@ def main() -> None:
             result["loadings_df"].write_parquet(
                 ctx.data_dir / f"pc_loadings_{label.lower()}.parquet"
             )
+            result["reconstruction_error_df"].write_parquet(
+                ctx.data_dir / f"reconstruction_error_{label.lower()}.parquet"
+            )
             print(f"  Saved: pc_scores_{label.lower()}.parquet")
             print(f"  Saved: pc_loadings_{label.lower()}.parquet")
+            print(f"  Saved: reconstruction_error_{label.lower()}.parquet")
 
             # Collect explained variance for combined output
             for i, v in enumerate(result["explained_variance"]):
@@ -990,7 +1105,7 @@ def main() -> None:
         # ── Phase 3: Plots ──
         print_header("GENERATING PLOTS")
         for label, result in results.items():
-            plot_scree(result["pca"], label, ctx.plots_dir)
+            plot_scree(result["pca"], label, ctx.plots_dir, result["parallel_thresholds"])
             plot_ideological_map(result["scores_df"], label, ctx.plots_dir)
             plot_pc1_distribution(result["scores_df"], label, ctx.plots_dir)
 
@@ -1036,6 +1151,18 @@ def main() -> None:
             manifest[f"{label.lower()}_explained_variance"] = result["explained_variance"]
             manifest[f"{label.lower()}_n_legislators"] = result["scores_df"].height
             manifest[f"{label.lower()}_n_votes"] = len(result["vote_ids"])
+            manifest[f"{label.lower()}_eigenvalue_ratio"] = result["eigenvalue_ratio"]
+            manifest[f"{label.lower()}_n_significant_dimensions"] = result["n_significant"]
+            manifest[f"{label.lower()}_parallel_thresholds"] = result[
+                "parallel_thresholds"
+            ].tolist()
+            recon = result["reconstruction_error_df"]
+            n_high = recon.filter(pl.col("high_error")).height
+            manifest[f"{label.lower()}_reconstruction_error"] = {
+                "mean_rmse": float(recon["reconstruction_rmse"].mean()),
+                "max_rmse": float(recon["reconstruction_rmse"].max()),
+                "n_high_error": n_high,
+            }
         if sensitivity_findings:
             manifest["sensitivity"] = sensitivity_findings
         if validation_results:

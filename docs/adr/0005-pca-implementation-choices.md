@@ -31,6 +31,14 @@ PCA is the mandatory second analysis phase (after EDA) per the analytic workflow
 
 6. **Data-driven PC2 extreme detection.** The `detect_extreme_pc2()` pure-data function + `ExtremePC2Legislator` frozen dataclass detect the most extreme PC2 legislator if >3σ from the pack. This follows the same extract-to-pure-function pattern established in synthesis (ADR-0008: `detect_chamber_maverick()`), prediction (`detect_hardest_legislators()`), and IRT (`_detect_forest_highlights()`). The detection logic was previously inline in `plot_ideological_map()` and untestable.
 
+7. **Vectorized imputation.** Row-mean imputation uses `np.nanmean` + broadcast instead of a Python `for` loop. Same result, cleaner and faster.
+
+8. **Parallel analysis (Horn 1965).** After fitting PCA, generate 100 random matrices of the same shape, compute their correlation-matrix eigenvalues, and compare actual eigenvalues against the 95th percentile. Components exceeding the random threshold are statistically significant. This is the recommended dimensionality selection method in the psychometric literature. Plotted as a reference line on the scree plot and reported in the HTML report.
+
+9. **Eigenvalue ratio (λ1/λ2).** A single-number dimensionality summary: >5 = strongly one-dimensional, 3-5 = predominantly one-dimensional, <3 = meaningful second dimension. Provides immediate interpretability without requiring scree plot inspection.
+
+10. **Per-legislator reconstruction error.** After PCA reconstruction, compute per-legislator RMSE. Flag legislators with RMSE > mean + 2σ as "high error" — their voting patterns are poorly explained by the dominant dimensions. Saved as a separate parquet file and reported in the HTML report.
+
 ## Consequences
 
 **Benefits:**
@@ -40,8 +48,13 @@ PCA is the mandatory second analysis phase (after EDA) per the analytic workflow
 - Sensitivity analysis (r = 0.999 on real data) confirms that threshold choice barely matters — results are robust.
 - Holdout validation (93% accuracy, 0.97 AUC-ROC) proves PCA captures genuine structure, not just base rate.
 - `detect_extreme_pc2()` is testable independently, null-safe (handles `full_name=None`), and strips leadership suffixes. No hardcoded legislator names.
+- Parallel analysis provides an objective, literature-backed dimensionality test — no more subjective scree plot eyeballing.
+- Eigenvalue ratio gives an immediate, single-number answer to "is this one-dimensional?"
+- Reconstruction error identifies PCA outliers that may surface as IRT convergence issues or synthesis anomalies.
+- 36 tests (up from 16) cover all statistical logic including the new diagnostics.
 
 **Trade-offs:**
 - Row-mean imputation is not the most principled method. If a legislator was absent specifically on contentious votes, their imputed values are biased toward their easy-vote average. IRT handles this properly.
 - Duplicated filter logic means a bug fix in EDA's filtering won't automatically propagate to PCA's sensitivity. This is acceptable because the two should be verified independently anyway.
 - 5 components are extracted but only PC1-2 are typically interpretable. PC3-5 are retained for downstream IRT comparison but may be noise.
+- Parallel analysis adds ~2s of compute (100 random matrices). Negligible relative to total pipeline runtime.

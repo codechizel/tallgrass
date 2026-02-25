@@ -1,8 +1,9 @@
 # PCA Design Choices
 
 **Script:** `analysis/pca.py`
-**Constants defined at:** `analysis/pca.py:148-157`
+**Constants defined at:** `analysis/pca.py:149-160`
 **ADR:** `docs/adr/0005-pca-implementation-choices.md`
+**Deep dive:** `docs/pca-deep-dive.md`
 
 ## Assumptions
 
@@ -16,21 +17,23 @@
 
 ## Parameters & Constants
 
-| Constant | Value | Justification | Code location |
-|----------|-------|---------------|---------------|
-| `DEFAULT_N_COMPONENTS` | 5 | Extracts 5 PCs per chamber. Only PC1-2 are typically interpretable; PC3-5 retained for IRT comparison. | `pca.py:151` |
-| `MINORITY_THRESHOLD` | 0.025 | Inherited from EDA. PCA does not re-filter the default matrices. | `pca.py:152` |
-| `SENSITIVITY_THRESHOLD` | 0.10 | Per workflow rules: re-run at 10% for sensitivity analysis. | `pca.py:153` |
-| `MIN_VOTES` | 20 | Inherited from EDA. | `pca.py:154` |
-| `HOLDOUT_FRACTION` | 0.20 | Random 20% of non-null cells masked for holdout validation. | `pca.py:155` |
-| `HOLDOUT_SEED` | 42 | NumPy random seed for reproducible holdout selection. | `pca.py:156` |
-| PC2 extreme threshold | 3σ | `detect_extreme_pc2()` flags the min-PC2 legislator only if `|PC2| > 3 × std(PC2)`. | `pca.py:detect_extreme_pc2()` |
+| Constant | Value | Justification |
+|----------|-------|---------------|
+| `DEFAULT_N_COMPONENTS` | 5 | Extracts 5 PCs per chamber. Only PC1-2 are typically interpretable; PC3-5 retained for IRT comparison. |
+| `MINORITY_THRESHOLD` | 0.025 | Inherited from EDA. PCA does not re-filter the default matrices. |
+| `SENSITIVITY_THRESHOLD` | 0.10 | Per workflow rules: re-run at 10% for sensitivity analysis. |
+| `MIN_VOTES` | 20 | Inherited from EDA. |
+| `HOLDOUT_FRACTION` | 0.20 | Random 20% of non-null cells masked for holdout validation. |
+| `HOLDOUT_SEED` | 42 | NumPy random seed for reproducible holdout and parallel analysis. |
+| `PARALLEL_ANALYSIS_N_ITER` | 100 | Random matrices generated for Horn's parallel analysis. |
+| `RECONSTRUCTION_ERROR_THRESHOLD_SD` | 2.0 | Flag legislators with reconstruction RMSE > mean + 2σ. |
+| PC2 extreme threshold | 3σ | `detect_extreme_pc2()` flags the min-PC2 legislator only if `|PC2| > 3 × std(PC2)`. |
 
 ## Methodological Choices
 
 ### Imputation: row-mean (each legislator's Yea rate)
 
-**Decision:** Missing values (nulls) are filled with each legislator's average Yea rate across their non-missing votes. A legislator who voted Yea 80% of the time gets their absences filled with 0.80.
+**Decision:** Missing values (nulls) are filled with each legislator's average Yea rate across their non-missing votes. A legislator who voted Yea 80% of the time gets their absences filled with 0.80. Implemented as vectorized NumPy (`np.nanmean` + broadcast).
 
 **Alternatives considered:**
 - Column-mean (bill's average Yea rate) — rejected because it erases per-legislator signal, which is exactly what PCA needs
@@ -44,11 +47,11 @@
 
 ### Standardization: center and scale (StandardScaler)
 
-**Decision:** Each roll call column is centered (subtract mean) and scaled (divide by standard deviation) before PCA.
+**Decision:** Each roll call column is centered (subtract mean) and scaled (divide by standard deviation) before PCA. This is correlation-matrix PCA.
 
 **Why:** Without scaling, close votes (high variance in the binary column) dominate PCA while near-unanimous votes contribute little. Centering removes the overall Yea rate; scaling ensures each roll call contributes equally.
 
-**Alternatives:** Center-only (no scaling) — used by some in the literature but gives disproportionate weight to contested votes. We chose center+scale to match Poole & Rosenthal's methodology.
+**Alternatives:** Center-only (covariance PCA) — naturally upweights contested votes and downweights near-unanimous ones, which aligns with the motivation behind the 2.5% filter. Some state-legislature studies use this. We chose center+scale to match Poole & Rosenthal's methodology. The sensitivity analysis (r=0.999) confirms the distinction barely matters in practice.
 
 **Impact:** Every contested roll call has equal weight after scaling. This means a procedural vote that happened to be contested has the same influence as a major policy vote. The sensitivity analysis (10% threshold) partially addresses this by removing borderline-contested votes.
 
@@ -66,7 +69,7 @@
 
 **Impact:** This tests whether PCA captures enough structure to predict held-out votes better than the ~82% Yea base rate. Current results: 93% accuracy, 0.97 AUC-ROC — PCA clearly captures real structure.
 
-**Caveat:** The holdout cells were imputed in the training matrix, so the training PCA is slightly contaminated by the test data through row-mean imputation. This is a minor concern given the high accuracy.
+**Caveat:** The holdout cells were imputed in the training matrix, so the training PCA is slightly contaminated by the test data through row-mean imputation. The imputation itself is clean (row means exclude masked cells), but the scaler and PCA fit see imputed values that are functions of the same legislator's real votes. This is inherent to any row-mean imputation scheme and not fixable without a fundamentally different approach. Practical impact is negligible.
 
 ### Sensitivity: duplicated filter logic
 
@@ -75,6 +78,28 @@
 **Why:** Keeps PCA self-contained. Changes to EDA's filtering won't silently alter PCA's sensitivity analysis.
 
 **Impact:** If a filtering bug is found in EDA, it must be fixed in PCA (and IRT) separately.
+
+### Parallel analysis (Horn 1965)
+
+**Decision:** After fitting PCA, run Horn's parallel analysis to objectively determine the number of significant dimensions. Generate 100 random matrices of the same shape, compute their correlation-matrix eigenvalues, and compare actual eigenvalues against the 95th percentile of the random distribution.
+
+**Why:** The scree plot is a visual diagnostic — subjective. Parallel analysis provides a statistical test: components whose eigenvalues exceed the random threshold are statistically significant. This is the recommended dimensionality selection method in the psychometric literature.
+
+**Impact:** Purely additive diagnostic. Appears as a reference line on the scree plot and a table in the HTML report. No impact on PCA fitting or downstream phases. Provides early warning for sessions where the ideological structure differs from the expected 1-2 dimensions.
+
+### Eigenvalue ratio (λ1/λ2)
+
+**Decision:** Report the ratio of the first eigenvalue to the second as a single-number summary of dimensionality. Ratio > 5 = "strongly one-dimensional," 3-5 = "predominantly one-dimensional," < 3 = "meaningful second dimension."
+
+**Why:** Immediately signals whether Kansas politics is one-dimensional without requiring interpretation of a scree plot.
+
+### Per-legislator reconstruction error
+
+**Decision:** After PCA reconstruction, compute per-legislator RMSE. Flag legislators with RMSE > mean + 2σ as "high error" — their voting patterns are poorly explained by the dominant dimensions.
+
+**Why:** Complements PC2 extreme detection by identifying legislators who are anomalous for any reason. High reconstruction error candidates are likely to show IRT convergence issues or appear as synthesis outliers.
+
+**Impact:** Saved as a separate parquet file. High-error legislators shown in the HTML report. No impact on PCA fitting or downstream phases.
 
 ## Downstream Implications
 
@@ -90,3 +115,5 @@
 ### For interpretation
 - **PCA gives point estimates only.** No uncertainty intervals. A legislator at PC1=0.5 might truly be anywhere from 0.3 to 0.7 — PCA cannot tell you. Use IRT credible intervals for uncertainty.
 - **PC2 interpretation requires examining loadings.** In the current data, Senate PC2 captures "contrarianism on routine legislation" (driven by Tyson/Thompson), not a traditional second ideological dimension. Do not over-interpret PC2 as a coherent dimension without checking what drives it.
+- **Parallel analysis results** formalize what the scree plot suggests visually. If only 1 dimension is significant, PC2 should be treated as noise rather than a substantive dimension.
+- **Reconstruction error** identifies legislators whose voting patterns don't fit the PCA model. These require case-by-case investigation rather than IRT interpretation.

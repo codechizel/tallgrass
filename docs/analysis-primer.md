@@ -104,6 +104,14 @@ PCA is fast and cheap to compute. It gives us a quick sketch of the political la
 
 Critically, PCA scores from this step are used to set up the next major analysis (IRT) — they help tell the model which end of the scale is "conservative" and which is "liberal."
 
+### Built-in diagnostics
+
+PCA doesn't just produce scores — it also runs several quality checks:
+
+- **Parallel analysis** (Horn 1965) — generates 100 random datasets of the same size and checks whether each principal component captures more variation than you'd expect from pure noise. This objectively determines how many dimensions are real vs. artifacts.
+- **Eigenvalue ratio** (λ1/λ2) — a single number summarizing dimensionality. Above 5 means "strongly one-dimensional" (party is the whole story); below 3 means there's a meaningful second dimension worth investigating.
+- **Per-legislator reconstruction error** — after compressing each legislator's voting record into a few numbers and reconstructing it, how much information was lost? Legislators with unusually high reconstruction error have voting patterns that don't fit the main dimensions — they're the ones worth investigating further.
+
 ### The limitation
 
 PCA gives every legislator a score, but it doesn't come with any measure of *uncertainty*. It can't tell you "we're pretty confident about Senator A's score, but Senator B missed a lot of votes so we're less sure about theirs." That's what Step 4 addresses.
@@ -400,3 +408,4 @@ These limitations aren't failures — they're the honest boundaries of what quan
 
 - **[External Validation Results](external-validation-results.md)** — How we checked our ideology scores against an independent national dataset (Shor-McCarty), and what we found (r = 0.93-0.98 for the flat IRT model).
 - **[Hierarchical Shrinkage Deep Dive](hierarchical-shrinkage-deep-dive.md)** — Why the hierarchical model struggles with the Kansas Senate's small Democrat caucus, with references to the statistics literature.
+- **[PCA Deep Dive](pca-deep-dive.md)** — Literature comparison, open-source landscape survey, and code audit of our PCA implementation.

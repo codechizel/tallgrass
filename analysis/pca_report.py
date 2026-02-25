@@ -36,12 +36,14 @@ def build_pca_report(
     """Build the full PCA HTML report by adding ~14 sections to the ReportBuilder."""
     for chamber, result in results.items():
         _add_pca_summary(report, result, chamber)
+        _add_dimensionality_diagnostics(report, result, chamber)
         _add_scree_figure(report, plots_dir, chamber)
         _add_ideological_map_figure(report, plots_dir, chamber)
         _add_pc1_distribution_figure(report, plots_dir, chamber)
         _add_top_loadings(report, result, chamber, pc=1)
         _add_top_loadings(report, result, chamber, pc=2)
         _add_legislator_scores(report, result, chamber)
+        _add_reconstruction_error(report, result, chamber)
 
     if sensitivity_findings:
         _add_sensitivity_table(report, sensitivity_findings)
@@ -101,6 +103,123 @@ def _add_pca_summary(
         TableSection(
             id=f"pca-summary-{chamber.lower()}",
             title=f"{chamber} PCA Summary",
+            html=html,
+        )
+    )
+
+
+def _add_dimensionality_diagnostics(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: eigenvalue ratio and parallel analysis results."""
+    pca = result["pca"]
+    eigenvalues = pca.explained_variance_
+    pa_thresholds = result["parallel_thresholds"]
+    n_comp = result["n_components"]
+
+    rows = []
+    for i in range(n_comp):
+        rows.append(
+            {
+                "component": f"PC{i + 1}",
+                "eigenvalue": float(eigenvalues[i]),
+                "random_threshold": float(pa_thresholds[i]),
+                "significant": "Yes" if eigenvalues[i] > pa_thresholds[i] else "No",
+            }
+        )
+
+    df = pl.DataFrame(rows)
+
+    eigenvalue_ratio = result["eigenvalue_ratio"]
+    n_sig = result["n_significant"]
+    if eigenvalue_ratio > 5:
+        interpretation = "strongly one-dimensional"
+    elif eigenvalue_ratio > 3:
+        interpretation = "predominantly one-dimensional"
+    else:
+        interpretation = "meaningful second dimension present"
+
+    html = make_gt(
+        df,
+        title=f"{chamber} — Dimensionality Diagnostics",
+        subtitle=(
+            f"λ1/λ2 = {eigenvalue_ratio:.2f} ({interpretation}). "
+            f"Parallel analysis: {n_sig} significant dimension(s)."
+        ),
+        column_labels={
+            "component": "Component",
+            "eigenvalue": "Eigenvalue",
+            "random_threshold": "95th Pct. Random",
+            "significant": "Significant?",
+        },
+        number_formats={
+            "eigenvalue": ".2f",
+            "random_threshold": ".2f",
+        },
+        source_note="Horn's parallel analysis (1965): retain components with eigenvalues above "
+        "the 95th percentile of random data of the same shape.",
+    )
+    report.add(
+        TableSection(
+            id=f"dimensionality-{chamber.lower()}",
+            title=f"{chamber} Dimensionality Diagnostics",
+            html=html,
+        )
+    )
+
+
+def _add_reconstruction_error(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: legislators with high reconstruction error (> mean + 2σ)."""
+    recon_df = result["reconstruction_error_df"]
+    high_error = recon_df.filter(pl.col("high_error"))
+
+    if high_error.height == 0:
+        return
+
+    # Join with scores_df for metadata
+    scores = result["scores_df"]
+    display = high_error.join(
+        scores.select("legislator_slug", "full_name", "party", "PC1"),
+        on="legislator_slug",
+        how="left",
+    ).sort("reconstruction_rmse", descending=True)
+
+    display = display.select(
+        "full_name",
+        "party",
+        "PC1",
+        "reconstruction_rmse",
+    )
+
+    mean_rmse = float(recon_df["reconstruction_rmse"].mean())
+    std_rmse = float(recon_df["reconstruction_rmse"].std())
+
+    html = make_gt(
+        display,
+        title=f"{chamber} — High Reconstruction Error Legislators",
+        subtitle=(
+            f"Legislators with RMSE > {mean_rmse:.4f} + 2 × {std_rmse:.4f} = "
+            f"{mean_rmse + 2 * std_rmse:.4f}. "
+            "These voting patterns are poorly explained by the PCA model."
+        ),
+        column_labels={
+            "full_name": "Legislator",
+            "party": "Party",
+            "PC1": "PC1",
+            "reconstruction_rmse": "RMSE",
+        },
+        number_formats={"PC1": ".3f", "reconstruction_rmse": ".4f"},
+    )
+    report.add(
+        TableSection(
+            id=f"recon-error-{chamber.lower()}",
+            title=f"{chamber} Reconstruction Error",
             html=html,
         )
     )
@@ -385,6 +504,8 @@ def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:
             HOLDOUT_SEED,
             MIN_VOTES,
             MINORITY_THRESHOLD,
+            PARALLEL_ANALYSIS_N_ITER,
+            RECONSTRUCTION_ERROR_THRESHOLD_SD,
             SENSITIVITY_THRESHOLD,
         )
     except ModuleNotFoundError:
@@ -393,6 +514,8 @@ def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:
             HOLDOUT_SEED,
             MIN_VOTES,
             MINORITY_THRESHOLD,
+            PARALLEL_ANALYSIS_N_ITER,
+            RECONSTRUCTION_ERROR_THRESHOLD_SD,
             SENSITIVITY_THRESHOLD,
         )
 
@@ -406,6 +529,8 @@ def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:
                 "Min Substantive Votes",
                 "Holdout Fraction",
                 "Holdout Random Seed",
+                "Parallel Analysis Iterations",
+                "Reconstruction Error Threshold",
             ],
             "Value": [
                 str(n_components),
@@ -415,6 +540,8 @@ def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:
                 str(MIN_VOTES),
                 f"{HOLDOUT_FRACTION:.2f} ({HOLDOUT_FRACTION * 100:.0f}%)",
                 str(HOLDOUT_SEED),
+                str(PARALLEL_ANALYSIS_N_ITER),
+                f"mean + {RECONSTRUCTION_ERROR_THRESHOLD_SD:.0f}σ",
             ],
             "Description": [
                 "Principal components extracted per chamber",
@@ -423,7 +550,9 @@ def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:
                 "Alternative threshold for sensitivity analysis",
                 "Drop legislators with fewer substantive votes",
                 "Fraction of non-null cells randomly masked for validation",
-                "NumPy random seed for reproducible holdout selection",
+                "NumPy random seed for reproducible holdout and parallel analysis",
+                "Random matrices generated for Horn's parallel analysis",
+                "Flag legislators with reconstruction RMSE above this threshold",
             ],
         }
     )
