@@ -223,6 +223,18 @@ class TestParseShorMcCarty:
         df = parse_shor_mccarty(raw)
         assert df.height == 0
 
+    def test_quoted_values(self):
+        """Real SM data has quoted values: "KS" not KS. Quotes are stripped."""
+        raw = (
+            "name\tst\tnp_score\thouse2019\n"
+            '"Alcala, John"\t"KS"\t0.5\t1\n'
+            '"Jones, Bob"\t"MO"\t0.3\t1'
+        )
+        df = parse_shor_mccarty(raw)
+        assert df.height == 1
+        assert df["name"][0] == "Alcala, John"
+        assert df["normalized_name"][0] == "john alcala"
+
 
 # ── Biennium Filtering ───────────────────────────────────────────────────────
 

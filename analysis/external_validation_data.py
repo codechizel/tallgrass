@@ -121,10 +121,10 @@ def parse_shor_mccarty(raw_text: str) -> pl.DataFrame:
     if len(lines) < 2:
         return pl.DataFrame()
 
-    header = lines[0].split("\t")
+    header = [h.strip('"') for h in lines[0].split("\t")]
     rows = []
     for line in lines[1:]:
-        fields = line.split("\t")
+        fields = [f.strip('"') for f in line.split("\t")]
         if len(fields) >= len(header):
             rows.append(dict(zip(header, fields)))
 
