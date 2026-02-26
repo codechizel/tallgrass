@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-02-25 (after MCA phase implementation)
+**Last updated:** 2026-02-26 (after cross-session validation first post-fix run)
 
 ---
 
@@ -36,42 +36,32 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Parallelism Performance Experiment | 2026-02-23 | `cores=n_chains` was already PyMC default; batch-job CPU contention was the real cause; sequential chains 1.8x slower due to thermal throttling (ADR-0022 addendum) |
 | — | Analysis Primer | 2026-02-24 | `docs/analysis-primer.md`: plain-English guide to the 13-step pipeline for general audiences (journalists, policymakers, citizens) |
 | — | Parallelism Experiment (Complete) | 2026-02-24 | 88th Legislature 4-run experiment: parallel 1.83-1.89x faster; convergence bit-identical; OMP_NUM_THREADS=6 cap applied (ADR-0022). Writeup: `docs/apple-silicon-mcmc-tuning.md` |
-| — | Full 91st Pipeline with Joint Model | 2026-02-24 | 12/12 phases succeeded including hierarchical joint cross-chamber model (93 min, 0 divergences, all checks passed); first complete run with joint model |
+| — | Full 91st Pipeline with Joint Model | 2026-02-24 | 12/12 phases succeeded including hierarchical joint cross-chamber model; first complete run with joint model. Re-run 2026-02-26 with bill-matching: 39m 36s total (joint 31 min), Senate all checks passed. |
 | — | Landscape Survey & Method Evaluation | 2026-02-24 | `docs/landscape-legislative-vote-analysis.md` and `docs/method-evaluation.md`: surveyed the field, evaluated all major methods, identified external validation as the priority gap |
 | — | External Validation (Shor-McCarty) | 2026-02-24 | Shor-McCarty external validation phase: name matching, Pearson/Spearman correlations, scatter plots, outlier analysis. 5 overlapping bienniums (84th-88th). ADR-0025. |
 | — | External Validation Results Article | 2026-02-24 | `docs/external-validation-results.md`: general-audience article explaining SM validation results (flat House r=0.981, flat Senate r=0.929, hierarchical Senate r=-0.541) |
 | — | Hierarchical Shrinkage Deep Dive | 2026-02-24 | `docs/hierarchical-shrinkage-deep-dive.md`: literature-grounded analysis of J=2 over-shrinkage problem (Gelman 2006/2015, James-Stein, Peress 2009), 6 remedies proposed |
 | — | IRT Deep Dive & Field Survey | 2026-02-25 | `docs/irt-deep-dive.md` and `docs/irt-field-survey.md`: field survey of IRT implementations, code audit, identification problem, unconstrained β contribution, Python ecosystem gap. Implemented: tail-ESS, shrinkage warning, sign-constraint removal, 28 new tests (853 total). |
 | 2c | MCA (Multiple Correspondence Analysis) | 2026-02-25 | Categorical-data analogue of PCA using chi-square distance; Yea/Nay/Absent as 3 categories; prince library; Greenacre correction; PCA validation (Spearman r), horseshoe detection, biplot, absence map. 34 new tests. Deep dive: `docs/mca-deep-dive.md`, design: `analysis/design/mca.md`. |
+| — | Hierarchical IRT Fixes (Bill-Matching + Adaptive Priors) | 2026-02-26 | Joint model bill-matching (ADR-0043): 71 shared bills bridge chambers via concurrent calibration. Group-size-adaptive priors fix Senate-D convergence. Joint model runtime 93 min → 31 min. ADR-0042, ADR-0043. |
+| 9 | Cross-Session Validation (90th vs 91st) | 2026-02-26 | First post-fix run: ideology r=0.940 (House), 0.975 (Senate). Cross-session prediction AUC 0.967-0.976 (nearly matches within-session 0.975-0.984). 94 tests. IRT ideal points confirmed as stable traits; network centrality metrics confirmed session-specific. Tyson flagged as paradox in both bienniums. |
 
 ---
 
 ## Next Up
 
-### 1. Cross-Session Validation (Feature Complete)
+### 1. Time Series Analysis
 
-**Priority:** High — the biggest remaining gap in current results.
-**Status:** All 7 implementation steps complete (data layer, plots, report builder, CLI, prediction transfer, detection validation, docs). 55 tests. Ready for first real run once both sessions' upstream phases are complete.
-
-Four distinct analyses become possible now that both bienniums are scraped:
-
-- **Temporal comparison (who moved?):** Compare IRT ideal points for returning legislators across bienniums. Who shifted ideology? Are the 2025-26 mavericks (Schreiber, Dietrich) the same people who were mavericks in 2023-24? This is the most newsworthy output for the nontechnical audience — "Senator X moved 1.2 points rightward since last session" is a concrete, actionable finding.
-- **Metric stability:** Cross-session correlations for party unity, maverick rates, network centrality, and other legislative metrics. High Pearson/Spearman r for returning legislators indicates these measures capture stable traits, not session-specific noise.
-- **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. SHAP feature importance rankings compared via Kendall's tau.
-- **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
-
-### 2. Time Series Analysis
-
-**Priority:** Medium — adds temporal depth to static snapshots.
+**Priority:** Medium — adds temporal depth to static snapshots. Now that cross-session validation confirms IRT ideal points are stable across bienniums, temporal analysis can build on that foundation.
 
 Two methods documented but not yet implemented:
 
 - **Ideological drift** (`Analytic_Methods/26_TSA_ideological_drift.md`): Rolling IRT or rolling party unity within a session. Did anyone change position mid-session? Track 15-vote rolling windows.
 - **Changepoint detection** (`Analytic_Methods/27_TSA_changepoint_detection.md`): Structural breaks in voting patterns. When did the session's character shift? (e.g., pre- vs post-veto override period)
 
-Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
+Requires the `ruptures` library (not yet in `pyproject.toml`). Now that cross-session data is available, both methods become immediately actionable.
 
-### 3. 2D Bayesian IRT Model
+### 2. 2D Bayesian IRT Model
 
 **Priority:** Medium — solves the Tyson paradox properly.
 
@@ -88,7 +78,7 @@ This is computationally expensive (doubles MCMC time) and requires careful ident
 
 ### ~~Joint Cross-Chamber IRT~~
 
-~~A full joint MCMC model was attempted and failed.~~ **Completed (2026-02-24), fixed (2026-02-26).** The hierarchical joint cross-chamber model now runs with bill-matching (ADR-0043): shared `alpha`/`beta` parameters for 71-174 matched bills per session provide natural cross-chamber identification. Group-size-adaptive priors mitigate small-group convergence failures. See ADR-0043 and `docs/joint-hierarchical-irt-diagnosis.md`.
+~~A full joint MCMC model was attempted and failed.~~ **Completed (2026-02-24), fixed (2026-02-26).** The hierarchical joint cross-chamber model now runs with bill-matching (ADR-0043): shared `alpha`/`beta` parameters for 71 matched bills (91st) provide natural cross-chamber identification. Bill-matching reduced joint model runtime from 93 min to 31 min by shrinking the problem size (420 unified votes vs 491). Group-size-adaptive priors mitigate small-group convergence failures. Senate convergence now passes all checks. See ADR-0043 and `docs/joint-hierarchical-irt-diagnosis.md`.
 
 ### DIME/CFscores External Validation (Second Source)
 
@@ -116,7 +106,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-1172 tests exist across scraper (~219) and analysis (~953) modules. All passing. Coverage could be expanded:
+1172 tests exist across scraper (~219) and analysis (~953, including 94 cross-session) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
@@ -184,7 +174,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 27 | Changepoint Detection | TSA | **Planned** — item #5 above |
 | 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
 
-**Score: 21 completed, 2 rejected, 2 planned, 2 deferred, 1 partial = 29 total**
+**Score: 22 completed, 2 rejected, 2 planned, 2 deferred, 1 partial = 29 total**
 
 ---
 

@@ -501,6 +501,26 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** The Senate has only 11 Democrats and 30 Republicans. With 13 parameters to estimate for the Democrat group (1 party mean + 1 within-party spread + 11 offsets) from only 11 legislators, the model cannot identify the group-level parameters. The MCMC sampler oscillates between two modes (small sigma_within with large offsets vs. large sigma_within with small offsets), producing R-hat = 1.83. This is a textbook J=2 small-group problem documented by Gelman (2006, 2015) and Peress (2009). See `docs/hierarchical-shrinkage-deep-dive.md` for a full analysis with literature references.
 - **Downstream:** For the 88th Senate, use flat IRT `xi_mean` (r = 0.929 vs. Shor-McCarty), not hierarchical `hier_xi_mean`. The hierarchical House results are trustworthy (r = 0.984). The joint cross-chamber model (3-level, 168 legislators combined) also converges cleanly and may be preferred for Senate hierarchical estimates. As of ADR-0043, group-size-adaptive priors (`HalfNormal(0.5)` for groups < 20) mitigate the worst convergence failures, and bill-matching in the joint model provides natural cross-chamber identification.
 
+### Cross-Session — Network Centrality Metrics Are Session-Specific
+
+- **Phase:** Cross-Session Validation (90th vs 91st)
+- **Observation:** Betweenness centrality shows near-zero or negative cross-session correlations: House r=0.366, Senate r=-0.007. Eigenvector centrality is inverted: House r=-0.493, Senate r=-0.398. In contrast, party unity (r=0.80-0.81), PageRank (r=0.83-0.86), loyalty rate (r=0.70-0.78), and PC1 (r=0.986-0.992) are all highly stable across sessions.
+- **Explanation:** Betweenness and eigenvector centrality depend on the global network topology (which edges exist, where bridges form), which changes substantially across sessions as vote agendas shift. These are properties of a legislator's *position in a specific session's network*, not stable individual traits. PageRank is more stable because it reflects local connectivity (who you agree with) rather than global structure.
+- **Downstream:** Betweenness/eigenvector centrality should not be used as cross-session predictors or treated as stable legislator attributes. They remain useful for within-session analysis (bridge detection, network position) but their session-specificity should be noted in reports.
+
+### Cross-Session — Tyson Paradox Persists Across Bienniums
+
+- **Phase:** Cross-Session Validation (90th vs 91st)
+- **Observation:** Caryn Tyson is flagged as a metric paradox in both the 90th and 91st bienniums — the only legislator detected in both sessions. Her pattern of high party loyalty on discriminating votes combined with high contrarianism on routine votes is a stable, multi-session phenomenon, not a single-session anomaly.
+- **Downstream:** Strengthens the case for a 2D IRT model (roadmap item) that can separate ideology from contrarianism. The 1D compression of Tyson's behavior is a model limitation, not a data artifact.
+
+### Cross-Session — Prediction Generalizes Across Bienniums
+
+- **Phase:** Cross-Session Validation (90th vs 91st)
+- **Observation:** Cross-session AUC (0.967-0.976) nearly matches within-session holdout AUC (0.975-0.984). This is remarkably close — cross-session prediction should be harder because legislator composition changes, vote agendas shift, and party dynamics evolve.
+- **Explanation:** IRT ideal points dominate prediction (confirmed by SHAP), and ideal points are highly stable (r=0.940-0.975 cross-session). A model trained on one session's ideological landscape transfers almost perfectly because the underlying partisan structure of Kansas voting is durable.
+- **Downstream:** The within-session AUC=0.98 is not overfitting — it reflects genuine predictability of Kansas legislative voting, confirmed by out-of-sample cross-session validation.
+
 ## Template
 
 ```
