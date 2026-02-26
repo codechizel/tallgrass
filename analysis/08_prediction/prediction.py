@@ -18,6 +18,7 @@ Outputs (in results/<session>/prediction/<date>/):
 
 import argparse
 import json
+import sys
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,8 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from xgboost import XGBClassifier
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix
@@ -623,6 +626,7 @@ def evaluate_holdout(
     y_test: np.ndarray,
 ) -> list[dict]:
     """Evaluate all models on the holdout test set."""
+    n_classes = len(np.unique(y_test))
     results = []
     for name, model in models.items():
         y_pred = model.predict(X_test)
@@ -632,12 +636,12 @@ def evaluate_holdout(
             {
                 "model": name,
                 "accuracy": accuracy_score(y_test, y_pred),
-                "auc": roc_auc_score(y_test, y_prob),
+                "auc": roc_auc_score(y_test, y_prob) if n_classes > 1 else float("nan"),
                 "precision": precision_score(y_test, y_pred, zero_division=0),
                 "recall": recall_score(y_test, y_pred, zero_division=0),
                 "f1": f1_score(y_test, y_pred, zero_division=0),
                 "brier": brier_score_loss(y_test, y_prob),
-                "logloss": log_loss(y_test, y_prob),
+                "logloss": log_loss(y_test, y_prob, labels=[0, 1]),
             }
         )
 

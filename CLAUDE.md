@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1125 tests)
+just test                                    # → uv run pytest tests/ -v (~1163 tests)
 just test-scraper                            # → pytest on scraper test files only
 uv run tallgrass 2023                  # historical session (direct)
 uv run tallgrass 2024 --special        # special session (direct)
@@ -143,6 +143,7 @@ Key references:
 - IRT field survey: `docs/irt-field-survey.md` (identification problem, unconstrained β contribution, Python ecosystem gap)
 - Clustering deep dive: `docs/clustering-deep-dive.md` (literature survey, code audit, test gaps, recommendations)
 - Hierarchical IRT deep dive: `docs/hierarchical-irt-deep-dive.md` (ecosystem survey, code audit, 9 issues fixed, 35 tests, ADR-0033)
+- Joint hierarchical IRT diagnosis: `docs/joint-hierarchical-irt-diagnosis.md` (bill-matching bug: vote_id vs bill_number, sign flip cascade, fix plan)
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
 - Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)
 - Synthesis deep dive: `docs/synthesis-deep-dive.md` (field survey, code audit, detection algorithms, test gaps, refactoring)
@@ -165,7 +166,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 1125 tests
+just test                    # 1163 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

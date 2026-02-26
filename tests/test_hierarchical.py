@@ -11,6 +11,7 @@ Run: uv run pytest tests/test_hierarchical.py -v
 import sys
 from pathlib import Path
 
+import arviz as az
 import numpy as np
 import polars as pl
 import pytest
@@ -27,6 +28,7 @@ from analysis.hierarchical import (
     compute_variance_decomposition,
     extract_group_params,
     extract_hierarchical_ideal_points,
+    fix_joint_sign_convention,
     prepare_hierarchical_data,
 )
 
@@ -853,3 +855,214 @@ class TestIndependentExclusion:
         """When no Independents present, n_excluded should be 0."""
         data = prepare_hierarchical_data(house_matrix, legislators, "House")
         assert data["n_excluded"] == 0
+
+
+# -- Sign Convention Fix -------------------------------------------------------
+
+
+class TestFixJointSignConvention:
+    """Tests for fix_joint_sign_convention — post-hoc sign correction for joint model."""
+
+    def _make_joint_idata(
+        self, xi_house: list[float], xi_senate: list[float], mu_group: list[float]
+    ) -> az.InferenceData:
+        """Build a minimal InferenceData with xi and mu_group."""
+        xi = np.array([[xi_house + xi_senate]])  # (1 chain, 1 draw, N legislators)
+        mg = np.array([[mu_group]])  # (1 chain, 1 draw, 4 groups)
+        ds = xr.Dataset(
+            {
+                "xi": xr.DataArray(xi, dims=["chain", "draw", "leg"]),
+                "mu_group": xr.DataArray(mg, dims=["chain", "draw", "group"]),
+            }
+        )
+        return az.InferenceData(posterior=ds)
+
+    def _make_per_chamber_results(
+        self,
+        house_slugs: list[str],
+        house_xi: list[float],
+        senate_slugs: list[str],
+        senate_xi: list[float],
+    ) -> dict:
+        """Build per-chamber results dict with ideal_points DataFrames."""
+        return {
+            "House": {
+                "ideal_points": pl.DataFrame(
+                    {
+                        "legislator_slug": house_slugs,
+                        "xi_mean": house_xi,
+                    }
+                )
+            },
+            "Senate": {
+                "ideal_points": pl.DataFrame(
+                    {
+                        "legislator_slug": senate_slugs,
+                        "xi_mean": senate_xi,
+                    }
+                )
+            },
+        }
+
+    def test_no_flip_needed(self) -> None:
+        """When joint and per-chamber agree, no correction applied."""
+        house_slugs = ["rep_d_1", "rep_d_2", "rep_r_1", "rep_r_2"]
+        senate_slugs = ["sen_d_1", "sen_r_1", "sen_r_2"]
+
+        idata = self._make_joint_idata(
+            xi_house=[-3.0, -2.0, 4.0, 5.0],
+            xi_senate=[-6.0, 3.0, 4.0],
+            mu_group=[-2.5, 4.5, -6.0, 3.5],
+        )
+        combined_data = {
+            "n_house": 4,
+            "leg_slugs": house_slugs + senate_slugs,
+            "group_names": [
+                "House Democrat",
+                "House Republican",
+                "Senate Democrat",
+                "Senate Republican",
+            ],
+        }
+        per_chamber = self._make_per_chamber_results(
+            house_slugs,
+            [-3.0, -2.0, 4.0, 5.0],
+            senate_slugs,
+            [-6.0, 3.0, 4.0],
+        )
+
+        result_idata, flipped = fix_joint_sign_convention(idata, combined_data, per_chamber)
+        assert flipped == []
+        # xi unchanged
+        xi = result_idata.posterior["xi"].values[0, 0]
+        np.testing.assert_array_almost_equal(xi[4:], [-6.0, 3.0, 4.0])
+
+    def test_senate_sign_flip(self) -> None:
+        """When Senate xi is flipped, correction negates Senate xi."""
+        house_slugs = ["rep_d_1", "rep_d_2", "rep_r_1", "rep_r_2"]
+        senate_slugs = ["sen_d_1", "sen_d_2", "sen_r_1", "sen_r_2"]
+
+        # Joint has Senate flipped: D positive, R negative
+        idata = self._make_joint_idata(
+            xi_house=[-3.0, -2.0, 4.0, 5.0],
+            xi_senate=[6.0, 7.0, -4.0, -3.0],  # flipped!
+            mu_group=[-2.5, 4.5, -3.5, -3.0],
+        )
+        combined_data = {
+            "n_house": 4,
+            "leg_slugs": house_slugs + senate_slugs,
+            "group_names": [
+                "House Democrat",
+                "House Republican",
+                "Senate Democrat",
+                "Senate Republican",
+            ],
+        }
+        # Per-chamber has correct sign: D negative, R positive
+        per_chamber = self._make_per_chamber_results(
+            house_slugs,
+            [-3.0, -2.0, 4.0, 5.0],
+            senate_slugs,
+            [-6.0, -7.0, 4.0, 3.0],
+        )
+
+        result_idata, flipped = fix_joint_sign_convention(idata, combined_data, per_chamber)
+        assert flipped == ["Senate"]
+        xi = result_idata.posterior["xi"].values[0, 0]
+        # House unchanged
+        np.testing.assert_array_almost_equal(xi[:4], [-3.0, -2.0, 4.0, 5.0])
+        # Senate negated
+        np.testing.assert_array_almost_equal(xi[4:], [-6.0, -7.0, 4.0, 3.0])
+
+    def test_flipped_chambers_returned(self) -> None:
+        """Flipped chambers list is returned for use in extract function."""
+        house_slugs = ["rep_d_1", "rep_d_2", "rep_r_1", "rep_r_2"]
+        senate_slugs = ["sen_d_1", "sen_d_2", "sen_r_1", "sen_r_2"]
+
+        # Both chambers flipped
+        idata = self._make_joint_idata(
+            xi_house=[3.0, 2.0, -4.0, -5.0],  # house flipped
+            xi_senate=[6.0, 7.0, -4.0, -3.0],  # senate flipped
+            mu_group=[2.5, -4.5, 6.5, -3.5],
+        )
+        combined_data = {
+            "n_house": 4,
+            "leg_slugs": house_slugs + senate_slugs,
+            "group_names": [
+                "House Democrat",
+                "House Republican",
+                "Senate Democrat",
+                "Senate Republican",
+            ],
+        }
+        per_chamber = self._make_per_chamber_results(
+            house_slugs,
+            [-3.0, -2.0, 4.0, 5.0],
+            senate_slugs,
+            [-6.0, -7.0, 4.0, 3.0],
+        )
+
+        _, flipped = fix_joint_sign_convention(idata, combined_data, per_chamber)
+        assert sorted(flipped) == ["House", "Senate"]
+
+    def test_extract_uses_empirical_means_for_flipped(self) -> None:
+        """party_mean uses empirical xi for flipped chambers, mu_group for non-flipped."""
+        n_house = 3
+        n_senate = 3
+        xi = np.array([[[-3.0, -2.0, 5.0, -7.0, -6.0, 4.0]]])  # correct sign
+        mu_group = np.array([[[-2.5, 5.0, -6.0, 3.5]]])  # correct for house, wrong for senate
+        ds = xr.Dataset(
+            {
+                "xi": xr.DataArray(xi, dims=["chain", "draw", "leg"]),
+                "mu_group": xr.DataArray(mu_group, dims=["chain", "draw", "group"]),
+            }
+        )
+        idata = az.InferenceData(posterior=ds)
+
+        slugs = ["rep_d_1", "rep_d_2", "rep_r_1", "sen_d_1", "sen_d_2", "sen_r_1"]
+        group_idx = np.array([0, 0, 1, 2, 2, 3])
+
+        data = {
+            "leg_slugs": slugs,
+            "group_idx": group_idx,
+            "group_names": [
+                "House Democrat",
+                "House Republican",
+                "Senate Democrat",
+                "Senate Republican",
+            ],
+        }
+        legislators = pl.DataFrame(
+            {
+                "slug": slugs,
+                "full_name": [f"Leg {i}" for i in range(6)],
+                "party": [
+                    "Democrat",
+                    "Democrat",
+                    "Republican",
+                    "Democrat",
+                    "Democrat",
+                    "Republican",
+                ],
+                "district": list(range(1, 7)),
+                "chamber": ["House"] * n_house + ["Senate"] * n_senate,
+            }
+        )
+
+        result = extract_hierarchical_ideal_points(
+            idata, data, legislators, flipped_chambers=["Senate"]
+        )
+
+        # House party_mean should come from mu_group
+        house_d = result.filter((pl.col("chamber") == "House") & (pl.col("party") == "Democrat"))
+        assert house_d["party_mean"][0] == pytest.approx(-2.5)
+
+        # Senate party_mean should be empirical mean of corrected xi
+        senate_d = result.filter((pl.col("chamber") == "Senate") & (pl.col("party") == "Democrat"))
+        expected_senate_d_mean = (-7.0 + -6.0) / 2
+        assert senate_d["party_mean"][0] == pytest.approx(expected_senate_d_mean)
+
+        senate_r = result.filter(
+            (pl.col("chamber") == "Senate") & (pl.col("party") == "Republican")
+        )
+        assert senate_r["party_mean"][0] == pytest.approx(4.0)

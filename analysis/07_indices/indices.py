@@ -18,6 +18,7 @@ Outputs (in results/<session>/indices/<date>/):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -28,6 +29,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix

@@ -50,3 +50,12 @@ Kansas has had Independent legislators in historical sessions (Pyle switched aff
 
 **Risk:**
 - If a future session has many Independents (e.g., 5+), the hierarchical model's party-level estimates would be unaffected (Independents are excluded), but synthesis and profiles would have more null party-specific metrics. Consider a 3-party hierarchical model if this becomes common.
+
+## Update: Synthesis Detect Crash Fix (2026-02-26)
+
+Running the 89th biennium synthesis revealed that Independents still caused a crash in `synthesis_detect.py`. Dennis Pyle had null `unity_score` (party unity is undefined for a one-member party), and:
+
+1. `_minority_parties()` included "Independent" in its results, causing `detect_chamber_maverick()` to attempt maverick analysis on a party with undefined unity scores.
+2. `detect_chamber_maverick()` did not filter null `unity_score` values before computing percentiles.
+
+**Fix:** `_minority_parties()` now excludes "Independent" from results, and `detect_chamber_maverick()` adds a null filter on `unity_score`. See ADR-0042.

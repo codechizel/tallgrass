@@ -479,7 +479,7 @@ class TestMinorityParties:
         assert result == []
 
     def test_multiple_minority_parties(self):
-        """With R majority and both D and I as minorities."""
+        """With R majority and both D and I, Independent is excluded."""
         rows = (
             [{"party": "Republican", "legislator_slug": f"rep_{i}"} for i in range(5)]
             + [{"party": "Democrat", "legislator_slug": "dem_a"}]
@@ -488,8 +488,8 @@ class TestMinorityParties:
         df = pl.DataFrame(rows)
         result = _minority_parties(df)
         assert "Democrat" in result
-        assert "Independent" in result
-        assert len(result) == 2
+        assert "Independent" not in result
+        assert len(result) == 1
 
 
 # ── detect_bridge_builder() — fallback ──────────────────────────────────────

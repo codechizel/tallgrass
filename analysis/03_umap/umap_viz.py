@@ -22,6 +22,7 @@ Outputs (in results/<session>/umap/<date>/):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -35,6 +36,8 @@ from matplotlib.patches import Patch
 from scipy.spatial import procrustes
 from scipy.stats import spearmanr
 from sklearn.manifold import trustworthiness as sklearn_trustworthiness
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix

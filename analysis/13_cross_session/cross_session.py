@@ -22,6 +22,7 @@ Outputs (in results/kansas/cross-session/<pair>/validation/<date>/):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -32,6 +33,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 from scipy import stats as sp_stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.cross_session_data import (

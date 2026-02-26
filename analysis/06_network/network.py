@@ -20,6 +20,7 @@ Outputs (in results/<session>/network/<date>/):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -35,6 +36,8 @@ import polars as pl
 from matplotlib.colors import Normalize
 from matplotlib.patches import Patch
 from sklearn.metrics import adjusted_rand_score, cohen_kappa_score, normalized_mutual_info_score
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix

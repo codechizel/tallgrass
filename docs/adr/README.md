@@ -69,6 +69,7 @@ What are the trade-offs?
 | [0039](0039-cross-session-validation-enhancements.md) | Cross-session validation enhancements (PSI, ICC, fuzzy matching, percentile thresholds) | Accepted | 2026-02-25 |
 | [0040](0040-rename-to-tallgrass.md) | Rename package to Tallgrass | Accepted | 2026-02-25 |
 | [0041](0041-mca-implementation-choices.md) | MCA implementation choices (prince, Greenacre, categorical encoding) | Accepted | 2026-02-25 |
+| [0042](0042-joint-model-sign-fix-and-pipeline-hardening.md) | Joint model sign fix, pipeline hardening, and joint model diagnosis | Accepted | 2026-02-26 |
 
 ## Creating a New ADR
 

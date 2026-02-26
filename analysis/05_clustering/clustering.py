@@ -18,6 +18,7 @@ Outputs (in results/<session>/clustering/<date>/):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -40,6 +41,8 @@ from sklearn.cluster import HDBSCAN, KMeans, SpectralClustering
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix

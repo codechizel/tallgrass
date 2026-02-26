@@ -68,3 +68,13 @@ A comprehensive code audit and ecosystem survey (`docs/hierarchical-irt-deep-div
 - **Tests**: 26 → 35. Added tests for small-group warning, joint ordering constraint, rescaling fallback, unequal-group ICC, joint group params boundary, Independent legislator exclusion. Fixed a tautological assertion and strengthened a weak assertion.
 
 See ADR-0033 for the full decision record.
+
+## Update: Joint Model Sign Fix and Diagnosis (2026-02-26)
+
+Running the joint model across multiple bienniums revealed a consistent sign flip in the Senate: the model converges with Senate Democrats positive and Senate Republicans negative, the reverse of the correct convention. A post-hoc correction (`fix_joint_sign_convention`) compares joint xi with per-chamber hierarchical xi and negates flipped chambers.
+
+A deeper investigation revealed the root cause: `build_joint_model()` combines data by `vote_id` (unique per roll call), not `bill_number`. Since House and Senate roll calls always have different vote_ids, the joint model has **zero shared bill parameters** — the two chambers' likelihoods are completely separable. The hierarchy provides soft regularization but not a common measurement scale.
+
+The flat IRT correctly matches bills by `bill_number` (71-133 shared bills per session) via `build_joint_vote_matrix()`. The hierarchical model should do the same but does not yet.
+
+**Impact:** Joint hierarchical results are unreliable for cross-chamber placement. Per-chamber hierarchical models and flat IRT equated scores remain correct. See `docs/joint-hierarchical-irt-diagnosis.md` for the full analysis and ADR-0042 for the decision record.

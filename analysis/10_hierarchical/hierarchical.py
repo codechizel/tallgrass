@@ -25,6 +25,7 @@ Outputs (in results/<session>/hierarchical/<date>/):
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -39,6 +40,8 @@ import polars as pl
 import pymc as pm
 import pytensor.tensor as pt
 from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext
@@ -135,6 +138,12 @@ mu_group      = mu_chamber[c] + sigma_party * offset_party_sorted
 sigma_within  ~ HalfNormal(1)
 xi            = mu_group[g_i] + sigma_within[g_i] * xi_offset_i
 ```
+
+**Sign identification:** The within-chamber sort ensures D < R on offsets, but
+the model has a sign indeterminacy: for chamber-specific votes, beta_j and xi_i
+can jointly flip sign without changing the likelihood. A post-hoc correction
+(`fix_joint_sign_convention`) compares joint xi with the per-chamber hierarchical
+xi (known correct) and negates any chamber whose legislators are flipped.
 
 ## Inputs
 
@@ -529,6 +538,81 @@ def build_joint_model(
     return idata, combined_data, sampling_time
 
 
+def fix_joint_sign_convention(
+    idata: az.InferenceData,
+    combined_data: dict,
+    per_chamber_results: dict,
+) -> az.InferenceData:
+    """Fix sign indeterminacy in the joint cross-chamber model.
+
+    The joint model combines House and Senate votes with shared beta parameters.
+    However, for chamber-specific votes (most bills), the model can flip the sign
+    of beta_j and xi_i simultaneously without changing the likelihood. The
+    within-chamber sort constraint (D < R on offsets) is necessary but not
+    sufficient for global identification — it constrains the *relative* ordering
+    but not the *absolute* sign.
+
+    Fix: compare joint xi with per-chamber hierarchical xi (which have correct
+    sign convention from direct sort). If a chamber's legislators are negatively
+    correlated with the per-chamber model, negate xi for those legislators.
+
+    Returns (idata, flipped_chambers) where flipped_chambers is a list of chamber
+    names that were corrected (e.g., ["Senate"]). Callers should use empirical xi
+    means instead of mu_group for party_mean in flipped chambers.
+    """
+    xi_post = idata.posterior["xi"].values  # (chain, draw, legislator)
+    n_house = combined_data["n_house"]
+    flipped: list[str] = []
+
+    for chamber, start, end in [("House", 0, n_house), ("Senate", n_house, None)]:
+        if chamber not in per_chamber_results:
+            continue
+
+        # Get per-chamber hierarchical xi means (known correct sign)
+        chamber_ip = per_chamber_results[chamber]["ideal_points"]
+        chamber_slugs = chamber_ip["legislator_slug"].to_list()
+        chamber_xi = chamber_ip["xi_mean"].to_numpy()
+
+        # Get joint xi means for this chamber's legislators
+        joint_slugs = combined_data["leg_slugs"][start:end]
+        joint_xi_mean = xi_post[:, :, start:end].mean(axis=(0, 1))
+
+        # Match legislators by slug for correlation
+        joint_slug_to_xi = dict(zip(joint_slugs, joint_xi_mean))
+        matched_joint = []
+        matched_chamber = []
+        for slug, xi in zip(chamber_slugs, chamber_xi):
+            if slug in joint_slug_to_xi:
+                matched_joint.append(joint_slug_to_xi[slug])
+                matched_chamber.append(xi)
+
+        if len(matched_joint) < 3:
+            continue
+
+        r = float(np.corrcoef(matched_joint, matched_chamber)[0, 1])
+
+        if r < 0:
+            print(f"  Sign flip detected for {chamber} (r={r:.3f}), correcting...")
+            # Negate xi for this chamber's legislators across all posterior samples
+            xi_post[:, :, start:end] *= -1
+            flipped.append(chamber)
+        else:
+            print(f"  {chamber} sign OK (r={r:.3f})")
+
+    if flipped:
+        # Write corrected xi back to the posterior
+        idata.posterior["xi"].values = xi_post
+        # Note: mu_group posterior is NOT corrected — it was estimated jointly with
+        # the flipped xi and cannot be meaningfully recovered by simple arithmetic.
+        # The extract function uses corrected xi means per group instead of mu_group
+        # when flipped_chambers is set.
+        print(f"  Corrected sign for: {', '.join(flipped)}")
+    else:
+        print("  No sign correction needed")
+
+    return idata, flipped
+
+
 # ── Phase 3: Convergence Diagnostics ────────────────────────────────────────
 
 
@@ -608,11 +692,16 @@ def extract_hierarchical_ideal_points(
     data: dict,
     legislators: pl.DataFrame,
     flat_ip: pl.DataFrame | None = None,
+    flipped_chambers: list[str] | None = None,
 ) -> pl.DataFrame:
     """Extract posterior summaries with shrinkage comparison to flat IRT.
 
     Returns DataFrame with legislator_slug, xi_mean, xi_sd, xi_hdi_*,
     party_mean, shrinkage_pct, delta_from_flat, plus metadata.
+
+    For flipped chambers (sign-corrected by fix_joint_sign_convention), party_mean
+    is computed from empirical xi means per group rather than mu_group, since the
+    mu_group posterior was estimated in the wrong sign convention.
     """
     xi_posterior = idata.posterior["xi"]
     xi_mean = xi_posterior.mean(dim=["chain", "draw"]).values
@@ -627,11 +716,24 @@ def extract_hierarchical_ideal_points(
         mu_mean = idata.posterior["mu_party"].mean(dim=["chain", "draw"]).values
         group_idx = data["party_idx"]
 
+    # For flipped chambers, compute empirical group means from corrected xi
+    empirical_group_means: dict[int, float] = {}
+    if flipped_chambers and "group_names" in data:
+        group_names = data["group_names"]
+        for chamber in flipped_chambers:
+            for gi, name in enumerate(group_names):
+                if chamber in name:
+                    # Compute mean xi for all legislators in this group
+                    members = [j for j, gj in enumerate(group_idx) if gj == gi]
+                    if members:
+                        empirical_group_means[gi] = float(np.mean([xi_mean[j] for j in members]))
+
     slugs = data["leg_slugs"]
 
     rows = []
     for i, slug in enumerate(slugs):
-        party_mean = float(mu_mean[group_idx[i]])
+        gi = group_idx[i]
+        party_mean = empirical_group_means.get(gi, float(mu_mean[gi]))
         rows.append(
             {
                 "legislator_slug": slug,
@@ -1309,11 +1411,17 @@ def main() -> None:
 
                 joint_convergence = check_hierarchical_convergence(joint_idata, "Joint")
 
+                # Fix sign indeterminacy using per-chamber results as reference
+                joint_idata, flipped_chambers = fix_joint_sign_convention(
+                    joint_idata, combined_data, per_chamber_results
+                )
+
                 # Extract joint ideal points
                 joint_ip = extract_hierarchical_ideal_points(
                     joint_idata,
                     combined_data,
                     legislators,
+                    flipped_chambers=flipped_chambers,
                 )
 
                 # Save

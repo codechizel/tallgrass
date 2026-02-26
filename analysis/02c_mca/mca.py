@@ -20,6 +20,7 @@ Outputs (in results/<session>/mca/<date>/):
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -34,6 +35,8 @@ import prince
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix

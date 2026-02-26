@@ -19,6 +19,7 @@ Outputs (in results/<session>/irt/<date>/):
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -34,6 +35,8 @@ import pymc as pm
 import pytensor.tensor as pt
 from matplotlib.patches import Patch
 from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
     from analysis.run_context import RunContext, strip_leadership_suffix

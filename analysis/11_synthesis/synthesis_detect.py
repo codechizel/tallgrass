@@ -91,7 +91,7 @@ def detect_chamber_maverick(
     if "unity_score" not in leg_df.columns:
         return None
 
-    party_df = leg_df.filter(pl.col("party") == party)
+    party_df = leg_df.filter((pl.col("party") == party) & pl.col("unity_score").is_not_null())
     if party_df.height == 0:
         return None
 
@@ -355,11 +355,15 @@ def detect_annotation_slugs(
 
 
 def _minority_parties(leg_df: pl.DataFrame) -> list[str]:
-    """Return all parties except the majority party."""
+    """Return all parties except the majority party and Independents.
+
+    Independents are excluded because party-unity metrics (unity_score, maverick_rate)
+    are undefined for legislators with no party caucus.
+    """
     majority = _majority_party(leg_df)
     if majority is None:
         return []
-    return [p for p in leg_df["party"].unique().to_list() if p != majority]
+    return [p for p in leg_df["party"].unique().to_list() if p != majority and p != "Independent"]
 
 
 def detect_all(leg_dfs: dict[str, pl.DataFrame]) -> dict:
