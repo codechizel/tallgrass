@@ -9,8 +9,6 @@ Usage (called from clustering.py):
     build_clustering_report(ctx.report, results=results, ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

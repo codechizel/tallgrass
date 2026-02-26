@@ -20,17 +20,15 @@ Usage:
         save_manifest(manifest, ctx.run_dir)
 """
 
-from __future__ import annotations
-
 import io
 import json
 import re
 import subprocess
 import sys
-import typing
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
+from typing import TextIO
 from zoneinfo import ZoneInfo
 
 _CT = ZoneInfo("America/Chicago")
@@ -116,7 +114,7 @@ def _git_commit_hash() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         pass
     return "unknown"
 
@@ -200,7 +198,7 @@ class RunContext:
         self._today = today
         self._primer = primer
         self._tee: _TeeStream | None = None
-        self._original_stdout: typing.TextIO | None = None
+        self._original_stdout: TextIO | None = None
         self._start_time: datetime | None = None
 
         # Lazy-init report builder (avoids importing report.py at module level)
@@ -264,9 +262,7 @@ class RunContext:
 
         # Write run info
         end_time = datetime.now(_CT)
-        elapsed_seconds = (
-            (end_time - self._start_time).total_seconds() if self._start_time else 0.0
-        )
+        elapsed_seconds = (end_time - self._start_time).total_seconds() if self._start_time else 0.0
         run_info = {
             "analysis": self.analysis_name,
             "session": self.session,
@@ -389,9 +385,9 @@ def _append_missing_votes(report: object, session: str) -> None:
         lines.append(
             "<tr>"
             f'<td style="padding:4px 6px; border-bottom:1px solid #eee;">{bill}</td>'
-            f'<td style="padding:4px 6px; border-bottom:1px solid #eee; text-align:center;">'
+            '<td style="padding:4px 6px; border-bottom:1px solid #eee; text-align:center;">'
             f"{tally_str}</td>"
-            f'<td style="padding:4px 6px; border-bottom:1px solid #eee; text-align:center;">'
+            '<td style="padding:4px 6px; border-bottom:1px solid #eee; text-align:center;">'
             f"{margin_str}</td>"
             f'<td style="padding:4px 6px; border-bottom:1px solid #eee;">{error_label}</td>'
             f'<td style="padding:4px 6px; border-bottom:1px solid #eee;">{link}</td>'

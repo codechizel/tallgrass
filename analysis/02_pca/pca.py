@@ -16,8 +16,6 @@ Outputs (in results/<session>/pca/<date>/):
   - pca_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from dataclasses import dataclass

@@ -9,8 +9,6 @@ Usage (called from cross_session.py):
     build_cross_session_report(ctx.report, results=..., plots_dir=...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl
@@ -289,26 +287,40 @@ def _add_metric_stability_table(
         "PC1": "PCA Dimension 1",
     }
 
+    select_cols = ["Metric", "pearson_r", "spearman_rho", "n_legislators"]
+    col_labels: dict[str, str] = {
+        "Metric": "Metric",
+        "pearson_r": "Pearson r",
+        "spearman_rho": "Spearman rho",
+        "n_legislators": "N",
+    }
+    num_formats: dict[str, str] = {"pearson_r": ".3f", "spearman_rho": ".3f"}
+
+    # Include new columns if available
+    if "icc" in stability.columns:
+        select_cols.append("icc")
+        col_labels["icc"] = "ICC"
+        num_formats["icc"] = ".3f"
+    if "stability_interpretation" in stability.columns:
+        select_cols.append("stability_interpretation")
+        col_labels["stability_interpretation"] = "Reliability"
+
     display = stability.with_columns(
         pl.col("metric")
         .map_elements(lambda m: display_names.get(m, m), return_dtype=pl.Utf8)
         .alias("Metric")
-    ).select("Metric", "pearson_r", "spearman_rho", "n_legislators")
+    ).select(select_cols)
 
     html = make_gt(
         display,
         title=f"{chamber} — Metric Stability Across Sessions",
         subtitle="How consistent are legislative metrics for returning legislators?",
-        column_labels={
-            "Metric": "Metric",
-            "pearson_r": "Pearson r",
-            "spearman_rho": "Spearman rho",
-            "n_legislators": "N",
-        },
-        number_formats={"pearson_r": ".3f", "spearman_rho": ".3f"},
+        column_labels=col_labels,
+        number_formats=num_formats,
         source_note=(
             f"Pearson r < {CORRELATION_WARN} would indicate weak stability. "
-            "Spearman rho measures rank-order consistency (less sensitive to outliers)."
+            "ICC = Intraclass Correlation (Koo & Li 2016): "
+            "<0.50 poor, 0.50–0.75 moderate, 0.75–0.90 good, >0.90 excellent."
         ),
     )
     report.add(

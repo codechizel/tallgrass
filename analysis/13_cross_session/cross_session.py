@@ -20,8 +20,6 @@ Outputs (in results/kansas/cross-session/<pair>/validation/<date>/):
   - validation_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -883,9 +881,9 @@ def main() -> None:
             # onto Session B's scale using the alignment coefficients.
             ret_slugs = set(chamber_matched["slug_b"].to_list())
             xi_ret = irt_b.filter(pl.col("legislator_slug").is_in(ret_slugs))["xi_mean"].to_numpy()
-            xi_dep_raw = (
-                irt_a.filter(pl.col("legislator_slug").is_in(dep_slugs))["xi_mean"].to_numpy()
-            )
+            xi_dep_raw = irt_a.filter(pl.col("legislator_slug").is_in(dep_slugs))[
+                "xi_mean"
+            ].to_numpy()
             xi_dep = xi_dep_raw * a_coef + b_coef  # Transform to Session B scale
             xi_new = irt_b.filter(pl.col("legislator_slug").is_in(new_slugs))["xi_mean"].to_numpy()
 

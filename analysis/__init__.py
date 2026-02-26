@@ -22,8 +22,6 @@ Uses a PEP 302 meta-path finder so that ``from analysis.eda import X``
 transparently loads ``analysis.01_eda.eda``.  Zero import changes needed.
 """
 
-from __future__ import annotations
-
 import importlib
 import sys
 import types

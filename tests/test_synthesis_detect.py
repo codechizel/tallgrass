@@ -16,6 +16,10 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.synthesis_detect import (
+    BRIDGE_SD_TOLERANCE,
+    PARADOX_MIN_PARTY_SIZE,
+    PARADOX_RANK_GAP,
+    UNITY_SKIP_THRESHOLD,
     NotableLegislator,
     ParadoxCase,
     _majority_party,
@@ -310,3 +314,94 @@ class TestDetectAnnotationSlugs:
         # rep_e is also the most extreme R by xi_mean
         slugs = detect_annotation_slugs(df, [notable])
         assert slugs.count("rep_e") == 1
+
+
+# ── TestThresholdConstants ──────────────────────────────────────────────────
+
+
+class TestThresholdConstants:
+    """Verify extracted constants match the previously hardcoded values.
+
+    Run: uv run pytest tests/test_synthesis_detect.py::TestThresholdConstants -v
+    """
+
+    def test_unity_skip_threshold(self):
+        assert UNITY_SKIP_THRESHOLD == 0.95
+
+    def test_bridge_sd_tolerance(self):
+        assert BRIDGE_SD_TOLERANCE == 1.0
+
+    def test_paradox_rank_gap(self):
+        assert PARADOX_RANK_GAP == 0.5
+
+    def test_paradox_min_party_size(self):
+        assert PARADOX_MIN_PARTY_SIZE == 5
+
+
+# ── TestPercentileMaverick ──────────────────────────────────────────────────
+
+
+class TestPercentileMaverick:
+    """Percentile-based maverick detection mode.
+
+    Run: uv run pytest tests/test_synthesis_detect.py::TestPercentileMaverick -v
+    """
+
+    def test_percentile_mode_finds_result(self):
+        """Percentile mode should detect a maverick even when all unity > 0.95."""
+        df = pl.DataFrame({
+            "legislator_slug": ["a", "b", "c", "d", "e"],
+            "full_name": ["A", "B", "C", "D", "E"],
+            "party": ["Republican"] * 5,
+            "district": ["1", "2", "3", "4", "5"],
+            "unity_score": [0.96, 0.97, 0.98, 0.99, 0.995],
+            "weighted_maverick": [0.04, 0.03, 0.02, 0.01, 0.005],
+        })
+        # Default mode returns None (all > 0.95)
+        assert detect_chamber_maverick(df, "Republican", "house") is None
+        # Percentile mode returns the bottom 20%
+        result = detect_chamber_maverick(df, "Republican", "house", percentile=0.20)
+        assert result is not None
+        assert result.slug == "a"
+
+    def test_percentile_default_none_unchanged(self):
+        """Default percentile=None should match original behavior."""
+        df = _leg_df()
+        result = detect_chamber_maverick(df, "Republican", "house")
+        result_explicit = detect_chamber_maverick(df, "Republican", "house", percentile=None)
+        # Both should find the same maverick
+        assert result is not None
+        assert result_explicit is not None
+        assert result.slug == result_explicit.slug
+
+
+# ── TestPercentileParadox ───────────────────────────────────────────────────
+
+
+class TestPercentileParadox:
+    """Percentile-based paradox detection mode.
+
+    Run: uv run pytest tests/test_synthesis_detect.py::TestPercentileParadox -v
+    """
+
+    def test_percentile_mode_with_synthetic_data(self):
+        """Percentile mode should use data-driven threshold."""
+        df = _leg_df()
+        # Default mode
+        result_default = detect_metric_paradox(df, "house")
+        # Percentile mode at 50th percentile (median rank gap as threshold)
+        result_pct = detect_metric_paradox(df, "house", rank_gap_percentile=0.50)
+        # Both should find a result (Eve E has extreme gap)
+        assert result_default is not None
+        assert result_pct is not None
+
+    def test_low_percentile_is_more_permissive(self):
+        """Lower percentile threshold should be easier to pass."""
+        df = _leg_df()
+        # Both default (fixed 0.5) and low percentile should detect
+        result_default = detect_metric_paradox(df, "house")
+        result_low_pct = detect_metric_paradox(df, "house", rank_gap_percentile=0.10)
+        assert result_default is not None
+        assert result_low_pct is not None
+        # Both should find the same legislator (Eve E)
+        assert result_default.slug == result_low_pct.slug

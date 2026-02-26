@@ -17,8 +17,6 @@ Outputs (in results/<session>/beta_binomial/<date>/):
   - beta_binomial_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path

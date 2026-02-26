@@ -407,7 +407,7 @@ class KSVoteScraper:
         return bill_urls
 
     @staticmethod
-    def _bill_sort_key(url: str):
+    def _bill_sort_key(url: str) -> tuple[int, int]:
         """Sort bills: SB before HB, then numerically."""
         match = _BILL_URL_RE.search(url)
         if match:
@@ -492,9 +492,9 @@ class KSVoteScraper:
         result = self._get(api_url)
         if not result.ok:
             print(
-                f"  API pre-filter failed"
+                "  API pre-filter failed"
                 f" ({result.error_type}: {result.error_message}),"
-                f" falling back to full scan"
+                " falling back to full scan"
             )
             return bill_urls, {}
 
@@ -914,7 +914,7 @@ class KSVoteScraper:
                 f" ({result.error_type}: {result.error_message})"
             )
 
-    def _parse_vote_page(self, soup: BeautifulSoup, vote_link: VoteLink):
+    def _parse_vote_page(self, soup: BeautifulSoup, vote_link: VoteLink) -> None:
         """Parse a single vote_view page."""
         bill_number = vote_link.bill_number
         vote_url = vote_link.vote_url
@@ -1324,7 +1324,7 @@ class KSVoteScraper:
         doc_path.write_text("\n".join(lines), encoding="utf-8")
         return doc_path
 
-    def _print_failure_summary(self):
+    def _print_failure_summary(self) -> None:
         """Print a grouped summary of all failed vote page fetches."""
         if not self.failures:
             return

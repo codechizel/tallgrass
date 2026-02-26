@@ -18,9 +18,15 @@ from analysis.cross_session_data import (
     align_irt_scales,
     classify_turnover,
     compare_feature_importance,
+    compute_icc,
     compute_ideology_shift,
     compute_metric_stability,
+    compute_psi,
     compute_turnover_impact,
+    fuzzy_match_legislators,
+    interpret_icc,
+    interpret_psi,
+    interpret_stability,
     match_legislators,
     normalize_name,
     standardize_features,
@@ -528,7 +534,11 @@ class TestComputeMetricStability:
         df_b = pl.DataFrame({"legislator_slug": matched["slug_b"].to_list()})
         result = compute_metric_stability(df_a, df_b, matched, ["nonexistent"])
         assert result.height == 0
-        assert set(result.columns) == {"metric", "pearson_r", "spearman_rho", "n_legislators"}
+        assert set(result.columns) == {
+            "metric", "pearson_r", "spearman_rho", "n_legislators",
+            "psi", "psi_interpretation", "icc", "icc_interpretation",
+            "stability_interpretation",
+        }
 
 
 # ── TestComputeTurnoverImpact ────────────────────────────────────────────────
@@ -1139,6 +1149,11 @@ class TestBuildCrossSessionReport:
                 "pearson_r": [0.85],
                 "spearman_rho": [0.82],
                 "n_legislators": [25],
+                "psi": [0.05],
+                "psi_interpretation": ["stable"],
+                "icc": [0.88],
+                "icc_interpretation": ["good"],
+                "stability_interpretation": ["good"],
             }
         )
         matched = pl.DataFrame(
@@ -1183,3 +1198,234 @@ class TestBuildCrossSessionReport:
             session_b_label="91st_2025-2026",
         )
         assert len(report._sections) > 0
+
+
+# ── TestComputePSI ──────────────────────────────────────────────────────────
+
+
+class TestComputePSI:
+    """Tests for Population Stability Index computation.
+
+    Run: uv run pytest tests/test_cross_session.py::TestComputePSI -v
+    """
+
+    def test_identical_distributions(self) -> None:
+        """Identical arrays should have PSI near 0."""
+        a = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
+        psi = compute_psi(a, a)
+        assert psi == pytest.approx(0.0, abs=0.01)
+
+    def test_shifted_distribution(self) -> None:
+        """Shifted distribution should have higher PSI."""
+        rng = np.random.default_rng(42)
+        a = rng.normal(0, 1, 200)
+        b = rng.normal(2, 1, 200)
+        psi = compute_psi(a, b)
+        assert psi > 0.10  # Meaningful drift
+
+    def test_empty_array_returns_nan(self) -> None:
+        """Arrays with < 2 elements should return NaN."""
+        assert np.isnan(compute_psi(np.array([1.0]), np.array([1.0, 2.0])))
+        assert np.isnan(compute_psi(np.array([]), np.array([])))
+
+    def test_psi_is_non_negative(self) -> None:
+        """PSI is always >= 0 for valid inputs."""
+        rng = np.random.default_rng(42)
+        a = rng.normal(0, 1, 100)
+        b = rng.normal(0.5, 1.2, 100)
+        psi = compute_psi(a, b)
+        assert psi >= 0
+
+    def test_interpret_psi_thresholds(self) -> None:
+        """PSI interpretation should follow standard thresholds."""
+        assert interpret_psi(0.05) == "stable"
+        assert interpret_psi(0.15) == "investigate"
+        assert interpret_psi(0.30) == "significant drift"
+        assert interpret_psi(float("nan")) == "insufficient data"
+
+
+# ── TestComputeICC ──────────────────────────────────────────────────────────
+
+
+class TestComputeICC:
+    """Tests for Intraclass Correlation Coefficient computation.
+
+    Run: uv run pytest tests/test_cross_session.py::TestComputeICC -v
+    """
+
+    def test_perfect_agreement(self) -> None:
+        """Identical arrays should have ICC = 1.0."""
+        a = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        icc = compute_icc(a, a)
+        assert icc == pytest.approx(1.0, abs=0.001)
+
+    def test_no_agreement(self) -> None:
+        """Random uncorrelated arrays should have ICC near 0."""
+        rng = np.random.default_rng(42)
+        a = rng.normal(0, 1, 100)
+        b = rng.normal(0, 1, 100)
+        icc = compute_icc(a, b)
+        assert abs(icc) < 0.3  # Allow some sampling noise
+
+    def test_known_value(self) -> None:
+        """Known linear transform should produce high ICC."""
+        a = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
+        b = a + 0.1  # Small constant shift
+        icc = compute_icc(a, b)
+        assert icc > 0.95  # Very high consistency
+
+    def test_too_few_subjects(self) -> None:
+        """ICC with < 3 subjects should return NaN."""
+        assert np.isnan(compute_icc(np.array([1.0, 2.0]), np.array([1.0, 2.0])))
+
+    def test_interpret_icc_thresholds(self) -> None:
+        """ICC interpretation should follow Koo & Li 2016 thresholds."""
+        assert interpret_icc(0.30) == "poor"
+        assert interpret_icc(0.60) == "moderate"
+        assert interpret_icc(0.80) == "good"
+        assert interpret_icc(0.95) == "excellent"
+        assert interpret_icc(float("nan")) == "insufficient data"
+
+
+# ── TestFuzzyMatchLegislators ───────────────────────────────────────────────
+
+
+class TestFuzzyMatchLegislators:
+    """Tests for fuzzy name matching between sessions.
+
+    Run: uv run pytest tests/test_cross_session.py::TestFuzzyMatchLegislators -v
+    """
+
+    def test_catches_typo(self) -> None:
+        """A small typo should be matched above the default threshold."""
+        result = fuzzy_match_legislators(
+            ["john smithe"],
+            ["john smith"],
+            threshold=0.85,
+        )
+        assert result.height == 1
+        assert result["name_a"][0] == "john smithe"
+        assert result["name_b"][0] == "john smith"
+        assert result["similarity"][0] > 0.85
+
+    def test_threshold_respected(self) -> None:
+        """Names below the threshold should not match."""
+        result = fuzzy_match_legislators(
+            ["alice jones"],
+            ["bob williams"],
+            threshold=0.85,
+        )
+        assert result.height == 0
+
+    def test_empty_unmatched(self) -> None:
+        """Empty input lists should return empty DataFrame."""
+        result = fuzzy_match_legislators([], ["bob smith"])
+        assert result.height == 0
+        assert set(result.columns) == {"name_a", "name_b", "similarity"}
+
+    def test_no_false_positives(self) -> None:
+        """Very different names should not match even at low threshold."""
+        result = fuzzy_match_legislators(
+            ["zachary"],
+            ["alexander"],
+            threshold=0.50,
+        )
+        assert result.height == 0
+
+    def test_best_match_selected(self) -> None:
+        """When multiple candidates exist, the best match should be selected."""
+        result = fuzzy_match_legislators(
+            ["john smith"],
+            ["john smithe", "jane doe"],
+            threshold=0.80,
+        )
+        assert result.height == 1
+        assert result["name_b"][0] == "john smithe"
+
+
+# ── TestMatchLegislatorsFuzzy ───────────────────────────────────────────────
+
+
+class TestMatchLegislatorsFuzzy:
+    """Tests for fuzzy_threshold parameter in match_legislators.
+
+    Run: uv run pytest tests/test_cross_session.py::TestMatchLegislatorsFuzzy -v
+    """
+
+    def test_fuzzy_finds_extra_match(self) -> None:
+        """Fuzzy matching should find names that differ slightly."""
+        names_shared = [f"Member {i}" for i in range(20)]
+        # Add a typo pair
+        names_a = names_shared + ["John Smithe"]
+        names_b = names_shared + ["John Smith"]
+
+        leg_a = _make_legislators(names_a)
+        leg_b = _make_legislators(names_b, prefix="rep2")
+
+        exact = match_legislators(leg_a, leg_b)
+        fuzzy = match_legislators(leg_a, leg_b, fuzzy_threshold=0.85)
+
+        # Fuzzy should find one more match
+        assert fuzzy.height == exact.height + 1
+
+    def test_none_threshold_no_change(self) -> None:
+        """fuzzy_threshold=None should behave identically to default."""
+        names = [f"Member {i}" for i in range(25)]
+        leg_a = _make_legislators(names)
+        leg_b = _make_legislators(names, prefix="rep2")
+
+        default = match_legislators(leg_a, leg_b)
+        explicit_none = match_legislators(leg_a, leg_b, fuzzy_threshold=None)
+
+        assert default.height == explicit_none.height
+
+
+# ── TestStabilityInterpretation ─────────────────────────────────────────────
+
+
+class TestStabilityInterpretation:
+    """Tests for stability interpretation based on Spearman rho.
+
+    Run: uv run pytest tests/test_cross_session.py::TestStabilityInterpretation -v
+    """
+
+    def test_interpret_stability_thresholds(self) -> None:
+        """Interpretation should follow Koo & Li 2016 thresholds."""
+        assert interpret_stability(0.30) == "poor"
+        assert interpret_stability(0.60) == "moderate"
+        assert interpret_stability(0.80) == "good"
+        assert interpret_stability(0.95) == "excellent"
+        assert interpret_stability(float("nan")) == "insufficient data"
+
+    def test_negative_rho_uses_absolute(self) -> None:
+        """Negative rho should use abs() for interpretation."""
+        assert interpret_stability(-0.85) == "good"
+        assert interpret_stability(-0.95) == "excellent"
+
+    def test_stability_column_in_output(self) -> None:
+        """compute_metric_stability output should include stability_interpretation."""
+        _, _, matched = _make_large_matched(25)
+        vals = [float(i) / 25 for i in range(25)]
+        df_a = pl.DataFrame(
+            {"legislator_slug": matched["slug_a"].to_list(), "unity_score": vals}
+        )
+        df_b = pl.DataFrame(
+            {"legislator_slug": matched["slug_b"].to_list(), "unity_score": vals}
+        )
+        result = compute_metric_stability(df_a, df_b, matched, ["unity_score"])
+        assert "stability_interpretation" in result.columns
+        assert "psi" in result.columns
+        assert "icc" in result.columns
+        assert result["stability_interpretation"][0] == "excellent"
+
+    def test_empty_stability_df_schema(self) -> None:
+        """Empty stability DataFrame should include new columns."""
+        from analysis.cross_session_data import _empty_stability_df
+
+        df = _empty_stability_df()
+        expected_cols = {
+            "metric", "pearson_r", "spearman_rho", "n_legislators",
+            "psi", "psi_interpretation", "icc", "icc_interpretation",
+            "stability_interpretation",
+        }
+        assert set(df.columns) == expected_cols

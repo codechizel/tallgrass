@@ -18,8 +18,6 @@ Outputs (in results/<session>/network/<date>/):
   - network_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -301,7 +299,7 @@ def _build_network_from_vote_subset(
                 k = cohen_kappa_score(vi[mask], vj[mask])
                 kappa_mat[i, j] = k
                 kappa_mat[j, i] = k
-            except (ValueError, ZeroDivisionError):
+            except ValueError, ZeroDivisionError:
                 pass
 
     ip_dict = _build_ip_lookup(ideal_points)
@@ -448,7 +446,7 @@ def compute_network_summary(G: nx.Graph) -> dict:
     # Party assortativity
     try:
         assortativity_party = nx.attribute_assortativity_coefficient(G, "party")
-    except (ValueError, ZeroDivisionError):
+    except ValueError, ZeroDivisionError:
         assortativity_party = None
 
     return {
@@ -521,7 +519,7 @@ def compute_centralities(G: nx.Graph) -> pl.DataFrame:
                 else:
                     for n in component:
                         eigenvector[n] = 0.0
-    except (nx.NetworkXError, nx.AmbiguousSolution, np.linalg.LinAlgError):
+    except nx.NetworkXError, nx.AmbiguousSolution, np.linalg.LinAlgError:
         eigenvector = {n: 0.0 for n in nodes}
 
     # Closeness centrality (distance = 1/kappa; per component for disconnected graphs)

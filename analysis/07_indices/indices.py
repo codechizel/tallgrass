@@ -16,8 +16,6 @@ Outputs (in results/<session>/indices/<date>/):
   - indices_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -1786,13 +1784,9 @@ def main() -> None:
             chamber_results["fractured_votes"] = fractured
 
             # Carey UNITY (Rice variant penalizing abstentions)
-            carey_df = compute_carey_unity(
-                votes, rollcalls, legislators, chamber, args.session
-            )
+            carey_df = compute_carey_unity(votes, rollcalls, legislators, chamber, args.session)
             if carey_df.height > 0:
-                carey_df.write_parquet(
-                    ctx.data_dir / f"carey_unity_{chamber.lower()}.parquet"
-                )
+                carey_df.write_parquet(ctx.data_dir / f"carey_unity_{chamber.lower()}.parquet")
             chamber_results["carey_unity"] = carey_df
 
             # Rice plots

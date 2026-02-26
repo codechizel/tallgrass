@@ -4,8 +4,6 @@ Assembles scorecard, bill-type breakdown, defection analysis, voting neighbors,
 and surprising votes into a self-contained HTML report. Called by profiles.py.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

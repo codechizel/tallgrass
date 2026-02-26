@@ -27,6 +27,30 @@
 | `FEATURE_IMPORTANCE_TOP_K` | 10 | Compare top 10 SHAP features across sessions. | `cross_session_data.py` |
 | `SIGN_ARBITRARY_METRICS` | `{"PC1"}` | Metrics whose sign is conventional but can flip on edge-case data. `compute_metric_stability()` uses `abs()` on correlations for these so a sign flip is not misread as instability. ADR-0037. | `cross_session_data.py` |
 | `XGBOOST_PARAMS` | n_estimators=200, max_depth=6, lr=0.1 | Fixed hyperparameters for cross-session prediction. Same for A→B and B→A. | `cross_session.py` |
+| `UNITY_SKIP_THRESHOLD` | 0.95 | Maverick detection: skip if all party unity scores exceed this. | `synthesis_detect.py` |
+| `BRIDGE_SD_TOLERANCE` | 1.0 | Bridge-builder: candidate must be within this many SDs of cross-party midpoint. | `synthesis_detect.py` |
+| `PARADOX_RANK_GAP` | 0.5 | Paradox: minimum percentile rank gap between IRT and loyalty. | `synthesis_detect.py` |
+| `PARADOX_MIN_PARTY_SIZE` | 5 | Paradox: minimum legislators in majority party for detection. | `synthesis_detect.py` |
+
+### Stability Enrichment
+
+`compute_metric_stability()` now includes five additional columns beyond Pearson/Spearman:
+
+| Column | Source | Interpretation |
+|--------|--------|----------------|
+| `psi` | `compute_psi()` | Population Stability Index: < 0.10 stable, 0.10–0.25 investigate, > 0.25 significant drift |
+| `psi_interpretation` | `interpret_psi()` | Human-readable PSI label |
+| `icc` | `compute_icc()` | ICC(3,1) two-way mixed, single measures, consistency |
+| `icc_interpretation` | `interpret_icc()` | Koo & Li 2016: < 0.50 poor, 0.50–0.75 moderate, 0.75–0.90 good, > 0.90 excellent |
+| `stability_interpretation` | `interpret_stability()` | Spearman rho interpreted per Koo & Li 2016 thresholds |
+
+### Fuzzy Matching
+
+`match_legislators()` accepts an optional `fuzzy_threshold` parameter. When set, unmatched names go through a second pass with `fuzzy_match_legislators()` using `difflib.SequenceMatcher` (stdlib). This is a resilience feature — the default exact matching is preferred.
+
+### Percentile-Based Detection
+
+`detect_chamber_maverick()` accepts `percentile` (e.g., 0.10 for bottom 10%) and `detect_metric_paradox()` accepts `rank_gap_percentile`. Both default to `None` (original fixed-threshold behavior). These are additive — existing callers are unaffected.
 
 ## Methodological Choices
 

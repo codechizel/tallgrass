@@ -23,8 +23,6 @@ Outputs (in results/<session>/hierarchical/<date>/):
   - hierarchical_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import time

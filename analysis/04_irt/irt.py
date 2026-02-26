@@ -17,8 +17,6 @@ Outputs (in results/<session>/irt/<date>/):
   - irt_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import time
@@ -2552,16 +2550,13 @@ def main() -> None:
             xi_init = None
             if not args.no_pca_init:
                 anchor_set = {cons_idx, lib_idx}
-                free_pos = [
-                    i for i in range(data["n_legislators"])
-                    if i not in anchor_set
-                ]
+                free_pos = [i for i in range(data["n_legislators"]) if i not in anchor_set]
                 slug_order = {s: i for i, s in enumerate(data["leg_slugs"])}
-                pc1_vals = pca_scores.filter(
-                    pl.col("legislator_slug").is_in(data["leg_slugs"])
-                ).sort(
-                    pl.col("legislator_slug").replace_strict(slug_order)
-                )["PC1"].to_numpy()
+                pc1_vals = (
+                    pca_scores.filter(pl.col("legislator_slug").is_in(data["leg_slugs"]))
+                    .sort(pl.col("legislator_slug").replace_strict(slug_order))["PC1"]
+                    .to_numpy()
+                )
                 # Standardize to mean-0, sd-1 (the xi prior)
                 pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
                 xi_init = pc1_std[free_pos].astype(np.float64)

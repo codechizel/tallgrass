@@ -5,11 +5,24 @@ Pure data logic — no plotting, no report building. Detects mavericks,
 bridge-builders, and metric paradoxes from upstream analysis DataFrames.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
+import numpy as np
 import polars as pl
+
+# ── Detection Threshold Constants ──────────────────────────────────────────
+
+UNITY_SKIP_THRESHOLD: float = 0.95
+"""Maverick: skip detection if all party unity scores exceed this value."""
+
+BRIDGE_SD_TOLERANCE: float = 1.0
+"""Bridge-builder: candidate must be within this many SDs of the cross-party midpoint."""
+
+PARADOX_RANK_GAP: float = 0.5
+"""Paradox: minimum percentile rank gap between IRT and loyalty to flag."""
+
+PARADOX_MIN_PARTY_SIZE: int = 5
+"""Paradox: minimum legislators in the majority party for detection."""
 
 
 @dataclass(frozen=True)
@@ -58,15 +71,22 @@ def _majority_party(leg_df: pl.DataFrame) -> str | None:
 
 
 def detect_chamber_maverick(
-    leg_df: pl.DataFrame, party: str, chamber: str
+    leg_df: pl.DataFrame,
+    party: str,
+    chamber: str,
+    *,
+    percentile: float | None = None,
 ) -> NotableLegislator | None:
     """Detect the maverick in a given party: lowest unity_score.
 
-    Ties broken by highest weighted_maverick. Returns None if all unity > 0.95
-    or if the required columns are missing.
+    Ties broken by highest weighted_maverick. Returns None if all unity
+    exceed :data:`UNITY_SKIP_THRESHOLD` or if the required columns are missing.
 
     Args:
         chamber: lowercase key matching leg_dfs dict ("house" or "senate").
+        percentile: If set (e.g. 0.10), select the bottom Nth percentile
+            by unity score rather than a single lowest + threshold check.
+            Default ``None`` preserves the original behavior.
     """
     if "unity_score" not in leg_df.columns:
         return None
@@ -75,19 +95,33 @@ def detect_chamber_maverick(
     if party_df.height == 0:
         return None
 
-    # Skip if everyone is highly disciplined
-    min_unity = party_df["unity_score"].min()
-    if min_unity is not None and min_unity > 0.95:
-        return None
+    if percentile is not None:
+        # Percentile-based: select bottom N% by unity
+        cutoff = float(np.percentile(party_df["unity_score"].to_numpy(), percentile * 100))
+        candidates = party_df.filter(pl.col("unity_score") <= cutoff)
+        if candidates.height == 0:
+            return None
+        # Among candidates, pick the lowest unity (ties: highest weighted_maverick)
+        sort_cols = ["unity_score"]
+        sort_desc = [False]
+        if "weighted_maverick" in leg_df.columns:
+            sort_cols.append("weighted_maverick")
+            sort_desc.append(True)
+        candidate = candidates.sort(sort_cols, descending=sort_desc).head(1).to_dicts()[0]
+    else:
+        # Original behavior: skip if everyone is highly disciplined
+        min_unity = party_df["unity_score"].min()
+        if min_unity is not None and min_unity > UNITY_SKIP_THRESHOLD:
+            return None
 
-    # Sort: lowest unity first, then highest weighted_maverick as tiebreaker
-    sort_cols = ["unity_score"]
-    sort_desc = [False]
-    if "weighted_maverick" in leg_df.columns:
-        sort_cols.append("weighted_maverick")
-        sort_desc.append(True)
+        # Sort: lowest unity first, then highest weighted_maverick as tiebreaker
+        sort_cols = ["unity_score"]
+        sort_desc = [False]
+        if "weighted_maverick" in leg_df.columns:
+            sort_cols.append("weighted_maverick")
+            sort_desc.append(True)
 
-    candidate = party_df.sort(sort_cols, descending=sort_desc).head(1).to_dicts()[0]
+        candidate = party_df.sort(sort_cols, descending=sort_desc).head(1).to_dicts()[0]
 
     # Compute party average unity for subtitle
     avg_unity = party_df["unity_score"].mean()
@@ -142,8 +176,10 @@ def detect_bridge_builder(leg_df: pl.DataFrame, chamber: str) -> NotableLegislat
     if overall_sd is None or overall_sd == 0:
         overall_sd = 1.0
 
-    # Candidates within 1 SD of the midpoint
-    near_center = leg_df.filter((pl.col("xi_mean") - midpoint).abs() <= overall_sd)
+    # Candidates within BRIDGE_SD_TOLERANCE SDs of the midpoint
+    near_center = leg_df.filter(
+        (pl.col("xi_mean") - midpoint).abs() <= BRIDGE_SD_TOLERANCE * overall_sd
+    )
 
     if near_center.height > 0:
         candidate_df = near_center.sort("betweenness", descending=True).head(1)
@@ -181,12 +217,24 @@ def detect_bridge_builder(leg_df: pl.DataFrame, chamber: str) -> NotableLegislat
     )
 
 
-def detect_metric_paradox(leg_df: pl.DataFrame, chamber: str) -> ParadoxCase | None:
+def detect_metric_paradox(
+    leg_df: pl.DataFrame,
+    chamber: str,
+    *,
+    rank_gap_percentile: float | None = None,
+) -> ParadoxCase | None:
     """Detect the metric paradox: largest gap between IRT rank and loyalty rank.
 
     Within the majority party, finds the legislator with the largest gap between
-    xi_mean percentile rank and loyalty_rate percentile rank. Must exceed 0.5 gap
-    (top half on one, bottom half on other).
+    xi_mean percentile rank and loyalty_rate percentile rank. Must exceed
+    :data:`PARADOX_RANK_GAP` (top half on one, bottom half on other).
+
+    Args:
+        chamber: lowercase key matching leg_dfs dict ("house" or "senate").
+        rank_gap_percentile: If set, compute the rank gap threshold as this
+            percentile of all rank gaps rather than the fixed
+            :data:`PARADOX_RANK_GAP`.  Default ``None`` preserves the
+            original behavior.
     """
     if "xi_mean" not in leg_df.columns or "loyalty_rate" not in leg_df.columns:
         return None
@@ -197,7 +245,7 @@ def detect_metric_paradox(leg_df: pl.DataFrame, chamber: str) -> ParadoxCase | N
 
     party_df = leg_df.filter(pl.col("party") == majority)
     n = party_df.height
-    if n < 5:
+    if n < PARADOX_MIN_PARTY_SIZE:
         return None
 
     # Compute percentile ranks within majority party
@@ -211,7 +259,16 @@ def detect_metric_paradox(leg_df: pl.DataFrame, chamber: str) -> ParadoxCase | N
         return None
 
     b = best.to_dicts()[0]
-    if b["rank_gap"] < 0.5:
+
+    # Determine threshold
+    if rank_gap_percentile is not None:
+        gap_threshold = float(
+            np.percentile(ranked["rank_gap"].to_numpy(), rank_gap_percentile * 100)
+        )
+    else:
+        gap_threshold = PARADOX_RANK_GAP
+
+    if b["rank_gap"] < gap_threshold:
         return None
 
     # Determine direction: if xi_pct > loyalty_pct, they're extreme on ideology

@@ -18,8 +18,6 @@ Outputs (in results/<session>/synthesis/<date>/):
   - synthesis_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -634,9 +632,7 @@ def main() -> None:
         print("\nGenerating new plots...")
 
         # Pipeline summary
-        plot_pipeline_summary(
-            manifests, ctx.plots_dir, session=ctx.session, upstream=upstream
-        )
+        plot_pipeline_summary(manifests, ctx.plots_dir, session=ctx.session, upstream=upstream)
 
         # Dashboard scatters — pass dynamic annotation slugs
         for chamber in ("house", "senate"):

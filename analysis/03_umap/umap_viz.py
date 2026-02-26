@@ -20,8 +20,6 @@ Outputs (in results/<session>/umap/<date>/):
   - umap_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path

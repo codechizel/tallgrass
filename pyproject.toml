@@ -1,6 +1,6 @@
 [project]
 name = "ks-vote-scraper"
-version = "0.2.0"
+version = "2026.2.25"
 description = "Scrape roll call votes from the Kansas Legislature website"
 requires-python = ">=3.14"
 dependencies = [

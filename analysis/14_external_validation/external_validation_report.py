@@ -9,8 +9,6 @@ Usage (called from external_validation.py):
     build_external_validation_report(ctx.report, all_results=..., ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

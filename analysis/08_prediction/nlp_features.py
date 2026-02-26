@@ -9,8 +9,6 @@ Usage (called from prediction.py):
     topic_df, topic_model = fit_topic_features(rollcalls["short_title"])
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 

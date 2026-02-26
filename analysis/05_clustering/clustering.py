@@ -16,8 +16,6 @@ Outputs (in results/<session>/clustering/<date>/):
   - clustering_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -1277,9 +1275,7 @@ def plot_irt_loyalty_clusters(
     names = merged["full_name"].to_list()
 
     # Map labels from ideal_points row order to merged row order via slug lookup
-    slug_to_label = {
-        s: labels[i] for i, s in enumerate(ideal_points["legislator_slug"].to_list())
-    }
+    slug_to_label = {s: labels[i] for i, s in enumerate(ideal_points["legislator_slug"].to_list())}
     plot_labels = np.array([slug_to_label[s] for s in merged["legislator_slug"].to_list()])
 
     for cluster_id in range(k):

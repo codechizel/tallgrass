@@ -9,8 +9,6 @@ Usage (called from beta_binomial.py):
     build_beta_binomial_report(ctx.report, chamber_results=..., ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

@@ -13,8 +13,6 @@ Usage:
     uv run python analysis/irt_beta_experiment.py [--n-samples 500] [--n-tune 300]
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import time

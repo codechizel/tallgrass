@@ -460,9 +460,21 @@ Implementation requires loading ArviZ InferenceData from both sessions and align
 
 ### 8.2 Near-Term Enhancements
 
-4. **Extract XGBoost hyperparameters** to a module-level constant (duplicated in two places).
-5. **Document tau asymmetry** in `compare_feature_importance()` docstring.
+4. **Extract XGBoost hyperparameters** to a module-level constant (duplicated in two places). ✓ Done — `XGBOOST_PARAMS` at `cross_session.py:106-114`.
+5. **Document tau asymmetry** in `compare_feature_importance()` docstring. ✓ Done — docstring at `cross_session_data.py:512-518`.
 6. **Add `report.section_count` property** (project-wide, not cross-session-specific).
+
+### 8.4 Implemented Enhancements (v2026.02.25)
+
+7. **PSI (Population Stability Index)** added to `compute_metric_stability()` output. `compute_psi()` bins two distributions and computes the standard PSI formula. Columns: `psi`, `psi_interpretation` (stable / investigate / significant drift).
+
+8. **ICC (Intraclass Correlation Coefficient)** added to `compute_metric_stability()` output. `compute_icc()` implements ICC(3,1) two-way mixed, single measures, consistency. Columns: `icc`, `icc_interpretation` (poor / moderate / good / excellent per Koo & Li 2016).
+
+9. **Stability interpretation** column added to `compute_metric_stability()` output. Spearman rho interpreted per Koo & Li 2016 thresholds (poor / moderate / good / excellent).
+
+10. **Percentile-based detection thresholds** added as optional parameters. `detect_chamber_maverick()` accepts `percentile` (e.g., 0.10 for bottom 10% by unity score). `detect_metric_paradox()` accepts `rank_gap_percentile`. Both default to `None` (original behavior). Hardcoded thresholds extracted to module-level constants: `UNITY_SKIP_THRESHOLD`, `BRIDGE_SD_TOLERANCE`, `PARADOX_RANK_GAP`, `PARADOX_MIN_PARTY_SIZE`.
+
+11. **Fuzzy matching fallback** added to `match_legislators()` via optional `fuzzy_threshold` parameter. Uses `difflib.SequenceMatcher` (stdlib) for resilience against name changes or transcription errors. `fuzzy_match_legislators()` is also available as a standalone function.
 
 ### 8.3 Future Sessions (When 3+ Available)
 

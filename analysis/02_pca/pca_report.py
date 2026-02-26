@@ -9,8 +9,6 @@ Usage (called from pca.py):
     build_pca_report(ctx.report, results=results, ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import numpy as np

@@ -9,8 +9,6 @@ Usage (called from umap_viz.py):
     build_umap_report(ctx.report, results=results, ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

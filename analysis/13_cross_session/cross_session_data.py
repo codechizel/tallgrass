@@ -5,9 +5,8 @@ comparison. No I/O, no plotting — all functions take DataFrames in, return
 DataFrames or dicts out.
 """
 
-from __future__ import annotations
-
 import re
+from difflib import SequenceMatcher
 
 import numpy as np
 import polars as pl
@@ -84,6 +83,8 @@ def _add_name_norm(df: pl.DataFrame) -> pl.DataFrame:
 def match_legislators(
     leg_a: pl.DataFrame,
     leg_b: pl.DataFrame,
+    *,
+    fuzzy_threshold: float | None = None,
 ) -> pl.DataFrame:
     """Match legislators across sessions by normalized full_name.
 
@@ -92,6 +93,9 @@ def match_legislators(
             ``slug`` or ``legislator_slug``, ``party``, ``chamber``,
             ``district``).
         leg_b: Legislators from session B (same columns).
+        fuzzy_threshold: If set, unmatched names go through a second pass
+            with :func:`fuzzy_match_legislators` at this similarity
+            threshold.  Matched fuzzy pairs are appended to the result.
 
     Returns:
         DataFrame with columns: ``name_norm``, ``full_name_a``,
@@ -105,33 +109,70 @@ def match_legislators(
     a = _add_name_norm(_normalize_slug_col(leg_a))
     b = _add_name_norm(_normalize_slug_col(leg_b))
 
+    a_sel = a.select(
+        "name_norm",
+        pl.col("full_name").alias("full_name_a"),
+        pl.col("legislator_slug").alias("slug_a"),
+        pl.col("party").alias("party_a"),
+        pl.col("chamber").alias("chamber_a"),
+        pl.col("district").alias("district_a"),
+    )
+    b_sel = b.select(
+        "name_norm",
+        pl.col("full_name").alias("full_name_b"),
+        pl.col("legislator_slug").alias("slug_b"),
+        pl.col("party").alias("party_b"),
+        pl.col("chamber").alias("chamber_b"),
+        pl.col("district").alias("district_b"),
+    )
+
     matched = (
-        a.select(
-            "name_norm",
-            pl.col("full_name").alias("full_name_a"),
-            pl.col("legislator_slug").alias("slug_a"),
-            pl.col("party").alias("party_a"),
-            pl.col("chamber").alias("chamber_a"),
-            pl.col("district").alias("district_a"),
-        )
-        .join(
-            b.select(
-                "name_norm",
-                pl.col("full_name").alias("full_name_b"),
-                pl.col("legislator_slug").alias("slug_b"),
-                pl.col("party").alias("party_b"),
-                pl.col("chamber").alias("chamber_b"),
-                pl.col("district").alias("district_b"),
-            ),
-            on="name_norm",
-            how="inner",
-        )
+        a_sel.join(b_sel, on="name_norm", how="inner")
         .with_columns(
             (pl.col("chamber_a") != pl.col("chamber_b")).alias("is_chamber_switch"),
             (pl.col("party_a") != pl.col("party_b")).alias("is_party_switch"),
         )
         .sort("name_norm")
     )
+
+    # Optional fuzzy second pass
+    if fuzzy_threshold is not None:
+        matched_names_a = set(matched["name_norm"].to_list())
+        matched_names_b = set(matched["name_norm"].to_list())
+
+        unmatched_a_df = a_sel.filter(~pl.col("name_norm").is_in(matched_names_a))
+        unmatched_b_df = b_sel.filter(~pl.col("name_norm").is_in(matched_names_b))
+
+        if unmatched_a_df.height > 0 and unmatched_b_df.height > 0:
+            fuzzy_matches = fuzzy_match_legislators(
+                unmatched_a_df["name_norm"].to_list(),
+                unmatched_b_df["name_norm"].to_list(),
+                threshold=fuzzy_threshold,
+            )
+
+            for row in fuzzy_matches.iter_rows(named=True):
+                a_row = unmatched_a_df.filter(pl.col("name_norm") == row["name_a"])
+                b_row = unmatched_b_df.filter(pl.col("name_norm") == row["name_b"])
+                if a_row.height == 1 and b_row.height == 1:
+                    # Use session B's name_norm as the canonical key
+                    fuzzy_row = pl.DataFrame(
+                        {
+                            "name_norm": [row["name_b"]],
+                            "full_name_a": [a_row["full_name_a"][0]],
+                            "slug_a": [a_row["slug_a"][0]],
+                            "party_a": [a_row["party_a"][0]],
+                            "chamber_a": [a_row["chamber_a"][0]],
+                            "district_a": [a_row["district_a"][0]],
+                            "full_name_b": [b_row["full_name_b"][0]],
+                            "slug_b": [b_row["slug_b"][0]],
+                            "party_b": [b_row["party_b"][0]],
+                            "chamber_b": [b_row["chamber_b"][0]],
+                            "district_b": [b_row["district_b"][0]],
+                            "is_chamber_switch": [a_row["chamber_a"][0] != b_row["chamber_b"][0]],
+                            "is_party_switch": [a_row["party_a"][0] != b_row["party_b"][0]],
+                        }
+                    )
+                    matched = pl.concat([matched, fuzzy_row]).sort("name_norm")
 
     if matched.height < MIN_OVERLAP:
         msg = (
@@ -141,6 +182,53 @@ def match_legislators(
         raise ValueError(msg)
 
     return matched
+
+
+def fuzzy_match_legislators(
+    unmatched_a: list[str],
+    unmatched_b: list[str],
+    threshold: float = 0.85,
+) -> pl.DataFrame:
+    """Find close name matches between two lists using SequenceMatcher.
+
+    Returns a DataFrame of suggested fuzzy matches with similarity scores.
+    Only pairs exceeding *threshold* are included. Each name from *a* is
+    matched to at most one name from *b* (the best match).
+
+    Args:
+        unmatched_a: Normalized names from session A with no exact match.
+        unmatched_b: Normalized names from session B with no exact match.
+        threshold: Minimum similarity ratio (0–1) to include a match.
+
+    Returns:
+        DataFrame with columns: ``name_a``, ``name_b``, ``similarity``.
+    """
+    if not unmatched_a or not unmatched_b:
+        return pl.DataFrame(schema={"name_a": pl.Utf8, "name_b": pl.Utf8, "similarity": pl.Float64})
+
+    rows: list[dict] = []
+    used_b: set[str] = set()
+
+    for name_a in unmatched_a:
+        best_score = 0.0
+        best_name: str | None = None
+
+        for name_b in unmatched_b:
+            if name_b in used_b:
+                continue
+            score = SequenceMatcher(None, name_a, name_b).ratio()
+            if score > best_score:
+                best_score = score
+                best_name = name_b
+
+        if best_name is not None and best_score >= threshold:
+            rows.append({"name_a": name_a, "name_b": best_name, "similarity": round(best_score, 4)})
+            used_b.add(best_name)
+
+    if not rows:
+        return pl.DataFrame(schema={"name_a": pl.Utf8, "name_b": pl.Utf8, "similarity": pl.Float64})
+
+    return pl.DataFrame(rows).sort("similarity", descending=True)
 
 
 def classify_turnover(
@@ -298,6 +386,124 @@ def compute_ideology_shift(aligned: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+# ── PSI / ICC Helpers ──────────────────────────────────────────────────────
+
+
+def compute_psi(a: np.ndarray, b: np.ndarray, n_bins: int = 10) -> float:
+    """Population Stability Index between two distributions.
+
+    Bins *a* and *b* into *n_bins* quantile buckets (derived from *a*),
+    then computes:  ``PSI = Σ (p_b[i] - p_a[i]) * ln(p_b[i] / p_a[i])``.
+
+    Interpretation (standard thresholds):
+        - < 0.10  →  stable
+        - 0.10–0.25  →  investigate
+        - > 0.25  →  significant drift
+
+    Returns ``NaN`` if either array has fewer than 2 elements.
+    """
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+
+    if len(a) < 2 or len(b) < 2:
+        return float("nan")
+
+    # Quantile-based bin edges from distribution a
+    edges = np.quantile(a, np.linspace(0, 1, n_bins + 1))
+    edges[0] = -np.inf
+    edges[-1] = np.inf
+    # Deduplicate edges (can happen with low-variance data)
+    edges = np.unique(edges)
+
+    counts_a = np.histogram(a, bins=edges)[0].astype(np.float64)
+    counts_b = np.histogram(b, bins=edges)[0].astype(np.float64)
+
+    # Convert to proportions with floor to avoid log(0)
+    eps = 1e-4
+    p_a = np.maximum(counts_a / counts_a.sum(), eps)
+    p_b = np.maximum(counts_b / counts_b.sum(), eps)
+
+    return float(np.sum((p_b - p_a) * np.log(p_b / p_a)))
+
+
+def interpret_psi(psi: float) -> str:
+    """Return a human-readable PSI interpretation."""
+    if np.isnan(psi):
+        return "insufficient data"
+    if psi < 0.10:
+        return "stable"
+    if psi <= 0.25:
+        return "investigate"
+    return "significant drift"
+
+
+def compute_icc(a: np.ndarray, b: np.ndarray) -> float:
+    """ICC(3,1) — two-way mixed, single measures, consistency.
+
+    Formula: ``(MS_row - MS_error) / (MS_row + (k-1) * MS_error)``
+    where *k* = 2 (two sessions).
+
+    Interpretation (Koo & Li 2016):
+        - < 0.50  →  poor
+        - 0.50–0.75  →  moderate
+        - 0.75–0.90  →  good
+        - > 0.90  →  excellent
+
+    Returns ``NaN`` if fewer than 3 subjects.
+    """
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+
+    n = len(a)
+    if n < 3 or len(b) != n:
+        return float("nan")
+
+    k = 2  # two sessions (raters)
+    data = np.column_stack([a, b])  # n x k
+
+    grand_mean = data.mean()
+    row_means = data.mean(axis=1)
+
+    ss_row = k * np.sum((row_means - grand_mean) ** 2)
+    ss_error = np.sum((data - row_means[:, np.newaxis]) ** 2)
+
+    ms_row = ss_row / (n - 1)
+    ms_error = ss_error / ((n - 1) * (k - 1))
+
+    denom = ms_row + (k - 1) * ms_error
+    if denom == 0:
+        return float("nan")
+
+    return float((ms_row - ms_error) / denom)
+
+
+def interpret_icc(icc: float) -> str:
+    """Return a human-readable ICC interpretation per Koo & Li 2016."""
+    if np.isnan(icc):
+        return "insufficient data"
+    if icc < 0.50:
+        return "poor"
+    if icc <= 0.75:
+        return "moderate"
+    if icc <= 0.90:
+        return "good"
+    return "excellent"
+
+
+def interpret_stability(rho: float) -> str:
+    """Interpret Spearman rho as test-retest reliability (Koo & Li 2016 thresholds)."""
+    if np.isnan(rho):
+        return "insufficient data"
+    rho_abs = abs(rho)
+    if rho_abs < 0.50:
+        return "poor"
+    if rho_abs <= 0.75:
+        return "moderate"
+    if rho_abs <= 0.90:
+        return "good"
+    return "excellent"
+
+
 # ── Metric Stability ────────────────────────────────────────────────────────
 
 
@@ -309,6 +515,11 @@ def _empty_stability_df() -> pl.DataFrame:
             "pearson_r": pl.Float64,
             "spearman_rho": pl.Float64,
             "n_legislators": pl.Int64,
+            "psi": pl.Float64,
+            "psi_interpretation": pl.Utf8,
+            "icc": pl.Float64,
+            "icc_interpretation": pl.Utf8,
+            "stability_interpretation": pl.Utf8,
         }
     )
 
@@ -329,7 +540,9 @@ def compute_metric_stability(
 
     Returns:
         DataFrame with columns: ``metric``, ``pearson_r``, ``spearman_rho``,
-        ``n_legislators``.  Metrics missing from either session are skipped.
+        ``n_legislators``, ``psi``, ``psi_interpretation``, ``icc``,
+        ``icc_interpretation``, ``stability_interpretation``.
+        Metrics missing from either session are skipped.
     """
     if metrics is None:
         metrics = STABILITY_METRICS
@@ -375,12 +588,20 @@ def compute_metric_stability(
             pearson_r = abs(pearson_r)
             spearman_rho = abs(spearman_rho)
 
+        psi_val = compute_psi(va, vb)
+        icc_val = compute_icc(va, vb)
+
         rows.append(
             {
                 "metric": metric,
                 "pearson_r": round(float(pearson_r), 4),
                 "spearman_rho": round(float(spearman_rho), 4),
                 "n_legislators": pairs.height,
+                "psi": round(psi_val, 4) if not np.isnan(psi_val) else psi_val,
+                "psi_interpretation": interpret_psi(psi_val),
+                "icc": round(icc_val, 4) if not np.isnan(icc_val) else icc_val,
+                "icc_interpretation": interpret_icc(icc_val),
+                "stability_interpretation": interpret_stability(float(spearman_rho)),
             }
         )
 

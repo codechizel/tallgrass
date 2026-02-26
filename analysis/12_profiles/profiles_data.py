@@ -7,8 +7,6 @@ legislators detected by synthesis_detect.
 Consumed by profiles.py (orchestration) and profiles_report.py (HTML sections).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import polars as pl
@@ -257,9 +255,7 @@ def resolve_names(
                 continue
             if narrowed:
                 # Still ambiguous but narrowed
-                results.append(
-                    NameMatch(query=raw_query, status="ambiguous", matches=narrowed)
-                )
+                results.append(NameMatch(query=raw_query, status="ambiguous", matches=narrowed))
                 continue
 
         # Multiple last-name matches, no disambiguation possible

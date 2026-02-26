@@ -5,8 +5,6 @@ Loads parquets and manifests from 10 upstream phases, joins them into unified
 per-chamber legislator DataFrames. Reused by profiles and cross-session phases.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

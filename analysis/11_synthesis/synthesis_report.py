@@ -5,8 +5,6 @@ Assembles findings from all 10 upstream analysis phases into a single HTML repor
 written for nontechnical audiences. Called by synthesis.py.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 

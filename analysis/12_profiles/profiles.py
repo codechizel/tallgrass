@@ -16,8 +16,6 @@ Outputs (in results/<session>/profiles/<date>/):
   - profiles_report.html
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -637,13 +635,10 @@ def _resolve_name_args(
             resolved_slugs.append(m["slug"])
         elif match.status == "ambiguous":
             print(
-                f"  NOTE: '{match.query}' matched {len(match.matches)} "
-                "legislators (all included):"
+                f"  NOTE: '{match.query}' matched {len(match.matches)} legislators (all included):"
             )
             for m in match.matches:
-                print(
-                    f"    - {m['full_name']} ({m['party'][0]}-{m['district']}, {m['chamber']})"
-                )
+                print(f"    - {m['full_name']} ({m['party'][0]}-{m['district']}, {m['chamber']})")
                 resolved_slugs.append(m["slug"])
         else:
             print(f"  WARNING: No legislator found matching '{match.query}'")

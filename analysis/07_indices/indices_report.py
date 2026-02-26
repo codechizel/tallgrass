@@ -9,8 +9,6 @@ Usage (called from indices.py):
     build_indices_report(ctx.report, results=results, ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

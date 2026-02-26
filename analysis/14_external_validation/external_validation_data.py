@@ -10,8 +10,6 @@ bienniums (2011-2020), providing the first external validation of our
 IRT ideal points.
 """
 
-from __future__ import annotations
-
 import math
 import re
 

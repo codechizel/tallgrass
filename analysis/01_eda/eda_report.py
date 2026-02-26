@@ -9,8 +9,6 @@ Usage (called from eda.py):
     build_eda_report(ctx.report, votes=votes, rollcalls=rollcalls, ...)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import polars as pl

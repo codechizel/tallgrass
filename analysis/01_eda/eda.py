@@ -16,8 +16,6 @@ Outputs (in results/<session>/eda/<date>/):
   - filtering_manifest.json, run_info.json, run_log.txt
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
