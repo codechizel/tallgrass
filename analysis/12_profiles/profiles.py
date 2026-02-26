@@ -7,7 +7,7 @@ Reads upstream parquets (via synthesis.py infrastructure) and raw CSVs. Produces
 a standalone HTML report with 5 plots per legislator.
 
 Usage:
-  uv run python analysis/profiles.py [--session 2025-26] [--slugs slug1,slug2] [--names "Masterson,Carpenter"]
+  uv run python analysis/profiles.py [--session 2025-26] [--slugs s1,s2] [--names "Name1"]
 
 Outputs (in results/<session>/profiles/<date>/):
   - data/:   ProfileTarget list, per-legislator data as parquet

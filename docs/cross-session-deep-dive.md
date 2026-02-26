@@ -1,441 +1,478 @@
 # Cross-Session Validation Deep Dive
 
-A code audit, ecosystem survey, and fresh-eyes evaluation of the Cross-Session Validation phase (Phase 13).
+An ecosystem survey, code audit, and integration assessment for the Cross-Session Validation phase (Phase 13).
 
-**Date:** 2026-02-25
+**Date:** 2026-02-26 (v2, expanded from 2026-02-25 audit)
 
 ---
 
 ## Executive Summary
 
-The cross-session validation phase is architecturally sound — a clean three-file separation (data, orchestration, report), four well-motivated sub-analyses, and 55 tests covering the pure data layer. The affine alignment approach with trimmed OLS is the standard method for two-session comparison, and with 131 overlapping legislators (78% overlap), the anchor set is more than adequate.
+Cross-session validation is the problem of making IRT ideal points comparable across independently estimated legislative sessions, then using that comparability to answer questions about who moved, which metrics are stable traits, and whether predictive models generalize. It is the single biggest gap in most state-level legislative analysis projects — and the Python ecosystem offers essentially nothing off the shelf.
 
-An ecosystem survey confirms the **Python gap is real**: there is no Python package for cross-session ideal point bridging. The R ecosystem dominates (DW-NOMINATE, Nokken-Poole, `emIRT::dynIRT`, `idealstan`), but the "build from scratch using existing stack" decision (ADR-0019) was the right call.
+Our Phase 13 implementation handles the two-session case with a clean three-layer architecture (data, orchestration, report), four well-motivated sub-analyses, and 73 tests. The affine alignment approach with trimmed OLS is the academic standard for pairwise comparison, validated by Shor, McCarty & Berry (2011). With 131 overlapping legislators (78% overlap), the anchor set far exceeds the minimum.
 
-This deep dive identifies **three bugs** (one high-severity, two medium), **one design gap**, **eleven test gaps**, and **two refactoring opportunities**. It also surveys the academic and open-source landscape for cross-session legislative analysis — a survey that validates the implementation's methodological choices while identifying where future multi-session work would diverge from the current pairwise approach.
+This deep dive surveys the academic literature and open-source ecosystem, audits the existing code, evaluates integration readiness, and identifies where future multi-session work would diverge from the current pairwise approach.
+
+**Key findings:**
+
+- The **Python ecosystem gap is real and persistent**: no Python package handles cross-session ideal point bridging. R dominates (DW-NOMINATE, Nokken-Poole, `emIRT::dynIRT`, `idealstan`). Building from scratch was the right call (ADR-0019).
+- Three bugs found in the original audit (all fixed in ADR-0035): turnover scale mismatch, ddof inconsistency, prediction filtering.
+- Two **novel capabilities** not found in any open-source project: SHAP feature importance stability via Kendall's tau, and synthesis detection threshold validation across sessions.
+- The implementation is **production-ready** for its first real run once both sessions' upstream phases are complete.
+- **Future 3+ session work** would require a fundamentally different approach (dynamic IRT with random walk priors), implementable in PyMC but not yet built.
 
 ---
 
-## 1. Field Survey: How Do Others Compare Legislators Across Sessions?
+## 1. The Core Problem: Scale Identification
 
-### 1.1 The Core Problem: Scale Identification
+The fundamental challenge in comparing IRT ideal points across sessions is the **identification problem**. Each independent IRT fit produces scores on an arbitrary latent scale — the model likelihood is invariant to shifting, stretching, or reflecting all ideal points simultaneously. Raw scores from two sessions are not comparable. This is a mathematical property of the model class, not a software limitation.
 
-The fundamental challenge in comparing IRT ideal points across sessions is the **identification problem**. Each independent IRT fit produces scores on an arbitrary latent scale that can be shifted, stretched, or reflected without changing the model likelihood. Raw scores from two sessions are not comparable — this is a mathematical property of the model class, not a software limitation.
+Concretely: if Session A places a moderate Republican at xi = 0.5 and Session B places the same person at xi = 2.1, that tells you nothing about whether they moved. The scales are different.
+
+Three nonidentifiabilities must be resolved:
+
+1. **Translation** — the zero point is arbitrary (xi → xi + c)
+2. **Scale** — the unit is arbitrary (xi → a·xi)
+3. **Reflection** — the sign is arbitrary (xi → −xi)
 
 Key reference: Herron (2004), "Studying Dynamics in Legislator Ideal Points: Scale Matters," *Political Analysis* 12(2), 182–190. His central argument: research designs that compare ideal points across time "must allow for changes in underlying policy spaces."
 
-### 1.2 Academic Methods for Cross-Session Estimation
+---
 
-| Method | How It Works | Cross-Session? | Python Available? |
-|--------|-------------|----------------|-------------------|
-| **DW-NOMINATE** | Joint estimation across all congresses; linear movement trajectory | By construction | pynominate (minimal) |
-| **Nokken-Poole** | Fix bill parameters from common-space model; re-estimate legislators per session | By construction | No |
-| **Martin-Quinn** | Dynamic Bayesian IRT; random walk prior on ideal points across terms | By construction | No (Stan/PyMC possible) |
-| **Affine alignment** | Post-hoc linear transform using bridge legislators | Post-hoc | Our implementation |
-| **Shor-McCarty** | External survey data as bridge across state chambers and Congress | External bridge | No |
-| **Bailey Bridge** | Bridge *issues* (not people) across institutions and time | Issue bridge | No |
-| **Bateman-Clinton-Lapinski** | Match identical bills across sessions as anchors | Content bridge | No |
+## 2. Ecosystem Survey: How Do Others Solve This?
 
-**Our approach (affine alignment)** is Method B in this taxonomy. It is the standard post-hoc approach when sessions are estimated independently and overlap is high. The literature validates it for two-session pairwise comparison:
+### 2.1 Academic Methods
 
-- Shor, McCarty, and Berry (2011) showed that "only a few such bridges are necessary" — our 131 anchors far exceed the minimum.
+| Method | Authors | How It Works | Cross-Session? | Python? |
+|--------|---------|-------------|----------------|---------|
+| **DW-NOMINATE** | Poole & Rosenthal (1985, 2007) | Joint estimation across all congresses; legislators follow a linear movement trajectory in the policy space | By construction | pynominate (minimal) |
+| **Nokken-Poole** | Nokken & Poole (2004) | Fix bill parameters from a common-space DW-NOMINATE model; re-estimate each legislator per session independently | By construction | No |
+| **Martin-Quinn** | Martin & Quinn (2002) | Dynamic Bayesian IRT with random walk prior: `xi[t] ~ Normal(xi[t-1], tau^2)` | By construction | No (Stan/PyMC possible) |
+| **Affine alignment** | Standard post-hoc | Linear transform using bridge legislators: `xi_b = A·xi_a + B` | Post-hoc | Our implementation |
+| **Shor-McCarty** | Shor & McCarty (2011) | External survey data as bridge across state chambers and Congress | External bridge | No |
+| **Bailey Bridge** | Bailey (2007) | Bridge *issues* (not people) across institutions and time | Issue bridge | No |
+| **Bateman-Clinton-Lapinski** | Bateman, Clinton & Lapinski (2017) | Match identical/similar bills across sessions as content anchors, impute votes on bills predating a legislator's tenure | Content bridge | No |
+| **Groseclose-Levitt-Snyder** | Groseclose, Levitt & Snyder (1999) | Adjusted ADA scores: use overlapping members to normalize interest group ratings across congresses | Post-hoc | No |
+| **Lewis-Sonnet splines** | Lewis & Sonnet (working paper) | Penalized B-splines on NOMINATE scores over time, allowing smooth nonlinear trajectories | By construction | No |
+
+**Our approach (affine alignment)** is the standard post-hoc method when sessions are estimated independently and overlap is high. The literature validates it for pairwise comparison:
+
+- Shor, McCarty & Berry (2011) showed that "only a few such bridges are necessary" — our 131 anchors far exceed the minimum.
 - The trimmed OLS variant (removing genuine movers before fitting) is standard robust regression practice.
-- Session B as reference is the natural choice ("where did legislators come from?").
+- Gray (2020) found the bridge legislator stability assumption is "technically, but immaterially, false" — bridge legislators do move slightly, but the bias is negligible with many anchors.
 
-**Limitations relative to joint estimation:** Affine alignment assumes a *linear* relationship between scales. If the policy space rotated (e.g., the primary cleavage shifted from economic to social issues), an affine transform won't capture that. For adjacent bienniums in the same state, this assumption is safe.
+**Limitations relative to joint estimation:** Affine alignment assumes a *linear* relationship between scales. If the policy space rotated (e.g., the primary cleavage shifted from economic to social issues), an affine transform won't capture that. For adjacent bienniums in the same state, this assumption is safe. For longer time horizons or cross-institutional comparison, joint estimation or content-based anchoring would be necessary.
 
-### 1.3 Python Implementations
+### 2.2 Python Implementations
 
-| Package | URL | Framework | Cross-Session? |
-|---------|-----|-----------|----------------|
-| **pynominate** | github.com/voteview/pynominate | sklearn, matplotlib | Yes (by design) |
-| **py-irt** | github.com/nd-ball/py-irt | Pyro/PyTorch | No (static only) |
-| **tbip** | github.com/keyonvafa/tbip | TF / NumPyro | Partial (multi-session speech) |
-| **idealstan** (R) | github.com/saudiwin/idealstan | Stan | Yes (time-varying) |
-| **emIRT** (R) | github.com/kosukeimai/emIRT | EM | Yes (dynIRT) |
-| **MCMCpack** (R) | CRAN | C++ | Yes (MCMCdynamicIRT1d) |
+| Package | URL | Framework | What It Does | Cross-Session? |
+|---------|-----|-----------|-------------|----------------|
+| **pynominate** | github.com/voteview/pynominate | sklearn, matplotlib | Python port of W-NOMINATE; estimates ideal points and bill parameters jointly | Yes (by design) |
+| **py-irt** | github.com/nd-ball/py-irt | Pyro/PyTorch | 1PL/2PL/4PL IRT models for educational testing; no legislative focus | No (static only) |
+| **tbip** | github.com/keyonvafa/tbip | TF / NumPyro | Text-Based Ideal Points — speech-based ideology from floor debates | Partial (multi-session speech) |
+| **pylegiscan** | github.com/poliquin/pylegiscan | requests | API wrapper for LegiScan; data access, not analysis | N/A (data only) |
+| **legcop** | PyPI | requests | API wrapper for legislative data from Congress and 50 states | N/A (data only) |
+| **openstates** | github.com/openstates | Django, API | Comprehensive state legislature data; bills, votes, legislators | N/A (data only) |
+| **unitedstates/congress** | github.com/unitedstates/congress | Python scrapers | US Congress bills, votes, amendments scraping | N/A (data only) |
 
-**The Python ecosystem gap is real.** There is no Python equivalent of `MCMCpack::MCMCdynamicIRT1d` or `emIRT::dynIRT`. For dynamic/longitudinal IRT in Python, you'd need custom Stan code via CmdStanPy or a custom PyMC model (the random walk prior is straightforward to implement). This is relevant if/when the project moves to 3+ sessions.
+**The Python ecosystem gap is real and persistent.** There is no Python equivalent of `MCMCpack::MCMCdynamicIRT1d` or `emIRT::dynIRT`. The data access packages (pylegiscan, legcop, openstates) provide raw legislative data but no analytical tools for cross-session comparison.
 
-### 1.4 R Ecosystem (Dominant for This Problem)
+For dynamic/longitudinal IRT in Python, you would need:
 
-The R ecosystem has mature tools that our Python implementation doesn't replicate:
+- **Custom PyMC model** — the Martin-Quinn random walk prior is straightforward: add `xi[t] ~ Normal(xi[t-1], tau^2)` to the IRT model. Our existing PyMC IRT infrastructure could support this.
+- **CmdStanPy** — write Stan code directly; idealstan's Stan models could be ported.
+- **NumPyro/Pyro** — JAX-based or PyTorch-based; py-irt already demonstrates the pattern.
 
-- **wnominate**: W-NOMINATE (single session, analogous to our flat IRT)
-- **pscl**: Bayesian ideal points (Clinton-Jackman-Rivers), single session
-- **Rvoteview**: Data access package — downloads NOMINATE/Nokken-Poole scores from Voteview
-- **emIRT**: Fast EM algorithms including `dynIRT` for dynamic estimation
-- **idealstan**: Generalized IRT with Stan — time-varying, missing data, multiple response types
+None of these exist as packages. Building cross-session from scratch was the right call.
 
-The project's decision to build cross-session from scratch rather than bridging to R (via rpy2) is consistent with the "Python over R" technology preference (ADR-0030, analysis-framework.md).
+### 2.3 R Ecosystem (Dominant for This Problem)
 
-### 1.5 Data Access Projects
+The R ecosystem has mature tools:
 
-| Project | What It Does |
-|---------|-------------|
-| **unitedstates/congress** | Python scrapers for US Congress bills, votes, amendments |
-| **Voteview** | Downloadable NOMINATE/Nokken-Poole scores for all US Congresses |
-| **Open States** | API and data for all 50 state legislatures |
-| **OpenStatesParser** | Roll call matrices + pairwise similarity from Open States data |
-| **DIME** | Campaign finance-based ideology scores (Bonica CFscores) — cross-session by design |
+| Package | What It Does | Cross-Session? |
+|---------|-------------|----------------|
+| **wnominate** | W-NOMINATE (single session, 2D) | No — but DW-NOMINATE does |
+| **pscl** | Bayesian ideal points (Clinton-Jackman-Rivers) | No (static) |
+| **Rvoteview** | Downloads NOMINATE/Nokken-Poole scores from Voteview | Pre-computed cross-session |
+| **emIRT** | Fast EM algorithms including `dynIRT` for dynamic estimation | Yes |
+| **idealstan** | Generalized IRT with Stan: time-varying, missing data, multiple response types | Yes |
+| **MCMCpack** | C++ MCMC: `MCMCdynamicIRT1d` and `MCMCdynamicIRT` (1D and KD) | Yes |
+| **basicspace** | Aldrich-McKelvey scaling, Blackbox, etc. | Partial |
 
-### 1.6 What the Literature Suggests for Future Work
+The project's decision to stay Python-only (ADR-0002, ADR-0019) is consistent with the technology preference. rpy2 bridges are fragile, add deployment complexity, and create a maintenance burden for a single analysis phase.
 
-Two capabilities appear in the literature but are out of scope for our current two-session comparison:
+### 2.4 Data Access and Pre-Computed Scores
 
-1. **Dynamic IRT (random walk).** When three or more sessions are available, the Martin-Quinn random walk prior (`xi[t] ~ Normal(xi[t-1], tau^2)`) is the standard Bayesian approach. It provides full posterior uncertainty on movements and allows nonlinear trajectories. The design doc already notes this as a future upgrade (cross_session.md, line 152).
+| Project | What It Provides | URL |
+|---------|-----------------|-----|
+| **Voteview** | DW-NOMINATE and Nokken-Poole scores for every US Congress (1st–118th) | voteview.com/data |
+| **Shor-McCarty** | Common-space ideal points for all 50 state legislatures (1993–2018) | Harvard Dataverse |
+| **DIME/CFscores** | Campaign-finance ideology for candidates, donors, committees | data.stanford.edu/dime |
+| **Martin-Quinn** | Dynamic ideal points for US Supreme Court justices | mqscores.wustl.edu |
+| **Open States** | Bills, votes, legislators for all 50 states (API v3) | docs.openstates.org/api-v3 |
+| **Bailey Bridge** | Bridge ideal points linking Congress, President, and Supreme Court | Georgetown |
 
-2. **Content-based anchoring (Bateman-Clinton-Lapinski).** Instead of matching legislators, match bills that appear in both sessions. This sidesteps the assumption that bridge legislators are stable — an assumption that Gray (2020) found is "technically, but immaterially, false." Kansas has recurring legislation (e.g., annual budget bills) that could serve as content anchors.
+Shor-McCarty is already integrated (Phase 14, external validation). DIME/CFscores is deferred (roadmap). Voteview is Congress-only, not directly applicable to Kansas state data.
 
-Neither is a deficiency in the current implementation — they require either more data (3+ sessions) or upstream scraper changes (bill text). The pairwise affine approach is the right tool for the current problem.
+### 2.5 Key Academic Insights for Our Implementation
+
+**Nokken-Poole "freed" ideal points.** Nokken & Poole (2004) showed that when you allow each Congress to estimate independently (rather than constraining a linear trajectory as DW-NOMINATE does), "a sizable portion of members of both major political parties" show meaningful ideological variation across terms. This validates our core premise: cross-session comparison reveals real movements, not just noise.
+
+**Bridge legislator stability (Gray 2020).** The assumption that bridge legislators are ideologically stable is technically violated — everyone moves a little. Gray found this violation is immaterial with sufficient anchors. Our 131 bridges (78% overlap) provide robust alignment even if some bridges moved.
+
+**Groseclose-Levitt-Snyder (1999) adjusted scores.** Their approach to normalizing interest group ratings across congresses using overlapping members is conceptually identical to our affine alignment. They showed that unadjusted cross-congress comparisons are "severely misleading" — the same result Herron (2004) formalized for IRT. This validates the necessity of alignment.
+
+**Lewis & Sonnet penalized splines.** Their working paper proposes smooth nonlinear trajectories for NOMINATE scores using B-splines. This is more flexible than Martin-Quinn's random walk (which is Markov — no long-range smoothness) and DW-NOMINATE (which is linear). Relevant for future work if we move beyond pairwise comparison.
+
+**Shor-McCarty common-space methodology.** Shor & McCarty (2011) use survey responses from state legislative candidates (Project Vote Smart / National Political Awareness Test) as bridges to place state legislators on the same scale as US Congress. Their key insight: you don't need many bridges — "only a few are necessary" for reliable alignment. Their approach is inherently cross-session because the survey data provides a fixed external reference.
+
+**Test-retest reliability.** Political science treats metric stability across sessions as a **test-retest reliability** problem. The standard psychometric measure is the Intraclass Correlation Coefficient (ICC), with interpretation thresholds: ICC < 0.50 = poor, 0.50–0.75 = moderate, 0.75–0.90 = good, > 0.90 = excellent (Koo & Li 2016). Our `compute_metric_stability()` reports Pearson/Spearman correlations for 8 metrics — functionally equivalent for the two-session case. A caveat from Groseclose, Levitt & Snyder: party unity scores are sensitive to **agenda composition** (the vote set changes across sessions), so raw level comparisons can be misleading even after alignment. Rank-based metrics are more robust.
+
+**Entity resolution for matching.** Python offers several tools for fuzzy legislator matching beyond our current exact-normalized approach: Splink (probabilistic record linkage at scale), dedupe (ML-powered entity resolution), and polars-fuzzy-match (Rust-powered fzf-style matching). Blasingame et al. (2024) showed zero-shot LLM matching outperforms existing fuzzy matching by up to 39%. Our exact matching is sufficient with 78% overlap, but fuzzy matching would become necessary if name changes or transcription errors reduce the match rate.
+
+**Concept drift monitoring.** Cross-session prediction is a natural case of **concept drift** — the relationship between features and votes changes as the agenda shifts. The Population Stability Index (PSI) provides a single number: PSI < 0.10 = stable, 0.10–0.25 = investigate, > 0.25 = significant drift. This could augment our z-score standardization approach by flagging when feature distributions have shifted enough to warrant caution.
 
 ---
 
-## 2. Code Audit
+## 3. Code Audit
 
-### 2.1 Architecture
+### 3.1 Architecture
 
-The three-file structure follows the project standard:
+Three-layer separation follows the project standard:
 
 ```
-cross_session_data.py   (549 lines) — Pure data logic: matching, alignment, shift, stability, prediction helpers
-cross_session.py        (982 lines) — Orchestrator: CLI, plots, detection validation, prediction transfer, main loop
-cross_session_report.py (511 lines) — Report builder: ~15 section functions
+cross_session_data.py   (556 lines) — Pure data logic: matching, alignment, shift, stability, prediction
+cross_session.py        (993 lines) — Orchestrator: CLI, plots, detection validation, prediction, main()
+cross_session_report.py (510 lines) — Report builder: ~15 section functions
 ```
 
 **Separation of concerns is clean.** `cross_session_data.py` has no I/O, no plotting, and no report logic. Every public function takes DataFrames in and returns structured data out. The orchestrator handles all I/O, plotting, and report assembly.
 
-**Dependency chain is clean:**
+**Dependency chain:**
 - `cross_session_data.py` → scipy.stats, numpy, polars (no project imports)
 - `cross_session.py` → `cross_session_data`, `cross_session_report`, `synthesis_data`, `synthesis_detect`, `run_context`
 - `cross_session_report.py` → `cross_session_data` (constants only), `report`
 
 No circular dependencies. The data module is independently testable.
 
-### 2.2 Issues Found
+### 3.2 Data Flow
 
-#### Issue 1 (Bug — High): Turnover impact compares IRT values on different scales
-
-**Location:** `cross_session.py:874-878`
-
-```python
-# Get xi values for each cohort from the raw IRT DataFrames
-ret_slugs = set(chamber_matched["slug_b"].to_list())
-xi_ret = irt_b.filter(...)["xi_mean"].to_numpy()    # Session B scale
-xi_dep = irt_a.filter(...)["xi_mean"].to_numpy()     # Session A scale ← WRONG
-xi_new = irt_b.filter(...)["xi_mean"].to_numpy()     # Session B scale
+```
+Session A (e.g., 90th 2023-24)       Session B (e.g., 91st 2025-26)
+     │                                       │
+     └──── Load legislator CSVs ─────────────┘
+                    │
+           match_legislators()
+                    │
+             ~131 matched pairs (78% overlap)
+                    │
+           align_irt_scales()
+          xi_a_aligned = A·xi_a + B
+                    │
+     ┌──────┬──────┼──────┬────────┐
+     │      │      │      │        │
+  Ideology  Metric  Turn- Detec-  Cross-
+  Shift     Stab.  over   tion   Prediction
+     │      │      │      │        │
+     └──────┴──────┴──────┴────────┘
+                    │
+          Save parquets + plots + HTML report
 ```
 
-The code extracts departing legislators' ideology from `irt_a` (Session A's raw IRT output) but compares it against returning and new legislators from `irt_b` (Session B's raw IRT output). These are on **different latent scales**. The affine alignment coefficients (`a_coef`, `b_coef`) are computed earlier (line 834) but never applied to the departing cohort.
+### 3.3 Function Inventory
 
-**Impact:** `compute_turnover_impact()` runs KS tests and computes means on mismatched scales. If Session A's IRT scale is shifted or stretched relative to Session B's, the departing cohort's mean/distribution will appear systematically different from returning/new — a statistical artifact, not a real finding. The turnover impact strip plot and all downstream interpretations are affected.
+**Data layer (`cross_session_data.py`):**
 
-**Why departing legislators aren't in `aligned`:** The `aligned` DataFrame only contains legislators in *both* sessions (the intersection). Departing legislators are by definition absent from Session B, so they can't appear in the alignment output.
+| Function | Purpose | Lines |
+|----------|---------|-------|
+| `normalize_name()` | Lowercase, strip whitespace, remove leadership suffixes | ~10 |
+| `match_legislators()` | Name-based cross-session matching; flags chamber/party switches | ~70 |
+| `classify_turnover()` | Split into returning/departing/new cohorts | ~30 |
+| `align_irt_scales()` | Robust affine transform with trimmed OLS | ~80 |
+| `compute_ideology_shift()` | Point estimate + rank shift + significant mover classification | ~60 |
+| `compute_metric_stability()` | Pearson/Spearman for 8 metrics across sessions | ~50 |
+| `compute_turnover_impact()` | Cohort distribution comparison + KS tests | ~40 |
+| `align_feature_columns()` | Find shared feature columns for prediction transfer | ~20 |
+| `standardize_features()` | Z-score numeric features within session | ~30 |
+| `compare_feature_importance()` | SHAP ranking comparison via Kendall's tau | ~40 |
 
-**Fix:** Apply the affine transform to departing legislators' xi values:
+All functions are independently testable with synthetic DataFrames. No function exceeds ~80 lines. Clean.
 
-```python
-xi_dep_raw = irt_a.filter(...)["xi_mean"].to_numpy()
-xi_dep = xi_dep_raw * a_coef + b_coef  # Transform to Session B scale
-```
+**Orchestration layer (`cross_session.py`):**
 
-This puts all three cohorts on Session B's scale, making the comparison valid. The affine coefficients are already available in scope (`a_coef`, `b_coef` from line 834).
+6 plot functions, `validate_detection()`, `_run_cross_prediction()`, `main()`, plus helpers (`_majority_party`, `_extract_name`, `_load_vote_features`).
 
-**Severity:** High. Produces incorrect statistical comparisons and misleading visualizations.
+**Report layer (`cross_session_report.py`):**
 
-#### Issue 2 (Bug — Medium): ddof mismatch between classification and visualization thresholds
+`build_cross_session_report()` with ~15 section builders. Standard `ReportBuilder` pattern.
 
-**Location:** `cross_session_data.py:277` vs `cross_session.py:320`
+### 3.4 Constants and Parameters
 
-```python
-# Classification (cross_session_data.py:277) — Polars default ddof=1
-delta_std = aligned["delta_xi"].std()
-threshold = SHIFT_THRESHOLD_SD * delta_std
+| Constant | Value | Justification |
+|----------|-------|---------------|
+| `MIN_OVERLAP` | 20 | Below ~20 bridge legislators, affine fits become unreliable (simulation literature) |
+| `SHIFT_THRESHOLD_SD` | 1.0 | Flag movers > 1 SD; standard outlier threshold |
+| `ALIGNMENT_TRIM_PCT` | 10 | Trim 10% extreme residuals; standard robust regression |
+| `CORRELATION_WARN` | 0.70 | Below r=0.70, alignment may be unreliable |
+| `FEATURE_IMPORTANCE_TOP_K` | 10 | Compare top 10 SHAP features |
+| `STABILITY_METRICS` | 8 metrics | unity, maverick, weighted_maverick, betweenness, eigenvector, pagerank, loyalty, PC1 |
+| `SIGN_ARBITRARY_METRICS` | `{"PC1"}` | Metrics whose sign is conventional (orient_pc1 normalizes, but edge cases can flip). Correlations use `abs()` so a sign flip doesn't masquerade as instability. |
+| XGBoost params | n=200, depth=6, lr=0.1 | Fixed for both A→B and B→A |
 
-# Visualization (cross_session.py:320) — NumPy default ddof=0
-std = float(np.std(deltas))
-threshold = SHIFT_THRESHOLD_SD * std
-```
+All constants are documented with docstrings.
 
-Polars `.std()` uses `ddof=1` (sample standard deviation). NumPy `np.std()` uses `ddof=0` (population standard deviation). The dashed threshold lines on the shift distribution histogram don't match the actual threshold used to classify significant movers.
+### 3.5 Bugs Found and Fixed (ADR-0035)
 
-**Impact:** For n=131, the difference is ~0.4% (`sqrt(131/130)` ≈ 1.0038). Visually negligible, but a legislator right at the boundary could appear inside the threshold lines on the plot while actually being classified as a significant mover (or vice versa). More importantly, it's a correctness issue — the visualization should match the computation exactly.
+Three bugs were identified in the original audit (2026-02-25) and fixed in the same commit:
 
-**Fix:** Use `np.std(deltas, ddof=1)` in `plot_shift_distribution` to match Polars behavior.
+| # | Issue | Severity | Fix |
+|---|-------|----------|-----|
+| 1 | **Turnover impact scale mismatch** — departing legislators' xi from Session A compared on different scale against returning/new from Session B | HIGH | Apply `xi_dep = xi_dep_raw * a_coef + b_coef` to transform departing cohort |
+| 2 | **ddof mismatch** — classification uses Polars `std()` (ddof=1), visualization uses `np.std()` (ddof=0) | MEDIUM | Use `np.std(deltas, ddof=1)` in plot to match Polars |
+| 3 | **Prediction tests all legislators** — design doc says "returning only" but code tested on all including new | MEDIUM | Filter vote features to returning legislators' slugs |
 
-**Severity:** Medium. Cosmetically minor for n=131, but a correctness violation that would become visible with smaller samples.
+All three are now fixed. 18 regression tests were added.
 
-#### Issue 3 (Bug — Medium): Cross-session prediction tests all legislators, not returning only
+### 3.6 Strengths
 
-**Location:** `cross_session.py:567-738`
-
-The design doc (cross_session.md, line 96) specifies:
-
-> "Train XGBoost on session A features → predict session B votes **(returning legislators only)**."
-
-But `_run_cross_prediction()` loads ALL votes from both sessions and never filters to returning legislators:
-
-```python
-vf_a = _load_vote_features(ks_a, chamber)  # All session A votes
-vf_b = _load_vote_features(ks_b, chamber)  # All session B votes — includes new legislators
-# ...
-X_b = vf_b_std.select(feature_cols).to_numpy()  # Unfiltered
-y_pred_ab = model_ab.predict(X_b)                # Predicting on ALL legislators
-```
-
-The `matched` DataFrame is never passed to `_run_cross_prediction()`.
-
-**Impact:** Cross-session AUC includes predictions on new legislators who weren't in the training session. This conflates two questions: (1) does the model generalize to the same legislators in a new context? and (2) does it generalize to entirely new legislators? These have different expected performance characteristics and should be measured separately (or at least limited to returning only, as the design doc states).
-
-**Counterargument:** One could argue that testing on all legislators is a *stronger* generalization test — the model should work on anyone, not just returners. But this contradicts the stated design, and the AUC comparison against within-session holdout becomes less meaningful (within-session includes all legislators by definition).
-
-**Fix:** Pass `matched` to `_run_cross_prediction()` and filter both `vf_a` and `vf_b` to returning legislators' slugs:
-
-```python
-ret_slugs_a = set(matched["slug_a"].to_list())
-ret_slugs_b = set(matched["slug_b"].to_list())
-vf_a = vf_a.filter(pl.col("legislator_slug").is_in(ret_slugs_a))
-vf_b = vf_b.filter(pl.col("legislator_slug").is_in(ret_slugs_b))
-```
-
-**Severity:** Medium. The current behavior is defensible as a design choice, but it contradicts the documented methodology.
-
-#### Issue 4 (Design Gap): Feature importance tau asymmetry is undocumented in code
-
-**Location:** `cross_session_data.py:536-544`
-
-```python
-df = ... .sort("rank_a")  # Sort by Session A's ranking
-top_features = df.head(min(top_k, len(feature_names)))
-tau, _ = stats.kendalltau(
-    top_features["rank_a"].to_numpy(),
-    top_features["rank_b"].to_numpy(),
-)
-```
-
-Kendall's tau is computed on Session A's top-K features vs where those features rank in Session B. This is inherently asymmetric — tau computed on Session B's top-K would likely differ. The design doc notes this correctly (cross_session.md, line 101: "top-K by session A"), but the function docstring doesn't call out the asymmetry, and there's no test verifying it's intentional.
-
-**Severity:** Low. The asymmetry is reasonable (Session A is the "training" session in the A→B direction), but should be documented in the function docstring.
-
-### 2.3 No Dead Code Found
-
-Every function in all three files is called:
-- All 10 public functions in `cross_session_data.py` are called from `cross_session.py`
-- All 6 plot functions are called from `main()`
-- All ~15 report section functions are called from `build_cross_session_report()`
-- All constants are used
-- Both private helpers (`_normalize_slug_col`, `_add_name_norm`) are used by `match_legislators`
-
-No dead code. No unused imports. Clean.
-
-### 2.4 Things Done Well
-
-- **Pure data layer is exemplary.** `cross_session_data.py` has zero I/O, zero side effects, and every function is independently testable. This is the cleanest data module in the analysis pipeline.
-- **Robust alignment with trimming.** The two-pass OLS with 10% residual trimming is textbook robust regression. The fallback to untrimmed fit when trimming leaves too few points is a good safety net.
-- **Bidirectional prediction transfer.** Testing both A→B and B→A catches asymmetric generalization failures.
-- **SHAP-based feature comparison.** Comparing feature importance rankings (not just raw AUC) is a genuinely insightful validation — stable rankings mean the model captures structural patterns rather than session-specific noise. This goes beyond what most political science cross-validation approaches do.
-- **Graceful degradation.** Missing IRT data, missing prediction results, and missing metrics are all handled with warnings rather than crashes.
-- **The primer is excellent.** Clear, structured, plain-English. Follows the project's audience-first principle.
-
-### 2.5 Design Doc Discrepancy: Wasserstein Distance
-
-The design doc (cross_session.md, lines 72–73) lists three complementary shift metrics:
-
-1. Point estimate shift (`delta_xi`) — **implemented**
-2. Posterior overlap (Wasserstein distance on MCMC posterior samples) — **not implemented**
-3. Rank shift — **implemented**
-
-The Wasserstein distance metric is mentioned in both the design doc and ADR-0019 but was never implemented. This is a missed opportunity — posterior overlap would account for estimation uncertainty, distinguishing genuine movements from noise. A legislator with wide credible intervals in both sessions might show `delta_xi = 0.5` but overlapping posteriors (not a meaningful shift), while a precisely-estimated legislator with the same delta is a genuine mover.
-
-**Recommendation:** Either implement it or explicitly note in the design doc that it was deferred. The data is available (MCMC traces in ArviZ InferenceData objects).
+- **Pure data layer is exemplary.** Zero I/O, zero side effects, fully independently testable.
+- **Robust alignment with trimming.** Two-pass OLS with fallback is textbook.
+- **Bidirectional prediction.** Testing both A→B and B→A catches asymmetric generalization failures.
+- **SHAP-based feature comparison.** Comparing feature importance rankings via Kendall's tau is genuinely novel — most political science projects don't do this.
+- **Graceful degradation.** Missing upstream results produce warnings, not crashes.
+- **Session-pair agnostic.** Works with any two bienniums, not just 90th/91st.
 
 ---
 
-## 3. Test Gaps
+## 4. Test Coverage
 
-The existing 55 tests provide strong coverage of `cross_session_data.py`. The main gaps are in the orchestration and report layers, and in edge cases that would have caught the bugs above.
+### 4.1 Current State: 73 Tests
 
-### 3.1 Missing Coverage for `cross_session.py` Functions
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| `normalize_name()` | 7 | Complete |
+| `match_legislators()` | 10 | Complete |
+| `classify_turnover()` | 3 | Complete |
+| `align_irt_scales()` | 6 | Complete |
+| `compute_ideology_shift()` | 5 | Complete |
+| `compute_metric_stability()` | 6 | Complete |
+| `compute_turnover_impact()` | 5 | Complete |
+| `align_feature_columns()` | 4 | Complete |
+| `standardize_features()` | 4 | Complete |
+| `compare_feature_importance()` | 5 | Complete |
+| Bug-fix regression tests (ADR-0035) | 18 | Scale, ddof, detection, naming, plots, report |
+| **Total** | **73** | **Data layer: strong. Orchestration: smoke tests only.** |
 
-| Function | Tests | Status |
-|----------|-------|--------|
-| `validate_detection()` | 0 | **Missing** — no test verifies detection runs on both sessions |
-| `_majority_party()` | 0 | **Missing** — no test for empty DataFrame or ties |
-| `_extract_name()` | 0 | **Missing** — no test for suffix stripping, single-word names |
-| `plot_ideology_shift_scatter()` | 0 | **Missing** — no smoke test |
-| `plot_biggest_movers()` | 0 | **Missing** — no smoke test |
-| `plot_shift_distribution()` | 0 | **Missing** — no smoke test |
-| `plot_turnover_impact()` | 0 | **Missing** — no smoke test |
-| `plot_prediction_comparison()` | 0 | **Missing** — no smoke test |
-| `plot_feature_importance_comparison()` | 0 | **Missing** — no smoke test |
-| `_run_cross_prediction()` | 0 | **Missing** — integration test (acceptable to skip) |
+### 4.2 Coverage by Layer
 
-### 3.2 Missing Coverage for `cross_session_report.py`
-
-| Function | Tests | Status |
-|----------|-------|--------|
-| `build_cross_session_report()` | 0 | **Missing** |
-| All `_add_*` section builders | 0 | **Missing** |
-
-### 3.3 Missing Edge Case and Bug-Catching Tests
-
-1. **`test_turnover_impact_same_scale`** — Verify that all three cohorts are compared on the same scale. Pass cohorts with a known affine offset and confirm the results reflect the transformed values. (Would have caught Issue 1.)
-
-2. **`test_shift_threshold_matches_plot`** — Verify that the classification threshold in `compute_ideology_shift` matches what `plot_shift_distribution` would display. Compute both with the same data and assert equality. (Would have caught Issue 2.)
-
-3. **`test_validate_detection_basic`** — Pass two synthetic legislator DataFrames with known maverick/bridge/paradox patterns, verify the function returns the expected names.
-
-4. **`test_majority_party_returns_largest`** — Pass a DataFrame with 3 Republicans and 2 Democrats, verify "Republican" is returned.
-
-5. **`test_majority_party_empty_df`** — Pass an empty DataFrame, verify `None` is returned.
-
-6. **`test_extract_name_strips_suffix`** — Verify `_extract_name("Bob Jones - Speaker")` returns `"Jones"`.
-
-7. **`test_extract_name_single_word`** — Verify `_extract_name("Cher")` returns `"Cher"`.
-
-8. **`test_feature_importance_asymmetry`** — Verify that swapping session A/B SHAP values produces a different tau (documenting the intentional asymmetry).
-
-9. **`test_normalize_name_hyphen_dash_distinction`** — Verify that `"Mary-Jane Smith"` (hyphenated name) is preserved but `"Mary Smith - Chair"` (leadership suffix) is stripped. Currently this works, but the regex pattern warrants explicit coverage.
-
-### 3.4 Smoke Tests for Plot Functions
-
-Six plot functions produce PNGs. Smoke tests should:
-- Pass synthetic data
-- Verify the function doesn't crash
-- Verify the output file exists on disk
-- Clean up with `tmp_path`
-
-These catch matplotlib API regressions (deprecated kwargs, changed defaults).
-
-### 3.5 Summary
-
-| Category | Current | Recommended | New Tests |
-|----------|---------|-------------|-----------|
-| `cross_session_data.py` | 55 | 58 | 3 edge cases + bug catchers |
-| `cross_session.py` (helpers) | 0 | 5 | detection, majority_party, extract_name |
-| `cross_session.py` (plotting) | 0 | 6 | smoke tests |
-| `cross_session_report.py` | 0 | 2 | report integration |
-| **Total** | **55** | **71** | **+16** |
-
----
-
-## 4. Refactoring Opportunities
-
-### 4.1 XGBoost Hyperparameters Duplicated
-
-**Location:** `cross_session.py:621-629` and `cross_session.py:640-648`
-
-The XGBoost model is constructed identically in two places (A→B and B→A). Extract to a constant or factory function:
-
-```python
-XGBOOST_PARAMS = dict(
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.1,
-    random_state=42,
-    eval_metric="logloss",
-    verbosity=0,
-    n_jobs=-1,
-)
-
-model_ab = XGBClassifier(**XGBOOST_PARAMS)
-model_ba = XGBClassifier(**XGBOOST_PARAMS)
+```
+Data layer   (cross_session_data.py):    55 unit tests + 18 regression   ✓ Strong
+Orchestration (cross_session.py):        6 plot smoke tests + helpers    ◑ Adequate
+Report       (cross_session_report.py):  1 integration smoke test        ◑ Minimal
 ```
 
-This prevents drift if one is updated without the other.
+### 4.3 Remaining Test Gaps
 
-### 4.2 `report: object` Typing (Project-Wide)
-
-**Location:** `cross_session_report.py:45` (`report: ReportBuilder` would be correct)
-
-All report section functions receive `report: ReportBuilder` but the type is elided because of the try/except import pattern. Same pattern exists in profiles_report.py, synthesis_report.py, and others. A project-wide fix (conditional import or Protocol type) would restore type safety. Not cross-session-specific.
-
-### 4.3 `report._sections` Access (Project-Wide)
-
-**Location:** `cross_session_report.py:87`
-
-Accesses private `report._sections` for section count logging. Same pattern in 16+ files. Add a `section_count` property to `ReportBuilder`.
+The orchestration and report layers are lightly tested. This is acceptable for a phase that hasn't had its first real run yet — integration issues will surface during the run. The data layer, where correctness matters most, has thorough coverage.
 
 ---
 
 ## 5. Comparison: Our Implementation vs. the Field
 
-### 5.1 What We Do Better
+### 5.1 What We Do That Nobody Else Does
 
-| Capability | Us | Best Alternative |
-|-----------|-----|-----------------|
-| Prediction transfer | XGBoost cross-session AUC + SHAP comparison | Not found in any open-source project |
-| Feature importance stability | Kendall's tau on SHAP rankings | Novel approach |
-| Detection threshold validation | Same thresholds tested on independent data | Not found |
-| Turnover cohort analysis | KS tests on departing/returning/new distributions | Voteview (descriptive only, no statistical tests) |
-| Pure Python, no R bridge | Affine alignment + scipy + polars | Most projects require R (wnominate, pscl) |
+| Capability | Our Approach | Closest Alternative |
+|-----------|-------------|-------------------|
+| **SHAP feature stability** | Kendall's tau on SHAP importance rankings across sessions | Not found in any open-source project |
+| **Synthesis detection validation** | Same thresholds tested on independent session | Not found |
+| **Turnover cohort analysis** | KS tests on departing/returning/new ideology distributions | Voteview (descriptive only, no tests) |
+| **Bidirectional prediction transfer** | Train A→test B and train B→test A with AUC comparison | Not found as integrated analysis |
+| **Pure Python, no R bridge** | Affine alignment + scipy + polars | Most projects require R |
+
+The SHAP comparison is particularly valuable: stable feature importance rankings mean the prediction model captures structural patterns in legislative voting, not session-specific noise. If `xi_mean` is the top feature in both sessions, it confirms that ideology drives votes regardless of the specific bills considered.
 
 ### 5.2 What the Field Does That We Don't
 
-| Capability | Who Does It | Gap Assessment |
-|-----------|------------|----------------|
-| Joint estimation (DW-NOMINATE) | Voteview (R, Fortran) | Requires pooled model; 2-session pairwise doesn't warrant it |
-| Session-specific scores (Nokken-Poole) | Voteview | Requires fixing bill parameters from a common-space model |
-| Dynamic random walk (Martin-Quinn) | MCMCpack (R), idealstan (R) | Only valuable with 3+ sessions; no Python implementation |
-| Content-based anchoring | Bateman-Clinton-Lapinski | Requires bill text matching; future work (see `docs/future-bill-text-analysis.md`) |
-| Posterior overlap (Wasserstein) | Standard in Bayesian literature | Mentioned in design doc but not implemented |
-| External bridging (surveys/donations) | Shor-McCarty, DIME/CFscores | Requires external data not currently scraped |
+| Capability | Who Does It | Our Status | Gap Assessment |
+|-----------|------------|-----------|----------------|
+| Joint estimation (DW-NOMINATE) | Voteview | Not needed | Requires pooled model; 2-session pairwise doesn't warrant it |
+| Session-specific scores (Nokken-Poole) | Voteview | Not needed | Requires fixing bill parameters from common-space model |
+| Dynamic random walk (Martin-Quinn) | MCMCpack, idealstan (R) | **Deferred** | Valuable with 3+ sessions; implementable in PyMC |
+| Content-based anchoring (Bateman-Clinton-Lapinski) | Custom R code | **Deferred** | Requires bill text matching (see `docs/future-bill-text-analysis.md`) |
+| Posterior overlap (Wasserstein) | Standard Bayesian practice | **Deferred** | Design doc mentions it; requires loading two sessions' MCMC traces |
+| Penalized spline trajectories (Lewis-Sonnet) | Custom R code | Not applicable | Only relevant for 5+ time points with smooth trajectories |
+| External bridging (surveys) | Shor-McCarty | Already in Phase 14 | SM external validation covers this separately |
 
-### 5.3 Methodological Validation from the Literature
+The "deferred" items are genuine future work opportunities, not deficiencies. None is necessary for the two-session case. Dynamic IRT becomes the priority when the 89th (2021-22) or 87th-88th sessions are integrated for multi-session trajectories.
 
-Three of our design choices are directly supported by academic work:
+### 5.3 Methodological Validation
 
-1. **Affine alignment with trimmed OLS.** Shor, McCarty, and Berry (2011) validated that "only a few bridges are necessary" for reliable alignment. Our 131 anchors far exceed the minimum. The trimming approach is standard robust regression.
+Three of our design choices are directly supported by the literature:
 
-2. **`MIN_OVERLAP = 20` threshold.** Consistent with simulation results from the sparse-bridging literature. Below ~20 bridge legislators, affine fits become unreliable.
+1. **Affine alignment with trimmed OLS.** Shor, McCarty & Berry (2011) validated that "only a few bridges are necessary." Groseclose, Levitt & Snyder (1999) demonstrated the same approach for interest group rating normalization. Our 131 anchors far exceed the minimum.
 
-3. **Session B as reference scale.** The most recent session is the standard reference in cross-session political science work — DW-NOMINATE uses the most recent Congress as the endpoint of the linear trajectory.
+2. **`MIN_OVERLAP = 20` threshold.** Consistent with simulation results from the sparse-bridging literature. Below ~20 bridge legislators, affine fits become unreliable due to outlier sensitivity.
 
-One choice diverges from the literature:
+3. **Session B as reference scale.** The most recent session is the standard reference — DW-NOMINATE uses the most recent Congress as the endpoint.
 
-4. **Z-score standardization for cross-session prediction.** The standard approach in the prediction transfer literature is to use domain adaptation techniques (transfer learning, covariate shift correction). Z-score standardization is a simple baseline. For this application (same institution, adjacent sessions, high overlap), it's likely sufficient — but domain adaptation could improve cross-session AUC if the current ~0.85-0.92 performance needs improvement.
+One choice is simpler than the literature norm:
 
----
-
-## 6. Recommendations Summary
-
-### Priority 1 (Bug Fixes)
-
-| # | Issue | Location | Fix |
-|---|-------|----------|-----|
-| 1 | Turnover impact scale mismatch | `cross_session.py:877` | Apply `a_coef * xi_dep + b_coef` to departing cohort |
-| 2 | ddof mismatch (plot vs classification) | `cross_session.py:320` | Use `np.std(deltas, ddof=1)` |
-| 3 | Prediction tests all legislators | `cross_session.py:567-738` | Filter to returning legislators or update design doc |
-
-### Priority 2 (New Tests)
-
-| # | Test | Covers |
-|---|------|--------|
-| 4 | `test_turnover_impact_same_scale` | Scale mismatch prevention |
-| 5 | `test_shift_threshold_matches_plot` | ddof consistency |
-| 6 | `test_validate_detection_basic` | Detection function coverage |
-| 7 | `test_majority_party_returns_largest` | Helper coverage |
-| 8 | `test_majority_party_empty_df` | Edge case |
-| 9 | `test_extract_name_strips_suffix` | Helper coverage |
-| 10 | `test_extract_name_single_word` | Edge case |
-| 11 | `test_feature_importance_asymmetry` | Documenting intentional behavior |
-| 12 | `test_normalize_name_hyphen_dash_distinction` | Regex edge case |
-| 13-18 | Six plot function smoke tests | Matplotlib regression protection |
-| 19 | `test_build_cross_session_report` | Report integration |
-
-### Priority 3 (Refactoring & Design)
-
-| # | Issue | Scope |
-|---|-------|-------|
-| 20 | Extract XGBoost hyperparameters to constant | `cross_session.py` |
-| 21 | Implement or defer Wasserstein distance | Design doc vs code gap |
-| 22 | Document tau asymmetry in function docstring | `cross_session_data.py:495` |
-| 23 | `report: object` → `ReportBuilder` typing | Project-wide |
-| 24 | `report._sections` → `report.section_count` | Project-wide |
+4. **Z-score standardization for cross-session prediction.** The transfer learning literature recommends domain adaptation techniques (covariate shift correction, TrAdaBoost). For same-institution adjacent sessions with 78% overlap, z-scores are likely sufficient. Would revisit if cross-session AUC drops more than 0.10 below within-session AUC.
 
 ---
 
-## 7. References
+## 6. Pipeline Integration Assessment
+
+### 6.1 Upstream Dependencies
+
+Cross-session reads completed results from both sessions via the `latest` symlinks:
+
+| Upstream Phase | What It Reads | Required? |
+|---------------|--------------|-----------|
+| **IRT (Phase 4)** | `irt_{chamber}.parquet` → ideal points (xi_mean, xi_sd) | **Yes** — alignment requires ideal points |
+| **Prediction (Phase 7)** | `vote_features_{chamber}.parquet`, `holdout_results_{chamber}.parquet` | Optional (behind `--skip-prediction`) |
+| **Synthesis (Phase 11)** | `legislator_df_{chamber}.parquet` → joined metrics | **Yes** — metric stability and detection validation |
+
+If IRT or Synthesis is missing for a chamber, that chamber is skipped with a warning. Prediction data being missing only skips the prediction transfer analysis.
+
+### 6.2 Downstream Consumers (None Currently)
+
+Cross-session results are currently standalone — not consumed by other phases. The design doc identifies two integration points:
+
+1. **Synthesis** could add a "Cross-Session" section when multiple sessions are available, joining ideology shift and stability metrics into the legislator DataFrame.
+2. **Profiles** could include a "Historical Comparison" section showing ideology trajectory.
+
+Neither is implemented. Both would add value but are not blockers for the first run.
+
+### 6.3 Invocation
+
+```bash
+just cross-session                                         # Default: 2023-24 vs 2025-26
+just cross-session --session-a 2023-24 --session-b 2025-26 # Explicit
+just cross-session --chambers house                        # Single chamber
+just cross-session --skip-prediction                       # Faster (skip XGBoost)
+```
+
+### 6.4 Output Structure
+
+```
+results/kansas/cross-session/90th-vs-91st/validation/YYYY-MM-DD/
+├── data/
+│   ├── ideology_shift_{chamber}.parquet
+│   ├── metric_stability_{chamber}.parquet
+│   ├── prediction_transfer_{chamber}.parquet
+│   ├── feature_importance_{chamber}.parquet
+│   ├── turnover_impact_{chamber}.json
+│   └── detection_validation.json
+├── plots/
+│   ├── ideology_shift_scatter_{chamber}.png
+│   ├── biggest_movers_{chamber}.png
+│   ├── shift_distribution_{chamber}.png
+│   ├── turnover_impact_{chamber}.png
+│   ├── prediction_comparison_{chamber}.png
+│   └── feature_importance_comparison_{chamber}.png
+├── validation_report.html
+├── run_info.json
+└── run_log.txt
+```
+
+### 6.5 Readiness for First Run
+
+**Prerequisites:**
+- Both 90th (2023-24) and 91st (2025-26) sessions must have completed at minimum: EDA, PCA, IRT, Clustering, Network, Prediction, Indices, Synthesis.
+- The 91st session data exists and has been run through the full pipeline (confirmed in roadmap).
+- The 90th session was run through 11 phases (confirmed in roadmap, "90th Biennium Pipeline Run" on 2026-02-22).
+
+**Status:** Ready for first run. Both sessions have completed upstream phases.
+
+---
+
+## 7. Future Work: The 3+ Session Horizon
+
+### 7.1 When Pairwise Alignment Breaks Down
+
+Affine alignment is pairwise: it maps Session A onto Session B's scale. With three sessions (A, B, C), you can chain: align A→B, then B→C. But chaining accumulates error — alignment noise in A→B propagates into the A→C comparison.
+
+With four or more sessions, the number of pairwise comparisons grows quadratically. Chain alignment becomes unwieldy. The standard solution is **joint dynamic estimation**.
+
+### 7.2 Martin-Quinn Dynamic IRT in PyMC
+
+The random walk prior on ideal points is straightforward to implement in PyMC:
+
+```python
+# Pseudocode — not production
+with pm.Model():
+    # Innovation standard deviation
+    tau = pm.HalfNormal("tau", sigma=0.5)
+
+    # Initial ideal points (session 1)
+    xi_0 = pm.Normal("xi_0", mu=0, sigma=1, shape=n_legislators)
+
+    # Random walk across sessions
+    xi = [xi_0]
+    for t in range(1, n_sessions):
+        xi_t = pm.Normal(f"xi_{t}", mu=xi[t-1], sigma=tau, shape=n_legislators)
+        xi.append(xi_t)
+
+    # Standard 2PL IRT likelihood per session
+    for t in range(n_sessions):
+        alpha_t = pm.Normal(f"alpha_{t}", mu=0, sigma=1, shape=n_bills[t])
+        beta_t = pm.Normal(f"beta_{t}", mu=0, sigma=5, shape=n_bills[t])
+        logit_p = alpha_t[bill_idx[t]] * (xi[t][leg_idx[t]] - beta_t[bill_idx[t]])
+        pm.Bernoulli(f"votes_{t}", logit_p=logit_p, observed=votes[t])
+```
+
+This produces full posterior distributions for each legislator in each session, with movements quantified as posterior differences. No post-hoc alignment needed — the model handles identification through the random walk constraint.
+
+**Practical considerations:**
+- Requires legislator-session mapping (who served when) — our `match_legislators()` provides this.
+- Computational cost scales linearly with sessions but quadratically with MCMC dimensions.
+- Identification: constrain tau or fix one legislator per session.
+- Our PCA-informed initialization (ADR-0023) could extend to multi-session.
+
+### 7.3 Content-Based Anchoring
+
+Bateman, Clinton & Lapinski (2017) match identical or similar bills across sessions, using shared bill content as anchors rather than shared legislators. This sidesteps the bridge legislator stability assumption entirely.
+
+Kansas has recurring legislation (budget bills, reauthorizations) that could serve as content anchors. This requires:
+- Bill text scraping (see `docs/future-bill-text-analysis.md`)
+- Text similarity matching (TF-IDF or embedding-based)
+- Joint IRT with bill parameters constrained to be equal for matched bills
+
+This is a substantial project but becomes more valuable as the number of sessions grows and legislator overlap decreases (turnover).
+
+### 7.4 Wasserstein Distance for Posterior Overlap
+
+The deferred Wasserstein distance metric (design doc § 3) would account for estimation uncertainty in shift quantification. A legislator with wide credible intervals in both sessions might show delta_xi = 0.5 but overlapping posteriors — not a meaningful shift. A precisely-estimated legislator with the same delta is a genuine mover.
+
+Implementation requires loading ArviZ InferenceData from both sessions and aligning full posterior chains (not just point estimates). The scipy `wasserstein_distance` function handles the computation. The main challenge is I/O: MCMC traces are large (hundreds of MB per session).
+
+---
+
+## 8. Recommendations
+
+### 8.1 Immediate (First Run)
+
+1. **Run cross-session validation.** Both sessions' upstream phases are complete. `just cross-session` should produce the first real results.
+2. **Review alignment quality.** Check Pearson/Spearman r between aligned ideal points (expect r > 0.85). If r < 0.70, investigate whether the policy space shifted.
+3. **Spot-check movers.** Do the flagged "biggest movers" make political sense? Kansas political knowledge provides ground truth.
+
+### 8.2 Near-Term Enhancements
+
+4. **Extract XGBoost hyperparameters** to a module-level constant (duplicated in two places).
+5. **Document tau asymmetry** in `compare_feature_importance()` docstring.
+6. **Add `report.section_count` property** (project-wide, not cross-session-specific).
+
+### 8.3 Future Sessions (When 3+ Available)
+
+7. **Implement Martin-Quinn dynamic IRT** as an alternative to chained affine alignment.
+8. **Explore content-based anchoring** once bill text scraping is available.
+9. **Add Wasserstein distance** for posterior-aware shift quantification.
+
+---
+
+## 9. References
 
 ### Foundational
 
@@ -450,29 +487,43 @@ One choice diverges from the literature:
 - Shor, B. and N. McCarty. 2011. "The Ideological Mapping of American Legislatures." *APSR* 105(3), 530–551.
 - Shor, B., N. McCarty, and C. Berry. 2011. "Methodological Issues in Bridging Ideal Points in Disparate Institutions in a Data Sparse Environment." SSRN.
 - Bailey, M.A. 2007. "Comparable Preference Estimates across Time and Institutions for the Court, Congress, and Presidency." *AJPS* 51(3), 433–448.
-- Bateman, D.A., J.D. Clinton, and J.S. Lapinski. 2017. "Anchors Away: A New Approach for Estimating Ideal Points Comparable across Time and Chambers." *Political Analysis* 25(2), 172–191.
+- Bateman, D.A., J.D. Clinton, and J.S. Lapinski. 2017. "A House Divided? Roll Calls, Polarization, and Policy Differences in the U.S. House, 1877–2011." *AJPS* 61(3), 698–714.
 - Gray, T. 2020. "A Bridge Too Far? Examining Bridging Assumptions in Common-Space Estimations." *Legislative Studies Quarterly* 45(2).
 - Groseclose, T., S.D. Levitt, and J.M. Snyder. 1999. "Comparing Interest Group Scores across Time and Chambers: Adjusted ADA Scores for the U.S. Congress." *APSR* 93(1), 33–50.
+- Lewis, J.B. and L. Sonnet. Working paper. "Estimating NOMINATE scores over time using penalized splines."
+- McCarty, N. 2011. "Measuring Legislative Preferences." In *The Oxford Handbook of the American Congress*, edited by E. Schickler and F.E. Lee. Oxford University Press.
 
-### Validation and Methods
+### Validation, Stability, and Drift
 
 - Remmel, M.L. and J.J. Mondak. 2020. "Three Validation Tests of the Shor-McCarty State Legislator Ideology Data." *American Politics Research*.
 - Imai, K., J. Lo, and J. Olmsted. 2016. "Fast Estimation of Ideal Points with Massive Data." *APSR* 110(4), 631–656.
-- Lewis, J.B. and L. Sonnet. Working paper. "Estimating NOMINATE scores over time using penalized splines."
-- Shin, S. 2024. "Measuring Issue Specific Ideal Points from Roll Call Votes." Working paper.
 - Shin, S., J. Lim, and J.H. Park. 2025. "L1-based Bayesian Ideal Point Model for Roll Call Data." *JASA* 120(550), 631–644.
+- Bonica, A. 2014. "Mapping the Ideological Marketplace." *AJPS* 58(2), 367–386. (DIME/CFscores)
+- Caughey, D. and C. Warshaw. 2015. "Dynamic Estimation of Latent Opinion Using a Hierarchical Group-Level IRT Model." *Political Analysis* 23(2), 197–211.
+- Minozzi, W. and C. Volden. 2021. "Measuring Party Loyalty." *Political Science Research and Methods* 9(2), 351–367.
+- Koo, T.K. and M.Y. Li. 2016. "A Guideline of Selecting and Reporting Intraclass Correlation Coefficients for Reliability Research." *Journal of Chiropractic Medicine* 15(2), 155–163.
+- Ornstein, J., E. Blasingame, and J. Truscott. 2024. "How to Train Your Stochastic Parrot: Large Language Models for Political Texts." Working paper.
 
 ### Open-Source Projects
 
 - Voteview data: https://voteview.com/data
 - pynominate: https://github.com/voteview/pynominate
 - py-irt: https://github.com/nd-ball/py-irt
+- tbip (Text-Based Ideal Points): https://github.com/keyonvafa/tbip
 - emIRT: https://github.com/kosukeimai/emIRT
 - idealstan: https://github.com/saudiwin/idealstan
+- MCMCpack: https://CRAN.R-project.org/package=MCMCpack
 - Rvoteview: https://github.com/voteview/Rvoteview
+- pylegiscan: https://github.com/poliquin/pylegiscan
+- legcop: https://pypi.org/project/legcop/
 - Open States: https://docs.openstates.org/api-v3/
 - DIME (CFscores): https://data.stanford.edu/dime
 - Martin-Quinn Scores: https://mqscores.wustl.edu/
-- Stan ideal point examples: https://jrnold.github.io/bugs-examples-in-stan/legislators.html
 - Bailey Bridge Ideal Points: https://michaelbailey.georgetown.domains/bridge-ideal-points-2020/
 - Shor-McCarty data: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/GZJOT3
+- Stan ideal point examples: https://jrnold.github.io/bugs-examples-in-stan/legislators.html
+- Bateman congressional data: http://www.davidalexbateman.net/congressional-data.html
+- Splink (entity resolution): https://github.com/moj-analytical-services/splink
+- dedupe (ML entity resolution): https://github.com/dedupeio/dedupe
+- polars-fuzzy-match: https://pypi.org/project/polars-fuzzy-match/
+- NumPyro TBIP tutorial: https://num.pyro.ai/en/stable/tutorials/tbip.html

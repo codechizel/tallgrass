@@ -1580,8 +1580,8 @@ def analyze_participation(
                 left_on="legislator_slug",
                 right_on="slug",
             )
-            .select("full_name", "party", "bill_number", "vote_date", "chamber")
-            .sort("vote_date", "full_name")
+            .select("full_name", "party", "bill_number", "vote_datetime", "vote_date", "chamber")
+            .sort("vote_datetime", "full_name")
         )
         for row in pnp_detail.iter_rows(named=True):
             print(

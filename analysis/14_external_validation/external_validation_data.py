@@ -297,7 +297,7 @@ def _phase2_last_name_match(
     our_df: pl.DataFrame,
     sm_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Phase 2: Match by last name only, using district as tiebreaker."""
+    """Phase 2: Match by last name only, deduplicating to first match per legislator."""
     if our_df.height == 0 or sm_df.height == 0:
         return pl.DataFrame()
 
@@ -325,8 +325,8 @@ def _phase2_last_name_match(
     if candidates.height == 0:
         return pl.DataFrame()
 
-    # If multiple SM matches for one of our legislators, pick closest district
-    # For simplicity, take the first match per our legislator
+    # If multiple SM matches for one of our legislators, take first match
+    # (district tiebreaker not implemented — ambiguity is rare in KS data)
     deduped = candidates.unique(subset=["normalized_name"])
 
     # Drop helper columns

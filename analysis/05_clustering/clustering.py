@@ -1276,14 +1276,11 @@ def plot_irt_loyalty_clusters(
     parties = merged["party"].to_list()
     names = merged["full_name"].to_list()
 
-    # Trim labels to match merged (in case loyalty is shorter)
-    slug_order = ideal_points["legislator_slug"].to_list()
-    merged_slugs = set(merged["legislator_slug"].to_list())
-    label_indices = [i for i, s in enumerate(slug_order) if s in merged_slugs]
-    if len(label_indices) == merged.height:
-        plot_labels = labels[label_indices]
-    else:
-        plot_labels = labels[: merged.height]
+    # Map labels from ideal_points row order to merged row order via slug lookup
+    slug_to_label = {
+        s: labels[i] for i, s in enumerate(ideal_points["legislator_slug"].to_list())
+    }
+    plot_labels = np.array([slug_to_label[s] for s in merged["legislator_slug"].to_list()])
 
     for cluster_id in range(k):
         mask = plot_labels == cluster_id

@@ -326,7 +326,8 @@ def plot_shift_distribution(
 ) -> None:
     """Histogram of ideology shifts with threshold lines."""
     deltas = shifted["delta_xi"].to_numpy()
-    std = float(np.std(deltas, ddof=1))  # Match Polars std() (ddof=1) used in compute_ideology_shift
+    # ddof=1 matches Polars std() used in compute_ideology_shift
+    std = float(np.std(deltas, ddof=1))
     threshold = SHIFT_THRESHOLD_SD * std
 
     fig, ax = plt.subplots(figsize=(8, 5))

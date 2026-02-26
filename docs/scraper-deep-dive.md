@@ -143,6 +143,13 @@ This is a data limitation, not a bug. The ODT parser correctly returns an empty 
 
 None found. All functions and branches are used or are documented fallbacks (e.g., JS discovery is only used when HTML listing pages yield zero bills for pre-2021 sessions).
 
+### RunContext Fixes (ADR-0037)
+
+The pipeline review found two issues in `run_context.py` (shared infrastructure, not scraper-specific):
+
+1. **`_append_missing_votes` format crash:** `f"{total:,}"` crashed with `ValueError` when `total_vote_pages` was missing from the failure manifest (defaults to `"?"` string). Fixed with `isinstance(total, int)` guard.
+2. **`latest` symlink on failed runs:** `finalize()` updated the `latest` symlink unconditionally, so downstream phases could follow it to partial results. Fixed by skipping symlink update when the run failed.
+
 ### Refactoring Opportunities
 
 **None that would justify the risk.** The scraper code is stable, well-tested for its parsing logic, and handles 15 years of format variations. The main risk of refactoring (extracting a Page class hierarchy, splitting `_parse_vote_page()` into smaller functions, etc.) is introducing regressions in edge cases that took months to discover and fix.

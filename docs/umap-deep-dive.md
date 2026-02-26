@@ -182,7 +182,7 @@ The test suite (`tests/test_umap_viz.py`, 21 tests) covers:
 
 ### Dead Code
 
-No dead code found. All functions are called, all imports are used, all constants are referenced.
+One dead branch found and removed in ADR-0037: `if not validation:` was unreachable because a `trustworthiness` key was always added immediately before the check. All remaining functions are called, all imports used, all constants referenced.
 
 ---
 

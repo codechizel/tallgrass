@@ -116,7 +116,7 @@ def _git_commit_hash() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except FileNotFoundError, subprocess.TimeoutExpired:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return "unknown"
 
@@ -216,7 +216,7 @@ class RunContext:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        self.finalize()
+        self.finalize(failed=exc_type is not None)
 
     def _init_report(self) -> object:
         """Initialize a ReportBuilder, or None if the report module isn't available."""
@@ -249,7 +249,7 @@ class RunContext:
         sys.stdout = self._tee  # type: ignore[assignment]
         self._start_time = datetime.now(_CT)
 
-    def finalize(self) -> None:
+    def finalize(self, *, failed: bool = False) -> None:
         """Write run_info.json, run_log.txt, and update latest symlink."""
         # Restore stdout before writing metadata (so our writes aren't captured)
         log_text = ""
@@ -306,10 +306,12 @@ class RunContext:
                 )
 
         # Update latest symlink (relative so it's portable)
-        latest = self._analysis_dir / "latest"
-        if latest.is_symlink() or latest.exists():
-            latest.unlink()
-        latest.symlink_to(self._run_label)
+        # Skip symlink update on failed runs so downstream phases don't see partial results
+        if not failed:
+            latest = self._analysis_dir / "latest"
+            if latest.is_symlink() or latest.exists():
+                latest.unlink()
+            latest.symlink_to(self._run_label)
 
 
 def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:
@@ -353,8 +355,9 @@ def _append_missing_votes(report: object, session: str) -> None:
     rows.sort(key=lambda r: (r[0] is None, r[0] or 0))
 
     # Build HTML table
+    total_display = f"{total:,}" if isinstance(total, int) else total
     lines = [
-        f"<p>{len(failures)} of {total:,} vote pages could not be fetched."
+        f"<p>{len(failures)} of {total_display} vote pages could not be fetched."
         " Close votes are bolded.</p>",
         '<table style="width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;">',
         "<thead><tr>"

@@ -45,6 +45,10 @@ STABILITY_METRICS: list[str] = [
 ]
 """Metrics to compare across sessions in the stability analysis."""
 
+SIGN_ARBITRARY_METRICS: set[str] = {"PC1"}
+"""Metrics whose sign is conventional (orient_pc1 normalizes, but edge cases can flip).
+Correlations use abs() so a sign flip doesn't masquerade as instability."""
+
 _SUFFIX_RE = re.compile(r"\s*-\s+.*$")
 """Matches leadership suffixes like ' - House Minority Caucus Chair'."""
 
@@ -365,6 +369,11 @@ def compute_metric_stability(
 
         pearson_r, _ = stats.pearsonr(va, vb)
         spearman_rho, _ = stats.spearmanr(va, vb)
+
+        # Sign-arbitrary metrics: use abs() so a convention flip isn't misread
+        if metric in SIGN_ARBITRARY_METRICS:
+            pearson_r = abs(pearson_r)
+            spearman_rho = abs(spearman_rho)
 
         rows.append(
             {

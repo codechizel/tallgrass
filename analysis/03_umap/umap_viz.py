@@ -543,8 +543,6 @@ def run_umap_for_chamber(
     print("\n  Validation correlations:")
     validation = compute_validation_correlations(embedding_df, pca_scores, irt_points)
     validation["trustworthiness"] = trust
-    if not validation:
-        print("    No upstream data available for validation")
 
     return {
         "embedding_df": embedding_df,

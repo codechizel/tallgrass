@@ -63,7 +63,7 @@ synthesis.py          — Orchestrator (imports from all three, produces plots +
 
 ### 6. Dynamic AUC extraction over hardcoded values
 
-**Decision:** Extract the best XGBoost AUC from `holdout_results` parquets at runtime (`_extract_best_auc`), with fallback to `"~0.98"` label if unavailable. All manifest-derived statistics (vote counts, party votes) use `"?"` as fallback, not session-specific numbers.
+**Decision:** Extract the best XGBoost AUC from `holdout_results` parquets at runtime (`_extract_best_auc`), with fallback to `"N/A"` if unavailable. All manifest-derived statistics (vote counts, party votes) use `"?"` as fallback, not session-specific numbers. Fabricated numbers are worse than missing values for a nontechnical audience (ADR-0037).
 
 **Alternatives:** Hardcode session-specific numbers as fallbacks. Rejected because wrong numbers for a nontechnical audience are worse than "not available".
 

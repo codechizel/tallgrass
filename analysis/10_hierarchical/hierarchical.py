@@ -224,7 +224,9 @@ def parse_args() -> argparse.Namespace:
         "--n-tune", type=int, default=HIER_N_TUNE, help="MCMC tuning samples (discarded)"
     )
     parser.add_argument("--n-chains", type=int, default=HIER_N_CHAINS, help="Number of MCMC chains")
-    parser.add_argument("--cores", type=int, default=None, help="CPU cores for sampling (default: n_chains)")
+    parser.add_argument(
+        "--cores", type=int, default=None, help="CPU cores for sampling (default: n_chains)"
+    )
     parser.add_argument("--skip-joint", action="store_true", help="Skip joint cross-chamber model")
     return parser.parse_args()
 

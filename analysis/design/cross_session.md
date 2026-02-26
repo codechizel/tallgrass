@@ -25,6 +25,7 @@
 | `ALIGNMENT_TRIM_PCT` | 10 | Trim 10% most extreme residuals from affine fit. Prevents genuine movers from distorting the alignment. | `cross_session_data.py` |
 | `CORRELATION_WARN` | 0.70 | If cross-session Pearson r < 0.70, warn that alignment may be unreliable. | `cross_session_data.py` |
 | `FEATURE_IMPORTANCE_TOP_K` | 10 | Compare top 10 SHAP features across sessions. | `cross_session_data.py` |
+| `SIGN_ARBITRARY_METRICS` | `{"PC1"}` | Metrics whose sign is conventional but can flip on edge-case data. `compute_metric_stability()` uses `abs()` on correlations for these so a sign flip is not misread as instability. ADR-0037. | `cross_session_data.py` |
 | `XGBOOST_PARAMS` | n_estimators=200, max_depth=6, lr=0.1 | Fixed hyperparameters for cross-session prediction. Same for A→B and B→A. | `cross_session.py` |
 
 ## Methodological Choices

@@ -392,7 +392,7 @@ One fragile pattern: several sections use `next(iter(paradoxes.values()))` to ge
 Recommendations 1-9 were implemented in a single session. Key changes:
 
 - **`synthesis_data.py` (new):** Extracted `UPSTREAM_PHASES`, `_read_parquet_safe`, `_read_manifest`, `load_all_upstream`, and `build_legislator_df` from `synthesis.py`. Updated imports in `profiles.py`, `cross_session.py`, and `analysis/__init__.py` module map.
-- **`_extract_best_auc()` (new):** Dynamically reads XGBoost AUC from holdout_results parquets, replacing the dead-loop + hardcoded 0.98 value.
+- **`_extract_best_auc()` (new):** Dynamically reads XGBoost AUC from holdout_results parquets, replacing the dead-loop + hardcoded 0.98 value. Falls back to `"N/A"` (not a fabricated number) when prediction hasn't run (ADR-0037).
 - **Minority-party mavericks:** `detect_all()` now detects the lowest-unity minority-party legislator per chamber. Report adds a "crossing the aisle" paragraph.
 - **`test_synthesis.py` (new):** 47 tests covering data loading, joins, AUC extraction, `detect_all` integration, minority mavericks, Democrat-majority paradox, and edge cases.
 - Test count: 975 → 1022 (47 new tests, 0 regressions).

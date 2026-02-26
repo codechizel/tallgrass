@@ -488,7 +488,7 @@ def plot_pipeline_summary(
 
     # Best AUC across chambers — extract from holdout_results parquets if available
     best_auc = _extract_best_auc(upstream) if upstream else None
-    auc_label = f"{best_auc:.2f}" if best_auc is not None else "~0.98"
+    auc_label = f"{best_auc:.2f}" if best_auc is not None else "N/A"
 
     # Optimal k from clustering manifest
     k_optimal = clustering.get("house_optimal_k", 2)
