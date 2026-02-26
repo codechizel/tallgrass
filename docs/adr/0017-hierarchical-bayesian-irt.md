@@ -78,3 +78,13 @@ A deeper investigation revealed the root cause: `build_joint_model()` combines d
 The flat IRT correctly matches bills by `bill_number` (71-133 shared bills per session) via `build_joint_vote_matrix()`. The hierarchical model should do the same but does not yet.
 
 **Impact:** Joint hierarchical results are unreliable for cross-chamber placement. Per-chamber hierarchical models and flat IRT equated scores remain correct. See `docs/joint-hierarchical-irt-diagnosis.md` for the full analysis and ADR-0042 for the decision record.
+
+## Update: Bill-Matching and Adaptive Priors (2026-02-26)
+
+The two critical problems identified in ADR-0042 and `docs/joint-hierarchical-irt-diagnosis.md` have been fixed:
+
+1. **Bill-matching in `build_joint_model()`**: A new `_match_bills_across_chambers()` helper matches vote_ids across chambers by `bill_number`, creating shared `alpha`/`beta` parameters for matched bills (71-174 per session). Both chambers' observations on the same bill now point to the same item parameters, providing the mathematical bridge for cross-chamber identification via concurrent calibration.
+
+2. **Group-size-adaptive priors**: New constants `SMALL_GROUP_THRESHOLD = 20` and `SMALL_GROUP_SIGMA_SCALE = 0.5`. Both `build_per_chamber_model()` and `build_joint_model()` now use `HalfNormal(0.5)` for groups with < 20 members (Gelman 2015). This prevents the catastrophic convergence failures (R-hat > 1.8, ESS < 10) observed in small groups like Senate Democrats.
+
+See ADR-0043 for the full decision record. Test count: 39 → 48 hierarchical tests.

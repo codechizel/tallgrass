@@ -10,7 +10,7 @@
 
 2. **Two parties only.** The model assumes exactly two parties (Republican, Democrat). Independent or third-party legislators are excluded from the hierarchical model (they cannot be pooled toward a party mean) but still receive flat IRT estimates. Kansas has had occasional Independent legislators. See ADR-0021.
 
-3. **Per-chamber primary, joint secondary.** The primary analysis runs separate 2-level models for House and Senate (consistent with the flat IRT phase). A secondary 3-level joint model adds a chamber level but may fail to converge due to sparse cross-chamber overlap (only ~71 shared bills for ~169 legislators).
+3. **Per-chamber primary, joint secondary.** The primary analysis runs separate 2-level models for House and Senate (consistent with the flat IRT phase). A secondary 3-level joint model adds a chamber level. As of ADR-0043, the joint model matches bills across chambers by `bill_number` to create shared `alpha`/`beta` parameters (71-174 shared bills per session), providing the mathematical bridge for cross-chamber identification via concurrent calibration.
 
 4. **Non-centered parameterization.** The hierarchical model uses non-centered parameterization (`xi = mu_party + sigma_within * xi_offset`) to avoid the "funnel of hell" pathology that plagues centered hierarchical models. This is standard practice for hierarchical Bayesian models.
 
@@ -32,6 +32,8 @@
 | `RANDOM_SEED` | 42 | Reused from flat IRT |
 | `PARTY_COLORS` | R=#E81B23, D=#0015BC | Consistent across all phases |
 | `MIN_GROUP_SIZE_WARN` | 15 | Below this, hierarchical shrinkage may be unreliable (James-Stein J=2) |
+| `SMALL_GROUP_THRESHOLD` | 20 | Groups below this get tighter sigma_within prior (ADR-0043) |
+| `SMALL_GROUP_SIGMA_SCALE` | 0.5 | sigma_within ~ HalfNormal(0.5) for small groups (ADR-0043) |
 | `SHRINKAGE_MIN_DISTANCE` | 0.5 | Min flat-to-party-mean distance for meaningful shrinkage_pct |
 
 ## Methodological Choices
@@ -56,11 +58,13 @@
 
 **Decision:** Run separate 2-level models for House and Senate. Optionally run a 3-level joint model with `--skip-joint` flag.
 
-**Rationale:** Chambers vote on different bills and have different compositions. The flat IRT already established that per-chamber analysis is the norm. The joint model (chamber → party → legislator) is theoretically interesting (common ideological scale across chambers) but practically difficult: only ~71 shared bills link the chambers, and bridging legislators are rare. Per-chamber models are the trustworthy primary output.
+**Rationale:** Chambers vote on different bills and have different compositions. The flat IRT already established that per-chamber analysis is the norm. The joint model (chamber → party → legislator) is theoretically interesting (common ideological scale across chambers). Per-chamber models are the trustworthy primary output.
 
-**Risk:** The joint model may produce divergences or poor ESS due to the sparse link between chambers. The `--skip-joint` flag allows bypassing it without losing the primary results.
+**Bill matching (ADR-0043):** The joint model matches bills across chambers by `bill_number` (via `_match_bills_across_chambers()`) to create shared `alpha`/`beta` parameters. These shared items are the mathematical bridge for cross-chamber identification — the same concurrent calibration approach used by Clinton, Jackman & Rivers (2004). The matching logic prefers "Final Action" motions and was extracted from the flat IRT's proven `build_joint_vote_matrix()`.
 
-**Identification:** The joint model uses the same `pt.sort` ordering constraint within each chamber's pair of party offsets (House D < House R, Senate D < Senate R) to prevent sign flips. Without this, the sampler could place Senate Democrats above Senate Republicans while correctly ordering the House — a label-switching pathology observed in the 90th biennium audit.
+**Identification:** The joint model uses `pt.sort` ordering within each chamber's pair of party offsets (House D < House R, Senate D < Senate R) plus shared bill parameters for cross-chamber sign and scale identification. A safety net (`fix_joint_sign_convention()`) compares joint xi with per-chamber hierarchical xi and negates flipped chambers, but should not trigger when shared bills provide sufficient bridging.
+
+**Adaptive priors (ADR-0043):** Groups with fewer than `SMALL_GROUP_THRESHOLD` (20) members get `sigma_within ~ HalfNormal(SMALL_GROUP_SIGMA_SCALE)` (0.5) to prevent convergence failures in small groups (Gelman 2015).
 
 ### Variance decomposition via ICC
 

@@ -88,7 +88,7 @@ This is computationally expensive (doubles MCMC time) and requires careful ident
 
 ### ~~Joint Cross-Chamber IRT~~
 
-~~A full joint MCMC model was attempted and failed.~~ **Completed (2026-02-24).** The hierarchical joint cross-chamber model now runs successfully for the 91st Legislature: 172 legislators, 491 votes, 43,612 observations, 0 divergences, all convergence checks passed. Runtime: 93 minutes on M3 Pro with `OMP_NUM_THREADS=6`. See the full 12-phase pipeline run in the Completed Phases table.
+~~A full joint MCMC model was attempted and failed.~~ **Completed (2026-02-24), fixed (2026-02-26).** The hierarchical joint cross-chamber model now runs with bill-matching (ADR-0043): shared `alpha`/`beta` parameters for 71-174 matched bills per session provide natural cross-chamber identification. Group-size-adaptive priors mitigate small-group convergence failures. See ADR-0043 and `docs/joint-hierarchical-irt-diagnosis.md`.
 
 ### DIME/CFscores External Validation (Second Source)
 
@@ -116,7 +116,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-1159 tests exist across scraper (~219) and analysis (~940) modules. All passing. Coverage could be expanded:
+1172 tests exist across scraper (~219) and analysis (~953) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability

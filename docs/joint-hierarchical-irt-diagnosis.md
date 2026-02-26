@@ -1,7 +1,7 @@
 # Why the Joint Hierarchical IRT Model Produces Distorted Cross-Chamber Estimates
 
 **Date:** 2026-02-26
-**Status:** Diagnostic finding — fixable engineering bug, not a modeling limitation
+**Status:** Fixed (ADR-0043) — bill-matching + group-size-adaptive priors implemented
 
 ## Terminology
 
@@ -189,11 +189,19 @@ Shor, McCarty, and Berry (2011) studied the thin-bridge problem via Monte Carlo 
 
 ## Current Status
 
-Until the fix is implemented:
+**Fixed in ADR-0043** (2026-02-26). Two changes:
+
+1. **Bill-matching in `build_joint_model()`**: The `rollcalls` DataFrame is now passed to the joint model builder. A new `_match_bills_across_chambers()` function (extracted from the flat IRT's proven logic) matches vote_ids across chambers by `bill_number`, preferring Final Action motions. Matched bills share a single `alpha`/`beta` parameter pair — the mathematical bridge for cross-chamber identification. Expected: 71-174 shared bills per session.
+
+2. **Group-size-adaptive priors**: Groups with fewer than 20 members (e.g. Senate Democrats) get `sigma_within ~ HalfNormal(0.5)` instead of `HalfNormal(1.0)`. This follows Gelman (2015) on informative priors for small J.
+
+The `fix_joint_sign_convention()` safety net is retained but should no longer trigger for sessions with sufficient shared bills.
+
+Previously:
 
 - **Per-chamber hierarchical models** remain valid for within-chamber analysis (shrinkage, ICC, variance decomposition)
-- **Flat IRT + test equating** should be used for all cross-chamber comparisons (anchored by 51-133 shared bill parameters per session)
-- **Joint hierarchical results** should be treated as unreliable for cross-chamber placement
+- **Flat IRT + test equating** remains the gold standard for cross-chamber comparisons
+- **Joint hierarchical results** should now produce sensible cross-chamber placement with shared bills providing natural identification
 
 ## References
 

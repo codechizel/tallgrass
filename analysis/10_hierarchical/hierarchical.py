@@ -135,15 +135,24 @@ mu_chamber    = mu_global + sigma_chamber * offset_chamber
 
 offset_party_sorted = sort_per_chamber(offset_party)  -- D < R within each chamber
 mu_group      = mu_chamber[c] + sigma_party * offset_party_sorted
-sigma_within  ~ HalfNormal(1)
+sigma_within  ~ HalfNormal(sigma_scale)   -- adaptive: 0.5 for small groups, 1.0 otherwise
 xi            = mu_group[g_i] + sigma_within[g_i] * xi_offset_i
 ```
 
-**Sign identification:** The within-chamber sort ensures D < R on offsets, but
-the model has a sign indeterminacy: for chamber-specific votes, beta_j and xi_i
-can jointly flip sign without changing the likelihood. A post-hoc correction
-(`fix_joint_sign_convention`) compares joint xi with the per-chamber hierarchical
-xi (known correct) and negates any chamber whose legislators are flipped.
+**Bill matching (ADR-0043):** Bills voted on by both chambers are matched by
+`bill_number` (preferring Final Action motions) to create shared `alpha`/`beta`
+parameters. These shared items bridge the chambers via concurrent calibration —
+the same mechanism used by flat IRT test equating (71-174 shared bills per session).
+
+**Sign identification:** Shared bill parameters naturally constrain cross-chamber
+sign and scale. The within-chamber sort (D < R on offsets) provides additional
+identification. A post-hoc safety net (`fix_joint_sign_convention`) compares
+joint xi with per-chamber hierarchical xi and negates any chamber whose legislators
+are flipped — but should not trigger when shared bills provide sufficient bridging.
+
+**Adaptive priors (ADR-0043):** Groups with fewer than 20 members get
+`sigma_within ~ HalfNormal(0.5)` instead of `HalfNormal(1.0)` to prevent
+convergence failures in small groups (Gelman 2015).
 
 ## Inputs
 
@@ -208,6 +217,14 @@ SHRINKAGE_MIN_DISTANCE = 0.5  # Min flat-to-party-mean distance for meaningful s
 # Small-group warning threshold (James-Stein requires J >= 3; with J=2 and small N,
 # hierarchical shrinkage may be unreliable — see docs/hierarchical-shrinkage-deep-dive.md)
 MIN_GROUP_SIZE_WARN = 15
+
+# Group-size-adaptive priors: tighter HalfNormal for small groups (Gelman 2015).
+# With J=2 groups and small N (e.g. ~11 Senate Democrats), the standard HalfNormal(1)
+# prior on sigma_within allows the posterior to explore pathological geometries
+# (funnel/mode-splitting), producing R-hat > 1.8 and ESS < 10. A tighter prior
+# keeps the posterior closer to the prior, preventing catastrophic convergence failure.
+SMALL_GROUP_THRESHOLD = 20
+SMALL_GROUP_SIGMA_SCALE = 0.5
 
 # Convergence diagnostic variable lists
 HIER_CONVERGENCE_VARS = ["xi", "mu_party", "sigma_within", "alpha", "beta"]
@@ -339,6 +356,21 @@ def build_per_chamber_model(
     party_idx = data["party_idx"]
     n_parties = data["n_parties"]
 
+    # Group-size-adaptive priors for sigma_within (Gelman 2015: informative priors for J=2)
+    party_counts = np.array([int((party_idx == p).sum()) for p in range(n_parties)])
+    sigma_scale = np.array(
+        [
+            SMALL_GROUP_SIGMA_SCALE if party_counts[p] < SMALL_GROUP_THRESHOLD else 1.0
+            for p in range(n_parties)
+        ]
+    )
+    for p in range(n_parties):
+        if party_counts[p] < SMALL_GROUP_THRESHOLD:
+            print(
+                f"  Adaptive prior: {data['party_names'][p]} ({party_counts[p]} members) → "
+                f"sigma_within ~ HalfNormal({SMALL_GROUP_SIGMA_SCALE})"
+            )
+
     coords = {
         "legislator": data["leg_slugs"],
         "vote": data["vote_ids"],
@@ -352,8 +384,10 @@ def build_per_chamber_model(
         mu_party_raw = pm.Normal("mu_party_raw", mu=0, sigma=2, shape=n_parties)
         mu_party = pm.Deterministic("mu_party", pt.sort(mu_party_raw), dims="party")
 
-        # Per-party within-group standard deviation
-        sigma_within = pm.HalfNormal("sigma_within", sigma=1, shape=n_parties, dims="party")
+        # Per-party within-group standard deviation (adaptive for small groups)
+        sigma_within = pm.HalfNormal(
+            "sigma_within", sigma=sigma_scale, shape=n_parties, dims="party"
+        )
 
         # --- Non-centered legislator ideal points ---
         xi_offset = pm.Normal("xi_offset", mu=0, sigma=1, shape=n_leg, dims="legislator")
@@ -390,12 +424,87 @@ def build_per_chamber_model(
     return idata, sampling_time
 
 
+def _match_bills_across_chambers(
+    house_vote_ids: list[str],
+    senate_vote_ids: list[str],
+    rollcalls: pl.DataFrame,
+) -> tuple[list[dict], list[str], list[str]]:
+    """Match bills across chambers by bill_number for shared item parameters.
+
+    For each bill_number appearing in both chambers' vote sets:
+    - Prefer the vote_id with "Final Action" or "Emergency Final Action" motion
+    - If multiple, pick the latest chronologically (vote_id encodes timestamp)
+
+    Returns (matched_bills, house_only_vids, senate_only_vids) where matched_bills
+    is a list of dicts with keys: bill_number, house_vote_id, senate_vote_id.
+    """
+    # Build vote_id → bill_number / motion mappings from rollcalls
+    rc = rollcalls.select("vote_id", "bill_number", "motion").filter(
+        pl.col("vote_id").is_in(house_vote_ids + senate_vote_ids)
+    )
+    vid_to_bill: dict[str, str] = dict(
+        zip(rc["vote_id"].to_list(), rc["bill_number"].to_list())
+    )
+    vid_to_motion: dict[str, str] = dict(
+        zip(rc["vote_id"].to_list(), rc["motion"].to_list())
+    )
+
+    # Group vote_ids by bill_number and chamber
+    house_bill_vids: dict[str, list[str]] = {}
+    for vid in house_vote_ids:
+        bill = vid_to_bill.get(vid)
+        if bill:
+            house_bill_vids.setdefault(bill, []).append(vid)
+
+    senate_bill_vids: dict[str, list[str]] = {}
+    for vid in senate_vote_ids:
+        bill = vid_to_bill.get(vid)
+        if bill:
+            senate_bill_vids.setdefault(bill, []).append(vid)
+
+    shared_bills = set(house_bill_vids.keys()) & set(senate_bill_vids.keys())
+
+    def _pick_best_vid(vids: list[str]) -> str:
+        """Pick best vote_id: prefer Final Action, then latest chronologically."""
+        final_vids = [
+            v
+            for v in vids
+            if (vid_to_motion.get(v) or "").lower()
+            in ("final action", "emergency final action")
+        ]
+        candidates = final_vids if final_vids else vids
+        return sorted(candidates)[-1]  # Latest chronologically (vote_id encodes timestamp)
+
+    matched: list[dict] = []
+    house_used: set[str] = set()
+    senate_used: set[str] = set()
+
+    for bill in sorted(shared_bills):
+        h_vid = _pick_best_vid(house_bill_vids[bill])
+        s_vid = _pick_best_vid(senate_bill_vids[bill])
+        matched.append(
+            {
+                "bill_number": bill,
+                "house_vote_id": h_vid,
+                "senate_vote_id": s_vid,
+            }
+        )
+        house_used.add(h_vid)
+        senate_used.add(s_vid)
+
+    house_only = [v for v in house_vote_ids if v not in house_used]
+    senate_only = [v for v in senate_vote_ids if v not in senate_used]
+
+    return matched, house_only, senate_only
+
+
 def build_joint_model(
     house_data: dict,
     senate_data: dict,
     n_samples: int,
     n_tune: int,
     n_chains: int,
+    rollcalls: pl.DataFrame | None = None,
     cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
 ) -> tuple[az.InferenceData, dict, float]:
@@ -404,8 +513,10 @@ def build_joint_model(
     Model structure:
         mu_global → mu_group (4 groups: HD, HR, SD, SR) → xi → likelihood
 
-    Combines House and Senate data into a single model with shared bill parameters
-    where bills appear in both chambers.
+    When rollcalls is provided, bills are matched across chambers by bill_number
+    to create shared alpha/beta parameters. These shared items bridge the chambers,
+    providing natural sign and scale identification (concurrent calibration).
+    Without rollcalls, falls back to vote_id deduplication (no shared items).
 
     Returns (InferenceData, combined_data_dict, sampling_time_seconds).
     """
@@ -415,9 +526,54 @@ def build_joint_model(
     n_leg = n_house + n_senate
 
     all_slugs = house_data["leg_slugs"] + senate_data["leg_slugs"]
-    all_vote_ids = list(dict.fromkeys(house_data["vote_ids"] + senate_data["vote_ids"]))
-    n_votes = len(all_vote_ids)
-    vote_to_idx = {v: i for i, v in enumerate(all_vote_ids)}
+
+    # --- Bill matching: shared items bridge the chambers ---
+    house_vote_ids = house_data["vote_ids"]
+    senate_vote_ids = senate_data["vote_ids"]
+    n_shared = 0
+
+    if rollcalls is not None:
+        matched_bills, house_only_vids, senate_only_vids = _match_bills_across_chambers(
+            house_vote_ids, senate_vote_ids, rollcalls
+        )
+        n_shared = len(matched_bills)
+
+        # Build unified vote list: matched (shared) first, then house-only, then senate-only
+        # Each matched bill gets ONE index — both chambers' observations point to the same
+        # alpha/beta, which is the mathematical bridge for cross-chamber identification.
+        all_vote_ids: list[str] = []
+        matched_labels: list[str] = []
+        for m in matched_bills:
+            label = f"matched_{m['bill_number']}"
+            matched_labels.append(label)
+            all_vote_ids.append(label)
+        all_vote_ids.extend(house_only_vids)
+        all_vote_ids.extend(senate_only_vids)
+        n_votes = len(all_vote_ids)
+        vote_to_idx = {v: i for i, v in enumerate(all_vote_ids)}
+
+        # Build lookup: original vote_id → unified index
+        # Matched bills: both house and senate vote_ids map to the same index
+        original_vid_to_idx: dict[str, int] = {}
+        for i, m in enumerate(matched_bills):
+            original_vid_to_idx[m["house_vote_id"]] = i  # index of matched label
+            original_vid_to_idx[m["senate_vote_id"]] = i
+        for vid in house_only_vids:
+            original_vid_to_idx[vid] = vote_to_idx[vid]
+        for vid in senate_only_vids:
+            original_vid_to_idx[vid] = vote_to_idx[vid]
+
+        print(
+            f"  Joint bill matching: {n_shared} shared bills, "
+            f"{len(house_only_vids)} house-only, {len(senate_only_vids)} senate-only"
+        )
+    else:
+        # Fallback: no bill matching (legacy behavior)
+        all_vote_ids = list(dict.fromkeys(house_vote_ids + senate_vote_ids))
+        n_votes = len(all_vote_ids)
+        original_vid_to_idx = {v: i for i, v in enumerate(all_vote_ids)}
+        matched_bills = []
+        print("  Joint: no rollcalls provided, falling back to vote_id dedup (no shared items)")
 
     # Remap indices for combined model
     senate_leg_offset = n_house
@@ -430,8 +586,12 @@ def build_joint_model(
     )
     combined_vote_idx = np.concatenate(
         [
-            np.array([vote_to_idx[house_data["vote_ids"][v]] for v in house_data["vote_idx"]]),
-            np.array([vote_to_idx[senate_data["vote_ids"][v]] for v in senate_data["vote_idx"]]),
+            np.array(
+                [original_vid_to_idx[house_vote_ids[v]] for v in house_data["vote_idx"]]
+            ),
+            np.array(
+                [original_vid_to_idx[senate_vote_ids[v]] for v in senate_data["vote_idx"]]
+            ),
         ]
     )
     combined_y = np.concatenate([house_data["y"], senate_data["y"]])
@@ -448,6 +608,21 @@ def build_joint_model(
 
     # Chamber index for each group (0=House, 1=Senate)
     group_chamber = np.array([0, 0, 1, 1], dtype=np.int64)
+
+    # Group-size-adaptive priors for sigma_within (Gelman 2015: informative priors for J=2)
+    party_counts = np.array([int((group_idx == g).sum()) for g in range(n_groups)])
+    sigma_scale = np.array(
+        [
+            SMALL_GROUP_SIGMA_SCALE if party_counts[g] < SMALL_GROUP_THRESHOLD else 1.0
+            for g in range(n_groups)
+        ]
+    )
+    for g in range(n_groups):
+        if party_counts[g] < SMALL_GROUP_THRESHOLD:
+            print(
+                f"  Adaptive prior: {group_names[g]} ({party_counts[g]} members) → "
+                f"sigma_within ~ HalfNormal({SMALL_GROUP_SIGMA_SCALE})"
+            )
 
     n_obs = len(combined_y)
 
@@ -485,8 +660,10 @@ def build_joint_model(
             dims="group",
         )
 
-        # --- Within-group ---
-        sigma_within = pm.HalfNormal("sigma_within", sigma=1, shape=n_groups, dims="group")
+        # --- Within-group (adaptive priors for small groups) ---
+        sigma_within = pm.HalfNormal(
+            "sigma_within", sigma=sigma_scale, shape=n_groups, dims="group"
+        )
 
         # --- Non-centered legislator ideal points ---
         xi_offset = pm.Normal("xi_offset", mu=0, sigma=1, shape=n_leg, dims="legislator")
@@ -506,7 +683,7 @@ def build_joint_model(
 
         # --- Sample ---
         print(f"  Joint: {n_samples} draws, {n_tune} tune, {n_chains} chains")
-        print(f"  {n_leg} legislators, {n_votes} votes, {n_obs} observations")
+        print(f"  {n_leg} legislators, {n_votes} votes ({n_shared} shared), {n_obs} observations")
         print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
         t0 = time.time()
         idata = pm.sample(
@@ -525,6 +702,7 @@ def build_joint_model(
         "vote_ids": all_vote_ids,
         "n_legislators": n_leg,
         "n_votes": n_votes,
+        "n_shared_bills": n_shared,
         "n_obs": n_obs,
         "group_idx": group_idx,
         "group_names": group_names,
@@ -532,6 +710,7 @@ def build_joint_model(
         "group_chamber": group_chamber,
         "n_house": n_house,
         "n_senate": n_senate,
+        "matched_bills": matched_bills,
     }
 
     print(f"  Joint sampling complete in {sampling_time:.1f}s")
@@ -1406,6 +1585,7 @@ def main() -> None:
                     n_samples=args.n_samples,
                     n_tune=args.n_tune,
                     n_chains=args.n_chains,
+                    rollcalls=rollcalls,
                     cores=args.cores,
                 )
 
@@ -1495,6 +1675,7 @@ def main() -> None:
             manifest["joint_n_legislators"] = joint_results["ideal_points"].height
             manifest["joint_sampling_time_s"] = round(joint_results["sampling_time"], 1)
             manifest["joint_convergence_ok"] = joint_results["convergence"]["all_ok"]
+            manifest["joint_n_shared_bills"] = joint_results["combined_data"]["n_shared_bills"]
         else:
             manifest["joint_skipped"] = True
 

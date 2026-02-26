@@ -78,4 +78,4 @@ Full diagnosis of the bill-matching bug written to `docs/joint-hierarchical-irt-
 - `party_mean` for flipped chambers is computed from empirical xi means rather than the mu_group posterior. This is less principled but necessarily so — the mu_group posterior is in the wrong sign convention.
 - The AUC `nan` for single-class holdouts means some 84th-session prediction metrics are missing. This is correct behavior (AUC is undefined for a single class) but means the prediction report must handle nans gracefully.
 
-**Next step:** Refactor `build_joint_model()` to match bills by `bill_number` and create shared beta parameters for matched bills, as described in `docs/joint-hierarchical-irt-diagnosis.md`.
+**Next step:** ~~Refactor `build_joint_model()` to match bills by `bill_number` and create shared beta parameters for matched bills, as described in `docs/joint-hierarchical-irt-diagnosis.md`.~~ **Done in ADR-0043** — bill-matching and group-size-adaptive priors implemented.

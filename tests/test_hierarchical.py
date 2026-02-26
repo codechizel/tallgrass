@@ -24,6 +24,9 @@ import pytensor.tensor as pt
 from analysis.hierarchical import (
     MIN_GROUP_SIZE_WARN,
     PARTY_NAMES,
+    SMALL_GROUP_SIGMA_SCALE,
+    SMALL_GROUP_THRESHOLD,
+    _match_bills_across_chambers,
     compute_flat_hier_correlation,
     compute_variance_decomposition,
     extract_group_params,
@@ -1066,3 +1069,163 @@ class TestFixJointSignConvention:
             (pl.col("chamber") == "Senate") & (pl.col("party") == "Republican")
         )
         assert senate_r["party_mean"][0] == pytest.approx(4.0)
+
+
+# ── TestBillMatchingAcrossChambers ──────────────────────────────────────────
+
+
+class TestBillMatchingAcrossChambers:
+    """Tests for _match_bills_across_chambers — shared bill identification.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestBillMatchingAcrossChambers -v
+    """
+
+    @pytest.fixture
+    def rollcalls(self) -> pl.DataFrame:
+        """Rollcalls with bills appearing in both chambers."""
+        return pl.DataFrame(
+            {
+                "vote_id": [
+                    "h_v1",
+                    "h_v2",
+                    "h_v3",
+                    "h_v4",
+                    "s_v1",
+                    "s_v2",
+                    "s_v3",
+                ],
+                "bill_number": [
+                    "HB 2001",
+                    "HB 2001",
+                    "SB 100",
+                    "HB 2002",
+                    "HB 2001",
+                    "SB 100",
+                    "SB 200",
+                ],
+                "motion": [
+                    "Committee Vote",
+                    "Final Action",
+                    "Emergency Final Action",
+                    "Final Action",
+                    "Final Action",
+                    "Final Action",
+                    "Final Action",
+                ],
+            }
+        )
+
+    def test_shared_bill_count(self, rollcalls: pl.DataFrame) -> None:
+        """Should find 2 shared bills (HB 2001 and SB 100)."""
+        house_vids = ["h_v1", "h_v2", "h_v3"]
+        senate_vids = ["s_v1", "s_v2", "s_v3"]
+        matched, house_only, senate_only = _match_bills_across_chambers(
+            house_vids, senate_vids, rollcalls
+        )
+        assert len(matched) == 2
+        bill_numbers = {m["bill_number"] for m in matched}
+        assert bill_numbers == {"HB 2001", "SB 100"}
+
+    def test_prefers_final_action(self, rollcalls: pl.DataFrame) -> None:
+        """For HB 2001 in House, should pick h_v2 (Final Action) over h_v1 (Committee Vote)."""
+        house_vids = ["h_v1", "h_v2", "h_v3"]
+        senate_vids = ["s_v1", "s_v2", "s_v3"]
+        matched, _, _ = _match_bills_across_chambers(house_vids, senate_vids, rollcalls)
+        hb2001 = next(m for m in matched if m["bill_number"] == "HB 2001")
+        assert hb2001["house_vote_id"] == "h_v2"  # Final Action
+        assert hb2001["senate_vote_id"] == "s_v1"  # Final Action
+
+    def test_house_only_and_senate_only(self, rollcalls: pl.DataFrame) -> None:
+        """Unmatched vote_ids should appear in house_only / senate_only lists."""
+        house_vids = ["h_v1", "h_v2", "h_v3", "h_v4"]
+        senate_vids = ["s_v1", "s_v2", "s_v3"]
+        matched, house_only, senate_only = _match_bills_across_chambers(
+            house_vids, senate_vids, rollcalls
+        )
+        # h_v4 is HB 2002 (house-only), h_v1 is the non-preferred dup for HB 2001
+        assert "h_v4" in house_only
+        # s_v3 is SB 200 (senate-only)
+        assert "s_v3" in senate_only
+
+    def test_no_shared_bills(self) -> None:
+        """When no bills overlap, matched should be empty."""
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["h_v1", "s_v1"],
+                "bill_number": ["HB 100", "SB 200"],
+                "motion": ["Final Action", "Final Action"],
+            }
+        )
+        matched, house_only, senate_only = _match_bills_across_chambers(
+            ["h_v1"], ["s_v1"], rollcalls
+        )
+        assert len(matched) == 0
+        assert house_only == ["h_v1"]
+        assert senate_only == ["s_v1"]
+
+    def test_emergency_final_action_preferred(self) -> None:
+        """Emergency Final Action should be treated same as Final Action."""
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["h_v1", "h_v2", "s_v1"],
+                "bill_number": ["HB 1", "HB 1", "HB 1"],
+                "motion": ["Committee Vote", "Emergency Final Action", "Final Action"],
+            }
+        )
+        matched, _, _ = _match_bills_across_chambers(["h_v1", "h_v2"], ["s_v1"], rollcalls)
+        assert len(matched) == 1
+        assert matched[0]["house_vote_id"] == "h_v2"  # Emergency Final Action preferred
+
+
+# ── TestGroupSizeAdaptiveSigma ──────────────────────────────────────────────
+
+
+class TestGroupSizeAdaptiveSigma:
+    """Tests for group-size-adaptive sigma_within priors.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestGroupSizeAdaptiveSigma -v
+    """
+
+    def test_constants_defined(self) -> None:
+        """SMALL_GROUP_THRESHOLD and SMALL_GROUP_SIGMA_SCALE should be defined."""
+        assert SMALL_GROUP_THRESHOLD == 20
+        assert SMALL_GROUP_SIGMA_SCALE == 0.5
+
+    def test_small_group_gets_tighter_prior(self) -> None:
+        """Groups below SMALL_GROUP_THRESHOLD get sigma=0.5, others get 1.0."""
+        party_counts = np.array([10, 80])  # 10 Democrats, 80 Republicans
+        sigma_scale = np.array(
+            [
+                SMALL_GROUP_SIGMA_SCALE if party_counts[p] < SMALL_GROUP_THRESHOLD else 1.0
+                for p in range(2)
+            ]
+        )
+        assert sigma_scale[0] == SMALL_GROUP_SIGMA_SCALE  # Small group → tighter
+        assert sigma_scale[1] == 1.0  # Large group → standard
+
+    def test_all_large_groups_standard_prior(self) -> None:
+        """When all groups are large enough, all get sigma=1.0."""
+        party_counts = np.array([25, 80])
+        sigma_scale = np.array(
+            [
+                SMALL_GROUP_SIGMA_SCALE if party_counts[p] < SMALL_GROUP_THRESHOLD else 1.0
+                for p in range(2)
+            ]
+        )
+        assert sigma_scale[0] == 1.0
+        assert sigma_scale[1] == 1.0
+
+    def test_joint_model_four_groups(self) -> None:
+        """Joint model with 4 groups: only small groups get adaptive prior."""
+        # Simulating: House-D=30, House-R=95, Senate-D=11, Senate-R=29
+        group_counts = np.array([30, 95, 11, 29])
+        sigma_scale = np.array(
+            [
+                SMALL_GROUP_SIGMA_SCALE if group_counts[g] < SMALL_GROUP_THRESHOLD else 1.0
+                for g in range(4)
+            ]
+        )
+        assert sigma_scale[0] == 1.0  # House-D (30) → standard
+        assert sigma_scale[1] == 1.0  # House-R (95) → standard
+        assert sigma_scale[2] == SMALL_GROUP_SIGMA_SCALE  # Senate-D (11) → tighter
+        assert sigma_scale[3] == 1.0  # Senate-R (29) → standard

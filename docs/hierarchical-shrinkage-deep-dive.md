@@ -273,15 +273,16 @@ Now that we have external validation data, we could use the Shor-McCarty scores 
 
 This is an example of **empirical Bayes** — using one dataset to inform the priors for a model applied to a related dataset. It's a well-established technique, and having the Shor-McCarty data makes it natural.
 
-### Remedy 4: Group-Size-Adaptive Priors
+### Remedy 4: Group-Size-Adaptive Priors (Implemented — ADR-0043)
 
 Rather than using the same `HalfNormal(1)` for both parties regardless of size, scale the prior based on the group:
 
 ```
-For n >= 40 legislators:  sigma_within ~ HalfNormal(1)     # Let data speak
-For n = 20-39:            sigma_within ~ HalfNormal(0.75)   # Moderate guidance
-For n < 20:               sigma_within ~ HalfNormal(0.5)    # Stronger guidance
+For n >= 20 legislators:  sigma_within ~ HalfNormal(1.0)   # Let data speak
+For n < 20:               sigma_within ~ HalfNormal(0.5)   # Stronger guidance
 ```
+
+**This remedy was implemented in ADR-0043** with constants `SMALL_GROUP_THRESHOLD = 20` and `SMALL_GROUP_SIGMA_SCALE = 0.5`, applied in both `build_per_chamber_model()` and `build_joint_model()`. The tighter prior prevents the catastrophic convergence failures (R-hat > 1.8, ESS < 10) that occurred with the standard prior on small groups like Senate Democrats (~11 members), while allowing the data to speak for larger groups.
 
 This acknowledges the statistical reality that smaller groups need more prior regularization without abandoning the hierarchical structure entirely.
 

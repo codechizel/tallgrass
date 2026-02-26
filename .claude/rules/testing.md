@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1163)
+just test                    # run all tests (~1172)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -46,7 +46,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_mca.py` — categorical matrix, Polars-to-pandas, MCA fitting, orientation, eigenvalues, contributions, cos², horseshoe detection, constants (~34 tests)
 - `tests/test_prediction.py` — vote/bill features, model training, SHAP, NLP integration, holdout eval, baselines, proper scoring rules (~54 tests)
 - `tests/test_beta_binomial.py` — method of moments, posteriors, shrinkage, edge cases (~26 tests)
-- `tests/test_hierarchical.py` — hierarchical data prep, model structure, variance decomposition, small-group warning, joint ordering, rescaling fallback, Independent exclusion, sign convention fix (~39 tests)
+- `tests/test_hierarchical.py` — hierarchical data prep, model structure, variance decomposition, small-group warning, joint ordering, rescaling fallback, Independent exclusion, sign convention fix, bill-matching, adaptive priors (~48 tests)
 - `tests/test_profiles.py` — profile targets, scorecard, bill-type breakdown, defections, name resolution (~36 tests)
 - `tests/test_cross_session.py` — matching, IRT alignment, shift, stability, PSI, ICC, fuzzy matching, prediction transfer, detection, plot smoke tests, report (~95 tests)
 - `tests/test_clustering.py` — party loyalty, cross-method ARI, within-party, kappa distance, hierarchical, spectral, HDBSCAN, characterization (~70 tests)
