@@ -1,5 +1,7 @@
 """Configuration constants for the KS Legislature vote scraper."""
 
+from importlib.metadata import version
+
 BASE_URL = "https://www.kslegislature.gov"
 
 REQUEST_DELAY = 0.15  # seconds between requests (rate-limited via lock)
@@ -18,7 +20,7 @@ CACHE_FILENAME_MAX_LENGTH = 200  # max chars for cached file names (filesystem s
 BILL_TITLE_MAX_LENGTH = 500  # truncate bill titles beyond this length
 
 USER_AGENT = (
-    "KSLegVoteScraper/0.2 "
+    f"Tallgrass/{version('tallgrass')} "
     "(Research project; collecting public roll call vote data; "
     "contact: joseph.claeys@gmail.com)"
 )
