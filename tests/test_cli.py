@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from ks_vote_scraper.cli import main
-from ks_vote_scraper.session import CURRENT_BIENNIUM_START
+from tallgrass.cli import main
+from tallgrass.session import CURRENT_BIENNIUM_START
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ def mock_scraper(monkeypatch):
             self.run_called = True
             self.run_enrich = enrich
 
-    monkeypatch.setattr("ks_vote_scraper.cli.KSVoteScraper", FakeScraper)
+    monkeypatch.setattr("tallgrass.cli.KSVoteScraper", FakeScraper)
     return instances
 
 

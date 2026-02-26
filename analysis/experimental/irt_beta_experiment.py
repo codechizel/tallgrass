@@ -414,7 +414,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Resolve paths
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
     data_dir = ks.data_dir

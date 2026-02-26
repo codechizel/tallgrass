@@ -1,16 +1,16 @@
-"""Command-line interface for the Kansas Legislature vote scraper."""
+"""Command-line interface for Tallgrass."""
 
 import argparse
 from pathlib import Path
 
-from ks_vote_scraper.config import BASE_URL, REQUEST_DELAY
-from ks_vote_scraper.scraper import KSVoteScraper
-from ks_vote_scraper.session import CURRENT_BIENNIUM_START, SPECIAL_SESSION_YEARS, KSSession
+from tallgrass.config import BASE_URL, REQUEST_DELAY
+from tallgrass.scraper import KSVoteScraper
+from tallgrass.session import CURRENT_BIENNIUM_START, SPECIAL_SESSION_YEARS, KSSession
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        prog="ks-vote-scraper",
+        prog="tallgrass",
         description="Scrape roll call votes from the Kansas Legislature website.",
     )
     parser.add_argument(

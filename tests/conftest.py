@@ -1,4 +1,4 @@
-"""Shared fixtures for KS Vote Scraper tests.
+"""Shared fixtures for Tallgrass tests.
 
 Provides pre-built KSSession instances covering the three session types:
 current biennium, historical biennium, and special session.
@@ -6,7 +6,7 @@ current biennium, historical biennium, and special session.
 
 import pytest
 
-from ks_vote_scraper.session import KSSession
+from tallgrass.session import KSSession
 
 # ── Session fixtures ─────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from ks_vote_scraper.scraper import FetchResult, KSVoteScraper, _normalize_bill_code
+from tallgrass.scraper import FetchResult, KSVoteScraper, _normalize_bill_code
 
 # ── _normalize_bill_code() ───────────────────────────────────────────────────
 

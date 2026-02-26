@@ -9,8 +9,8 @@ Run: uv run pytest tests/test_output.py -v
 
 import csv
 
-from ks_vote_scraper.models import IndividualVote, RollCall
-from ks_vote_scraper.output import save_csvs
+from tallgrass.models import IndividualVote, RollCall
+from tallgrass.output import save_csvs
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
-# KS Vote Scraper
+# Tallgrass
 
-Scrapes Kansas Legislature roll call votes from kslegislature.gov into CSV files for statistical/Bayesian analysis. Coverage: 2011-2026 (84th-91st legislatures).
+Kansas Legislature roll call vote scraper + analysis platform. Scrapes kslegislature.gov into CSV files for statistical/Bayesian analysis. Coverage: 2011-2026 (84th-91st legislatures).
 
 ## Commits
 
@@ -15,17 +15,17 @@ Scrapes Kansas Legislature roll call votes from kslegislature.gov into CSV files
 [Just](https://github.com/casey/just) is used as a command runner — thin aliases over `uv run` commands. The `Justfile` also sets `OMP_NUM_THREADS=6` and `OPENBLAS_NUM_THREADS=6` globally to cap thread pools on Apple Silicon (ADR-0022). Run `just --list` to see all recipes, or use the underlying `uv run` commands directly.
 
 ```bash
-just scrape 2025                             # → uv run ks-vote-scraper 2025
-just scrape-fresh 2025                       # → uv run ks-vote-scraper --clear-cache 2025
+just scrape 2025                             # → uv run tallgrass 2025
+just scrape-fresh 2025                       # → uv run tallgrass --clear-cache 2025
 just lint                                    # → ruff check --fix + ruff format
 just lint-check                              # → ruff check + ruff format --check
 just typecheck                               # → ty check src/ + ty check analysis/
-just sessions                                # → uv run ks-vote-scraper --list-sessions
+just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
 just test                                    # → uv run pytest tests/ -v (~1125 tests)
 just test-scraper                            # → pytest on scraper test files only
-uv run ks-vote-scraper 2023                  # historical session (direct)
-uv run ks-vote-scraper 2024 --special        # special session (direct)
+uv run tallgrass 2023                  # historical session (direct)
+uv run tallgrass 2024 --special        # special session (direct)
 ```
 
 Analysis recipes (all pass `*args` through to the underlying script):
@@ -49,7 +49,7 @@ Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles
 ## Architecture
 
 ```
-src/ks_vote_scraper/
+src/tallgrass/
   config.py     - Constants (BASE_URL, delays, workers, user agent)
   session.py    - KSSession: biennium URL resolution, STATE_DIR, data_dir/results_dir
   models.py     - IndividualVote + RollCall dataclasses
@@ -132,7 +132,7 @@ See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (39 decisions)
+- ADRs: `docs/adr/README.md` (40 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)

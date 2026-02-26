@@ -1,4 +1,4 @@
-"""Analysis pipeline for KS Vote Scraper.
+"""Analysis pipeline for Tallgrass.
 
 Pipeline phases (in order):
   01_eda           — Exploratory Data Analysis

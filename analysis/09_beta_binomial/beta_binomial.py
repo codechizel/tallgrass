@@ -590,7 +590,7 @@ def plot_raw_vs_bayesian(
 def main() -> None:
     args = parse_args()
 
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
     results_root = ks.results_dir

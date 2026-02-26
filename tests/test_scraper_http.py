@@ -16,13 +16,13 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from ks_vote_scraper.config import (
+from tallgrass.config import (
     BILL_TITLE_MAX_LENGTH,
     CACHE_FILENAME_MAX_LENGTH,
     MAX_RETRIES,
 )
-from ks_vote_scraper.scraper import FetchResult, KSVoteScraper
-from ks_vote_scraper.session import KSSession
+from tallgrass.scraper import FetchResult, KSVoteScraper
+from tallgrass.session import KSSession
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────

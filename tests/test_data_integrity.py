@@ -12,7 +12,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from ks_vote_scraper.session import KSSession
+from tallgrass.session import KSSession
 
 # ── Constants ────────────────────────────────────────────────────────────────
 

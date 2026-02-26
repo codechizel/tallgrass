@@ -15,7 +15,7 @@ import re
 import pytest
 from bs4 import BeautifulSoup
 
-from ks_vote_scraper.scraper import KSVoteScraper, _clean_text
+from tallgrass.scraper import KSVoteScraper, _clean_text
 
 # ── _clean_text() ────────────────────────────────────────────────────────────
 # Bug #5: get_text(strip=True) drops spaces around inline <a> elements.
@@ -180,7 +180,7 @@ class TestVoteCategoryParsing:
         """Replicate the category parsing logic from _parse_vote_page."""
         import re
 
-        from ks_vote_scraper.scraper import VOTE_CATEGORIES
+        from tallgrass.scraper import VOTE_CATEGORIES
 
         vote_categories: dict[str, list[dict]] = {cat: [] for cat in VOTE_CATEGORIES}
         current_category = None
@@ -296,7 +296,7 @@ class TestLegislatorParsing:
         """Replicate the legislator parsing logic from enrich_legislators."""
         import re
 
-        from ks_vote_scraper.scraper import _clean_text
+        from tallgrass.scraper import _clean_text
 
         # Full name from h1 containing "Senator" or "Representative"
         name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))

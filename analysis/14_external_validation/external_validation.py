@@ -352,7 +352,7 @@ def plot_scatter(
 def main() -> None:
     args = parse_args()
 
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     # Determine which sessions to run
     if args.all_sessions:

@@ -10,7 +10,7 @@ Run: uv run pytest tests/test_session.py -v
 
 from pathlib import Path
 
-from ks_vote_scraper.session import KSSession, _ordinal
+from tallgrass.session import KSSession, _ordinal
 
 # ── _ordinal() ───────────────────────────────────────────────────────────────
 

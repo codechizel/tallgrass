@@ -656,7 +656,7 @@ def main() -> None:
         params=vars(args),
         primer=PROFILES_PRIMER,
     ) as ctx:
-        from ks_vote_scraper.session import STATE_DIR
+        from tallgrass.session import STATE_DIR
 
         results_base = Path("results") / STATE_DIR / ctx.session
         print(f"Loading upstream data from {results_base}")

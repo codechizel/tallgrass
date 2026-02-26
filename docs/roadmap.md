@@ -1,6 +1,6 @@
 # Roadmap
 
-What's been done, what's next, and what's on the horizon for the KS Vote Scraper analytics pipeline.
+What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
 **Last updated:** 2026-02-25 (after profiles name-based lookup + Justfile docs)
 

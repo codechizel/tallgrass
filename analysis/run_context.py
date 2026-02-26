@@ -93,7 +93,7 @@ def _normalize_session(session: str) -> str:
     m = re.match(r"^(\d{4})-(\d{2,4})$", session)
     if m:
         try:
-            from ks_vote_scraper.session import KSSession
+            from tallgrass.session import KSSession
         except ImportError:
             from session import KSSession  # type: ignore[no-redef]
         start = int(m.group(1))
@@ -179,7 +179,7 @@ class RunContext:
         self.analysis_name = analysis_name
         self.params = params or {}
 
-        from ks_vote_scraper.session import STATE_DIR
+        from tallgrass.session import STATE_DIR
 
         root = results_root or (Path("results") / STATE_DIR)
         today = datetime.now(_CT).strftime("%Y-%m-%d")
@@ -321,7 +321,7 @@ def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:
 
 def _append_missing_votes(report: object, session: str) -> None:
     """Append a Missing Votes section to the report from the failure manifest."""
-    from ks_vote_scraper.session import STATE_DIR
+    from tallgrass.session import STATE_DIR
 
     try:
         from analysis.report import TextSection

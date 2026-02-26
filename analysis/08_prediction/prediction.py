@@ -1574,7 +1574,7 @@ def plot_surprising_votes(
 def main() -> None:
     args = parse_args()
 
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir

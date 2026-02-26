@@ -1,6 +1,6 @@
 # Classical Indices Deep Dive
 
-A literature review, code audit, and gap analysis of the Phase 7 (Classical Indices) implementation in the KS Vote Scraper analysis pipeline.
+A literature review, code audit, and gap analysis of the Phase 7 (Classical Indices) implementation in the Tallgrass analysis pipeline.
 
 ## Summary of Findings
 

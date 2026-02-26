@@ -748,7 +748,7 @@ def _run_cross_prediction(
 def main() -> None:
     args = parse_args()
 
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     ks_a = KSSession.from_session_string(args.session_a)
     ks_b = KSSession.from_session_string(args.session_b)

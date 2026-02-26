@@ -1,5 +1,5 @@
 [project]
-name = "ks-vote-scraper"
+name = "tallgrass"
 version = "2026.2.25"
 description = "Scrape roll call votes from the Kansas Legislature website"
 requires-python = ">=3.14"
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ks-vote-scraper = "ks_vote_scraper.cli:main"
+tallgrass = "tallgrass.cli:main"
 
 [dependency-groups]
 dev = [

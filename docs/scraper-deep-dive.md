@@ -12,7 +12,7 @@ This review covers the full scraper codebase (2,332 lines across 7 files), all 8
 
 [OpenStates](https://github.com/openstates/openstates-scrapers) is the gold standard for US state legislature scraping, covering all 50 states. Their Kansas scraper (`scrapers/ks/votes.py`) is 152 lines and reveals how differently the same problem can be approached:
 
-| Dimension | OpenStates Kansas | KS Vote Scraper |
+| Dimension | OpenStates Kansas | Tallgrass |
 |---|---|---|
 | Session coverage | ~2015-present (HTML only) | 2011-2026 (HTML + ODT + JS) |
 | Error handling | String matching in response body | Typed `FetchResult` with error classification |

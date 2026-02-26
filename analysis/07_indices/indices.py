@@ -212,7 +212,7 @@ def save_fig(fig: plt.Figure, path: Path, dpi: int = 150) -> None:
 
 def _resolve_results_name(session: str) -> str:
     """Convert '2025-26' to biennium results directory name (e.g. '91st_2025-2026')."""
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     return KSSession.from_session_string(session).output_name
 
@@ -1697,7 +1697,7 @@ def save_filtering_manifest(manifest: dict, out_dir: Path) -> None:
 def main() -> None:
     args = parse_args()
 
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
 

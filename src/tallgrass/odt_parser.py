@@ -16,8 +16,8 @@ import zipfile
 from dataclasses import dataclass
 from io import BytesIO
 
-from ks_vote_scraper.config import BILL_TITLE_MAX_LENGTH
-from ks_vote_scraper.models import IndividualVote, RollCall
+from tallgrass.config import BILL_TITLE_MAX_LENGTH
+from tallgrass.models import IndividualVote, RollCall
 
 # Namespace map for ODF content.xml
 _NS = {
@@ -93,7 +93,7 @@ def parse_odt_votes(
     categories, result_text = _parse_odt_body_votes(body_text, chamber, member_directory)
 
     # Look up metadata
-    from ks_vote_scraper.scraper import _normalize_bill_code
+    from tallgrass.scraper import _normalize_bill_code
 
     bill_code = _normalize_bill_code(bill_number)
     meta_info = (bill_metadata or {}).get(bill_code, {})
@@ -274,7 +274,7 @@ def _parse_odt_body_votes(
         (categories, result_text) where categories maps canonical category names
         to lists of ``{"name": ..., "slug": ...}`` dicts.
     """
-    from ks_vote_scraper.scraper import VOTE_CATEGORIES
+    from tallgrass.scraper import VOTE_CATEGORIES
 
     categories: dict[str, list[dict]] = {cat: [] for cat in VOTE_CATEGORIES}
     result_text = ""

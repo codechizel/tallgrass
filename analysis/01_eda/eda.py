@@ -1997,7 +1997,7 @@ def main() -> None:
     if args.data_dir:
         data_dir = Path(args.data_dir)
     else:
-        from ks_vote_scraper.session import KSSession
+        from tallgrass.session import KSSession
 
         data_dir = KSSession.from_session_string(args.session).data_dir
 

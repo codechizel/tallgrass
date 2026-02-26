@@ -13,7 +13,7 @@ from io import BytesIO
 
 import pytest
 
-from ks_vote_scraper.odt_parser import (
+from tallgrass.odt_parser import (
     OdtMetadata,
     _classify_motion,
     _derive_passed,

@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This directory contains Architecture Decision Records (ADRs) for the KS Vote Scraper project.
+This directory contains Architecture Decision Records (ADRs) for the Tallgrass project.
 
 ADRs document significant technical decisions so future contributors understand *why* things are the way they are, not just *what* they are.
 
@@ -67,6 +67,7 @@ What are the trade-offs?
 | [0037](0037-pipeline-review-fixes.md) | Pipeline review fixes (except syntax, RunContext failure safety, PC1 sign, label alignment) | Accepted | 2026-02-25 |
 | [0038](0038-python-314-modernization.md) | Python 3.14 modernization (__future__ removal, CalVer, typing cleanup) | Accepted | 2026-02-25 |
 | [0039](0039-cross-session-validation-enhancements.md) | Cross-session validation enhancements (PSI, ICC, fuzzy matching, percentile thresholds) | Accepted | 2026-02-25 |
+| [0040](0040-rename-to-tallgrass.md) | Rename package to Tallgrass | Accepted | 2026-02-25 |
 
 ## Creating a New ADR
 

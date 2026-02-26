@@ -2412,7 +2412,7 @@ def plot_cross_party_bridge(
 def main() -> None:
     args = parse_args()
 
-    from ks_vote_scraper.session import KSSession
+    from tallgrass.session import KSSession
 
     ks = KSSession.from_session_string(args.session)
 

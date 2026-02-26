@@ -4,7 +4,7 @@ import csv
 from dataclasses import asdict, fields
 from pathlib import Path
 
-from ks_vote_scraper.models import IndividualVote, RollCall
+from tallgrass.models import IndividualVote, RollCall
 
 
 def save_csvs(

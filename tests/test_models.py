@@ -11,8 +11,8 @@ import dataclasses
 
 import pytest
 
-from ks_vote_scraper.models import IndividualVote, RollCall
-from ks_vote_scraper.scraper import FetchFailure, VoteLink
+from tallgrass.models import IndividualVote, RollCall
+from tallgrass.scraper import FetchFailure, VoteLink
 
 # ── IndividualVote ───────────────────────────────────────────────────────────
 

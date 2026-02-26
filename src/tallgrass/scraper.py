@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 
-from ks_vote_scraper.config import (
+from tallgrass.config import (
     BASE_URL,
     BILL_TITLE_MAX_LENGTH,
     CACHE_FILENAME_MAX_LENGTH,
@@ -30,9 +30,9 @@ from ks_vote_scraper.config import (
     WAVE_DELAY,
     WAVE_WORKERS,
 )
-from ks_vote_scraper.models import IndividualVote, RollCall
-from ks_vote_scraper.output import save_csvs
-from ks_vote_scraper.session import KSSession
+from tallgrass.models import IndividualVote, RollCall
+from tallgrass.output import save_csvs
+from tallgrass.session import KSSession
 
 # Compiled regex for extracting bill type and number from URLs
 _BILL_URL_RE = re.compile(r"/(sb|hb|scr|hcr|sr|hr)(\d+)/", re.I)
@@ -824,7 +824,7 @@ class KSVoteScraper:
 
     def _parse_odt_vote_pages(self, vote_links: list[VoteLink]) -> None:
         """Parse ODT vote files (2011-2014)."""
-        from ks_vote_scraper.odt_parser import parse_odt_votes
+        from tallgrass.odt_parser import parse_odt_votes
 
         # Fetch phase (concurrent, binary mode)
         vote_urls = [vl.vote_url for vl in vote_links]

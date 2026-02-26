@@ -1,4 +1,4 @@
-# KS Vote Scraper — Command Runner (Just: https://github.com/casey/just)
+# Tallgrass — Command Runner (Just: https://github.com/casey/just)
 #
 # Thin aliases over `uv run` commands. The main value-adds:
 #   1. `just check` sequences lint + typecheck + tests as a single quality gate
@@ -19,11 +19,11 @@ default:
 
 # Scrape current session (cached)
 scrape *args:
-    uv run ks-vote-scraper {{args}}
+    uv run tallgrass {{args}}
 
 # Scrape with fresh cache
 scrape-fresh *args:
-    uv run ks-vote-scraper --clear-cache {{args}}
+    uv run tallgrass --clear-cache {{args}}
 
 # Lint and format
 lint:
@@ -41,7 +41,7 @@ install:
 
 # List available sessions
 sessions:
-    uv run ks-vote-scraper --list-sessions
+    uv run tallgrass --list-sessions
 
 # Run EDA analysis
 eda *args:
