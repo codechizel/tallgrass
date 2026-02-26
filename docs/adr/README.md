@@ -66,6 +66,7 @@ What are the trade-offs?
 | [0036](0036-scraper-hardening.md) | Scraper hardening (assert removal, config constants, title truncation warning, 44 HTTP tests) | Accepted | 2026-02-25 |
 | [0037](0037-pipeline-review-fixes.md) | Pipeline review fixes (except syntax, RunContext failure safety, PC1 sign, label alignment) | Accepted | 2026-02-25 |
 | [0038](0038-python-314-modernization.md) | Python 3.14 modernization (__future__ removal, CalVer, typing cleanup) | Accepted | 2026-02-25 |
+| [0039](0039-cross-session-validation-enhancements.md) | Cross-session validation enhancements (PSI, ICC, fuzzy matching, percentile thresholds) | Accepted | 2026-02-25 |
 
 ## Creating a New ADR
 
