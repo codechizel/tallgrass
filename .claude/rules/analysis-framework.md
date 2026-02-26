@@ -7,7 +7,7 @@ paths:
 
 ## 12-Phase Pipeline
 
-EDA -> PCA -> UMAP -> IRT -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles
+EDA -> PCA -> MCA -> UMAP -> IRT -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles
 
 Cross-session validation compares across bienniums (separate from the per-session pipeline).
 External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only).
@@ -44,6 +44,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 
 - `eda.md` — Binary encoding, filtering thresholds, agreement metrics, literature diagnostics (ADR-0026)
 - `pca.md` — Imputation, standardization, sign convention, holdout design
+- `mca.md` — Categorical encoding (Yea/Nay/Absent), prince library, Greenacre correction, horseshoe detection, PCA validation
 - `irt.md` — Priors, MCMC settings, PCA-informed chain initialization, convergence diagnostics (R-hat, bulk/tail-ESS, E-BFMI)
 - `clustering.md` — Three methods for robustness, k=2 finding
 - `prediction.md` — XGBoost primary, IRT features dominate, NLP topic features

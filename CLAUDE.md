@@ -30,7 +30,7 @@ uv run tallgrass 2024 --special        # special session (direct)
 
 Analysis recipes (all pass `*args` through to the underlying script):
 
-`just eda`, `just pca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
+`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
@@ -128,15 +128,16 @@ Analysis outputs in `results/kansas/{session}/{analysis}/{date}/` with `latest` 
 
 Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root.
 
-See `.claude/rules/analysis-framework.md` for the full 12-phase pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
+See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (40 decisions)
+- ADRs: `docs/adr/README.md` (41 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
 - PCA deep dive: `docs/pca-deep-dive.md` (literature review, code audit, implementation recommendations)
+- MCA deep dive: `docs/mca-deep-dive.md` (theory survey, ecosystem evaluation, integration design)
 - UMAP deep dive: `docs/umap-deep-dive.md` (literature survey, code review, implementation recommendations)
 - IRT deep dive: `docs/irt-deep-dive.md` (field survey, code audit, test gaps, recommendations)
 - IRT field survey: `docs/irt-field-survey.md` (identification problem, unconstrained β contribution, Python ecosystem gap)

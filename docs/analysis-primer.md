@@ -22,17 +22,18 @@ Here's the full pipeline at a glance:
 
 1. **Exploratory Data Analysis** — Count things. Look for problems.
 2. **PCA** — Find the main axis of disagreement.
-3. **UMAP** — Draw a map of the legislature.
-4. **Ideal Point Estimation (IRT)** — Place every legislator on a precise ideological scale.
-5. **Clustering** — Ask: are there distinct voting blocs?
-6. **Network Analysis** — Ask: who votes with whom, and who's the bridge?
-7. **Classical Indices** — Compute standard measures like party loyalty.
-8. **Prediction** — Can a computer predict how each legislator will vote?
-9. **Beta-Binomial** — Adjust loyalty scores for legislators with small track records.
-10. **Hierarchical IRT** — Measure how much of ideology comes from party vs. the individual.
-11. **Synthesis** — Combine everything into a narrative.
-12. **Profiles** — Deep-dive into the most interesting legislators.
-13. **Cross-Session Validation** — Check whether our findings hold up over time.
+3. **MCA** — Re-analyze with categorical votes (Yea/Nay/Absent).
+4. **UMAP** — Draw a map of the legislature.
+5. **Ideal Point Estimation (IRT)** — Place every legislator on a precise ideological scale.
+6. **Clustering** — Ask: are there distinct voting blocs?
+7. **Network Analysis** — Ask: who votes with whom, and who's the bridge?
+8. **Classical Indices** — Compute standard measures like party loyalty.
+9. **Prediction** — Can a computer predict how each legislator will vote?
+10. **Beta-Binomial** — Adjust loyalty scores for legislators with small track records.
+11. **Hierarchical IRT** — Measure how much of ideology comes from party vs. the individual.
+12. **Synthesis** — Combine everything into a narrative.
+13. **Profiles** — Deep-dive into the most interesting legislators.
+14. **Cross-Session Validation** — Check whether our findings hold up over time.
 
 Let's walk through each one.
 
@@ -114,11 +115,36 @@ PCA doesn't just produce scores — it also runs several quality checks:
 
 ### The limitation
 
-PCA gives every legislator a score, but it doesn't come with any measure of *uncertainty*. It can't tell you "we're pretty confident about Senator A's score, but Senator B missed a lot of votes so we're less sure about theirs." That's what Step 4 addresses.
+PCA gives every legislator a score, but it doesn't come with any measure of *uncertainty*. It can't tell you "we're pretty confident about Senator A's score, but Senator B missed a lot of votes so we're less sure about theirs." That's what Step 5 addresses.
 
 ---
 
-## Step 3: UMAP — Drawing the Map
+## Step 3: MCA — The Categorical Alternative
+
+### What it is
+
+PCA treats each vote as a number: 1 for Yea, 0 for Nay. But what about legislators who were absent? PCA has to either ignore them or guess what they would have voted. MCA (Multiple Correspondence Analysis) takes a different approach: it treats each vote as a *category* — Yea, Nay, or Absent — and analyzes the categories directly using a technique called chi-square distance.
+
+### The analogy
+
+Imagine you're surveying people's favorite pizza toppings, and some people didn't answer. PCA would say "I'll assume they like pepperoni (the most popular answer) and move on." MCA says "Not answering is itself informative — let's keep it as its own category and see if the non-answerers cluster together." In a legislature, absence patterns can be revealing: do the same legislators tend to skip the same votes? Are absences random, or do they follow partisan lines?
+
+### What we learn
+
+MCA produces an ideological ordering very similar to PCA (the Spearman correlation between MCA Dim1 and PCA PC1 is typically above 0.90), which validates that PCA's simpler assumptions don't distort the results for this dataset. But MCA adds two things PCA cannot:
+
+- **An absence map** showing where high-absence legislators fall in the ideological space. If they cluster near one party, absence patterns are partisan — a finding invisible to PCA.
+- **A biplot** that maps legislators and vote categories into the same space. You can literally see which votes pull a legislator toward the conservative or liberal end.
+
+MCA also detects the "horseshoe effect" — a known mathematical artifact where the second dimension turns out to be just a curved version of the first. If detected, it confirms the legislature is fundamentally one-dimensional (the party divide explains everything).
+
+### Why it comes after PCA
+
+MCA on purely binary data (Yea/Nay only) is mathematically identical to PCA — it adds nothing. MCA's value comes entirely from the three-category encoding (Yea/Nay/Absent). Since PCA is simpler and faster, it runs first as the baseline. MCA then asks: "Does treating absences as a real category change the picture?" If it does, the absence dimension matters. If it doesn't, PCA was sufficient all along.
+
+---
+
+## Step 4: UMAP — Drawing the Map
 
 ### What it is
 
@@ -138,7 +164,7 @@ This map becomes the most intuitive visualization for a general audience. You ca
 
 ---
 
-## Step 4: Ideal Point Estimation (IRT) — The Gold Standard
+## Step 5: Ideal Point Estimation (IRT) — The Gold Standard
 
 ### What it is
 
@@ -174,11 +200,11 @@ We use a Bayesian version of IRT, which means the model doesn't just give us a s
 
 ### Validation
 
-Here's a reassuring finding: the PCA scores from Step 2 and the IRT ideal points from Step 4 correlate at r > 0.95 (where 1.0 would be perfect agreement). Two completely different methods — one a simple linear technique, the other a full probabilistic model — arrive at essentially the same picture. When independent methods agree, that's strong evidence that both are capturing something real.
+Here's a reassuring finding: the PCA scores from Step 2 and the IRT ideal points from Step 5 correlate at r > 0.95 (where 1.0 would be perfect agreement). Two completely different methods — one a simple linear technique, the other a full probabilistic model — arrive at essentially the same picture. When independent methods agree, that's strong evidence that both are capturing something real.
 
 ---
 
-## Step 5: Clustering — Are There Distinct Factions?
+## Step 6: Clustering — Are There Distinct Factions?
 
 ### What it is
 
@@ -204,7 +230,7 @@ If there were a distinct moderate Republican bloc, it might vote with Democrats 
 
 ---
 
-## Step 6: Network Analysis — Mapping Relationships
+## Step 7: Network Analysis — Mapping Relationships
 
 ### What it is
 
@@ -228,7 +254,7 @@ Senator Caryn Tyson — the most conservative member of the Senate by IRT score 
 
 ---
 
-## Step 7: Classical Indices — Standard Yardsticks
+## Step 8: Classical Indices — Standard Yardsticks
 
 ### What it is
 
@@ -257,7 +283,7 @@ Still, unity scores are easy to explain and immediately meaningful ("this legisl
 
 ---
 
-## Step 8: Prediction — Testing Understanding
+## Step 9: Prediction — Testing Understanding
 
 ### What it is
 
@@ -273,7 +299,7 @@ The model predicts individual votes with **98% accuracy** and an AUC-ROC of 0.99
 
 The most important finding is *which features matter most*. The model tells us, in order: a bill's IRT discrimination score matters most (how partisan the bill is), followed by the legislator's ideal point (where they sit on the spectrum), followed by their uncertainty (how many votes they've cast). Party membership and loyalty scores matter, but less — because they're largely redundant with the ideal point.
 
-This confirms that the IRT model from Step 4 really is capturing the core of what drives legislative voting in Kansas.
+This confirms that the IRT model from Step 5 really is capturing the core of what drives legislative voting in Kansas.
 
 ### The interesting failures
 
@@ -281,11 +307,11 @@ The few votes the model gets wrong are often the most revealing. When the model 
 
 ---
 
-## Step 9: Beta-Binomial — Correcting for Small Samples
+## Step 10: Beta-Binomial — Correcting for Small Samples
 
 ### What it is
 
-This step addresses a specific problem with the party unity scores from Step 7. Imagine two legislators:
+This step addresses a specific problem with the party unity scores from Step 8. Imagine two legislators:
 
 - **Legislator A** voted in 200 party-line votes and agreed with their party 190 times (95% unity).
 - **Legislator B** voted in only 8 party-line votes and agreed with their party 6 times (75% unity).
@@ -304,11 +330,11 @@ For most Kansas legislators, the adjustment is small — they've cast enough vot
 
 ---
 
-## Step 10: Hierarchical IRT — Nature vs. Nurture
+## Step 11: Hierarchical IRT — Nature vs. Nurture
 
 ### What it is
 
-The IRT model from Step 4 treats every legislator as a completely independent individual. But legislators aren't independent — they belong to parties that coordinate positions, share information, and sometimes enforce discipline. The hierarchical model adds a layer of structure: it says "legislators within a party are *similar* to each other, but not identical."
+The IRT model from Step 5 treats every legislator as a completely independent individual. But legislators aren't independent — they belong to parties that coordinate positions, share information, and sometimes enforce discipline. The hierarchical model adds a layer of structure: it says "legislators within a party are *similar* to each other, but not identical."
 
 ### The analogy
 
@@ -328,7 +354,7 @@ This model also has a practical benefit: it produces better estimates for legisl
 
 ---
 
-## Step 11: Synthesis — Telling the Story
+## Step 12: Synthesis — Telling the Story
 
 ### What it is
 
@@ -346,7 +372,7 @@ The system automatically identifies three types of notable legislators:
 
 ---
 
-## Step 12: Profiles — Deep Dives
+## Step 13: Profiles — Deep Dives
 
 ### What it is
 
@@ -364,7 +390,7 @@ For each legislator identified as notable in the synthesis step, we produce a de
 
 ---
 
-## Step 13: Cross-Session Validation — Does It Hold Up?
+## Step 14: Cross-Session Validation — Does It Hold Up?
 
 ### What it is
 
@@ -409,5 +435,6 @@ These limitations aren't failures — they're the honest boundaries of what quan
 - **[External Validation Results](external-validation-results.md)** — How we checked our ideology scores against an independent national dataset (Shor-McCarty), and what we found (r = 0.93-0.98 for the flat IRT model).
 - **[Hierarchical Shrinkage Deep Dive](hierarchical-shrinkage-deep-dive.md)** — Why the hierarchical model struggles with the Kansas Senate's small Democrat caucus, with references to the statistics literature.
 - **[PCA Deep Dive](pca-deep-dive.md)** — Literature comparison, open-source landscape survey, and code audit of our PCA implementation.
+- **[MCA Deep Dive](mca-deep-dive.md)** — Theory survey, Python ecosystem evaluation, and integration design for Multiple Correspondence Analysis.
 - **[IRT Deep Dive](irt-deep-dive.md)** — Field survey of IRT implementations, code audit against best practices, and test gap analysis.
 - **[IRT Field Survey](irt-field-survey.md)** — The IRT identification problem, how the field solves it, our unconstrained β contribution, and why Python has no production IRT package for legislative analysis.

@@ -51,6 +51,10 @@ eda *args:
 pca *args:
     uv run python analysis/02_pca/pca.py {{args}}
 
+# Run MCA analysis
+mca *args:
+    uv run python analysis/02c_mca/mca.py {{args}}
+
 # Run Bayesian IRT analysis
 irt *args:
     uv run python analysis/04_irt/irt.py {{args}}

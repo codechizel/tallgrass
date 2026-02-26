@@ -3,6 +3,7 @@
 Pipeline phases (in order):
   01_eda           — Exploratory Data Analysis
   02_pca           — Principal Component Analysis
+  02c_mca          — Multiple Correspondence Analysis
   03_umap          — UMAP dimensionality reduction
   04_irt           — Bayesian IRT ideal points
   05_clustering    — Voting bloc detection
@@ -33,6 +34,8 @@ _MODULE_MAP: dict[str, str] = {
     "eda_report": "01_eda",
     "pca": "02_pca",
     "pca_report": "02_pca",
+    "mca": "02c_mca",
+    "mca_report": "02c_mca",
     "umap_viz": "03_umap",
     "umap_report": "03_umap",
     "irt": "04_irt",

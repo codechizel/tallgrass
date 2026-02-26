@@ -36,6 +36,7 @@ dev = [
     "xgboost>=2.0,<3",
     "shap>=0.49.1",
     "umap-learn>=0.5",
+    "prince>=0.13",
 ]
 
 [build-system]
@@ -87,6 +88,7 @@ replace-imports-with-any = [
     "great_tables.**",
     "css_inline.**",
     "bs4.**",
+    "prince.**",
 ]
 # analysis/ scripts use bare imports (not a package) — allow them.
 # Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to
@@ -114,6 +116,7 @@ allowed-unresolved-imports = [
     "cross_session_report",
     "external_validation_data",
     "external_validation_report",
+    "mca_report",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-02-25 (after profiles name-based lookup + Justfile docs)
+**Last updated:** 2026-02-25 (after MCA phase implementation)
 
 ---
 
@@ -42,6 +42,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | External Validation Results Article | 2026-02-24 | `docs/external-validation-results.md`: general-audience article explaining SM validation results (flat House r=0.981, flat Senate r=0.929, hierarchical Senate r=-0.541) |
 | — | Hierarchical Shrinkage Deep Dive | 2026-02-24 | `docs/hierarchical-shrinkage-deep-dive.md`: literature-grounded analysis of J=2 over-shrinkage problem (Gelman 2006/2015, James-Stein, Peress 2009), 6 remedies proposed |
 | — | IRT Deep Dive & Field Survey | 2026-02-25 | `docs/irt-deep-dive.md` and `docs/irt-field-survey.md`: field survey of IRT implementations, code audit, identification problem, unconstrained β contribution, Python ecosystem gap. Implemented: tail-ESS, shrinkage warning, sign-constraint removal, 28 new tests (853 total). |
+| 2c | MCA (Multiple Correspondence Analysis) | 2026-02-25 | Categorical-data analogue of PCA using chi-square distance; Yea/Nay/Absent as 3 categories; prince library; Greenacre correction; PCA validation (Spearman r), horseshoe detection, biplot, absence map. 34 new tests. Deep dive: `docs/mca-deep-dive.md`, design: `analysis/design/mca.md`. |
 
 ---
 
@@ -59,18 +60,7 @@ Four distinct analyses become possible now that both bienniums are scraped:
 - **Prediction honesty (out-of-sample):** Train vote prediction on 2023-24, test on 2025-26 (and vice versa). This is the gold standard for prediction validation — within-session holdout (AUC=0.98) is optimistic because the model sees the same legislators and session dynamics. Cross-session tests whether the learned patterns generalize. SHAP feature importance rankings compared via Kendall's tau.
 - **Detection threshold validation:** The synthesis detection thresholds (unity > 0.95 skip, rank gap > 0.5 for paradox, betweenness within 1 SD for bridge) were calibrated on 2025-26. Running synthesis on 2023-24 tests whether they produce sensible results on a different session with potentially different partisan dynamics. If they don't, the thresholds need to become adaptive or session-parameterized.
 
-### 2. MCA (Multiple Correspondence Analysis)
-
-**Priority:** Medium — alternative view on the vote matrix.
-
-Method documented in `Analytic_Methods/10_DIM_correspondence_analysis.md`. MCA treats each vote as a categorical variable rather than numeric, which is technically more appropriate for Yea/Nay data:
-
-- Complementary to PCA: PCA assumes continuous, MCA assumes categorical
-- May reveal structure PCA misses, especially in voting patterns where abstention is meaningful
-- `prince` library already in `pyproject.toml`
-- Compare MCA dimensions to PCA PC1/PC2 — if they agree, PCA's linear assumption is validated
-
-### 3. Time Series Analysis
+### 2. Time Series Analysis
 
 **Priority:** Medium — adds temporal depth to static snapshots.
 
@@ -81,7 +71,7 @@ Two methods documented but not yet implemented:
 
 Requires the `ruptures` library (already in `pyproject.toml`). Becomes much more powerful once 2023-24 data is available for cross-session comparison.
 
-### 4. 2D Bayesian IRT Model
+### 3. 2D Bayesian IRT Model
 
 **Priority:** Medium — solves the Tyson paradox properly.
 
@@ -126,7 +116,7 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 ### Test Suite Expansion
 
-1052 tests exist across scraper (~219) and analysis (~833) modules. All passing. Coverage could be expanded:
+1159 tests exist across scraper (~219) and analysis (~940) modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
@@ -174,7 +164,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 07 | ENP | IDX | Completed (Indices) |
 | 08 | Maverick Scores | IDX | Completed (Indices) |
 | 09 | PCA | DIM | Completed (PCA) |
-| 10 | MCA / Correspondence Analysis | DIM | **Planned** — item #4 above |
+| 10 | MCA / Correspondence Analysis | DIM | Completed (MCA, Phase 2c) |
 | 11 | UMAP / t-SNE | DIM | Completed (UMAP, Phase 2b) |
 | 12 | W-NOMINATE | DIM | Rejected (R-only) |
 | 13 | Optimal Classification | DIM | Rejected (R-only) |
@@ -194,7 +184,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 27 | Changepoint Detection | TSA | **Planned** — item #5 above |
 | 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
 
-**Score: 20 completed, 2 rejected, 3 planned, 2 deferred, 1 partial = 29 total** (was 19+1 after hierarchical IRT)
+**Score: 21 completed, 2 rejected, 2 planned, 2 deferred, 1 partial = 29 total**
 
 ---
 

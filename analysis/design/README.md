@@ -20,6 +20,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 8. Synthesis | [synthesis.md](synthesis.md) | Data-driven detection thresholds, graceful degradation, template narratives |
 | 9. Profiles | [profiles.md](profiles.md) | Per-legislator deep-dives: 0-1 scorecard metrics, bill discrimination tiers, defection sorting, agreement vs Kappa |
 | 2b. UMAP | [umap.md](umap.md) | Cosine metric, n_neighbors default, Procrustes sensitivity, Spearman validation |
+| 2c. MCA | [mca.md](mca.md) | Categorical encoding (Yea/Nay/Absent), Greenacre correction, prince library, horseshoe detection, PCA validation |
 | 7b. Beta-Binomial | [beta_binomial.md](beta_binomial.md) | Empirical Bayes, per-party-per-chamber priors, method of moments, shrinkage factor |
 | 8. Hierarchical IRT | [hierarchical.md](hierarchical.md) | 2-level partial pooling, ordering constraint, non-centered parameterization, ICC, shrinkage vs flat |
 | 9. Cross-Session | [cross_session.md](cross_session.md) | Affine IRT alignment, name matching, shift thresholds, prediction transfer, detection validation |
