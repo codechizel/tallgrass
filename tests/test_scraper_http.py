@@ -24,7 +24,6 @@ from tallgrass.config import (
 from tallgrass.scraper import FetchResult, KSVoteScraper
 from tallgrass.session import KSSession
 
-
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 

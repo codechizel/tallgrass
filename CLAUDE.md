@@ -133,7 +133,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (48 decisions)
+- ADRs: `docs/adr/README.md` (49 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -161,6 +161,7 @@ Key references:
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)
 - Experiment framework: `docs/experiment-framework-deep-dive.md` (ecosystem survey, design patterns, BetaPriorSpec, PlatformCheck, monitoring)
 - Nutpie deep dive: `docs/nutpie-deep-dive.md` (Rust NUTS sampler, normalizing flow adaptation, integration plan)
+- Nutpie flat IRT experiment: `docs/nutpie-flat-irt-experiment.md` (Experiment 1 results: compilation, sampling, sign flip, |r|=0.994 vs PyMC)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`

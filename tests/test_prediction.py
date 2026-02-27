@@ -10,7 +10,6 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 import pytest
-
 from analysis.nlp_features import fit_topic_features
 from analysis.prediction import (
     HARDEST_N,

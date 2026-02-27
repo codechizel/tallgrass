@@ -11,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
-
 from analysis.cross_session_data import (
     SHIFT_THRESHOLD_SD,
     align_feature_columns,
@@ -1126,6 +1125,7 @@ class TestBuildCrossSessionReport:
     def test_report_adds_sections(self, tmp_path: Path) -> None:
         """Building a report should add sections without crashing."""
         from analysis.cross_session_report import build_cross_session_report
+
         from analysis.report import ReportBuilder
 
         rng = np.random.default_rng(42)

@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-
 from analysis.profiles_data import (
     MAX_PROFILE_TARGETS,
-    NameMatch,
     ProfileTarget,
     build_scorecard,
     compute_bill_type_breakdown,

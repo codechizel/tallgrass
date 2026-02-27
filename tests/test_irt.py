@@ -21,9 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import arviz as az
 import xarray as xr
-
 from analysis.irt import (
-    ESS_THRESHOLD,
     HOLDOUT_FRACTION,
     HOLDOUT_SEED,
     MAX_DIVERGENCES,

@@ -10,7 +10,6 @@ import networkx as nx
 import numpy as np
 import polars as pl
 import pytest
-
 from analysis.network import (
     KAPPA_THRESHOLD_DEFAULT,
     _community_label,

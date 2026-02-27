@@ -329,19 +329,17 @@ Our joint model has ~1,042 parameters — right at the documented limit for norm
 
 ## Integration Plan
 
-### Experiment 1: Flat IRT Baseline (Low Risk)
+### Experiment 1: Flat IRT Baseline (Low Risk) — COMPLETE, PASS
 
-Run the simplest model through nutpie to verify basic compatibility.
+**Run date:** 2026-02-27. **Full results:** `docs/nutpie-flat-irt-experiment.md`, **ADR:** ADR-0049.
 
-1. Add `nutpie>=0.14` as optional dependency in `pyproject.toml`
-2. Build the flat 1D IRT model for one chamber (91st House)
-3. Compile with `nutpie.compile_pymc_model(model)` — verify compilation succeeds
-4. Sample with `nutpie.sample(compiled, draws=2000, tune=1000, chains=2, seed=42)`
-5. Compare: ideal point correlation with PyMC baseline (expect r > 0.99), R-hat, ESS, wall time
-6. Verify `idata.to_netcdf()` round-trips correctly
-7. Verify `az.rhat()`, `az.ess()` work on the output
+Compiled the 91st House flat 2PL IRT (130 legislators × 297 votes, 722 free parameters) with nutpie 0.16.6 Numba backend. Compilation: 13.6s, clean. Sampling: 2×2000 draws in 112.8s. All convergence diagnostics pass with wide margins (R-hat max 1.004, ESS min 1,950, zero divergences). Ideal points correlate |r| = 0.994 with PyMC baseline (sign flip due to IRT reflection invariance — correctable post-hoc).
 
-**Pass criteria**: Ideal points correlate r > 0.99 with PyMC baseline. No compilation errors.
+Key findings:
+- Numba `nopython` mode handles all PyTensor ops in our IRT models (`pt.set_subtensor`, `pm.Bernoulli(logit_p=...)`, `pm.Deterministic` with dims)
+- InferenceData fully compatible with ArviZ (R-hat, ESS, BFMI, HDI, NetCDF)
+- Single-process execution confirmed (Rust threads, no child processes)
+- `log_likelihood` group absent as expected (nutpie issue #150)
 
 ### Experiment 2: Hierarchical Per-Chamber with Numba (Medium Risk)
 
