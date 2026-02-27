@@ -120,6 +120,10 @@ typecheck:
     uvx ty check src/
     uvx ty check analysis/
 
+# Monitor running experiment
+monitor:
+    @cat /tmp/tallgrass/experiment.status.json 2>/dev/null | python3 -m json.tool || echo "No experiment running"
+
 # Full check (lint + typecheck + tests)
 check:
     just lint-check
