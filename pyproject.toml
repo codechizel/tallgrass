@@ -120,6 +120,7 @@ allowed-unresolved-imports = [
     "mca_report",
     "model_spec",
     "experiment_monitor",
+    "experiment_runner",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

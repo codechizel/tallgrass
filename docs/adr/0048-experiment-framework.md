@@ -1,0 +1,62 @@
+# ADR-0048: Experiment Framework
+
+**Date:** 2026-02-27
+**Status:** Accepted
+
+## Context
+
+Tallgrass has a growing experimental practice. Six experiments have been run since 2026-02-23. The positive-beta experiment (`run_experiment.py`, 799 lines) duplicates ~200 lines of production model-building code to change 3 lines (the beta prior). If production evolves, experiments silently drift. Platform constraints (thread caps, compiler checks) aren't enforced by experiment scripts that bypass the Justfile.
+
+Three structural problems:
+1. **Code duplication creates drift risk** — experiment copies of `build_per_chamber_model()` and `build_joint_model()` can diverge from production
+2. **Platform constraints are implicit** — M3 Pro MCMC rules (ADR-0022) only enforced by Justfile exports, not by experiment code
+3. **No standard experiment lifecycle** — each experiment reinvents data loading, diagnostics, and output structure
+
+## Decision
+
+Implement a lightweight experiment framework with three components:
+
+### 1. BetaPriorSpec (`analysis/10_hierarchical/model_spec.py`)
+
+Factor the bill discrimination (beta) prior into a frozen dataclass. Production functions gain a `beta_prior` parameter with `PRODUCTION_BETA` as the default. Zero behavior change for production callers. Experiments pass alternative specs to the same functions — no code duplication.
+
+### 2. Experiment Monitoring (`analysis/experiment_monitor.py`)
+
+- **PlatformCheck**: validates Apple Silicon constraints (thread caps, C++ compiler, concurrent MCMC processes) before sampling begins
+- **Monitoring callback**: updates process title via `setproctitle` and writes atomic JSON status file every 50 draws during `pm.sample()`
+- **ExperimentLifecycle**: context manager with PID lock (`fcntl`), process group isolation, SIGTERM handler, and automatic cleanup
+
+### 3. Experiment Runner (`analysis/experiment_runner.py`)
+
+- **ExperimentConfig**: frozen dataclass bundling all experiment parameters (beta prior, sampling settings, session, chambers)
+- **run_experiment()**: orchestrates the full lifecycle: platform check → data load → per-chamber models → optional joint model → HTML report → metrics.json
+- All model-building, diagnostics, and reporting logic is imported from production — zero duplication
+
+## Alternatives Considered
+
+- **Sacred/Hydra/MLflow**: too heavy for single-developer, single-machine use; designed for ML hyperparameter sweeps, not structural model variants (see ecosystem survey in `docs/experiment-framework-deep-dive.md`)
+- **OOP Strategy/Template Method**: model variants share 90-95% of code and differ by data (which prior), not behavior — functional approach is simpler
+- **Pydantic**: 6.5x slower than dataclasses; overkill for internal configs
+
+## Consequences
+
+**Positive:**
+- 799-line experiment scripts become ~25-line configs
+- Production functions are the single source of truth for model-building logic
+- Platform constraints are enforced before hours of sampling begin
+- MCMC processes are visible in `ps` via `setproctitle`
+- Standardized output format enables cross-variant comparison
+
+**Negative:**
+- Structural variants (2D IRT, 1PL Rasch) that change model topology still need standalone scripts — `BetaPriorSpec` only handles prior variants
+- `setproctitle` adds a dev dependency (~20 KB wheel)
+
+**Dependencies added:** `setproctitle>=1.3`
+
+## Related
+
+- [ADR-0022](0022-analysis-parallelism-and-timing.md) — Apple Silicon MCMC constraints
+- [ADR-0044](0044-hierarchical-pca-informed-init.md) — PCA-informed initialization
+- [ADR-0045](0045-4-chain-hierarchical-irt.md) — 4-chain with adapt_diag
+- [ADR-0047](0047-positive-beta-constraint-experiment.md) — Positive beta experiment (motivation)
+- [Experiment Framework Deep Dive](../experiment-framework-deep-dive.md) — Full ecosystem survey and design rationale

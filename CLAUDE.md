@@ -22,8 +22,9 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1172 tests)
+just test                                    # → uv run pytest tests/ -v (~1213 tests)
 just test-scraper                            # → pytest on scraper test files only
+just monitor                                 # → check running experiment status
 uv run tallgrass 2023                  # historical session (direct)
 uv run tallgrass 2024 --special        # special session (direct)
 ```
@@ -132,7 +133,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (47 decisions)
+- ADRs: `docs/adr/README.md` (48 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -164,6 +165,14 @@ Key references:
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
 
+## Experiment Framework
+
+Three components eliminate code duplication in MCMC experiments (ADR-0048):
+
+- **`analysis/10_hierarchical/model_spec.py`** — `BetaPriorSpec` frozen dataclass + `PRODUCTION_BETA`. Both `build_per_chamber_model()` and `build_joint_model()` accept `beta_prior=` parameter (defaults to production). Experiments pass alternative specs — no code duplication.
+- **`analysis/experiment_monitor.py`** — `PlatformCheck` (validates Apple Silicon constraints before sampling), monitoring callback (`setproctitle` + atomic JSON status file), `ExperimentLifecycle` (PID lock, process group, cleanup). `just monitor` shows experiment progress.
+- **`analysis/experiment_runner.py`** — `ExperimentConfig` frozen dataclass + `run_experiment()`. Orchestrates: platform check → data load → per-chamber models → optional joint → HTML report → metrics.json. 799-line experiment scripts become ~25-line configs.
+
 ## Concurrency
 
 - **Scraper**: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), sequential parse. Never mutate shared state during fetch.
@@ -174,7 +183,7 @@ Key references:
 ## Testing
 
 ```bash
-just test                    # 1172 tests
+just test                    # 1213 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```
