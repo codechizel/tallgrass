@@ -9,7 +9,7 @@ The flat IRT model uses PCA-informed chain initialization (ADR-0023) to prevent 
 
 The hierarchical IRT model loaded PCA scores but never used them for initialization. The `pca_scores` variable was dead code in the per-chamber model path -- `build_per_chamber_model()` had no initvals parameter. The hierarchical model mostly converged because the sorted party means (`mu_party = pt.sort(mu_party_raw)`) provide partial mode-breaking, but the 91st House showed a persistent marginal R-hat warning (1.0102) and ESS warning (370) that appeared in every run since the first hierarchical implementation (2026-02-22).
 
-An experiment (`results/experiments/2026-02-26_hierarchical-pca-init/`) tested PCA-informed initialization of `xi_offset` in the hierarchical model:
+An experiment (`results/experimental_lab/2026-02-26_hierarchical-pca-init/`) tested PCA-informed initialization of `xi_offset` in the hierarchical model:
 
 | Metric | Baseline House | PCA-init House | Baseline Senate | PCA-init Senate |
 |--------|---------------|----------------|-----------------|-----------------|

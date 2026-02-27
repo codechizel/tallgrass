@@ -288,7 +288,7 @@ This cuts the parameter count by ~430 (no β vector), eliminates the reflection 
 
 ## Experiment Results (2026-02-27)
 
-The Priority 1 experiment has been completed. Full results in `results/experiments/2026-02-27_positive-beta/experiment.md`.
+The Priority 1 experiment has been completed. Full results in `results/experimental_lab/2026-02-27_positive-beta/experiment.md`.
 
 ### What We Found
 
@@ -333,7 +333,7 @@ Updated based on experiment results:
 
 ## Related Documents
 
-- [Positive Beta Experiment](../results/experiments/2026-02-27_positive-beta/experiment.md) — LogNormal/HalfNormal results, joint model test, full metrics
+- [Positive Beta Experiment](../results/experimental_lab/2026-02-27_positive-beta/experiment.md) — LogNormal/HalfNormal results, joint model test, full metrics
 - [Hierarchical IRT Deep Dive](hierarchical-irt-deep-dive.md) — ecosystem survey, code audit, 9 issues fixed
 - [Hierarchical Shrinkage Deep Dive](hierarchical-shrinkage-deep-dive.md) — over-shrinkage with small groups
 - [Hierarchical PCA Init Experiment](hierarchical-pca-init-experiment.md) — R-hat fix, ESS threshold analysis

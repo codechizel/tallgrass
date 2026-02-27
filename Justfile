@@ -9,7 +9,7 @@
 # is equivalent to `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 #
 # Cap thread pools to P-core count (6) to prevent E-core spillover on Apple Silicon.
-# See ADR-0022 and results/experiments/2026-02-23_parallel-chains-performance/.
+# See ADR-0022 and results/experimental_lab/2026-02-23_parallel-chains-performance/.
 export OMP_NUM_THREADS := "6"
 export OPENBLAS_NUM_THREADS := "6"
 

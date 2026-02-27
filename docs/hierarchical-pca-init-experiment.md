@@ -117,4 +117,4 @@ The residual ESS issue (397 vs 400) could be addressed in a follow-up by increas
 - Jackman, S. (2001). Multidimensional analysis of roll call data via Bayesian simulation. *Political Analysis*, 9(3), 227-241.
 - Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021). Rank-normalization, folding, and localization: An improved R-hat for assessing convergence of MCMC. *Bayesian Analysis*, 16(2), 667-718.
 - ADR-0023: PCA-informed IRT chain initialization (2026-02-23).
-- Experiment data: `results/experiments/2026-02-26_hierarchical-pca-init/`
+- Experiment data: `results/experimental_lab/2026-02-26_hierarchical-pca-init/`

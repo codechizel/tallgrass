@@ -2553,7 +2553,7 @@ def main() -> None:
 
             # PCA-informed chain initialization (default: on)
             # Prevents reflection mode-splitting by starting chains near the
-            # correct orientation. See results/experiments/irt-convergence/.
+            # correct orientation. See results/experimental_lab/irt-convergence/.
             xi_init = None
             if not args.no_pca_init:
                 anchor_set = {cons_idx, lib_idx}

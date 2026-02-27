@@ -341,15 +341,17 @@ Key findings:
 - Single-process execution confirmed (Rust threads, no child processes)
 - `log_likelihood` group absent as expected (nutpie issue #150)
 
-### Experiment 2: Hierarchical Per-Chamber with Numba (Medium Risk)
+### Experiment 2: Hierarchical Per-Chamber with Numba (Medium Risk) — IN PROGRESS
 
-Test the model that matters most — the hierarchical IRT that currently fails on House.
+**Script:** `results/experimental_lab/2026-02-27_nutpie-hierarchical/run_experiment.py`
 
-1. Build the 91st House hierarchical per-chamber model
+Test the model that matters most — the hierarchical IRT that currently fails on House. Both chambers (House then Senate), 4 chains, 2000 draws, 1500 tune, no PCA init.
+
+1. Build the 91st House/Senate hierarchical per-chamber models
 2. Compile with Numba backend
 3. Sample with nutpie (no PCA init — let nutpie find the mode from zeros)
 4. Compare convergence: R-hat, ESS, divergences vs PyMC baseline
-5. Compare ideal points: correlation with PyMC baseline and flat IRT
+5. Compare ideal points: correlation with PyMC hierarchical and flat IRT baselines
 6. Time the run
 
 **Key question**: Does nutpie's standard adaptation (without NF) resolve the House convergence failure?

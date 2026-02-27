@@ -43,7 +43,7 @@ The experiment tests both the per-chamber model (where we have convergence data 
 
 ## Results (2026-02-27)
 
-Experiment complete. Full results in `results/experiments/2026-02-27_positive-beta/experiment.md`.
+Experiment complete. Full results in `results/experimental_lab/2026-02-27_positive-beta/experiment.md`.
 
 **Per-chamber (91st biennium):**
 

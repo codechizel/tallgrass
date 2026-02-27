@@ -214,8 +214,8 @@ The 1.01 threshold was calibrated for 4 chains (Vehtari et al. 2021). A value of
 
 ## Experiment files
 
-- Experiment plan: `results/experiments/2026-02-26_hierarchical-4-chains/experiment.md`
-- Experiment script: `results/experiments/2026-02-26_hierarchical-4-chains/run_experiment.py`
-- Run 1 metrics: `results/experiments/2026-02-26_hierarchical-4-chains/run_01_2chains/metrics.json`
-- Run 2 metrics: `results/experiments/2026-02-26_hierarchical-4-chains/run_02_4chains/metrics.json`
+- Experiment plan: `results/experimental_lab/2026-02-26_hierarchical-4-chains/experiment.md`
+- Experiment script: `results/experimental_lab/2026-02-26_hierarchical-4-chains/run_experiment.py`
+- Run 1 metrics: `results/experimental_lab/2026-02-26_hierarchical-4-chains/run_01_2chains/metrics.json`
+- Run 2 metrics: `results/experimental_lab/2026-02-26_hierarchical-4-chains/run_02_4chains/metrics.json`
 - Related: ADR-0022 (parallelism), ADR-0023 (PCA init), ADR-0044 (hierarchical PCA init)

@@ -125,6 +125,8 @@ External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downl
 
 Analysis outputs in `results/kansas/{session}/{NN_phase}/{date}/` with `latest` symlink (e.g. `results/kansas/91st_2025-2026/01_eda/2026-02-27/`). Phase directories use numbered prefixes matching the source layout (`01_eda`, `02_pca`, `04_irt`, etc.). Same-day runs append `.1`, `.2`, etc. `RunContext` manages structured output, elapsed timing, HTML reports, and auto-primers.
 
+Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each contains `experiment.md` (structured record from TEMPLATE.md), `run_experiment.py`, and `run_NN_description/` output directories.
+
 ## Analysis Pipeline
 
 Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root.
@@ -148,7 +150,7 @@ Key references:
 - Hierarchical PCA init experiment: `docs/hierarchical-pca-init-experiment.md` (R-hat fix, ESS threshold analysis, ADR-0044)
 - 4-chain hierarchical IRT experiment: `docs/hierarchical-4-chain-experiment.md` (ESS fix, jitter mode-splitting discovery, adapt_diag fix)
 - Hierarchical convergence improvement: `docs/hierarchical-convergence-improvement.md` (House vs Senate theory, β>0 constraint, 9-priority improvement plan, experiment results)
-- Positive beta experiment: `results/experiments/2026-02-27_positive-beta/experiment.md` (LogNormal fixes R-hat but not ESS; joint improves but still fails; positive β necessary but not sufficient)
+- Positive beta experiment: `results/experimental_lab/2026-02-27_positive-beta/experiment.md` (LogNormal fixes R-hat but not ESS; joint improves but still fails; positive β necessary but not sufficient)
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
 - Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)
 - Synthesis deep dive: `docs/synthesis-deep-dive.md` (field survey, code audit, detection algorithms, test gaps, refactoring)
@@ -162,6 +164,7 @@ Key references:
 - Experiment framework: `docs/experiment-framework-deep-dive.md` (ecosystem survey, design patterns, BetaPriorSpec, PlatformCheck, monitoring)
 - Nutpie deep dive: `docs/nutpie-deep-dive.md` (Rust NUTS sampler, normalizing flow adaptation, integration plan)
 - Nutpie flat IRT experiment: `docs/nutpie-flat-irt-experiment.md` (Experiment 1 results: compilation, sampling, sign flip, |r|=0.994 vs PyMC)
+- Nutpie hierarchical experiment: `results/experimental_lab/2026-02-27_nutpie-hierarchical/experiment.md` (Experiment 2: hierarchical per-chamber with Numba, House convergence test)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`

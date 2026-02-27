@@ -1,0 +1,33 @@
+{
+  "experiment": "nutpie-flat-irt",
+  "session": "2025-26",
+  "chamber": "House",
+  "sampler": "nutpie",
+  "backend": "numba",
+  "n_free_params": 722,
+  "n_samples": 2000,
+  "n_tune": 1000,
+  "n_chains": 2,
+  "seed": 42,
+  "compile_time_s": 13.6,
+  "sample_time_s": 112.8,
+  "total_time_s": 126.4,
+  "convergence": {
+    "xi_rhat_max": 1.003577,
+    "alpha_rhat_max": 1.007274,
+    "beta_rhat_max": 1.003932,
+    "xi_ess_min": 1950.3,
+    "divergences": 0,
+    "ebfmi": [
+      0.97,
+      1.005
+    ]
+  },
+  "comparison": {
+    "pearson_r_vs_pymc": -0.993495,
+    "abs_r": 0.993495,
+    "sign_flip": true,
+    "pass_criteria": "|r| > 0.99",
+    "pass": true
+  }
+}

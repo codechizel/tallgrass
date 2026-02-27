@@ -358,7 +358,7 @@ This confirms the expectation: the second dimension captures behavior of 3-5 ext
 
 ### Output Files
 
-Results in `results/experiments/2026-02-26_irt-2d/`:
+Results in `results/experimental_lab/2026-02-26_irt-2d/`:
 - `data/ideal_points_2d.parquet` — 42 legislators with 2D ideal points and HDIs
 - `data/convergence_summary.json` — full diagnostics and correlation metrics
 - `plots/2d_scatter.png` — Dim 1 vs Dim 2, party-colored, Tyson/Thompson annotated

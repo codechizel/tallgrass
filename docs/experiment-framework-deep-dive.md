@@ -19,7 +19,7 @@ This means:
 
 ### 2. Platform Constraints Are Implicit
 
-The Apple Silicon M3 Pro has hard rules for MCMC work (ADR-0022, `docs/apple-silicon-mcmc-tuning.md`): cap thread pools at 6, run bienniums sequentially, never schedule MCMC on efficiency cores. These rules live in documentation and the Justfile's `OMP_NUM_THREADS=6` export — but experiment scripts bypass the Justfile (they're run with `uv run python results/experiments/.../run_experiment.py`). An experimenter who forgets to set `OMP_NUM_THREADS` or launches two experiments in parallel will get skewed timing data from E-core scheduling, and may not realize it.
+The Apple Silicon M3 Pro has hard rules for MCMC work (ADR-0022, `docs/apple-silicon-mcmc-tuning.md`): cap thread pools at 6, run bienniums sequentially, never schedule MCMC on efficiency cores. These rules live in documentation and the Justfile's `OMP_NUM_THREADS=6` export — but experiment scripts bypass the Justfile (they're run with `uv run python results/experimental_lab/.../run_experiment.py`). An experimenter who forgets to set `OMP_NUM_THREADS` or launches two experiments in parallel will get skewed timing data from E-core scheduling, and may not realize it.
 
 The PCA-init experiment discovered this empirically: jitter + 4 chains causes mode-splitting (ADR-0045). The 4-chain experiment documented that first-run PyTensor compilation adds 10-20 minutes. These are platform-specific gotchas that each experiment rediscovers independently.
 
@@ -100,7 +100,7 @@ The research literature is clear: when model variants share 80-95% of their code
 
 | Aspect | Current State | Risk |
 |--------|--------------|------|
-| Separation from production | Experiments in `experimental/` and `results/experiments/` | Low |
+| Separation from production | Experiments in `experimental/` and `results/experimental_lab/` | Low |
 | Code duplication | `run_experiment.py` rewrites model-building logic | **High** |
 | Test coverage | Zero tests for experimental code | Medium |
 | Platform awareness | Thread caps, core scheduling not enforced by experiment code | **High** |
@@ -125,7 +125,7 @@ analysis/
         irt_2d_experiment.py     ← structural variants (different model topology)
         irt_beta_experiment.py   ← prior variants (parameterizable)
 
-results/experiments/
+results/experimental_lab/
     TEMPLATE.md
     2026-02-27_positive-beta/
         experiment.md
@@ -370,7 +370,7 @@ if __name__ == "__main__":
 ### What Doesn't Change
 
 - The existing `TEMPLATE.md` and `experiment.md` documentation standard
-- The `results/experiments/YYYY-MM-DD_description/` directory convention
+- The `results/experimental_lab/YYYY-MM-DD_description/` directory convention
 - The append-only results policy
 - The 91st-biennium default session rationale
 - The promotion path (experiment → ADR → production commit)
@@ -675,7 +675,7 @@ nutpie is a drop-in replacement for `pm.sample()` and benchmarks at 2-10x faster
 
 ### Phase 5: Retrofit Existing Experiments (Optional)
 
-1. Rewrite `results/experiments/2026-02-27_positive-beta/run_experiment.py` to use the new runner
+1. Rewrite `results/experimental_lab/2026-02-27_positive-beta/run_experiment.py` to use the new runner
 2. Verify identical output (metrics, plots, report)
 3. Leave older experiments as-is (they're completed; no value in rewriting)
 

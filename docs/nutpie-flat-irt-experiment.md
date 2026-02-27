@@ -106,10 +106,10 @@ This clears the path for **Experiment 2: Hierarchical per-chamber IRT with Numba
 
 | File | Description |
 |------|-------------|
-| `results/experiments/2026-02-27_nutpie-flat-irt/run_experiment.py` | Experiment script |
-| `results/experiments/2026-02-27_nutpie-flat-irt/run_01_house/metrics.json` | Machine-readable results |
-| `results/experiments/2026-02-27_nutpie-flat-irt/run_01_house/scatter_nutpie_vs_pymc.png` | Scatter plot (anti-diagonal confirms sign flip) |
-| `results/experiments/2026-02-27_nutpie-flat-irt/run_01_house/data/idata_nutpie_house.nc` | Full posterior trace (NetCDF) |
+| `results/experimental_lab/2026-02-27_nutpie-flat-irt/run_experiment.py` | Experiment script |
+| `results/experimental_lab/2026-02-27_nutpie-flat-irt/run_01_house/metrics.json` | Machine-readable results |
+| `results/experimental_lab/2026-02-27_nutpie-flat-irt/run_01_house/scatter_nutpie_vs_pymc.png` | Scatter plot (anti-diagonal confirms sign flip) |
+| `results/experimental_lab/2026-02-27_nutpie-flat-irt/run_01_house/data/idata_nutpie_house.nc` | Full posterior trace (NetCDF) |
 
 ## Related Documents
 

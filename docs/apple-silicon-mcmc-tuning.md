@@ -148,6 +148,6 @@ The core insight: Apple Silicon's heterogeneous architecture is invisible to mos
 ## References
 
 - [ADR-0022: Analysis parallelism and runtime timing](adr/0022-analysis-parallelism-and-timing.md) — the architectural decision record
-- [Parallel chains experiment](../results/experiments/2026-02-23_parallel-chains-performance/experiment.md) — full data tables and methodology
+- [Parallel chains experiment](../results/experimental_lab/2026-02-23_parallel-chains-performance/experiment.md) — full data tables and methodology
 - Apple Developer Documentation: [Energy Efficiency Guide for Mac Apps](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/)
 - PyMC Documentation: [Parallel Sampling](https://www.pymc.io/projects/docs/en/latest/learn/core_notebooks/pymc_overview.html)

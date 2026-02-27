@@ -55,7 +55,7 @@ Added `n_jobs=-1` to all `XGBClassifier` instances in `prediction.py` and `cross
 
 ## Addendum: Parallel Chains Performance Experiment (2026-02-23)
 
-A controlled experiment (`results/experiments/2026-02-23_parallel-chains-performance/`) tested `cores=1` (sequential) vs `cores=2` (parallel) across two phases:
+A controlled experiment (`results/experimental_lab/2026-02-23_parallel-chains-performance/`) tested `cores=1` (sequential) vs `cores=2` (parallel) across two phases:
 
 - **Phase 1 (91st Legislature):** Per-chamber models only (`--skip-joint`). Parallel is 1.87x faster.
 - **Phase 2 (88th Legislature):** Full run including joint cross-chamber model. Parallel is 1.83x faster overall; joint model specifically 1.89x faster (22.4 min vs 42.4 min).

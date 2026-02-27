@@ -7,7 +7,7 @@
 
 The hierarchical IRT model ran 2 MCMC chains on an M3 Pro with 6 performance cores, leaving 4 P-cores idle. The House chamber consistently produced marginal ESS warnings (xi: 397, mu_party: 356) against the 400 threshold from Vehtari et al. (2021), which assumes 4 chains with ~100 effective samples each. With 2 chains, each chain had to contribute ~200 effective samples — double the per-chain workload the threshold was calibrated for.
 
-An experiment (`results/experiments/2026-02-26_hierarchical-4-chains/`) tested 4 chains and discovered a critical interaction between PyMC's `jitter+adapt_diag` initialization and PCA-informed starting values:
+An experiment (`results/experimental_lab/2026-02-26_hierarchical-4-chains/`) tested 4 chains and discovered a critical interaction between PyMC's `jitter+adapt_diag` initialization and PCA-informed starting values:
 
 **Initial 4-chain attempt (with jitter):**
 

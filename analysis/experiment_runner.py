@@ -21,7 +21,7 @@ Usage:
         description="beta ~ Normal(0, 1)",
         beta_prior=BetaPriorSpec("normal", {"mu": 0, "sigma": 1}),
     )
-    metrics = run_experiment(config, output_base=Path("results/experiments/my-exp"))
+    metrics = run_experiment(config, output_base=Path("results/experimental_lab/my-exp"))
 """
 
 import json
@@ -383,7 +383,7 @@ def run_experiment(config: ExperimentConfig, output_base: Path) -> dict:
     Args:
         config: Experiment configuration (beta_prior, sampling params, etc.).
         output_base: Base directory for experiment output (e.g.
-            results/experiments/2026-02-27_positive-beta).
+            results/experimental_lab/2026-02-27_positive-beta).
 
     Returns:
         Metrics dict with config dump, convergence results, and timing.

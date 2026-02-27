@@ -605,13 +605,13 @@ def main() -> None:
 
     # Output directory
     today = datetime.now(CT_TZ).strftime("%Y-%m-%d")
-    output_dir = Path("results/experiments") / f"{today}_irt-2d"
+    output_dir = Path("results/experimental_lab") / f"{today}_irt-2d"
     # Handle same-day reruns
     if output_dir.exists():
         suffix = 1
-        while (Path("results/experiments") / f"{today}_irt-2d.{suffix}").exists():
+        while (Path("results/experimental_lab") / f"{today}_irt-2d.{suffix}").exists():
             suffix += 1
-        output_dir = Path("results/experiments") / f"{today}_irt-2d.{suffix}"
+        output_dir = Path("results/experimental_lab") / f"{today}_irt-2d.{suffix}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     chamber = args.chamber.capitalize()

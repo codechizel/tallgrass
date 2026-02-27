@@ -67,6 +67,23 @@
 
 *What code or configuration changes were applied to production as a result? Include commit hash if applicable. "No changes" is a valid answer — not every experiment leads to a code change.*
 
+## Artifacts
+
+*List the output files this experiment produced. Helps future readers find the data without digging through directories.*
+
+| File | Description |
+|------|-------------|
+| `run_experiment.py` | Experiment script |
+| `run_01_description/metrics.json` | Machine-readable results |
+| `run_01_description/data/...` | Posterior traces, ideal points, etc. |
+
+## Related
+
+*Link to ADRs, deep dives, and other documents that provide context for this experiment.*
+
+- `docs/relevant-deep-dive.md` — Background research
+- `docs/adr/NNNN-decision.md` — Decision record (if applicable)
+
 ---
 
 ## Default Session
