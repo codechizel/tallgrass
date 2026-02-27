@@ -204,7 +204,7 @@ Reads from upstream phases:
 
 HIER_N_SAMPLES = 2000
 HIER_N_TUNE = 1500
-HIER_N_CHAINS = 2
+HIER_N_CHAINS = 4
 HIER_TARGET_ACCEPT = 0.95
 
 # Party index convention: 0 = Democrat, 1 = Republican (after sorting)
@@ -415,14 +415,20 @@ def build_per_chamber_model(
         print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
         print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
 
-        # PCA-informed initialization of xi_offset (ADR-0044)
+        # PCA-informed initialization of xi_offset (ADR-0044, ADR-0045)
         sample_kwargs: dict = {}
         if xi_offset_initvals is not None:
             sample_kwargs["initvals"] = {"xi_offset": xi_offset_initvals}
+            # Use adapt_diag (no jitter) when PCA initvals provided.
+            # jitter+adapt_diag adds random perturbation that can push chains
+            # past the reflection mode boundary, causing mode-splitting with
+            # 4+ chains. PCA init already orients chains correctly.
+            sample_kwargs["init"] = "adapt_diag"
             print(
                 f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
                 f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
             )
+            print("  init='adapt_diag' (no jitter — PCA initvals provide orientation)")
 
         t0 = time.time()
         idata = pm.sample(

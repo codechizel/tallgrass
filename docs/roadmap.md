@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-02-26 (after cross-session validation first post-fix run)
+**Last updated:** 2026-02-26 (after 4-chain hierarchical IRT experiment)
 
 ---
 
@@ -46,17 +46,11 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Hierarchical IRT Fixes (Bill-Matching + Adaptive Priors) | 2026-02-26 | Joint model bill-matching (ADR-0043): 71 shared bills bridge chambers via concurrent calibration. Group-size-adaptive priors fix Senate-D convergence. Joint model runtime 93 min → 31 min. ADR-0042, ADR-0043. |
 | 9 | Cross-Session Validation (90th vs 91st) | 2026-02-26 | First post-fix run: ideology r=0.940 (House), 0.975 (Senate). Cross-session prediction AUC 0.967-0.976 (nearly matches within-session 0.975-0.984). 94 tests. IRT ideal points confirmed as stable traits; network centrality metrics confirmed session-specific. Tyson flagged as paradox in both bienniums. |
 | — | PCA-Informed Init for Hierarchical IRT | 2026-02-26 | Experiment proved PCA init fixes House R-hat (1.0102→1.0026) with r=0.999996 agreement. Implemented as default in `build_per_chamber_model()`. Per-chain ESS reporting added. ADR-0044. Article: `docs/hierarchical-pca-init-experiment.md`. |
+| — | 4-Chain Hierarchical IRT Experiment | 2026-02-26 | 4 chains resolve both ESS warnings (xi: 397→564, mu_party: 356→512) at +4% wall time. Discovered jitter mode-splitting: `jitter+adapt_diag` causes R-hat ~1.53 with 4 chains; fix is `adapt_diag` with PCA init. Run 3 unnecessary. Article: `docs/hierarchical-4-chain-experiment.md`. |
 
 ---
 
 ## Next Up
-
-### 0. 4-Chain Hierarchical IRT Experiment (Ready to Run)
-
-**Priority:** High — quick experiment, nearly free on our hardware.
-**Status:** Experiment directory and script created. Ready to run: `results/experiments/2026-02-26_hierarchical-4-chains/`.
-
-The ESS > 400 threshold assumes 4 chains (Vehtari et al. 2021: 100 per chain). We run 2 chains on 6 P-cores, leaving 4 cores idle. Going to 4 chains is nearly free (5-15% thermal overhead), roughly doubles ESS, and matches the standard configuration the literature was calibrated against. Three planned runs: 2-chain baseline, 4-chain, and 4-chain with 2500 draws.
 
 ### 1. Time Series Analysis
 

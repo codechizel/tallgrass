@@ -1159,11 +1159,15 @@ def build_and_sample(
         print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
         print(f"  Anchors: {n_anchors} fixed legislators")
 
-        # Build initvals if PCA-informed initialization requested
+        # Build initvals if PCA-informed initialization requested (ADR-0023, ADR-0045)
         sample_kwargs: dict = {}
         if xi_initvals is not None:
             sample_kwargs["initvals"] = {"xi_free": xi_initvals}
+            # Use adapt_diag (no jitter) when PCA initvals provided.
+            # Jitter can push chains past the reflection mode boundary.
+            sample_kwargs["init"] = "adapt_diag"
             print(f"  PCA-informed initvals: {len(xi_initvals)} free parameters")
+            print("  init='adapt_diag' (no jitter — PCA initvals provide orientation)")
 
         t0 = time.time()
         idata = pm.sample(

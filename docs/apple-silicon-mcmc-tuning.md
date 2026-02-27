@@ -77,11 +77,17 @@ We measured this across every model type:
 
 The original failure. Running 8 bienniums simultaneously meant 16+ MCMC processes competing for 6 P-cores. The macOS scheduler distributed them across all 12 cores, and at least half the chains landed on E-cores at 50% speed. Combined with thermal throttling from sustained 100% utilization across every core, each chain ran at roughly 40% of its normal speed — a 2.5x slowdown that turned a 2-hour pipeline into an unfinishable one.
 
-**Fix:** Run bienniums sequentially, never simultaneously. Parallel chains *within* a single biennium are fine (2 chains on 6 P-cores has plenty of headroom), but multiple bienniums create the kind of system-wide CPU pressure that triggers E-core scheduling.
+**Fix:** Run bienniums sequentially, never simultaneously. Parallel chains *within* a single biennium are fine (2-4 chains on 6 P-cores has plenty of headroom), but multiple bienniums create the kind of system-wide CPU pressure that triggers E-core scheduling.
+
+### 4. Jitter Mode-Splitting with 4+ Chains
+
+Discovered during the 4-chain experiment (2026-02-26). PyMC's default `jitter+adapt_diag` initialization adds random perturbation to starting values. With PCA-informed initialization and 4 chains, one chain's jitter pushed it past the reflection mode boundary of the IRT posterior, causing R-hat ~1.53 and ESS of 7. The same configuration with 2 chains was fine — the sorted party means constraint provided sufficient mode-breaking.
+
+**Fix:** Use `init='adapt_diag'` (no jitter) when PCA initvals are provided. PCA scores already orient chains correctly; jitter adds noise without benefit. See ADR-0045 and `docs/hierarchical-4-chain-experiment.md`.
 
 ## The Rules
 
-These are the four rules we now follow for all CPU-intensive analysis on Apple Silicon:
+These are the five rules we now follow for all CPU-intensive analysis on Apple Silicon:
 
 1. **Cap thread pools to the P-core count.** Set `OMP_NUM_THREADS` and `OPENBLAS_NUM_THREADS` to the number of performance cores (6 on M3 Pro). This prevents NumPy/SciPy/PyTensor from spawning threads that land on E-cores.
 
@@ -90,6 +96,8 @@ These are the four rules we now follow for all CPU-intensive analysis on Apple S
 3. **Run bienniums sequentially.** Never run multiple MCMC jobs at the same time. The macOS scheduler will push overflow work to E-cores, and the resulting slowdown is worse than just waiting.
 
 4. **Never use `taskpolicy -c background`.** This forces processes onto E-cores exclusively. A background-priority MCMC job runs 2-3x slower with no way to promote it back to P-cores.
+
+5. **Use `adapt_diag` (no jitter) with PCA-informed init and 4+ chains.** Jitter can flip chains past the IRT reflection mode boundary. With 2 chains, the sorted party constraint suffices; with 4+, it doesn't.
 
 ## Verifying Determinism
 
