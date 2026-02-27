@@ -132,7 +132,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (43 decisions)
+- ADRs: `docs/adr/README.md` (44 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -144,6 +144,7 @@ Key references:
 - Clustering deep dive: `docs/clustering-deep-dive.md` (literature survey, code audit, test gaps, recommendations)
 - Hierarchical IRT deep dive: `docs/hierarchical-irt-deep-dive.md` (ecosystem survey, code audit, 9 issues fixed, 35 tests, ADR-0033)
 - Joint hierarchical IRT diagnosis: `docs/joint-hierarchical-irt-diagnosis.md` (bill-matching bug: vote_id vs bill_number, sign flip cascade, fix plan)
+- Hierarchical PCA init experiment: `docs/hierarchical-pca-init-experiment.md` (R-hat fix, ESS threshold analysis, ADR-0044)
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
 - Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)
 - Synthesis deep dive: `docs/synthesis-deep-dive.md` (field survey, code audit, detection algorithms, test gaps, refactoring)

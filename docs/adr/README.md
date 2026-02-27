@@ -71,6 +71,7 @@ What are the trade-offs?
 | [0041](0041-mca-implementation-choices.md) | MCA implementation choices (prince, Greenacre, categorical encoding) | Accepted | 2026-02-25 |
 | [0042](0042-joint-model-sign-fix-and-pipeline-hardening.md) | Joint model sign fix, pipeline hardening, and joint model diagnosis | Accepted | 2026-02-26 |
 | [0043](0043-hierarchical-irt-bill-matching-and-adaptive-priors.md) | Hierarchical IRT bill-matching and group-size-adaptive priors | Accepted | 2026-02-26 |
+| [0044](0044-hierarchical-pca-informed-init.md) | PCA-informed initialization for hierarchical IRT | Accepted | 2026-02-26 |
 
 ## Creating a New ADR
 

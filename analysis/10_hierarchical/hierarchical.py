@@ -339,12 +339,18 @@ def build_per_chamber_model(
     n_chains: int,
     cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
+    xi_offset_initvals: np.ndarray | None = None,
 ) -> tuple[az.InferenceData, float]:
     """Build 2-level hierarchical IRT and sample with NUTS.
 
     Model structure:
         mu_party (sorted) → xi (non-centered) → likelihood
         sigma_within (per party) controls within-party spread
+
+    Args:
+        xi_offset_initvals: Optional initial xi_offset values (from PCA).
+            If provided, all chains start near these values. This prevents
+            reflection mode-splitting — see ADR-0044.
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -408,6 +414,16 @@ def build_per_chamber_model(
         # --- Sample ---
         print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
         print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
+
+        # PCA-informed initialization of xi_offset (ADR-0044)
+        sample_kwargs: dict = {}
+        if xi_offset_initvals is not None:
+            sample_kwargs["initvals"] = {"xi_offset": xi_offset_initvals}
+            print(
+                f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
+                f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
+            )
+
         t0 = time.time()
         idata = pm.sample(
             draws=n_samples,
@@ -417,6 +433,7 @@ def build_per_chamber_model(
             target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,
+            **sample_kwargs,
         )
         sampling_time = time.time() - t0
 
@@ -442,12 +459,8 @@ def _match_bills_across_chambers(
     rc = rollcalls.select("vote_id", "bill_number", "motion").filter(
         pl.col("vote_id").is_in(house_vote_ids + senate_vote_ids)
     )
-    vid_to_bill: dict[str, str] = dict(
-        zip(rc["vote_id"].to_list(), rc["bill_number"].to_list())
-    )
-    vid_to_motion: dict[str, str] = dict(
-        zip(rc["vote_id"].to_list(), rc["motion"].to_list())
-    )
+    vid_to_bill: dict[str, str] = dict(zip(rc["vote_id"].to_list(), rc["bill_number"].to_list()))
+    vid_to_motion: dict[str, str] = dict(zip(rc["vote_id"].to_list(), rc["motion"].to_list()))
 
     # Group vote_ids by bill_number and chamber
     house_bill_vids: dict[str, list[str]] = {}
@@ -469,8 +482,7 @@ def _match_bills_across_chambers(
         final_vids = [
             v
             for v in vids
-            if (vid_to_motion.get(v) or "").lower()
-            in ("final action", "emergency final action")
+            if (vid_to_motion.get(v) or "").lower() in ("final action", "emergency final action")
         ]
         candidates = final_vids if final_vids else vids
         return sorted(candidates)[-1]  # Latest chronologically (vote_id encodes timestamp)
@@ -586,12 +598,8 @@ def build_joint_model(
     )
     combined_vote_idx = np.concatenate(
         [
-            np.array(
-                [original_vid_to_idx[house_vote_ids[v]] for v in house_data["vote_idx"]]
-            ),
-            np.array(
-                [original_vid_to_idx[senate_vote_ids[v]] for v in senate_data["vote_idx"]]
-            ),
+            np.array([original_vid_to_idx[house_vote_ids[v]] for v in house_data["vote_idx"]]),
+            np.array([original_vid_to_idx[senate_vote_ids[v]] for v in senate_data["vote_idx"]]),
         ]
     )
     combined_y = np.concatenate([house_data["y"], senate_data["y"]])
@@ -822,13 +830,24 @@ def check_hierarchical_convergence(idata: az.InferenceData, chamber: str) -> dic
             print(f"  R-hat ({var}): max = {max_rhat:.4f}  {status}")
 
     # ESS
+    # Note: ESS_THRESHOLD=400 comes from Vehtari et al. (2021) which recommends
+    # 100 per chain (Stan default 4 chains → 400 total). We run 2 chains, so the
+    # per-chain recommendation is 100/chain = 200 total. We keep 400 for consistency
+    # with flat IRT but report per-chain ESS for transparency.
+    n_chains = len(idata.posterior.chain)
     ess = az.ess(idata)
     for var in available_vars:
         if var in ess:
             min_ess = float(ess[var].min())
+            per_chain = min_ess / n_chains
             diag[f"{var}_ess_min"] = min_ess
+            diag[f"{var}_ess_per_chain"] = per_chain
             status = "OK" if min_ess > ESS_THRESHOLD else "WARNING"
-            print(f"  ESS ({var}): min = {min_ess:.0f}  {status}")
+            per_chain_status = "OK" if per_chain > 100 else "WARNING"
+            print(
+                f"  ESS ({var}): min = {min_ess:.0f}  {status}  "
+                f"(per-chain: {per_chain:.0f}  {per_chain_status})"
+            )
 
     # Divergences
     divergences = int(idata.sample_stats["diverging"].sum().values)
@@ -1511,6 +1530,24 @@ def main() -> None:
             # Prepare data with party indices
             data = prepare_hierarchical_data(matrix, legislators, chamber)
 
+            # PCA-informed initialization of xi_offset (ADR-0044)
+            # Standardized PC1 scores approximate the N(0,1) prior on xi_offset,
+            # preventing reflection mode-splitting. Same principle as flat IRT (ADR-0023).
+            xi_init = None
+            if pca_scores is not None:
+                slug_order = {s: i for i, s in enumerate(data["leg_slugs"])}
+                pc1_vals = (
+                    pca_scores.filter(pl.col("legislator_slug").is_in(data["leg_slugs"]))
+                    .sort(pl.col("legislator_slug").replace_strict(slug_order))["PC1"]
+                    .to_numpy()
+                )
+                pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
+                xi_init = pc1_std.astype(np.float64)
+                print(
+                    f"  PCA init: {len(xi_init)} params, "
+                    f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                )
+
             # Build and sample
             print_header(f"SAMPLING — {chamber}")
             idata, sampling_time = build_per_chamber_model(
@@ -1519,6 +1556,7 @@ def main() -> None:
                 n_tune=args.n_tune,
                 n_chains=args.n_chains,
                 cores=args.cores,
+                xi_offset_initvals=xi_init,
             )
 
             # Convergence
