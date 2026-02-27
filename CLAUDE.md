@@ -157,6 +157,8 @@ Key references:
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (bb25, topic modeling, retrieval, open questions)
 - Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)
+- Experiment framework: `docs/experiment-framework-deep-dive.md` (ecosystem survey, design patterns, BetaPriorSpec, PlatformCheck, monitoring)
+- Nutpie deep dive: `docs/nutpie-deep-dive.md` (Rust NUTS sampler, normalizing flow adaptation, integration plan)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
@@ -166,6 +168,7 @@ Key references:
 - **Scraper**: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), sequential parse. Never mutate shared state during fetch.
 - **MCMC**: `cores=n_chains` for parallel chains. PCA-informed init default (ADR-0023). Hierarchical IRT uses 4 chains with `adapt_diag` (no jitter) when PCA initvals provided (ADR-0045).
 - **Apple Silicon (M3 Pro, 6P+6E)**: run bienniums sequentially; cap thread pools (`OMP_NUM_THREADS=6`); never use `taskpolicy -c background`. See ADR-0022.
+- **PyTensor C compiler**: PyTensor requires `clang++`/`g++` for C-compiled kernels. Without it, falls back to pure Python (~18x slower). Common failure: Xcode update requires opening Xcode.app to accept license. Justfile exports `PATH` with `/usr/bin` to prevent stripped-PATH failures.
 
 ## Testing
 

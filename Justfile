@@ -13,6 +13,10 @@
 export OMP_NUM_THREADS := "6"
 export OPENBLAS_NUM_THREADS := "6"
 
+# Ensure /usr/bin is on PATH so PyTensor can find clang++/g++ for C compilation.
+# Without this, background processes or stripped shells fall back to pure Python (~18x slower).
+export PATH := "/usr/bin:/bin:" + env("PATH")
+
 # Default: show available commands
 default:
     @just --list
