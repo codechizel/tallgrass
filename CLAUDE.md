@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1213 tests)
+just test                                    # → uv run pytest tests/ -v (~1238 tests)
 just test-scraper                            # → pytest on scraper test files only
 just monitor                                 # → check running experiment status
 uv run tallgrass 2023                  # historical session (direct)
@@ -183,7 +183,7 @@ Three components eliminate code duplication in MCMC experiments (ADR-0048):
 ## Testing
 
 ```bash
-just test                    # 1213 tests
+just test                    # 1238 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```
