@@ -39,4 +39,4 @@ We accept that ty is beta (0.0.x versioning, no stable API). We're both using it
 - 186 warnings in analysis code are noise (third-party stubs). This will improve as ty and library stubs mature.
 - Beta tool — diagnostic behavior may change between versions, requiring config updates.
 - No plugin system — can't add custom type inference for Polars or PyMC (ty plans to handle popular libraries directly).
-- Must maintain `allowed-unresolved-imports` list as new analysis scripts are added (analysis/ is not a package).
+- Must maintain `allowed-unresolved-imports` list as new analysis scripts are added (analysis/ is not a package). This list needs **both** bare module names (for try/except fallbacks) **and** `analysis.*` qualified names (for meta-path finder imports that ty cannot resolve statically).

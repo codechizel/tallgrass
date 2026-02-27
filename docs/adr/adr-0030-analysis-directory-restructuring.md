@@ -64,4 +64,4 @@ The `_AnalysisRedirectFinder` in `analysis/__init__.py` intercepts imports of th
 1. Create `analysis/NN_name/` with `__init__.py`
 2. Add module-to-subdirectory entries in `_MODULE_MAP`
 3. Update Justfile recipe path
-4. Update `pyproject.toml` allowed-unresolved-imports if the module has bare-import fallbacks
+4. Update `pyproject.toml` `allowed-unresolved-imports` — add **both** bare names (for try/except fallbacks) **and** `analysis.*` qualified names (for the meta-path finder imports that ty cannot follow at static analysis time)

@@ -94,7 +94,11 @@ replace-imports-with-any = [
 # analysis/ scripts use bare imports (not a package) — allow them.
 # Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to
 # bare imports via try/except when run directly with `uv run python`.
+# The analysis.__init__ PEP 302 meta-path finder redirects analysis.<name>
+# to analysis/<NN_subdir>/<name>.py at runtime, but ty can't follow that,
+# so we also allow the qualified analysis.* forms.
 allowed-unresolved-imports = [
+    # Bare fallback imports (try/except in each script)
     "run_context",
     "report",
     "nlp_features",
@@ -111,6 +115,7 @@ allowed-unresolved-imports = [
     "synthesis_report",
     "synthesis_detect",
     "synthesis",
+    "synthesis_data",
     "profiles_data",
     "profiles_report",
     "cross_session_data",
@@ -121,6 +126,38 @@ allowed-unresolved-imports = [
     "model_spec",
     "experiment_monitor",
     "experiment_runner",
+    # Qualified analysis.* imports (resolved by PEP 302 meta-path finder at runtime)
+    "analysis.eda",
+    "analysis.eda_report",
+    "analysis.pca",
+    "analysis.pca_report",
+    "analysis.mca",
+    "analysis.mca_report",
+    "analysis.umap_viz",
+    "analysis.umap_report",
+    "analysis.irt",
+    "analysis.irt_report",
+    "analysis.clustering",
+    "analysis.clustering_report",
+    "analysis.network_report",
+    "analysis.indices_report",
+    "analysis.prediction",
+    "analysis.prediction_report",
+    "analysis.nlp_features",
+    "analysis.beta_binomial_report",
+    "analysis.hierarchical",
+    "analysis.hierarchical_report",
+    "analysis.model_spec",
+    "analysis.synthesis",
+    "analysis.synthesis_data",
+    "analysis.synthesis_detect",
+    "analysis.synthesis_report",
+    "analysis.profiles_data",
+    "analysis.profiles_report",
+    "analysis.cross_session_data",
+    "analysis.cross_session_report",
+    "analysis.external_validation_report",
+    "analysis.external_validation_data",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.
