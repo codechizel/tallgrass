@@ -54,6 +54,11 @@ except ModuleNotFoundError:
     from hierarchical_report import build_hierarchical_report  # type: ignore[no-redef]
 
 try:
+    from analysis.model_spec import PRODUCTION_BETA, BetaPriorSpec
+except ModuleNotFoundError:
+    from model_spec import PRODUCTION_BETA, BetaPriorSpec  # type: ignore[no-redef]
+
+try:
     from analysis.irt import (
         ESS_THRESHOLD,
         MAX_DIVERGENCES,
@@ -340,6 +345,8 @@ def build_per_chamber_model(
     cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
     xi_offset_initvals: np.ndarray | None = None,
+    beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    callback=None,
 ) -> tuple[az.InferenceData, float]:
     """Build 2-level hierarchical IRT and sample with NUTS.
 
@@ -351,6 +358,9 @@ def build_per_chamber_model(
         xi_offset_initvals: Optional initial xi_offset values (from PCA).
             If provided, all chains start near these values. This prevents
             reflection mode-splitting — see ADR-0044.
+        beta_prior: Specification for the bill discrimination prior.
+            Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        callback: Optional PyMC sampling callback (e.g. for experiment monitoring).
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -405,7 +415,8 @@ def build_per_chamber_model(
 
         # --- Bill parameters ---
         alpha = pm.Normal("alpha", mu=0, sigma=5, shape=n_votes, dims="vote")
-        beta = pm.Normal("beta", mu=0, sigma=1, shape=n_votes, dims="vote")
+        beta = beta_prior.build(n_votes)
+        print(f"  Beta prior: {beta_prior.describe()}")
 
         # --- Likelihood ---
         eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
@@ -429,6 +440,9 @@ def build_per_chamber_model(
                 f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
             )
             print("  init='adapt_diag' (no jitter — PCA initvals provide orientation)")
+
+        if callback is not None:
+            sample_kwargs["callback"] = callback
 
         t0 = time.time()
         idata = pm.sample(
@@ -525,6 +539,8 @@ def build_joint_model(
     rollcalls: pl.DataFrame | None = None,
     cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
+    beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    callback=None,
 ) -> tuple[az.InferenceData, dict, float]:
     """Build 3-level joint cross-chamber hierarchical IRT model.
 
@@ -535,6 +551,11 @@ def build_joint_model(
     to create shared alpha/beta parameters. These shared items bridge the chambers,
     providing natural sign and scale identification (concurrent calibration).
     Without rollcalls, falls back to vote_id deduplication (no shared items).
+
+    Args:
+        beta_prior: Specification for the bill discrimination prior.
+            Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        callback: Optional PyMC sampling callback (e.g. for experiment monitoring).
 
     Returns (InferenceData, combined_data_dict, sampling_time_seconds).
     """
@@ -689,7 +710,8 @@ def build_joint_model(
 
         # --- Bill parameters ---
         alpha = pm.Normal("alpha", mu=0, sigma=5, shape=n_votes, dims="vote")
-        beta = pm.Normal("beta", mu=0, sigma=1, shape=n_votes, dims="vote")
+        beta = beta_prior.build(n_votes)
+        print(f"  Beta prior: {beta_prior.describe()}")
 
         # --- Likelihood ---
         eta = beta[combined_vote_idx] * xi[combined_leg_idx] - alpha[combined_vote_idx]
@@ -699,6 +721,11 @@ def build_joint_model(
         print(f"  Joint: {n_samples} draws, {n_tune} tune, {n_chains} chains")
         print(f"  {n_leg} legislators, {n_votes} votes ({n_shared} shared), {n_obs} observations")
         print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
+
+        sample_kwargs: dict = {}
+        if callback is not None:
+            sample_kwargs["callback"] = callback
+
         t0 = time.time()
         idata = pm.sample(
             draws=n_samples,
@@ -708,6 +735,7 @@ def build_joint_model(
             target_accept=target_accept,
             random_seed=RANDOM_SEED,
             progressbar=True,
+            **sample_kwargs,
         )
         sampling_time = time.time() - t0
 

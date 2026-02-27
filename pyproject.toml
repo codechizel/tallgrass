@@ -117,6 +117,7 @@ allowed-unresolved-imports = [
     "external_validation_data",
     "external_validation_report",
     "mca_report",
+    "model_spec",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.
