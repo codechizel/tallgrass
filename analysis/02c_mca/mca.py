@@ -1026,13 +1026,13 @@ def main() -> None:
 
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
     results_root = ks.results_dir
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "pca" / "latest"
+    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
 
     correction = args.correction if args.correction != "none" else "none"
 
     with RunContext(
         session=args.session,
-        analysis_name="mca",
+        analysis_name="02c_mca",
         params=vars(args),
         primer=MCA_PRIMER,
     ) as ctx:

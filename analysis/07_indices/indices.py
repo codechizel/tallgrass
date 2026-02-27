@@ -1711,18 +1711,20 @@ def main() -> None:
 
     results_root = ks.results_dir
 
-    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "irt" / "latest"
+    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "04_irt" / "latest"
     network_dir = (
-        Path(args.network_dir) if args.network_dir else results_root / "network" / "latest"
+        Path(args.network_dir) if args.network_dir else results_root / "06_network" / "latest"
     )
     clustering_dir = (
-        Path(args.clustering_dir) if args.clustering_dir else results_root / "clustering" / "latest"
+        Path(args.clustering_dir)
+        if args.clustering_dir
+        else results_root / "05_clustering" / "latest"
     )
-    eda_dir = Path(args.eda_dir) if args.eda_dir else results_root / "eda" / "latest"
+    eda_dir = Path(args.eda_dir) if args.eda_dir else results_root / "01_eda" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="indices",
+        analysis_name="07_indices",
         params=vars(args),
         primer=INDICES_PRIMER,
     ) as ctx:

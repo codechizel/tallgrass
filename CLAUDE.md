@@ -123,7 +123,7 @@ External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downl
 
 ## Results Directory
 
-Analysis outputs in `results/kansas/{session}/{analysis}/{date}/` with `latest` symlink. Same-day runs append `.1`, `.2`, etc. `RunContext` manages structured output, elapsed timing, HTML reports, and auto-primers.
+Analysis outputs in `results/kansas/{session}/{NN_phase}/{date}/` with `latest` symlink (e.g. `results/kansas/91st_2025-2026/01_eda/2026-02-27/`). Phase directories use numbered prefixes matching the source layout (`01_eda`, `02_pca`, `04_irt`, etc.). Same-day runs append `.1`, `.2`, etc. `RunContext` manages structured output, elapsed timing, HTML reports, and auto-primers.
 
 ## Analysis Pipeline
 
@@ -133,7 +133,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (49 decisions)
+- ADRs: `docs/adr/README.md` (50 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)

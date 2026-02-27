@@ -1517,13 +1517,13 @@ def main() -> None:
     results_root = ks.results_dir
 
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
-    eda_dir = Path(args.eda_dir) if args.eda_dir else results_root / "eda" / "latest"
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "pca" / "latest"
-    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "irt" / "latest"
+    eda_dir = Path(args.eda_dir) if args.eda_dir else results_root / "01_eda" / "latest"
+    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
+    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "04_irt" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="hierarchical",
+        analysis_name="10_hierarchical",
         params=vars(args),
         primer=HIERARCHICAL_PRIMER,
     ) as ctx:

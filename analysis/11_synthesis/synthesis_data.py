@@ -11,16 +11,16 @@ from pathlib import Path
 import polars as pl
 
 UPSTREAM_PHASES = [
-    "eda",
-    "pca",
-    "irt",
-    "clustering",
-    "network",
-    "prediction",
-    "indices",
-    "umap",
-    "beta_binomial",
-    "hierarchical",
+    "01_eda",
+    "02_pca",
+    "04_irt",
+    "05_clustering",
+    "06_network",
+    "08_prediction",
+    "07_indices",
+    "03_umap",
+    "09_beta_binomial",
+    "10_hierarchical",
 ]
 
 
@@ -58,26 +58,26 @@ def load_all_upstream(results_base: Path) -> dict:
 
         # Per-chamber parquets
         for chamber in ("house", "senate"):
-            if phase == "irt":
+            if phase == "04_irt":
                 df = _read_parquet_safe(data_dir / f"ideal_points_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["irt"] = df
-            elif phase == "indices":
+            elif phase == "07_indices":
                 df = _read_parquet_safe(data_dir / f"maverick_scores_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["maverick"] = df
-            elif phase == "network":
+            elif phase == "06_network":
                 df = _read_parquet_safe(data_dir / f"centrality_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["centrality"] = df
-            elif phase == "clustering":
+            elif phase == "05_clustering":
                 df = _read_parquet_safe(data_dir / f"kmeans_assignments_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["kmeans"] = df
                 df2 = _read_parquet_safe(data_dir / f"party_loyalty_{chamber}.parquet")
                 if df2 is not None:
                     upstream[chamber]["loyalty"] = df2
-            elif phase == "prediction":
+            elif phase == "08_prediction":
                 df = _read_parquet_safe(data_dir / f"per_legislator_accuracy_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["accuracy"] = df
@@ -87,19 +87,19 @@ def load_all_upstream(results_base: Path) -> dict:
                 hr = _read_parquet_safe(data_dir / f"holdout_results_{chamber}.parquet")
                 if hr is not None:
                     upstream[chamber]["holdout_results"] = hr
-            elif phase == "pca":
+            elif phase == "02_pca":
                 df = _read_parquet_safe(data_dir / f"pc_scores_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["pca"] = df
-            elif phase == "umap":
+            elif phase == "03_umap":
                 df = _read_parquet_safe(data_dir / f"umap_embedding_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["umap"] = df
-            elif phase == "beta_binomial":
+            elif phase == "09_beta_binomial":
                 df = _read_parquet_safe(data_dir / f"posterior_loyalty_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["beta_posterior"] = df
-            elif phase == "hierarchical":
+            elif phase == "10_hierarchical":
                 df = _read_parquet_safe(data_dir / f"hierarchical_ideal_points_{chamber}.parquet")
                 if df is not None:
                     upstream[chamber]["hierarchical"] = df

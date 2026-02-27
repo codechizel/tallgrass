@@ -2485,16 +2485,16 @@ def main() -> None:
     if args.eda_dir:
         eda_dir = Path(args.eda_dir)
     else:
-        eda_dir = results_root / "eda" / "latest"
+        eda_dir = results_root / "01_eda" / "latest"
 
     if args.pca_dir:
         pca_dir = Path(args.pca_dir)
     else:
-        pca_dir = results_root / "pca" / "latest"
+        pca_dir = results_root / "02_pca" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="irt",
+        analysis_name="04_irt",
         params=vars(args),
         primer=IRT_PRIMER,
     ) as ctx:

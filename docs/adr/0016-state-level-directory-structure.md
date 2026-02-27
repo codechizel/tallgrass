@@ -16,7 +16,7 @@ Insert a state-level directory between the root and the biennium directory:
 ```
 data/kansas/91st_2025-2026/          (was: data/91st_2025-2026/)
 data/kansas/90th_2023-2024/
-results/kansas/91st_2025-2026/eda/   (was: results/91st_2025-2026/eda/)
+results/kansas/91st_2025-2026/01_eda/   (was: results/91st_2025-2026/eda/)
 ```
 
 Implementation:

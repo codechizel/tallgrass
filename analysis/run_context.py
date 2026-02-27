@@ -5,14 +5,14 @@ Every analysis script (EDA, PCA, IRT, etc.) uses RunContext to get:
   - Automatic console log capture (run_log.txt)
   - Run metadata (run_info.json): git hash, timestamp, parameters
   - A `latest` symlink pointing to the most recent run
-  - A convenience report symlink in the session root (e.g. eda_report.html → eda/latest/...)
+  - A convenience report symlink in the session root (e.g. 01_eda_report.html → 01_eda/latest/...)
 
 Usage:
     with RunContext(
         session="2025-26",
-        analysis_name="eda",
+        analysis_name="01_eda",
         params=vars(args),
-        primer=EDA_PRIMER,        # Markdown primer written to results/<session>/eda/README.md
+        primer=EDA_PRIMER,        # Markdown primer written to results/<session>/01_eda/README.md
     ) as ctx:
         # ctx.plots_dir, ctx.data_dir, ctx.run_dir are ready
         df.write_parquet(ctx.data_dir / "vote_matrix.parquet")

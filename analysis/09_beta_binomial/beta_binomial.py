@@ -599,12 +599,12 @@ def main() -> None:
     results_root = ks.results_dir
 
     indices_dir = (
-        Path(args.indices_dir) if args.indices_dir else results_root / "indices" / "latest"
+        Path(args.indices_dir) if args.indices_dir else results_root / "07_indices" / "latest"
     )
 
     with RunContext(
         session=args.session,
-        analysis_name="beta_binomial",
+        analysis_name="09_beta_binomial",
         params=vars(args),
         primer=BETA_BINOMIAL_PRIMER,
     ) as ctx:

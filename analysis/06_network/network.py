@@ -2429,21 +2429,21 @@ def main() -> None:
     if args.eda_dir:
         eda_dir = Path(args.eda_dir)
     else:
-        eda_dir = results_root / "eda" / "latest"
+        eda_dir = results_root / "01_eda" / "latest"
 
     if args.irt_dir:
         irt_dir = Path(args.irt_dir)
     else:
-        irt_dir = results_root / "irt" / "latest"
+        irt_dir = results_root / "04_irt" / "latest"
 
     if args.clustering_dir:
         clustering_dir = Path(args.clustering_dir)
     else:
-        clustering_dir = results_root / "clustering" / "latest"
+        clustering_dir = results_root / "05_clustering" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="network",
+        analysis_name="06_network",
         params=vars(args),
         primer=NETWORK_PRIMER,
     ) as ctx:

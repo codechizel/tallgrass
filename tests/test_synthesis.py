@@ -183,8 +183,8 @@ class TestUpstreamPhases:
 
     def test_includes_all_expected(self):
         expected = {
-            "eda", "pca", "irt", "clustering", "network",
-            "prediction", "indices", "umap", "beta_binomial", "hierarchical",
+            "01_eda", "02_pca", "04_irt", "05_clustering", "06_network",
+            "08_prediction", "07_indices", "03_umap", "09_beta_binomial", "10_hierarchical",
         }
         assert set(UPSTREAM_PHASES) == expected
 
@@ -242,9 +242,9 @@ class TestLoadAllUpstream:
 
     def test_loads_irt_parquet(self, tmp_path: Path):
         """Place a valid IRT parquet and verify it loads."""
-        irt_dir = tmp_path / "irt" / "latest" / "data"
+        irt_dir = tmp_path / "04_irt" / "latest" / "data"
         irt_dir.mkdir(parents=True)
-        (tmp_path / "irt" / "latest" / "filtering_manifest.json").write_text("{}")
+        (tmp_path / "04_irt" / "latest" / "filtering_manifest.json").write_text("{}")
         df = _minimal_irt("house")
         df.write_parquet(irt_dir / "ideal_points_house.parquet")
         result = load_all_upstream(tmp_path)
@@ -253,9 +253,9 @@ class TestLoadAllUpstream:
 
     def test_loads_prediction_holdout(self, tmp_path: Path):
         """Place a holdout_results parquet and verify it loads."""
-        pred_dir = tmp_path / "prediction" / "latest" / "data"
+        pred_dir = tmp_path / "08_prediction" / "latest" / "data"
         pred_dir.mkdir(parents=True)
-        (tmp_path / "prediction" / "latest" / "filtering_manifest.json").write_text("{}")
+        (tmp_path / "08_prediction" / "latest" / "filtering_manifest.json").write_text("{}")
         hr = pl.DataFrame({
             "model": ["XGBoost", "Logistic"],
             "auc": [0.95, 0.88],

@@ -2006,7 +2006,7 @@ def main() -> None:
 
     with RunContext(
         session=args.session,
-        analysis_name="eda",
+        analysis_name="01_eda",
         params=vars(args),
         primer=EDA_PRIMER,
     ) as ctx:

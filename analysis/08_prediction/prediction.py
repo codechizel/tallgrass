@@ -1584,18 +1584,20 @@ def main() -> None:
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
 
     results_root = ks.results_dir
-    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "irt" / "latest"
+    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "04_irt" / "latest"
     clustering_dir = (
-        Path(args.clustering_dir) if args.clustering_dir else results_root / "clustering" / "latest"
+        Path(args.clustering_dir)
+        if args.clustering_dir
+        else results_root / "05_clustering" / "latest"
     )
     network_dir = (
-        Path(args.network_dir) if args.network_dir else results_root / "network" / "latest"
+        Path(args.network_dir) if args.network_dir else results_root / "06_network" / "latest"
     )
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "pca" / "latest"
+    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="prediction",
+        analysis_name="08_prediction",
         params=vars(args),
         primer=PREDICTION_PRIMER,
     ) as ctx:

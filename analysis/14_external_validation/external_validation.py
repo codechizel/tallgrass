@@ -254,10 +254,10 @@ def _load_irt(
 ) -> pl.DataFrame | None:
     """Load IRT ideal points for a model/chamber combination."""
     if model == "flat":
-        base = irt_dir_override or (results_root / "irt" / "latest")
+        base = irt_dir_override or (results_root / "04_irt" / "latest")
         path = base / "data" / f"ideal_points_{chamber}.parquet"
     else:
-        base = hierarchical_dir_override or (results_root / "hierarchical" / "latest")
+        base = hierarchical_dir_override or (results_root / "10_hierarchical" / "latest")
         path = base / "data" / f"hierarchical_ideal_points_{chamber}.parquet"
 
     if path.exists():
@@ -379,7 +379,7 @@ def main() -> None:
 
     with RunContext(
         session=primary_session,
-        analysis_name="external_validation",
+        analysis_name="14_external_validation",
         params=vars(args),
         primer=EXTERNAL_VALIDATION_PRIMER,
     ) as ctx:

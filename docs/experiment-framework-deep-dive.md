@@ -301,8 +301,8 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
 
     # 2. Load data (identical to production)
     ks = KSSession.from_session_string(config.session)
-    house_matrix, senate_matrix, _ = load_eda_matrices(ks.results_dir / "eda" / "latest")
-    house_pca, senate_pca = load_pca_scores(ks.results_dir / "pca" / "latest")
+    house_matrix, senate_matrix, _ = load_eda_matrices(ks.results_dir / "01_eda" / "latest")
+    house_pca, senate_pca = load_pca_scores(ks.results_dir / "02_pca" / "latest")
     rollcalls, legislators = load_metadata(ks.data_dir)
 
     # 3. Run per-chamber models (production function, experimental config)

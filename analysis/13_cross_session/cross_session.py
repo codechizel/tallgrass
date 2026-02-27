@@ -556,7 +556,7 @@ def _load_vote_features(
 ) -> pl.DataFrame | None:
     """Load vote_features parquet from a session's prediction results."""
     results_dir = ks.results_dir  # type: ignore[attr-defined]
-    path = results_dir / "prediction" / "latest" / "data" / f"vote_features_{chamber}.parquet"
+    path = results_dir / "08_prediction" / "latest" / "data" / f"vote_features_{chamber}.parquet"
     if not path.exists():
         return None
     return pl.read_parquet(path)
@@ -565,7 +565,7 @@ def _load_vote_features(
 def _load_within_session_auc(ks: object, chamber: str) -> float | None:
     """Load the within-session XGBoost AUC from holdout results."""
     results_dir = ks.results_dir  # type: ignore[attr-defined]
-    path = results_dir / "prediction" / "latest" / "data" / f"holdout_results_{chamber}.parquet"
+    path = results_dir / "08_prediction" / "latest" / "data" / f"holdout_results_{chamber}.parquet"
     if not path.exists():
         return None
     holdout = pl.read_parquet(path)
@@ -763,7 +763,7 @@ def main() -> None:
 
     with RunContext(
         session=f"cross-session/{comparison_label}",
-        analysis_name="validation",
+        analysis_name="13_cross_session",
         params=vars(args),
         primer=CROSS_SESSION_PRIMER,
     ) as ctx:

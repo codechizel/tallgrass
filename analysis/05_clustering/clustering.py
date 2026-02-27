@@ -2259,21 +2259,21 @@ def main() -> None:
     if args.eda_dir:
         eda_dir = Path(args.eda_dir)
     else:
-        eda_dir = results_root / "eda" / "latest"
+        eda_dir = results_root / "01_eda" / "latest"
 
     if args.irt_dir:
         irt_dir = Path(args.irt_dir)
     else:
-        irt_dir = results_root / "irt" / "latest"
+        irt_dir = results_root / "04_irt" / "latest"
 
     if args.pca_dir:
         pca_dir = Path(args.pca_dir)
     else:
-        pca_dir = results_root / "pca" / "latest"
+        pca_dir = results_root / "02_pca" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="clustering",
+        analysis_name="05_clustering",
         params=vars(args),
         primer=CLUSTERING_PRIMER,
     ) as ctx:

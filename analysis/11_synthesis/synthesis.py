@@ -595,7 +595,7 @@ def main() -> None:
 
     with RunContext(
         session=args.session,
-        analysis_name="synthesis",
+        analysis_name="11_synthesis",
         params=vars(args),
         primer=SYNTHESIS_PRIMER,
     ) as ctx:
@@ -667,22 +667,22 @@ def main() -> None:
         # ── Resolve upstream plot paths ──────────────────────────────────
         upstream_plots: dict[str, Path] = {}
         plot_map = {
-            "community_network_house": "network/community_network_house.png",
-            "community_network_senate": "network/community_network_senate.png",
-            "forest_house": "irt/forest_house.png",
-            "forest_senate": "irt/forest_senate.png",
-            "maverick_landscape_house": "indices/maverick_landscape_house.png",
-            "per_legislator_accuracy_house": "prediction/per_legislator_accuracy_house.png",
-            "shap_bar_house": "prediction/shap_bar_house.png",
-            "irt_clusters_house": "clustering/irt_clusters_house.png",
-            "convergence_summary_house": "irt/convergence_summary_house.png",
-            "calibration_house": "prediction/calibration_house.png",
-            "agreement_heatmap_house": "eda/agreement_heatmap_house.png",
-            "discrimination_house": "irt/discrimination_house.png",
-            "maverick_landscape_senate": "indices/maverick_landscape_senate.png",
-            "per_legislator_accuracy_senate": "prediction/per_legislator_accuracy_senate.png",
-            "umap_landscape_house": "umap/umap_landscape_house.png",
-            "umap_landscape_senate": "umap/umap_landscape_senate.png",
+            "community_network_house": "06_network/community_network_house.png",
+            "community_network_senate": "06_network/community_network_senate.png",
+            "forest_house": "04_irt/forest_house.png",
+            "forest_senate": "04_irt/forest_senate.png",
+            "maverick_landscape_house": "07_indices/maverick_landscape_house.png",
+            "per_legislator_accuracy_house": "08_prediction/per_legislator_accuracy_house.png",
+            "shap_bar_house": "08_prediction/shap_bar_house.png",
+            "irt_clusters_house": "05_clustering/irt_clusters_house.png",
+            "convergence_summary_house": "04_irt/convergence_summary_house.png",
+            "calibration_house": "08_prediction/calibration_house.png",
+            "agreement_heatmap_house": "01_eda/agreement_heatmap_house.png",
+            "discrimination_house": "04_irt/discrimination_house.png",
+            "maverick_landscape_senate": "07_indices/maverick_landscape_senate.png",
+            "per_legislator_accuracy_senate": "08_prediction/per_legislator_accuracy_senate.png",
+            "umap_landscape_house": "03_umap/umap_landscape_house.png",
+            "umap_landscape_senate": "03_umap/umap_landscape_senate.png",
         }
         for key, rel_path in plot_map.items():
             phase = rel_path.split("/")[0]

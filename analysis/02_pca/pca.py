@@ -1031,11 +1031,11 @@ def main() -> None:
     if args.eda_dir:
         eda_dir = Path(args.eda_dir)
     else:
-        eda_dir = results_root / "eda" / "latest"
+        eda_dir = results_root / "01_eda" / "latest"
 
     with RunContext(
         session=args.session,
-        analysis_name="pca",
+        analysis_name="02_pca",
         params=vars(args),
         primer=PCA_PRIMER,
     ) as ctx:

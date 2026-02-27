@@ -77,6 +77,7 @@ What are the trade-offs?
 | [0047](0047-positive-beta-constraint-experiment.md) | Positive beta constraint experiment for hierarchical IRT convergence | Accepted | 2026-02-27 |
 | [0048](0048-experiment-framework.md) | Experiment framework (BetaPriorSpec, PlatformCheck, experiment runner) | Accepted | 2026-02-27 |
 | [0049](0049-nutpie-flat-irt-baseline.md) | nutpie flat IRT baseline experiment (compilation, sampling, sign flip) | Accepted | 2026-02-27 |
+| [0050](0050-numbered-results-directories.md) | Numbered results directories (align with source layout) | Accepted | 2026-02-27 |
 
 ## Creating a New ADR
 

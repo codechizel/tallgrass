@@ -600,8 +600,8 @@ def main() -> None:
     ks = KSSession.from_session_string(args.session)
     data_dir = ks.data_dir
     results_root = ks.results_dir
-    eda_dir = results_root / "eda" / "latest"
-    pca_dir = results_root / "pca" / "latest"
+    eda_dir = results_root / "01_eda" / "latest"
+    pca_dir = results_root / "02_pca" / "latest"
 
     # Output directory
     today = datetime.now(CT_TZ).strftime("%Y-%m-%d")

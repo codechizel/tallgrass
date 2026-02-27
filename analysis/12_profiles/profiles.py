@@ -655,7 +655,7 @@ def main() -> None:
 
     with RunContext(
         session=args.session,
-        analysis_name="profiles",
+        analysis_name="12_profiles",
         params=vars(args),
         primer=PROFILES_PRIMER,
     ) as ctx:
@@ -719,7 +719,7 @@ def main() -> None:
         bill_params: dict[str, pl.DataFrame] = {}
         for chamber in ("house", "senate"):
             bp = _read_parquet_safe(
-                results_base / "irt" / "latest" / "data" / f"bill_params_{chamber}.parquet"
+                results_base / "04_irt" / "latest" / "data" / f"bill_params_{chamber}.parquet"
             )
             if bp is not None:
                 bill_params[chamber] = bp
