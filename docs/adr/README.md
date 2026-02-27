@@ -74,6 +74,7 @@ What are the trade-offs?
 | [0044](0044-hierarchical-pca-informed-init.md) | PCA-informed initialization for hierarchical IRT | Accepted | 2026-02-26 |
 | [0045](0045-4-chain-hierarchical-irt.md) | 4-chain hierarchical IRT with adapt_diag initialization | Accepted | 2026-02-26 |
 | [0046](0046-2d-irt-experimental.md) | 2D IRT as experimental extension (PLT identification, Tyson paradox) | Accepted | 2026-02-26 |
+| [0047](0047-positive-beta-constraint-experiment.md) | Positive beta constraint experiment for hierarchical IRT convergence | Accepted | 2026-02-27 |
 
 ## Creating a New ADR
 

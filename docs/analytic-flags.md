@@ -514,6 +514,25 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Observation:** Caryn Tyson is flagged as a metric paradox in both the 90th and 91st bienniums — the only legislator detected in both sessions. Her pattern of high party loyalty on discriminating votes combined with high contrarianism on routine votes is a stable, multi-session phenomenon, not a single-session anomaly.
 - **Downstream:** Confirmed by the experimental 2D IRT model (ADR-0046): Tyson is #1 on Dim 2 in both the 91st PCA (PC2=-24.8) and the 2D IRT (Dim 2=-1.882). The 1D compression of Tyson's behavior is a model limitation, not a data artifact. See `docs/2d-irt-deep-dive.md`.
 
+### Hierarchical Per-Chamber Convergence: House vs Senate Asymmetry (All Bienniums)
+
+- **Phase:** Hierarchical IRT
+- **Observation:** Across all 8 bienniums (84th–91st), the per-chamber hierarchical model shows a systematic asymmetry: Senate passes all convergence checks in 6/8 sessions, while House passes only 1/8 (the 90th). All 16 per-chamber models have zero divergences and healthy E-BFMI (>0.7). The joint cross-chamber model fails in all 8 sessions (R-hat 1.01–2.42, ESS 5–7, divergences in 7/8). See `docs/hierarchical-convergence-improvement.md` for the full analysis and improvement plan.
+
+| Biennium | House R-hat(xi) | House Result | Senate R-hat(xi) | Senate Result | Joint R-hat(xi) |
+|----------|-----------------|--------------|------------------|---------------|-----------------|
+| 84th | 1.0219 | FAIL | 1.0142 | FAIL | 1.5362 |
+| 85th | 1.0111 | FAIL | 1.0020 | **PASS** | 2.4227 |
+| 86th | 1.0610 | FAIL | 1.0038 | FAIL | 1.5509 |
+| 87th | 1.0079 | FAIL | 1.0054 | **PASS** | 1.0069 |
+| 88th | 1.0164 | FAIL | 1.0062 | **PASS** | 1.5376 |
+| 89th | 1.0179 | FAIL | 1.0023 | **PASS** | 1.7473 |
+| 90th | 1.0047 | **PASS** | 1.0079 | **PASS** | 1.5342 |
+| 91st | 1.0103 | FAIL | 1.0058 | **PASS** | 1.5330 |
+
+- **Explanation:** The House fails not from lack of data but from posterior geometry. Three reinforcing mechanisms: (1) β sign-flip multimodality — each of ~280 House bill β parameters creates a reflection axis, vs ~240 for Senate; (2) non-centered funnel scaling — 130 correlated ξ_offset parameters in House vs 40 in Senate increase the correlation plateau dimensionality; (3) NUTS cost scaling — sampler performance degrades as O(d^{1/4}) with dimensionality. The Senate occupies a sweet spot: 40 legislators provide enough data for group estimation without overwhelming the sampler geometry. The 90th House passes because it has the highest data density (128 legislators × 322 votes).
+- **Downstream:** Primary improvement path is constraining β > 0 (eliminating the reflection mode). Experiment planned: `results/experiments/2026-02-27_positive-beta/`. See ADR-0047 for the experimental design.
+
 ### Cross-Session — Prediction Generalizes Across Bienniums
 
 - **Phase:** Cross-Session Validation (90th vs 91st)
