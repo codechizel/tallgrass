@@ -286,15 +286,39 @@ eta = xi[leg_idx] - alpha[vote_idx]
 
 This cuts the parameter count by ~430 (no β vector), eliminates the reflection mode entirely, and dramatically simplifies the posterior geometry. The cost is reduced model expressiveness — all bills are assumed equally discriminating. But for the purpose of placing legislators on a common cross-chamber scale, the 1PL may be sufficient.
 
+## Experiment Results (2026-02-27)
+
+The Priority 1 experiment has been completed. Full results in `results/experiments/2026-02-27_positive-beta/experiment.md`.
+
+### What We Found
+
+**LogNormal beta fixes R-hat but breaks ESS.** On the 91st House, LogNormal(0, 0.5) dropped worst-case R-hat(xi) from 1.0103 to 1.0058 — clearly passing the 1.01 threshold. However, minimum ESS(xi) dropped from 564 to 362, falling below the 400 threshold. The model knows the right answer (chains agree) but hasn't drawn enough independent samples yet.
+
+**HalfNormal beta goes the other direction.** HalfNormal(1) produced worse R-hat (1.0122) but adequate ESS (450). The Senate showed the opposite pattern: HalfNormal produced the best convergence ever measured (R-hat 1.003, ESS 1,717).
+
+**Joint model improved but still fails.** With LogNormal beta, the joint model produced R-hat(xi) = 1.024, ESS(xi) = 243, and 25 divergences. This is dramatically better than production (R-hat ~1.5, ESS ~7, ~10 divergences) but still firmly failing all three key diagnostics. Sampling took 56 minutes.
+
+**Rankings are stable.** House ideal points correlate r > 0.99 with baseline, confirming the positive beta constraint doesn't change substantive conclusions. Senate correlations are lower (r ≈ 0.92) due to the small-group shrinkage interaction.
+
+### Updated Priority Assessment
+
+The experiment confirms two distinct problems:
+
+1. **Reflection mode** — *solved* by positive beta. LogNormal clearly eliminates the R-hat issue.
+2. **Slow mixing in high dimensions** — *not solved*. Even without the reflection mode, ESS is marginal for per-chamber House and severely inadequate for joint.
+
+The next most impactful step is **Priority 7 (more draws)** combined with LogNormal beta. If R-hat is fine, doubling draws to 4,000 should push ESS past the 400 threshold — a cheap test. For the joint model, **Priority 6 (nutpie)** is the most promising path: its normalizing-flow adaptation directly targets the high-dimensional correlation that makes NUTS slow.
+
 ## Implementation Sequence
 
-A practical rollout plan:
+Updated based on experiment results:
 
-1. **Experiment branch:** Implement Priority 1 (β > 0) and Priority 7 (more draws) together. Run on the 91st biennium as a baseline.
-2. **Evaluate:** If House per-chamber passes, move to joint model. Add Priority 2 (per-chamber init for joint) and Priority 3 (tighter α prior).
-3. **If joint still fails:** Add Priority 5 (ADVI init), then Priority 6 (nutpie).
-4. **If joint still fails:** Consider Priority 9 (1PL for joint) as a fallback.
-5. **Long-term:** Priority 4 (mixed centering) and Priority 8 (hierarchical bill priors) for robustness.
+1. ~~**Priority 1 (β > 0):** Confirmed effective for R-hat. LogNormal(0, 0.5) is the preferred variant.~~ **DONE**
+2. **Next:** Priority 7 (more draws, 4,000+) with LogNormal beta. If House per-chamber passes, deploy to production.
+3. **For joint model:** Priority 6 (nutpie) is the most promising path. If available, test before adding more complexity.
+4. **If nutpie unavailable or insufficient:** Priority 2 (per-chamber init for joint) + Priority 3 (tighter α).
+5. **If joint still fails:** Priority 5 (ADVI init), then Priority 9 (1PL fallback).
+6. **Long-term:** Priority 4 (mixed centering) and Priority 8 (hierarchical bill priors) for robustness.
 
 ## References
 
@@ -309,6 +333,7 @@ A practical rollout plan:
 
 ## Related Documents
 
+- [Positive Beta Experiment](../results/experiments/2026-02-27_positive-beta/experiment.md) — LogNormal/HalfNormal results, joint model test, full metrics
 - [Hierarchical IRT Deep Dive](hierarchical-irt-deep-dive.md) — ecosystem survey, code audit, 9 issues fixed
 - [Hierarchical Shrinkage Deep Dive](hierarchical-shrinkage-deep-dive.md) — over-shrinkage with small groups
 - [Hierarchical PCA Init Experiment](hierarchical-pca-init-experiment.md) — R-hat fix, ESS threshold analysis

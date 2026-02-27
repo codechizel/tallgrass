@@ -531,7 +531,7 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 | 91st | 1.0103 | FAIL | 1.0058 | **PASS** | 1.5330 |
 
 - **Explanation:** The House fails not from lack of data but from posterior geometry. Three reinforcing mechanisms: (1) β sign-flip multimodality — each of ~280 House bill β parameters creates a reflection axis, vs ~240 for Senate; (2) non-centered funnel scaling — 130 correlated ξ_offset parameters in House vs 40 in Senate increase the correlation plateau dimensionality; (3) NUTS cost scaling — sampler performance degrades as O(d^{1/4}) with dimensionality. The Senate occupies a sweet spot: 40 legislators provide enough data for group estimation without overwhelming the sampler geometry. The 90th House passes because it has the highest data density (128 legislators × 322 votes).
-- **Downstream:** Primary improvement path is constraining β > 0 (eliminating the reflection mode). Experiment planned: `results/experiments/2026-02-27_positive-beta/`. See ADR-0047 for the experimental design.
+- **Downstream:** The positive beta experiment (2026-02-27) confirmed the reflection-mode theory: LogNormal beta dropped House R-hat from 1.0103 to 1.0058 (passing), but ESS dropped from 564 to 362 (failing). HalfNormal went the other direction (worse R-hat, better ESS). Joint model improved (R-hat 1.5→1.024) but still fails (25 divergences). Positive beta is necessary but not sufficient alone — needs more draws or a faster sampler (nutpie). See `results/experiments/2026-02-27_positive-beta/experiment.md` for full results and ADR-0047.
 
 ### Cross-Session — Prediction Generalizes Across Bienniums
 

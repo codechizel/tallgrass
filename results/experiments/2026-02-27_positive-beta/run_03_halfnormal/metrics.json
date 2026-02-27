@@ -1,0 +1,37 @@
+{
+  "variant": "halfnormal",
+  "variant_description": "beta ~ HalfNormal(1) \u2014 hard zero floor, wider spread",
+  "session": "2025-26",
+  "elapsed_s": 415.4,
+  "include_joint": false,
+  "chambers": {
+    "House": {
+      "n_legislators": 130,
+      "sampling_time_s": 336.5,
+      "convergence_ok": false,
+      "rhat_xi_max": 1.012163189281179,
+      "rhat_mu_party_max": 1.0071484831660313,
+      "rhat_sigma_within_max": 1.0039811057827321,
+      "ess_xi_min": 450.40976430530327,
+      "ess_mu_party_min": 529.1139431507974,
+      "divergences": 0,
+      "flat_corr": 0.9778,
+      "icc_mean": 0.8573,
+      "pearson_r_vs_baseline": 0.9928
+    },
+    "Senate": {
+      "n_legislators": 42,
+      "sampling_time_s": 72.1,
+      "convergence_ok": true,
+      "rhat_xi_max": 1.0028093457914025,
+      "rhat_mu_party_max": 1.00246565893029,
+      "rhat_sigma_within_max": 1.0008231406366284,
+      "ess_xi_min": 1716.55768880669,
+      "ess_mu_party_min": 1700.404153529086,
+      "divergences": 0,
+      "flat_corr": 0.8988,
+      "icc_mean": 0.845,
+      "pearson_r_vs_baseline": 0.9267
+    }
+  }
+}

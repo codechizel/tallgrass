@@ -1,0 +1,46 @@
+{
+  "variant": "lognormal",
+  "variant_description": "beta ~ LogNormal(0, 0.5) \u2014 soft positive, prior median=1.0",
+  "session": "2025-26",
+  "elapsed_s": 3762.2,
+  "include_joint": true,
+  "chambers": {
+    "House": {
+      "n_legislators": 130,
+      "sampling_time_s": 329.1,
+      "convergence_ok": false,
+      "rhat_xi_max": 1.0058335297448517,
+      "rhat_mu_party_max": 1.005839216029777,
+      "rhat_sigma_within_max": 1.0033695498763606,
+      "ess_xi_min": 361.66166583200203,
+      "ess_mu_party_min": 396.51798701716984,
+      "divergences": 0,
+      "flat_corr": 0.9816,
+      "icc_mean": 0.8713,
+      "pearson_r_vs_baseline": 0.9948
+    },
+    "Senate": {
+      "n_legislators": 42,
+      "sampling_time_s": 62.8,
+      "convergence_ok": true,
+      "rhat_xi_max": 1.0084432743114071,
+      "rhat_mu_party_max": 1.0075024892642706,
+      "rhat_sigma_within_max": 1.001407674574734,
+      "ess_xi_min": 554.9341244163298,
+      "ess_mu_party_min": 533.5048944676884,
+      "divergences": 0,
+      "flat_corr": 0.8915,
+      "icc_mean": 0.8625,
+      "pearson_r_vs_baseline": 0.9199
+    }
+  },
+  "joint": {
+    "n_legislators": 172,
+    "sampling_time_s": 3357.7,
+    "convergence_ok": false,
+    "rhat_xi_max": 1.0235145328352473,
+    "ess_xi_min": 242.72518013674926,
+    "divergences": 25,
+    "n_shared_bills": 71
+  }
+}

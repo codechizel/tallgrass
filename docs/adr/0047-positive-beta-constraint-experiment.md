@@ -40,3 +40,20 @@ The experiment tests both the per-chamber model (where we have convergence data 
 - Accuracy: Pearson/Spearman correlation of ideal points (baseline vs treatment)
 - External: Correlation with flat IRT ideal points (which are externally validated against Shor-McCarty)
 - Impact: ICC, group parameters, shrinkage patterns, HTML report for visual inspection
+
+## Results (2026-02-27)
+
+Experiment complete. Full results in `results/experiments/2026-02-27_positive-beta/experiment.md`.
+
+**Per-chamber (91st biennium):**
+
+| Metric | Baseline | LogNormal | HalfNormal |
+|--------|----------|-----------|------------|
+| House R-hat(xi) | 1.0103 | **1.0058** | 1.0122 |
+| House ESS(xi) | 564 | 362 | 450 |
+| House verdict | FAIL (R-hat) | FAIL (ESS) | FAIL (R-hat) |
+| Senate verdict | PASS | PASS | PASS |
+
+**Joint (LogNormal):** R-hat(xi) = 1.024, ESS(xi) = 243, 25 divergences. Improved from production (R-hat ~1.5, ESS ~7) but still fails.
+
+**Conclusion:** Positive beta is necessary (fixes R-hat) but not sufficient (trades ESS). The reflection mode theory is confirmed. Next steps: combine with more draws (Priority 7) or nutpie sampler (Priority 6) to address the remaining ESS shortfall.
