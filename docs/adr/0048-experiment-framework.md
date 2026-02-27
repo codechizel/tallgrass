@@ -31,6 +31,7 @@ Factor the bill discrimination (beta) prior into a frozen dataclass. Production 
 - **ExperimentConfig**: frozen dataclass bundling all experiment parameters (beta prior, sampling settings, session, chambers)
 - **run_experiment()**: orchestrates the full lifecycle: platform check → data load → per-chamber models → optional joint model → HTML report → metrics.json
 - All model-building, diagnostics, and reporting logic is imported from production — zero duplication
+- HTML reports use `build_hierarchical_report()` from `analysis/10_hierarchical/hierarchical_report.py` — the same 18-22 section report as production `just hierarchical`. Standalone experiment scripts also call this function directly, ensuring experiment output is visually identical to production and can be directly compared.
 
 ## Alternatives Considered
 

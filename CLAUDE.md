@@ -177,6 +177,8 @@ Three components eliminate code duplication in MCMC experiments (ADR-0048):
 - **`analysis/experiment_monitor.py`** — `PlatformCheck` (validates Apple Silicon constraints before sampling), monitoring callback (`setproctitle` + atomic JSON status file), `ExperimentLifecycle` (PID lock, process group, cleanup). `just monitor` shows experiment progress.
 - **`analysis/experiment_runner.py`** — `ExperimentConfig` frozen dataclass + `run_experiment()`. Orchestrates: platform check → data load → per-chamber models → optional joint → HTML report → metrics.json. 799-line experiment scripts become ~25-line configs.
 
+All hierarchical experiments (whether using `ExperimentRunner` or standalone scripts) produce the full production HTML report via `build_hierarchical_report()` — the same 18-22 section report as `just hierarchical` (party posteriors, ICC, variance decomposition, dispersion, shrinkage scatter/table, forest plots, convergence, cross-chamber comparison, flat vs hier comparison). The nutpie flat IRT experiment uses a bespoke report (different model type).
+
 ## Concurrency
 
 - **Scraper**: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), sequential parse. Never mutate shared state during fetch.

@@ -41,6 +41,12 @@ from analysis.irt import (
 )
 
 from analysis.experiment_monitor import ExperimentLifecycle, PlatformCheck
+from analysis.report import (
+    FigureSection,
+    ReportBuilder,
+    TableSection,
+    make_gt,
+)
 from tallgrass.session import KSSession
 
 EXPERIMENT_DIR = Path(__file__).parent
@@ -122,10 +128,17 @@ def main() -> None:
     out_dir = EXPERIMENT_DIR / "run_01_house"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    report = ReportBuilder(
+        title="nutpie Flat IRT Baseline — Experiment 1",
+        session=SESSION,
+    )
+
     print("Experiment 1: nutpie Flat IRT Baseline")
     print(f"  Session: {SESSION}")
     print(f"  Output: {out_dir}")
     print()
+
+    t_total = time.time()
 
     # Platform check
     platform = PlatformCheck.current()
@@ -236,6 +249,53 @@ def main() -> None:
         for i, v in enumerate(bfmi_values):
             print(f"  E-BFMI chain {i}: {v:.3f}")
 
+        # Report: diagnostics table
+        diag_df = pl.DataFrame(
+            [
+                {
+                    "Parameter": "xi",
+                    "R-hat max": xi_rhat_max,
+                    "ESS min": xi_ess_min,
+                    "Status": "PASS" if xi_rhat_max < 1.01 and xi_ess_min > 400 else "FAIL",
+                },
+                {
+                    "Parameter": "alpha",
+                    "R-hat max": alpha_rhat_max,
+                    "ESS min": float("nan"),
+                    "Status": "PASS" if alpha_rhat_max < 1.01 else "FAIL",
+                },
+                {
+                    "Parameter": "beta",
+                    "R-hat max": beta_rhat_max,
+                    "ESS min": float("nan"),
+                    "Status": "PASS" if beta_rhat_max < 1.01 else "FAIL",
+                },
+                {
+                    "Parameter": "divergences",
+                    "R-hat max": float("nan"),
+                    "ESS min": float("nan"),
+                    "Status": "PASS" if divergences == 0 else "FAIL",
+                },
+            ]
+        )
+        report.add(
+            TableSection(
+                id="diagnostics",
+                title="Convergence Diagnostics",
+                html=make_gt(
+                    diag_df,
+                    title="MCMC Convergence — House",
+                    subtitle=(
+                        f"{N_SAMPLES} draws, {N_TUNE} tune, {N_CHAINS} chains | nutpie (Numba)"
+                    ),
+                    number_formats={
+                        "R-hat max": ".4f",
+                        "ESS min": ",.0f",
+                    },
+                ),
+            )
+        )
+
         # ── Phase 5: Compare with PyMC baseline ────────────────────────
         print_header("COMPARISON WITH PYMC BASELINE")
 
@@ -285,6 +345,14 @@ def main() -> None:
             ax.set_aspect("equal")
             fig.tight_layout()
             fig.savefig(out_dir / "scatter_nutpie_vs_pymc.png", dpi=150)
+            report.add(
+                FigureSection.from_figure(
+                    "scatter-pymc",
+                    "nutpie vs PyMC Flat IRT — House",
+                    fig,
+                    caption=f"|r| = {abs_r:.4f}. Target > 0.99.",
+                )
+            )
             plt.close(fig)
             print("  Saved: scatter_nutpie_vs_pymc.png")
         else:
@@ -333,6 +401,38 @@ def main() -> None:
         data_dir = out_dir / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         idata_nutpie.to_netcdf(str(data_dir / "idata_nutpie_house.nc"))
+
+        # Summary for report
+        abs_r_str = f"{abs_r:.4f}" if not np.isnan(abs_r) else "N/A"
+        summary_df = pl.DataFrame(
+            [
+                {"Metric": "Compile time", "Value": f"{compile_time:.1f}s"},
+                {"Metric": "Sample time", "Value": f"{sample_time:.1f}s"},
+                {"Metric": "R-hat(xi) max", "Value": f"{xi_rhat_max:.4f}"},
+                {"Metric": "ESS(xi) min", "Value": f"{xi_ess_min:.0f}"},
+                {"Metric": "|r| vs PyMC", "Value": abs_r_str},
+                {
+                    "Metric": "Sign flip",
+                    "Value": "Yes" if sign_flip else "No",
+                },
+            ]
+        )
+        report.add(
+            TableSection(
+                id="summary",
+                title="Experiment Summary",
+                html=make_gt(
+                    summary_df,
+                    title="nutpie Flat IRT — Key Metrics",
+                ),
+            )
+        )
+
+        elapsed = time.time() - t_total
+        report.elapsed_display = f"{elapsed:.0f}s"
+        report_path = EXPERIMENT_DIR / "experiment_1_report.html"
+        report.write(report_path)
+        print(f"\n  HTML Report: {report_path}")
 
         print(f"  Compile: {compile_time:.1f}s")
         print(f"  Sample:  {sample_time:.1f}s")

@@ -1,7 +1,7 @@
 # Experiment: nutpie Hierarchical Per-Chamber IRT (Numba)
 
 **Date:** 2026-02-27
-**Status:** Planning
+**Status:** Complete
 **Author:** Claude Code + Joseph Claeys
 
 ## The Short Version
@@ -64,36 +64,44 @@ If nutpie does NOT fix convergence, the problem is genuinely model-structural (t
 
 ### Summary Table
 
-*To be filled after experiment runs.*
-
 | Metric | PyMC Baseline (House) | nutpie House | PyMC Baseline (Senate) | nutpie Senate |
 |--------|----------------------|--------------|----------------------|---------------|
-| R-hat(xi) max | | | | |
-| R-hat(mu_party) max | | | | |
-| R-hat(sigma_within) max | | | | |
-| ESS(xi) min | | | | |
-| Divergences | | | | |
-| E-BFMI min | | | | |
-| \|r\| vs PyMC hier | — | | — | |
-| \|r\| vs flat IRT | | | | |
-| Compile time (s) | — | | — | |
-| Sample time (s) | | | | |
+| R-hat(xi) max | 1.0102 (WARNING) | **1.0040** (OK) | 1.0029 (OK) | **1.5320** (FAIL) |
+| R-hat(mu_party) max | — | 1.0046 (OK) | — | 1.5319 (FAIL) |
+| R-hat(sigma_within) max | — | 1.0030 (OK) | — | 1.5289 (FAIL) |
+| ESS(xi) min | 370 (WARNING) | **1294** (OK) | 536 (OK) | **7** (FAIL) |
+| Divergences | 0 | 0 | 0 | 0 |
+| E-BFMI min | — | 0.770 (OK) | — | 0.822 (OK) |
+| \|r\| vs PyMC hier | — | 1.0000 | — | 0.9998 |
+| \|r\| vs flat IRT | 0.9869 | 0.9869 | 0.9762 | 0.9762 |
+| Compile time (s) | — | 7.4 | — | 2.5 |
+| Sample time (s) | ~700 | 206.6 | ~180 | 37.2 |
 
 ### What We Observed
 
-*To be filled after experiment runs.*
+**House: ALL CHECKS PASSED.** nutpie resolves the House convergence failure. R-hat(xi) dropped from 1.0102 (WARNING with PyMC) to 1.0040 (well within threshold). ESS(xi) improved dramatically from 370 to 1294. Zero divergences. The ideal points are essentially identical to PyMC's (|r| = 1.0000). Sampling took 207s — comparable to PyMC (~175s per chamber with 4 chains).
+
+**Senate: CONVERGENCE FAILED.** Without PCA initialization, nutpie's chains fell into reflection mode-splitting — R-hat ~1.53, ESS ~7 across all parameters except alpha. This is the classic IRT bimodality problem: two chains found the "Democrats negative" mode while two found "Democrats positive." Despite the convergence failure, the posterior mean (averaging across modes) still agrees with PyMC (|r| = 0.9998).
+
+**Why House passed but Senate failed:** The House has more data (130 legislators, 297 votes, 35,917 observations vs 42/194/7,695). More data creates sharper likelihood peaks, helping nutpie's mass matrix adaptation break the reflection symmetry. The Senate's smaller dataset makes the two modes more symmetric and harder to distinguish.
 
 ### Impact on Rankings and Scores
 
-*To be filled after experiment runs.*
+Point estimates are identical to PyMC production for both chambers (|r| > 0.999). Rankings and scores would not change if nutpie replaced PyMC for House sampling. Senate results are invalid due to mode-splitting but the posterior mean still recovers correct rankings.
 
 ## What We Learned
 
-*To be filled after experiment runs.*
+1. **nutpie resolves the House convergence failure** — this is the primary finding. The House (130 legislators, 728 free params) was the problematic chamber where PyMC consistently produced R-hat warnings. nutpie's Rust NUTS with different mass matrix adaptation handles it cleanly.
+
+2. **PCA initialization is still needed for small chambers.** The Senate's convergence failure confirms that IRT reflection mode-splitting is a genuine model property, not a PyMC-specific bug. Smaller datasets don't provide enough information to break the symmetry.
+
+3. **nutpie + PCA init is the natural next step.** Experiment 2b tests `compile_pymc_model(initial_points={"xi_offset": pca_values}, jitter_rvs=set())` — nutpie's equivalent of PyMC's `initvals` + `adapt_diag` (no jitter).
+
+4. **Experiment 3 (normalizing flows) is likely unnecessary for per-chamber models.** If nutpie + PCA init fixes both chambers, NF adaptation becomes an optimization for sampling efficiency rather than a convergence fix.
 
 ## Changes Made
 
-*To be filled after experiment runs.*
+No production code changes. Experiment is self-contained in `run_experiment.py`. Follow-up experiment 2b (`run_experiment_pca_init.py`) tests PCA initialization. Both scripts produce the full production HTML report via `build_hierarchical_report()` (party posteriors, ICC, variance decomposition, shrinkage, forest plots, convergence diagnostics).
 
 ---
 

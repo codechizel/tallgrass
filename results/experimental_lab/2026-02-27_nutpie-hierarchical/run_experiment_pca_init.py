@@ -1,21 +1,26 @@
-"""Experiment 2: nutpie hierarchical per-chamber IRT (Numba).
+"""Experiment 2b: nutpie hierarchical per-chamber IRT with PCA initialization.
 
-Tests whether nutpie's Rust NUTS implementation resolves the House convergence
-failure that plagues the hierarchical per-chamber IRT model under PyMC.
+Experiment 2 showed that nutpie resolves the House convergence failure but Senate
+fails due to reflection mode-splitting without PCA initialization. This follow-up
+tests whether PCA-informed xi_offset initialization fixes Senate while maintaining
+House convergence.
+
+Key insight: nutpie's PCA init mechanism differs from PyMC's. Instead of
+`pm.sample(initvals=...)`, nutpie uses `compile_pymc_model(initial_points=...)`.
+The `jitter_rvs=set()` parameter disables jitter — matching production's
+`adapt_diag` (no jitter) strategy from ADR-0045.
 
 Two runs:
-  1. House (130 legislators, ~694 free params — the problematic chamber)
-  2. Senate (40 legislators, ~524 free params — the easy chamber, for comparison)
+  1. House (should still pass — PCA init may improve ESS)
+  2. Senate (should now pass — PCA init prevents mode-splitting)
 
-Each run:
-  - Builds the hierarchical model (identical to production, minus sampling)
-  - Compiles with nutpie Numba backend
-  - Samples with nutpie (no PCA init — let nutpie find the mode from zeros)
-  - Checks convergence diagnostics (R-hat, ESS, divergences, E-BFMI)
-  - Compares ideal points vs PyMC hierarchical and flat IRT baselines
+Comparison baselines:
+  - Experiment 2 (nutpie, no PCA init)
+  - PyMC production hierarchical
+  - Flat IRT
 
 Usage:
-    uv run python results/experiments/2026-02-27_nutpie-hierarchical/run_experiment.py
+    uv run python results/experimental_lab/2026-02-27_nutpie-hierarchical/run_experiment_pca_init.py
 """
 
 import json
@@ -53,11 +58,10 @@ from analysis.hierarchical import (
 )
 from analysis.hierarchical_report import build_hierarchical_report
 from analysis.irt import (
-    ESS_THRESHOLD,
     RANDOM_SEED,
-    RHAT_THRESHOLD,
     load_eda_matrices,
     load_metadata,
+    load_pca_scores,
     plot_forest,
 )
 from analysis.model_spec import PRODUCTION_BETA
@@ -157,19 +161,40 @@ def build_hierarchical_model(data: dict, beta_prior=PRODUCTION_BETA):
     return model
 
 
+def compute_pca_initvals(pca_scores: pl.DataFrame, leg_slugs: list[str]) -> np.ndarray:
+    """Compute standardized PC1 scores as xi_offset initvals.
+
+    Matches the production code in hierarchical.py:1570-1579:
+    - Filter PCA scores to legislators in this chamber
+    - Sort to match leg_slugs ordering
+    - Standardize to mean=0, std=1 (matches N(0,1) prior on xi_offset)
+    """
+    slug_order = {s: i for i, s in enumerate(leg_slugs)}
+    pc1_vals = (
+        pca_scores.filter(pl.col("legislator_slug").is_in(leg_slugs))
+        .sort(pl.col("legislator_slug").replace_strict(slug_order))["PC1"]
+        .to_numpy()
+    )
+    pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
+    return pc1_std.astype(np.float64)
+
+
 def run_chamber(
     chamber: str,
     run_name: str,
     eda_dir: Path,
+    pca_dir: Path,
     hier_dir: Path,
     irt_dir: Path,
     data_dir: Path,
+    exp2_dir: Path | None,
     plots_dir: Path,
 ) -> tuple[dict, dict]:
-    """Run nutpie experiment for a single chamber.
+    """Run nutpie experiment with PCA init for a single chamber.
 
-    Returns (metrics, chamber_result) where chamber_result is suitable for
-    build_hierarchical_report().
+    Returns (metrics, chamber_result) where chamber_result has keys matching
+    build_hierarchical_report expectations: data, idata, ideal_points,
+    group_params, icc_df, convergence, sampling_time, flat_corr.
     """
     out_dir = EXPERIMENT_DIR / run_name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -184,12 +209,25 @@ def run_chamber(
 
     matrix = house_matrix if chamber == "House" else senate_matrix
 
+    # Load PCA scores for initialization
+    house_pca, senate_pca = load_pca_scores(pca_dir)
+    pca_scores = house_pca if chamber == "House" else senate_pca
+    print(f"  PCA scores loaded: {len(pca_scores)} legislators")
+
     # ── Prepare hierarchical data ────────────────────────────────────────
     print_header(f"PREPARING HIERARCHICAL DATA — {chamber}")
     data = prepare_hierarchical_data(matrix, legislators, chamber)
     print(f"  {data['n_legislators']} legislators x {data['n_votes']} votes")
     print(f"  {data['n_obs']:,} observations")
     print(f"  Parties: {data['party_names']}")
+
+    # ── Compute PCA initvals ──────────────────────────────────────────────
+    print_header(f"COMPUTING PCA INITVALS — {chamber}")
+    xi_offset_initvals = compute_pca_initvals(pca_scores, data["leg_slugs"])
+    print(
+        f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
+        f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
+    )
 
     # ── Build model ──────────────────────────────────────────────────────
     print_header(f"BUILDING PYMC MODEL — {chamber}")
@@ -199,21 +237,27 @@ def run_chamber(
     print(f"  Total free parameters: {n_free_params}")
     print(f"  Free RVs: {[v.name for v in model.free_RVs]}")
 
-    # ── Compile with nutpie ──────────────────────────────────────────────
-    print_header(f"COMPILING WITH NUTPIE (Numba) — {chamber}")
+    # ── Compile with nutpie (PCA init) ────────────────────────────────────
+    print_header(f"COMPILING WITH NUTPIE (Numba + PCA init) — {chamber}")
     import nutpie
 
     t_compile = time.time()
     try:
-        compiled = nutpie.compile_pymc_model(model)
+        compiled = nutpie.compile_pymc_model(
+            model,
+            initial_points={"xi_offset": xi_offset_initvals},
+            jitter_rvs=set(),  # No jitter — PCA initvals provide orientation (ADR-0045)
+        )
         compile_time = time.time() - t_compile
         print(f"  Compilation SUCCESS in {compile_time:.1f}s")
+        print("  initial_points: xi_offset from PCA PC1 (standardized)")
+        print("  jitter_rvs: disabled (matching production adapt_diag, no jitter)")
     except Exception as e:
         compile_time = time.time() - t_compile
         print(f"  Compilation FAILED after {compile_time:.1f}s")
         print(f"  Error: {e}")
         metrics = {
-            "experiment": "nutpie-hierarchical",
+            "experiment": "nutpie-hierarchical-pca-init",
             "chamber": chamber,
             "phase": "compilation",
             "status": "FAILED",
@@ -229,7 +273,7 @@ def run_chamber(
     print_header(f"SAMPLING WITH NUTPIE — {chamber}")
     print(f"  {N_SAMPLES} draws, {N_TUNE} tune, {N_CHAINS} chains")
     print(f"  seed={RANDOM_SEED}")
-    print("  No PCA init — letting nutpie find the mode from zeros")
+    print("  PCA-informed xi_offset initialization (jitter disabled)")
 
     t_sample = time.time()
     idata = nutpie.sample(
@@ -244,72 +288,35 @@ def run_chamber(
     sample_time = time.time() - t_sample
     print(f"  Sampling complete in {sample_time:.1f}s")
 
-    # ── Convergence diagnostics (manual console output) ──────────────────
-    print_header(f"CONVERGENCE DIAGNOSTICS — {chamber}")
+    # ── Convergence diagnostics ──────────────────────────────────────────
+    # Production convergence check (populates console output + returns dict)
+    convergence = check_hierarchical_convergence(idata, chamber)
+    all_ok = convergence.get("all_ok", False)
+    divergences = convergence.get("divergences", 0)
 
+    # Also compute manual diagnostics for console detail
     rhat = az.rhat(idata)
     ess = az.ess(idata)
     diag: dict = {}
-
     available_vars = [v for v in HIER_CONVERGENCE_VARS if v in idata.posterior]
     for var in available_vars:
         if var in rhat:
-            max_rhat = float(rhat[var].max())
-            diag[f"{var}_rhat_max"] = max_rhat
-            status = "OK" if max_rhat < RHAT_THRESHOLD else "WARNING"
-            print(f"  R-hat ({var}): max = {max_rhat:.4f}  {status}")
-
-    for var in available_vars:
+            diag[f"{var}_rhat_max"] = float(rhat[var].max())
         if var in ess:
             min_ess = float(ess[var].min())
-            per_chain = min_ess / N_CHAINS
             diag[f"{var}_ess_min"] = min_ess
-            diag[f"{var}_ess_per_chain"] = per_chain
-            status = "OK" if min_ess > ESS_THRESHOLD else "WARNING"
-            print(f"  ESS ({var}): min = {min_ess:.0f}  {status}  (per-chain: {per_chain:.0f})")
+            diag[f"{var}_ess_per_chain"] = min_ess / N_CHAINS
 
-    # Divergences
-    if "diverging" in idata.sample_stats:
-        divergences = int(idata.sample_stats["diverging"].sum().values)
-    else:
-        divergences = 0
-    diag["divergences"] = divergences
-    print(f"  Divergences: {divergences}")
-
-    # E-BFMI
     bfmi_values = az.bfmi(idata)
+    diag["divergences"] = divergences
     diag["ebfmi"] = [round(float(v), 3) for v in bfmi_values]
     for i, v in enumerate(bfmi_values):
         status = "OK" if v > 0.3 else "WARNING"
         print(f"  E-BFMI chain {i}: {v:.3f}  {status}")
 
-    # Overall convergence assessment
-    rhat_ok = all(
-        diag.get(f"{v}_rhat_max", 0) < RHAT_THRESHOLD
-        for v in available_vars
-        if f"{v}_rhat_max" in diag
-    )
-    ess_ok = all(
-        diag.get(f"{v}_ess_min", float("inf")) > ESS_THRESHOLD
-        for v in available_vars
-        if f"{v}_ess_min" in diag
-    )
-    div_ok = divergences == 0
-    bfmi_ok = all(v > 0.3 for v in bfmi_values)
-    all_ok = rhat_ok and ess_ok and div_ok and bfmi_ok
-
-    if all_ok:
-        print("  CONVERGENCE: ALL CHECKS PASSED")
-    else:
-        print("  CONVERGENCE: SOME CHECKS FAILED — inspect diagnostics")
-
-    # ── Production convergence check (for report data) ────────────────────
-    convergence = check_hierarchical_convergence(idata, chamber)
-
-    # ── Extract ideal points ─────────────────────────────────────────────
+    # ── Extract ideal points + production results ──────────────────────────
     print_header(f"EXTRACTING IDEAL POINTS — {chamber}")
 
-    # Load flat IRT baseline for shrinkage comparison
     flat_path = irt_dir / "data" / f"ideal_points_{chamber.lower()}.parquet"
     flat_ip = pl.read_parquet(flat_path) if flat_path.exists() else None
     if flat_ip is not None:
@@ -320,7 +327,7 @@ def run_chamber(
     ip_df = extract_hierarchical_ideal_points(idata, data, legislators, flat_ip)
     print(f"  Extracted {len(ip_df)} ideal points")
 
-    # ── Production group params and variance decomposition ────────────────
+    # Production extraction: group params, ICC, flat correlation
     group_params = extract_group_params(idata, data)
     icc_df = compute_variance_decomposition(idata, data)
 
@@ -328,13 +335,75 @@ def run_chamber(
     if flat_ip is not None:
         flat_corr = compute_flat_hier_correlation(ip_df, flat_ip, chamber)
 
+    # Print group params
+    print("\n  Group-level parameters:")
+    for row in group_params.iter_rows(named=True):
+        print(
+            f"    {row['party']}: mu={row['mu_mean']:+.3f} "
+            f"[{row['mu_hdi_2.5']:+.3f}, {row['mu_hdi_97.5']:+.3f}], "
+            f"sigma={row['sigma_within_mean']:.3f}"
+        )
+
     # ── Production plots ─────────────────────────────────────────────────
-    print_header(f"PRODUCTION PLOTS — {chamber}")
+    print_header(f"PLOTS — {chamber}")
+    plots_dir.mkdir(parents=True, exist_ok=True)
     plot_party_posteriors(idata, data, chamber, plots_dir)
     plot_icc(icc_df, chamber, plots_dir)
     plot_shrinkage_scatter(ip_df, chamber, plots_dir)
     plot_forest(ip_df, chamber, plots_dir)
     plot_dispersion(idata, data, chamber, plots_dir)
+
+    # ── Compare vs experiment 2 (no PCA init) ─────────────────────────────
+    r_exp2 = float("nan")
+    exp2_path = None
+    if exp2_dir is not None:
+        run_name_exp2 = "run_01_house" if chamber == "House" else "run_02_senate"
+        ip_file = f"hierarchical_ideal_points_{chamber.lower()}.parquet"
+        exp2_path = exp2_dir / run_name_exp2 / "data" / ip_file
+
+    if exp2_path is not None and exp2_path.exists():
+        print_header(f"COMPARISON VS EXPERIMENT 2 (no PCA init) — {chamber}")
+        exp2_baseline = pl.read_parquet(exp2_path)
+        xi_pca = ip_df.select("legislator_slug", pl.col("xi_mean").alias("xi_pca"))
+        xi_nopca = exp2_baseline.select("legislator_slug", pl.col("xi_mean").alias("xi_nopca"))
+
+        merged_exp2 = xi_pca.join(xi_nopca, on="legislator_slug", how="inner")
+        if len(merged_exp2) > 2:
+            r_exp2, p_exp2 = stats.pearsonr(
+                merged_exp2["xi_pca"].to_numpy(),
+                merged_exp2["xi_nopca"].to_numpy(),
+            )
+            abs_r_exp2 = abs(r_exp2)
+            print(f"  Legislators matched: {len(merged_exp2)}")
+            print(f"  Pearson r vs exp 2 (no PCA): {r_exp2:.6f} (p={p_exp2:.2e})")
+            print(f"  |r| = {abs_r_exp2:.4f}")
+
+            # Scatter plot
+            fig, ax = plt.subplots(figsize=(8, 8))
+            ax.scatter(
+                merged_exp2["xi_nopca"].to_numpy(),
+                merged_exp2["xi_pca"].to_numpy(),
+                alpha=0.6,
+                s=20,
+            )
+            lim = (
+                max(
+                    abs(merged_exp2["xi_nopca"].to_numpy()).max(),
+                    abs(merged_exp2["xi_pca"].to_numpy()).max(),
+                )
+                * 1.1
+            )
+            ax.plot([-lim, lim], [-lim, lim], "k--", alpha=0.3)
+            ax.set_xlabel("nutpie (no PCA init) — Experiment 2")
+            ax.set_ylabel("nutpie (PCA init) — Experiment 2b")
+            ax.set_title(f"PCA Init vs No PCA Init — {chamber} (|r|={abs_r_exp2:.4f})")
+            ax.set_aspect("equal")
+            fig.tight_layout()
+            fig.savefig(out_dir / "scatter_pca_vs_nopca.png", dpi=150)
+            plt.close(fig)
+            print("  Saved: scatter_pca_vs_nopca.png")
+    else:
+        print("  No experiment 2 baseline available")
 
     # ── Compare vs PyMC hierarchical baseline ────────────────────────────
     print_header(f"COMPARISON VS PYMC HIERARCHICAL — {chamber}")
@@ -360,7 +429,7 @@ def run_chamber(
                 print("  Sign flip detected (expected — IRT reflection invariance)")
             print(f"  |r| = {abs_r_hier:.4f} (target > 0.95)")
 
-            # Scatter plot (nutpie-specific comparison)
+            # Scatter plot
             fig, ax = plt.subplots(figsize=(8, 8))
             ax.scatter(
                 merged_hier["xi_pymc_hier"].to_numpy(),
@@ -377,13 +446,13 @@ def run_chamber(
             )
             ax.plot([-lim, lim], [-lim, lim], "k--", alpha=0.3)
             ax.set_xlabel("PyMC Hierarchical Ideal Points (xi)")
-            ax.set_ylabel("nutpie Hierarchical Ideal Points (xi)")
-            ax.set_title(f"nutpie vs PyMC Hierarchical IRT — {chamber} (|r|={abs_r_hier:.4f})")
+            ax.set_ylabel("nutpie + PCA Init Ideal Points (xi)")
+            ax.set_title(f"nutpie+PCA vs PyMC Hierarchical — {chamber} (|r|={abs_r_hier:.4f})")
             ax.set_aspect("equal")
             fig.tight_layout()
-            fig.savefig(out_dir / "scatter_nutpie_vs_pymc_hier.png", dpi=150)
+            fig.savefig(out_dir / "scatter_nutpie_pca_vs_pymc_hier.png", dpi=150)
             plt.close(fig)
-            print("  Saved: scatter_nutpie_vs_pymc_hier.png")
+            print("  Saved: scatter_nutpie_pca_vs_pymc_hier.png")
         else:
             print(f"  Only {len(merged_hier)} matched — skipping correlation")
     else:
@@ -411,7 +480,6 @@ def run_chamber(
                 print("  Sign flip detected (expected — different identification)")
             print(f"  |r| = {abs_r_flat:.4f} (target > 0.90)")
 
-            # Scatter plot (nutpie-specific comparison)
             fig, ax = plt.subplots(figsize=(8, 8))
             ax.scatter(
                 merged_flat["xi_flat"].to_numpy(),
@@ -428,13 +496,13 @@ def run_chamber(
             )
             ax.plot([-lim, lim], [-lim, lim], "k--", alpha=0.3)
             ax.set_xlabel("Flat IRT Ideal Points (xi)")
-            ax.set_ylabel("nutpie Hierarchical Ideal Points (xi)")
-            ax.set_title(f"nutpie Hierarchical vs Flat IRT — {chamber} (|r|={abs_r_flat:.4f})")
+            ax.set_ylabel("nutpie + PCA Init Ideal Points (xi)")
+            ax.set_title(f"nutpie+PCA Hierarchical vs Flat IRT — {chamber} (|r|={abs_r_flat:.4f})")
             ax.set_aspect("equal")
             fig.tight_layout()
-            fig.savefig(out_dir / "scatter_nutpie_vs_flat.png", dpi=150)
+            fig.savefig(out_dir / "scatter_nutpie_pca_vs_flat.png", dpi=150)
             plt.close(fig)
-            print("  Saved: scatter_nutpie_vs_flat.png")
+            print("  Saved: scatter_nutpie_pca_vs_flat.png")
         else:
             print(f"  Only {len(merged_flat)} matched — skipping correlation")
     else:
@@ -443,26 +511,29 @@ def run_chamber(
     # ── Save outputs ─────────────────────────────────────────────────────
     print_header(f"SAVING OUTPUTS — {chamber}")
 
-    # Save ideal points
     data_out = out_dir / "data"
     data_out.mkdir(parents=True, exist_ok=True)
     ip_df.write_parquet(data_out / f"hierarchical_ideal_points_{chamber.lower()}.parquet")
+    group_params.write_parquet(data_out / f"group_params_{chamber.lower()}.parquet")
+    icc_df.write_parquet(data_out / f"variance_decomposition_{chamber.lower()}.parquet")
     print(f"  Saved: hierarchical_ideal_points_{chamber.lower()}.parquet")
 
-    # Save NetCDF trace
     idata.to_netcdf(str(data_out / f"idata_{chamber.lower()}.nc"))
     print(f"  Saved: idata_{chamber.lower()}.nc")
 
     # ── Build metrics ────────────────────────────────────────────────────
     abs_r_hier = abs(r_hier) if not np.isnan(r_hier) else None
     abs_r_flat = abs(r_flat) if not np.isnan(r_flat) else None
+    abs_r_exp2_val = abs(r_exp2) if not np.isnan(r_exp2) else None
 
     metrics = {
-        "experiment": "nutpie-hierarchical",
+        "experiment": "nutpie-hierarchical-pca-init",
         "session": SESSION,
         "chamber": chamber,
         "sampler": "nutpie",
         "backend": "numba",
+        "pca_init": True,
+        "jitter": False,
         "n_legislators": data["n_legislators"],
         "n_votes": data["n_votes"],
         "n_obs": data["n_obs"],
@@ -471,7 +542,6 @@ def run_chamber(
         "n_tune": N_TUNE,
         "n_chains": N_CHAINS,
         "seed": RANDOM_SEED,
-        "pca_init": False,
         "compile_time_s": round(compile_time, 1),
         "sample_time_s": round(sample_time, 1),
         "total_time_s": round(compile_time + sample_time, 1),
@@ -480,6 +550,10 @@ def run_chamber(
             "all_ok": all_ok,
         },
         "comparison": {
+            "vs_exp2_no_pca": {
+                "pearson_r": round(r_exp2, 6) if not np.isnan(r_exp2) else None,
+                "abs_r": round(abs_r_exp2_val, 6) if abs_r_exp2_val is not None else None,
+            },
             "vs_pymc_hierarchical": {
                 "pearson_r": round(r_hier, 6) if not np.isnan(r_hier) else None,
                 "abs_r": round(abs_r_hier, 6) if abs_r_hier is not None else None,
@@ -515,12 +589,14 @@ def run_chamber(
             print(f"  ESS({var}) min: {diag[ek]:.0f}")
     print(f"  Divergences: {divergences}")
     print(f"  Convergence: {'PASS' if all_ok else 'FAIL'}")
+    if abs_r_exp2_val is not None:
+        print(f"  |r| vs exp 2 (no PCA): {abs_r_exp2_val:.4f}")
     if abs_r_hier is not None:
         print(f"  |r| vs PyMC hierarchical: {abs_r_hier:.4f}")
     if abs_r_flat is not None:
         print(f"  |r| vs flat IRT: {abs_r_flat:.4f}")
 
-    # ── Chamber result for build_hierarchical_report() ────────────────────
+    # ── Build chamber_result dict for build_hierarchical_report ──────────
     chamber_result = {
         "data": data,
         "idata": idata,
@@ -546,13 +622,18 @@ def _resolve_upstream(results_root: Path, new_name: str, old_name: str) -> Path:
 def main() -> None:
     ks = KSSession.from_session_string(SESSION)
     eda_dir = _resolve_upstream(ks.results_dir, "01_eda", "eda")
+    pca_dir = _resolve_upstream(ks.results_dir, "02_pca", "pca")
     hier_dir = _resolve_upstream(ks.results_dir, "10_hierarchical", "hierarchical")
     irt_dir = _resolve_upstream(ks.results_dir, "04_irt", "irt")
 
-    print("Experiment 2: nutpie Hierarchical Per-Chamber IRT (Numba)")
+    # Experiment 2 results (for comparison)
+    exp2_house = EXPERIMENT_DIR / "run_01_house"
+    exp2_dir = EXPERIMENT_DIR if exp2_house.exists() else None
+
+    print("Experiment 2b: nutpie Hierarchical Per-Chamber IRT + PCA Init (Numba)")
     print(f"  Session: {SESSION}")
     print(f"  Sampling: {N_SAMPLES} draws, {N_TUNE} tune, {N_CHAINS} chains")
-    print("  No PCA init — nutpie finds the mode from zeros")
+    print("  PCA-informed xi_offset initialization (jitter disabled)")
     print()
 
     # Platform check
@@ -569,30 +650,24 @@ def main() -> None:
         print("  Platform checks: OK")
     print()
 
-    # Initialize report
-    report = ReportBuilder(
-        title="nutpie Hierarchical IRT (No PCA Init) — Experiment 2",
-        session=SESSION,
-    )
-
-    # Shared plots directory for production report
+    t_total = time.time()
     plots_dir = EXPERIMENT_DIR / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    t_total = time.time()
-
-    with ExperimentLifecycle("nutpie-hierarchical"):
+    with ExperimentLifecycle("nutpie-hierarchical-pca-init"):
         all_metrics = {}
         per_chamber_results: dict[str, dict] = {}
 
-        for chamber, run_name in [("House", "run_01_house"), ("Senate", "run_02_senate")]:
+        for chamber, run_name in [("House", "run_03_house_pca"), ("Senate", "run_04_senate_pca")]:
             metrics, chamber_result = run_chamber(
                 chamber=chamber,
                 run_name=run_name,
                 eda_dir=eda_dir,
+                pca_dir=pca_dir,
                 hier_dir=hier_dir,
                 irt_dir=irt_dir,
                 data_dir=ks.data_dir,
+                exp2_dir=exp2_dir,
                 plots_dir=plots_dir,
             )
             all_metrics[chamber] = metrics
@@ -601,17 +676,8 @@ def main() -> None:
 
         elapsed = time.time() - t_total
 
-        # ── Build production hierarchical report ──────────────────────────
-        if per_chamber_results:
-            build_hierarchical_report(
-                report,
-                chamber_results=per_chamber_results,
-                joint_results=None,
-                plots_dir=plots_dir,
-            )
-
-        # ── Final summary (console) ──────────────────────────────────────
-        print_header("EXPERIMENT 2 COMPLETE")
+        # ── Final summary ────────────────────────────────────────────────
+        print_header("EXPERIMENT 2b COMPLETE")
 
         for chamber, m in all_metrics.items():
             status = m.get("status", "")
@@ -624,34 +690,58 @@ def main() -> None:
             print(f"  {chamber}:")
             print(f"    Convergence: {'PASS' if conv.get('all_ok') else 'FAIL'}")
             print(f"    Time: {m.get('total_time_s', '?')}s")
+
+            exp2_r = comp.get("vs_exp2_no_pca", {}).get("abs_r")
             hier_r = comp.get("vs_pymc_hierarchical", {}).get("abs_r")
             flat_r = comp.get("vs_flat_irt", {}).get("abs_r")
+            if exp2_r is not None:
+                print(f"    |r| vs exp 2 (no PCA): {exp2_r:.4f}")
             if hier_r is not None:
                 print(f"    |r| vs PyMC hierarchical: {hier_r:.4f}")
             if flat_r is not None:
                 print(f"    |r| vs flat IRT: {flat_r:.4f}")
 
-        # Key finding
-        house_conv = all_metrics.get("House", {}).get("convergence", {})
-        senate_conv = all_metrics.get("Senate", {}).get("convergence", {})
-        if house_conv.get("all_ok"):
-            print("\n  KEY FINDING: nutpie RESOLVES the House convergence failure!")
-            print("  → Experiment 3 (NF) may not be needed for per-chamber.")
-        else:
-            print("\n  KEY FINDING: nutpie does NOT resolve House convergence.")
-            print("  → Experiment 3 (NF adaptation) becomes critical.")
+        # Format elapsed time for the report header
+        def _fmt_elapsed(seconds: float) -> str:
+            if seconds < 60:
+                return f"{seconds:.1f}s"
+            minutes, secs = divmod(int(seconds), 60)
+            if minutes < 60:
+                return f"{minutes}m {secs}s"
+            hours, mins = divmod(minutes, 60)
+            return f"{hours}h {mins}m {secs}s"
 
-        if not senate_conv.get("all_ok"):
-            print(
-                "  Senate fails due to reflection mode-splitting without PCA init. "
-                "PCA initialization is still needed for smaller chambers."
-            )
-
-        # Write report
-        report.elapsed_display = f"{elapsed:.0f}s"
-        report_path = EXPERIMENT_DIR / "experiment_2_report.html"
+        # ── HTML Report (production build_hierarchical_report) ────────────
+        print_header("HTML REPORT")
+        report = ReportBuilder(
+            title="nutpie Hierarchical IRT + PCA Init — Experiment 2b",
+            session=SESSION,
+            elapsed_display=_fmt_elapsed(elapsed),
+        )
+        build_hierarchical_report(
+            report,
+            chamber_results=per_chamber_results,
+            joint_results=None,
+            plots_dir=plots_dir,
+        )
+        report_path = EXPERIMENT_DIR / "experiment_2b_report.html"
         report.write(report_path)
         print(f"\n  HTML Report: {report_path}")
+
+        # Key question
+        house_ok = all_metrics.get("House", {}).get("convergence", {}).get("all_ok", False)
+        senate_ok = all_metrics.get("Senate", {}).get("convergence", {}).get("all_ok", False)
+        if house_ok and senate_ok:
+            print("\n  KEY FINDING: nutpie + PCA init RESOLVES convergence for BOTH chambers!")
+            print("  -> nutpie is ready for production use with PCA init.")
+            print("  -> Experiment 3 (NF) is no longer needed for per-chamber models.")
+        elif senate_ok and not house_ok:
+            print("\n  UNEXPECTED: PCA init broke House convergence.")
+        elif house_ok and not senate_ok:
+            print("\n  PCA init did NOT fix Senate convergence.")
+            print("  -> Experiment 3 (NF) becomes critical.")
+        else:
+            print("\n  BOTH chambers failed. Investigate.")
 
 
 if __name__ == "__main__":

@@ -721,7 +721,7 @@ The key insight is that an experiment framework for Tallgrass isn't about tracki
 
 4. **Initialization rules** (ADR-0044, ADR-0045): PCA init with `adapt_diag` (no jitter) when using 4+ chains. The runner applies these rules automatically based on config.
 
-5. **Output standardization**: Every experiment produces the same directory structure, metrics format, and report template. Comparison across variants is mechanical, not manual.
+5. **Output standardization**: Every experiment produces the same directory structure, metrics format, and report. All hierarchical experiments call `build_hierarchical_report()` — the same 18-22 section production report (party posteriors, ICC, variance decomposition, dispersion, shrinkage scatter/table, forest plots, convergence diagnostics, cross-chamber comparison, flat vs hier comparison, analysis parameters). Comparison across variants is mechanical, not manual.
 
 ## References
 
