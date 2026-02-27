@@ -6,7 +6,7 @@
 
 ## Assumptions
 
-1. **Unidimensional ideology.** The 2PL model assumes a single latent dimension explains all voting behavior. Legislators who deviate on a second dimension (e.g., Tyson's contrarianism on routine bills) will have their 1D ideal point estimated as a compromise between their positions on both dimensions. This is by design for the canonical baseline — a 2D model is a future extension.
+1. **Unidimensional ideology.** The 2PL model assumes a single latent dimension explains all voting behavior. Legislators who deviate on a second dimension (e.g., Tyson's contrarianism on routine bills) will have their 1D ideal point estimated as a compromise between their positions on both dimensions. This is by design for the canonical baseline. An experimental 2D IRT model (`analysis/experimental/irt_2d_experiment.py`) confirms the second dimension exists (Dim 2 vs PCA PC2 r=0.81) but is noisy for most legislators — only Tyson, Thompson, and Peck show meaningful Dim 2 signal. See `docs/2d-irt-deep-dive.md` and ADR-0046.
 
 2. **Yea/Nay only.** The model's likelihood is Bernoulli (binary). "Present and Passing," absences, and non-votes are excluded entirely — they do not enter the likelihood. This is a strength: no imputation artifacts.
 

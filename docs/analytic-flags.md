@@ -13,7 +13,7 @@ This is a living document — add entries as each analysis phase surfaces new fi
 - **Explanation:** Tyson has a 61.9% Yea rate and 74 Nay votes — more than double the Republican median. But her contrarian Nay votes are concentrated on low-discrimination bills (|beta| <= 1.5), which IRT downweights. On high-discrimination bills (|beta| > 1.5), she is 100% conservative: 63/63 Yea on R-Yea, 18/18 Nay on D-Yea. No other senator has a perfect record. Additionally, 31 of her 41 dissent votes (Nay where >80% Rs = Yea) are on negative-beta bills, meaning her dissent actually *reinforces* her conservative score rather than moderating it. This is a 1D model limitation: her two-dimensional behavior (ideology + contrarianism) is compressed into a single axis, and the axis captures the dimension that's most informative about ideology.
 - **Downstream:**
   - **Clustering:** Tyson's IRT position will pull any cluster she's in toward an extreme. Consider supplementing IRT with a party loyalty metric to distinguish "ideologically extreme" from "unreliable caucus member."
-  - **Prediction:** IRT ideal points will predict her partisan votes well but miss her contrarian dissent on routine bills. A 2D model would improve predictions for Tyson specifically.
+  - **Prediction:** IRT ideal points will predict her partisan votes well but miss her contrarian dissent on routine bills. The experimental 2D IRT model (ADR-0046) confirms this: Tyson's contrarianism is captured by Dim 2 (-1.882, rank #1), but Dim 2 HDIs are wide for most legislators — marginal prediction gain expected.
   - **Interpretation:** Always present Tyson's ranking with the caveat that 1D IRT conflates "consistently conservative on partisan votes" with "most conservative overall." See `analysis/design/tyson_paradox.md` for full investigation.
 
 ### Sen. Mike Thompson (R, District 10)
@@ -512,7 +512,7 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 
 - **Phase:** Cross-Session Validation (90th vs 91st)
 - **Observation:** Caryn Tyson is flagged as a metric paradox in both the 90th and 91st bienniums — the only legislator detected in both sessions. Her pattern of high party loyalty on discriminating votes combined with high contrarianism on routine votes is a stable, multi-session phenomenon, not a single-session anomaly.
-- **Downstream:** Strengthens the case for a 2D IRT model (roadmap item) that can separate ideology from contrarianism. The 1D compression of Tyson's behavior is a model limitation, not a data artifact.
+- **Downstream:** Confirmed by the experimental 2D IRT model (ADR-0046): Tyson is #1 on Dim 2 in both the 91st PCA (PC2=-24.8) and the 2D IRT (Dim 2=-1.882). The 1D compression of Tyson's behavior is a model limitation, not a data artifact. See `docs/2d-irt-deep-dive.md`.
 
 ### Cross-Session — Prediction Generalizes Across Bienniums
 

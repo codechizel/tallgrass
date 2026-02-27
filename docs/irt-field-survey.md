@@ -271,7 +271,7 @@ Our PyMC-based IRT implementation for Kansas legislative analysis makes the foll
 1. **Time-varying ideal points** (Martin-Quinn dynamic model). On our roadmap but not yet implemented.
 2. **Informative missingness** (idealstan's hurdle model). Not needed for Kansas (2.6% absence rate).
 3. **EM-based fast estimation** (emIRT). Could be useful for exploratory analysis; we use MCMC for full posteriors.
-4. **Multi-dimensional IRT** (2D models). On our roadmap; would address the Tyson paradox.
+4. **Multi-dimensional IRT** (2D models). Implemented experimentally (ADR-0046). Custom PyMC M2PL with PLT identification. Confirms Tyson paradox is a real 2D pattern (Dim 2 vs PC2 r=0.81). No existing Python package was suitable — py-irt, girth, girth-mcmc, deepirtools all lack proper 2D identification for legislative data. See `docs/2d-irt-deep-dive.md`.
 
 ---
 

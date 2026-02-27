@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-02-26 (after 4-chain hierarchical IRT experiment)
+**Last updated:** 2026-02-26 (after 2D IRT experimental implementation)
 
 ---
 
@@ -47,6 +47,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 9 | Cross-Session Validation (90th vs 91st) | 2026-02-26 | First post-fix run: ideology r=0.940 (House), 0.975 (Senate). Cross-session prediction AUC 0.967-0.976 (nearly matches within-session 0.975-0.984). 94 tests. IRT ideal points confirmed as stable traits; network centrality metrics confirmed session-specific. Tyson flagged as paradox in both bienniums. |
 | — | PCA-Informed Init for Hierarchical IRT | 2026-02-26 | Experiment proved PCA init fixes House R-hat (1.0102→1.0026) with r=0.999996 agreement. Implemented as default in `build_per_chamber_model()`. Per-chain ESS reporting added. ADR-0044. Article: `docs/hierarchical-pca-init-experiment.md`. |
 | — | 4-Chain Hierarchical IRT Experiment | 2026-02-26 | 4 chains resolve both ESS warnings (xi: 397→564, mu_party: 356→512) at +4% wall time. Discovered jitter mode-splitting: `jitter+adapt_diag` causes R-hat ~1.53 with 4 chains; fix is `adapt_diag` with PCA init. Run 3 unnecessary. Article: `docs/hierarchical-4-chain-experiment.md`. |
+| — | 2D Bayesian IRT (Experimental) | 2026-02-26 | M2PL model with PLT identification to resolve Tyson paradox. Custom PyMC build (no existing Python package suitable). Runs on Senate chamber. Deep dive: `docs/2d-irt-deep-dive.md`, design: `analysis/design/irt_2d.md`, ADR-0046. |
 
 ---
 
@@ -62,17 +63,6 @@ Two methods documented but not yet implemented:
 - **Changepoint detection** (`Analytic_Methods/27_TSA_changepoint_detection.md`): Structural breaks in voting patterns. When did the session's character shift? (e.g., pre- vs post-veto override period)
 
 Requires the `ruptures` library (not yet in `pyproject.toml`). Now that cross-session data is available, both methods become immediately actionable.
-
-### 2. 2D Bayesian IRT Model
-
-**Priority:** Medium — solves the Tyson paradox properly.
-
-The 1D model compresses Tyson's two-dimensional behavior (ideology + contrarianism) into one axis. A 2D model would:
-- Place Tyson as (very conservative on Dim 1, extreme outlier on Dim 2)
-- Improve predictions for legislators with unusual PC2 patterns
-- Validate whether the PCA PC2 "contrarianism" dimension has a Bayesian counterpart
-
-This is computationally expensive (doubles MCMC time) and requires careful identification constraints for rotation.
 
 ---
 

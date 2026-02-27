@@ -116,7 +116,7 @@ To use a baseball analogy: IRT measures batting average in clutch situations. Yo
 
 1. **Tyson's behavior is genuinely two-dimensional.** She has a strong ideological position (very conservative on partisan fights) AND a strong contrarian tendency (votes Nay on routine legislation regardless of ideology). A 1D model can only capture one of these. It captures the one that's most informative about the liberal-conservative spectrum, which is the partisan votes.
 
-2. **PC2 captures what IRT can't.** Her extreme PC2 score (-24.8, more than 3x the next senator) is the statistical fingerprint of her contrarianism. In a 2D IRT model (a future extension), she would likely appear as: very conservative on Dimension 1, extreme outlier on Dimension 2.
+2. **PC2 captures what IRT can't.** Her extreme PC2 score (-24.8, more than 3x the next senator) is the statistical fingerprint of her contrarianism. The experimental 2D IRT model (ADR-0046) confirmed this: Tyson is #3 on Dim 1 (ideology, +0.984) but #1 on Dim 2 (contrarianism, -1.882). Thompson is #2 on Dim 2 (-0.883), Peck #3 (-0.639). 2D Dim 1 vs PCA PC1 r=0.98, Dim 2 vs PC2 r=0.81. See `docs/2d-irt-deep-dive.md`.
 
 3. **The anchor is part of the story.** Murphy, whom PCA ranked as the most conservative, is the conservative anchor (fixed at xi = +1.0). He can't "compete" with Tyson in the rankings because his position is fixed. If Murphy's ideal point were freely estimated, he would likely land around +2.0 to +2.5 — still well below Tyson's +4.17, because he genuinely has a less extreme voting pattern on high-discrimination bills. But the gap would be smaller.
 
@@ -136,9 +136,9 @@ All three have the most negative PC2 scores in the Republican caucus. The more c
 
 This is a feature of the model, not a bug — but it's a feature that systematically mischaracterizes a specific behavioral type. The 1D IRT model treats "votes Nay on everything" and "votes Nay only on liberal bills" as similar, because on the high-discrimination bills both patterns look the same.
 
-## What We Could Do About It (Future Work)
+## What We Could Do About It
 
-1. **2D IRT.** A two-dimensional model would estimate Tyson's position on both the ideology axis and the contrarianism axis. This is the theoretically correct solution but significantly more complex to identify and interpret.
+1. **2D IRT.** ~~A two-dimensional model would estimate Tyson's position on both the ideology axis and the contrarianism axis. This is the theoretically correct solution but significantly more complex to identify and interpret.~~ **Implemented experimentally (2026-02-26).** The 2D M2PL model with PLT identification separates ideology from contrarianism. Tyson drops from #1 (1D) to #3 on Dim 1 but is #1 on Dim 2. Convergence is partial (Dim 2 mode-splitting for some parameters), confirming the second dimension is real but weakly identified for most legislators. See `analysis/experimental/irt_2d_experiment.py` and `docs/2d-irt-deep-dive.md`.
 
 2. **Party loyalty index.** A simple metric — "fraction of votes agreeing with the party median" — would immediately distinguish Tyson (low loyalty, high ideology) from Murphy (high loyalty, high ideology). This could supplement IRT rankings.
 
