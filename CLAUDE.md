@@ -150,6 +150,7 @@ Key references:
 - Design docs: `analysis/design/README.md`
 - ADRs: `docs/adr/README.md` (55 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
+- How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
 - PCA deep dive: `docs/pca-deep-dive.md` (literature review, code audit, implementation recommendations)
