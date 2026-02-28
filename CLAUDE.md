@@ -150,7 +150,7 @@ Key references:
 - Design docs: `analysis/design/README.md`
 - ADRs: `docs/adr/README.md` (53 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
-- External validation: `docs/external-validation-results.md` (general-audience results article)
+- External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
 - PCA deep dive: `docs/pca-deep-dive.md` (literature review, code audit, implementation recommendations)
 - MCA deep dive: `docs/mca-deep-dive.md` (theory survey, ecosystem evaluation, integration design)

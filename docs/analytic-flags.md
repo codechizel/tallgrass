@@ -494,12 +494,11 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** Either veto overrides were rare in these sessions, or they are coded differently in the historical data (different motion text patterns, or lumped into "Unknown" vote type). The 84th-85th had 57.9% "Unknown" vote types — some may be overrides.
 - **Downstream:** Override-specific analyses (override subnetwork, override Rice, override clustering) are skipped for all historical sessions. Cross-session comparison of override behavior is not possible.
 
-### 88th (2019-20) — Hierarchical Senate Over-Shrinkage (External Validation)
+### 88th (2019-20) — Hierarchical Senate Over-Shrinkage (RESOLVED)
 
 - **Phase:** Hierarchical IRT, External Validation
-- **Observation:** The 88th is marked "Clean" for flat IRT (both chambers converge), but the hierarchical per-chamber model catastrophically fails for the Senate: R-hat = 1.83, ESS = 3, ICC = 0.41 [0.00, 0.88]. External validation against Shor-McCarty scores confirms the failure: hierarchical Senate r = -0.541 (inverted), while flat Senate r = +0.929 (strong). The hierarchical House validates excellently at r = 0.984.
-- **Explanation:** The Senate has only 11 Democrats and 30 Republicans. With 13 parameters to estimate for the Democrat group (1 party mean + 1 within-party spread + 11 offsets) from only 11 legislators, the model cannot identify the group-level parameters. The MCMC sampler oscillates between two modes (small sigma_within with large offsets vs. large sigma_within with small offsets), producing R-hat = 1.83. This is a textbook J=2 small-group problem documented by Gelman (2006, 2015) and Peress (2009). See `docs/hierarchical-shrinkage-deep-dive.md` for a full analysis with literature references.
-- **Downstream:** For the 88th Senate, use flat IRT `xi_mean` (r = 0.929 vs. Shor-McCarty), not hierarchical `hier_xi_mean`. The hierarchical House results are trustworthy (r = 0.984). The joint cross-chamber model (3-level, 168 legislators combined) also converges cleanly and may be preferred for Senate hierarchical estimates. As of ADR-0043, group-size-adaptive priors (`HalfNormal(0.5)` for groups < 20) mitigate the worst convergence failures, and bill-matching in the joint model provides natural cross-chamber identification.
+- **Observation (original, 2026-02-24):** The hierarchical per-chamber model catastrophically failed for the Senate: R-hat = 1.83, ESS = 3, hierarchical Senate r = -0.541 (inverted) vs Shor-McCarty.
+- **Resolution (2026-02-28):** Three improvements eliminated the over-shrinkage: (1) nutpie Rust NUTS sampler with normalizing flow adaptation (ADR-0051, ADR-0053), (2) group-size-adaptive priors for small party groups (ADR-0043), (3) PCA-informed initialization (ADR-0044). The 88th hierarchical Senate now validates at r = 0.969 vs Shor-McCarty — outperforming the flat model (r = 0.929). Full 5-biennium external validation (84th-88th) confirms hierarchical Senate r = 0.945-0.991 across all sessions. See `docs/external-validation-results.md` for the complete results.
 
 ### Cross-Session — Network Centrality Metrics Are Session-Specific
 
