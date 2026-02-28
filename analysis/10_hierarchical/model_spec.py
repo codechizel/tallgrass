@@ -75,3 +75,9 @@ class BetaPriorSpec:
 # Production default: matches the hardcoded pm.Normal("beta", mu=0, sigma=1, ...)
 # that has been in build_per_chamber_model() and build_joint_model() since ADR-0017.
 PRODUCTION_BETA = BetaPriorSpec("normal", {"mu": 0, "sigma": 1})
+
+# Joint model beta: LogNormal(0, 0.5) eliminates reflection mode multimodality.
+# Positive constraint forces each bill to discriminate in the "natural" direction,
+# removing 420+ sign-flip axes from the posterior. Experiment (2026-02-27) showed
+# R-hat 1.53→1.024 and ESS 7→243 from this change alone. See docs/joint-model-deep-dive.md.
+JOINT_BETA = BetaPriorSpec("lognormal", {"mu": 0, "sigma": 0.5})

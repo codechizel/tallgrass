@@ -55,9 +55,9 @@ except ModuleNotFoundError:
     from hierarchical_report import build_hierarchical_report  # type: ignore[no-redef]
 
 try:
-    from analysis.model_spec import PRODUCTION_BETA, BetaPriorSpec
+    from analysis.model_spec import JOINT_BETA, PRODUCTION_BETA, BetaPriorSpec
 except ModuleNotFoundError:
-    from model_spec import PRODUCTION_BETA, BetaPriorSpec  # type: ignore[no-redef]
+    from model_spec import JOINT_BETA, PRODUCTION_BETA, BetaPriorSpec  # type: ignore[no-redef]
 
 try:
     from analysis.irt import (
@@ -1750,6 +1750,33 @@ def main() -> None:
                 house_data = per_chamber_results["House"]["data"]
                 senate_data = per_chamber_results["Senate"]["data"]
 
+                # PCA-informed initialization for joint model (Priority 1 from
+                # docs/joint-model-deep-dive.md). Concatenate per-chamber PCA init
+                # values in the same order as the joint model's legislator list
+                # (House first, then Senate — matching build_joint_graph()).
+                joint_xi_init = None
+                if house_pca is not None and senate_pca is not None:
+                    joint_init_parts = []
+                    for chamber_label, chamber_data, pca_scores in [
+                        ("House", house_data, house_pca),
+                        ("Senate", senate_data, senate_pca),
+                    ]:
+                        slug_order = {s: i for i, s in enumerate(chamber_data["leg_slugs"])}
+                        pc1_vals = (
+                            pca_scores.filter(
+                                pl.col("legislator_slug").is_in(chamber_data["leg_slugs"])
+                            )
+                            .sort(pl.col("legislator_slug").replace_strict(slug_order))["PC1"]
+                            .to_numpy()
+                        )
+                        pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
+                        joint_init_parts.append(pc1_std.astype(np.float64))
+                    joint_xi_init = np.concatenate(joint_init_parts)
+                    print(
+                        f"  Joint PCA init: {len(joint_xi_init)} params, "
+                        f"range [{joint_xi_init.min():.2f}, {joint_xi_init.max():.2f}]"
+                    )
+
                 joint_idata, combined_data, joint_time = build_joint_model(
                     house_data,
                     senate_data,
@@ -1758,6 +1785,8 @@ def main() -> None:
                     n_chains=args.n_chains,
                     rollcalls=rollcalls,
                     cores=args.cores,
+                    beta_prior=JOINT_BETA,
+                    xi_offset_initvals=joint_xi_init,
                 )
 
                 joint_convergence = check_hierarchical_convergence(joint_idata, "Joint")

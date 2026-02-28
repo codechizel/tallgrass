@@ -10,7 +10,7 @@ The joint model fails convergence diagnostics in **all eight bienniums** (2011-2
 
 This matters because the joint model is the only way to directly compare legislators across chambers — to answer questions like "Is the Senate more conservative than the House?" or "Is Senator X further right than Representative Y?" Without a working joint model, we rely on the flat IRT's post-hoc test equating, which makes strong assumptions about the equivalence of shared bills.
 
-This article examines the joint model's architecture, diagnoses the root causes of failure, surveys the political science and psychometrics literature for solutions, and proposes a prioritized improvement plan.
+This article examines the joint model's architecture, diagnoses the root causes of failure, reports our experimental results, surveys the political science and psychometrics literature for solutions, and proposes a revised improvement plan.
 
 ## The Joint Model's Architecture
 
@@ -69,41 +69,80 @@ The model constrains `mu_group` ordering within each chamber (D < R), which brea
 
 The production code includes a post-hoc sign correction (`fix_joint_sign_convention()`, line 851) that compares joint ideal points to per-chamber estimates and negates the posterior if they're anti-correlated. But this is a band-aid: if the sampler got stuck exploring reflection modes, the posterior is bimodal and averaging across modes is not meaningful.
 
-### A Critical Gap: No PCA Initialization
+## Experiment: PCA Init + LogNormal Beta (84th Biennium)
 
-The per-chamber models use PCA-informed initialization: the first principal component of the vote matrix provides starting values for `xi_offset`, helping the sampler find the correct mode quickly. This was implemented in ADR-0023 and proved critical for convergence.
+### What We Changed
 
-The joint model **does not use PCA initialization** in production. The `build_joint_model()` function accepts an `xi_offset_initvals` parameter (line 775), but the production call at line 1753 does not pass it. All chains start from the default (zeros + jitter), meaning the joint model must find the correct mode from scratch — a much harder problem with 1,042 parameters and multimodal posterior.
+Based on the initial analysis in this article, we implemented two changes:
 
-## What We've Already Tried
+1. **PCA initialization for the joint model.** Concatenated per-chamber PCA PC1 scores (standardized to N(0,1) scale) as starting values for `xi_offset`, matching the order of `build_joint_graph()` (House first, then Senate). Added `JOINT_BETA = BetaPriorSpec("lognormal", {"mu": 0, "sigma": 0.5})` to `model_spec.py`.
 
-### Successful Interventions (Per-Chamber)
+2. **LogNormal(0, 0.5) beta prior** for the joint model only. Per-chamber models continue to use Normal(0, 1). The `JOINT_BETA` constant is passed only to `build_joint_model()`.
 
-| Intervention | Effect | Status |
-|--------------|--------|--------|
-| PCA-informed init (ADR-0023) | Fixed per-chamber House R-hat (1.0102 → 1.0026) | Production |
-| nutpie Rust NUTS (ADR-0051) | Fixed remaining per-chamber failures (12/16 → 12/16 PASS, 4 WARN) | Production |
-| Adaptive sigma prior (ADR-0043) | Stabilized small-group Senate Democrats | Production |
-| 4-chain (ADR-0044) | Proved jitter mode-splitting; `adapt_diag` > `jitter+adapt_diag` | Diagnosed |
+We ran the full 14-phase pipeline on the 84th biennium (2011-12, run ID `84-260228.3`).
 
-### Experiments on Joint Model
+### Results
 
-| Intervention | Effect | Outcome |
-|--------------|--------|---------|
-| Bill-matching (ADR-0043) | Runtime 93 → 32 min, 71 shared bills bridge chambers | Partial improvement |
-| Positive beta (LogNormal) | R-hat 1.5 → 1.024, ESS 7 → 243, divergences 0 → 25 | Still fails |
-| nutpie Rust NUTS (ADR-0053) | Faster sampling but same convergence profile | No improvement |
+**Per-chamber models: flawless convergence (unchanged).**
 
-### What Has NOT Been Tried
+| Metric | House | Senate |
+|--------|-------|--------|
+| R-hat(xi) max | 1.0021 | 1.0025 |
+| ESS(xi) min | 1,026 | 869 |
+| Divergences | 0 | 0 |
+| Sampling time | 253.9s | — |
+| Verdict | **PASS** | **PASS** |
 
-1. **PCA initialization for the joint model** — The infrastructure exists but is not connected in production
-2. **Tighter alpha prior** — Currently Normal(0, 5); reducing to Normal(0, 2) would help with identifiability
-3. **Sparsity priors on beta** — Horseshoe or half-Laplace to shrink uninformative bills
-4. **Normalizing flow adaptation** — nutpie's experimental `flow_model` parameter
-5. **Pathfinder initialization** — L-BFGS variational inference for MCMC starting points (available in pymc-extras)
-6. **Two-stage linking** — Abandon concurrent calibration; use per-chamber models + Stocking-Lord test equating
-7. **Polya-Gamma augmentation** — Data augmentation that turns the logistic likelihood into a conjugate Gaussian
-8. **More draws** — Simply running longer (4,000+ draws) with the current model
+**Joint model: improved R-hat, catastrophic divergences.**
+
+| Metric | Baseline (Normal, no PCA) | PCA + LogNormal |
+|--------|--------------------------|-----------------|
+| R-hat(xi) max | 1.5362 | **1.2225** |
+| ESS(xi) min | 7 | 14 |
+| Divergences | 10 | **2,041** |
+| Sampling time | ~30 min | 142.5s |
+| Sign correction needed | Yes | **No** (r=0.96 House, r=0.82 Senate) |
+
+### What Happened
+
+The PCA initialization worked as intended — the sign is correct without post-hoc correction, and R-hat improved from 1.54 to 1.22. But the LogNormal prior created a **geometric catastrophe**: divergences exploded from 10 to 2,041.
+
+This was the opposite of what we expected based on the 91st biennium positive-beta experiment, where LogNormal produced only 25 divergences. The 84th has different data characteristics (more ODT-derived votes, smaller vote set, more near-unanimous bills), but the root cause is deeper.
+
+### Why LogNormal Causes Divergences
+
+When PyMC encounters `beta ~ LogNormal(0, 0.5)`, it applies a log transform internally to sample in unconstrained space. The sampler works with `log(beta)`, and adds a Jacobian correction. This creates **severe curvature variation** near the zero boundary:
+
+- The distance between beta = 0.01 and beta = 0.001 in unconstrained space is `log(0.01) - log(0.001) = 2.3` nats
+- The distance between beta = 1.0 and beta = 0.99 is only 0.01 nats
+
+With ~365 bill parameters, even a small fraction with posterior mass near zero creates local curvature pathologies. The step size adapts globally to the worst case, slowing the entire model. Betancourt's case study on divergences identifies this as the primary cause: "highly varying posterior curvature, for which small step sizes are too inefficient in some regions and diverge in other regions."
+
+The Stan documentation, PyMC discourse, and Betancourt's diagnostic case studies all converge on the same point: **hard boundaries on constrained parameters are a leading cause of NUTS divergences**, and the LogNormal's `1/beta` density term makes it worse than HalfNormal near zero.
+
+## Root Cause Diagnosis: Three Reinforcing Problems
+
+The joint model's convergence failure has three distinct root causes. Our experiment confirmed the first two and revealed the third.
+
+### Problem 1: Reflection Mode Multimodality
+
+With `beta ~ Normal(0, 1)`, each of the 420 bill discrimination parameters can be positive or negative. The likelihood is invariant under `(beta_j, xi) -> (-beta_j, -xi)` for each bill independently. The `pt.sort` constraint on group offsets breaks the *global* reflection (all betas flip simultaneously), but it cannot prevent *partial* reflections where a subset of betas flip.
+
+This creates a posterior landscape with ridges and saddle points that slow NUTS exploration. The sampler doesn't diverge (the geometry is smooth), but takes many steps to traverse between regions, inflating autocorrelation and depressing ESS.
+
+**Evidence**: The 91st positive-beta experiment (LogNormal prior) reduced joint R-hat from 1.53 to 1.024 and ESS from 7 to 243. PCA init on the 84th eliminated the need for post-hoc sign correction (r=0.96 House, r=0.82 Senate).
+
+### Problem 2: High-Dimensional Slow Mixing
+
+Even after removing reflection modes, the joint model has ~1,000 free parameters. NUTS mixing time scales as O(d^{1/4}) with dimension, meaning the 91st joint model mixes ~3.2x slower than the per-chamber House. The block-diagonal vote matrix (~83% chamber-specific bills), three-level hierarchy, and ~50% structural missingness compound this.
+
+**Evidence**: Even with LogNormal beta, the 91st joint model's ESS was 243 — below the 400 threshold. Step size collapsed to 0.007-0.009 (vs. 0.06 per-chamber), and draw speed was ~1/second (vs. ~9/second).
+
+### Problem 3: LogNormal Boundary Geometry (Newly Identified)
+
+The LogNormal prior solves Problem 1 (reflection modes) but introduces Problem 3: a curvature catastrophe near beta = 0. Many bills in a legislative session have genuinely low discrimination — bipartisan votes, procedural motions, near-unanimous confirmations. The LogNormal(0, 0.5) prior, with 95% of its mass in [0.37, 2.69], fights to keep these bills' betas away from zero. This prior-data conflict creates high-curvature regions that NUTS cannot navigate at any reasonable step size.
+
+**Evidence**: 84th joint model divergences went from 10 (Normal beta) to 2,041 (LogNormal beta). The 84th biennium's ODT-derived data likely has more near-zero-discrimination bills than the 91st, explaining why the divergence explosion was worse than the 91st experiment (25 divergences).
 
 ## Literature Survey: How Does the Field Handle This?
 
@@ -125,151 +164,116 @@ This is what our joint model attempts: estimate all parameters in a single model
 
 Estimate each chamber's ideal points independently (which we know works well), then use a post-hoc transformation to align the scales.
 
-**Test Equating Methods** (Kolen and Brennan 2014). The psychometrics field has developed sophisticated methods for placing scores from different test forms on a common scale. The most relevant are:
+**Test Equating Methods** (Kolen and Brennan 2014). The psychometrics field has developed sophisticated methods for placing scores from different test forms on a common scale. Four methods are relevant, in order of sophistication:
 
-- **Mean-Sigma / Mean-Mean**: Simple affine transformation matching the first two moments of shared items' parameters. This is essentially what our flat IRT's test equating does. Fast and robust but assumes the shared items function identically in both chambers.
-- **Stocking-Lord**: Minimizes the squared difference between test characteristic curves (the probability-of-correct-response function) evaluated at a grid of ability levels. More robust than mean-sigma because it weights items by their discrimination. Widely used in educational testing for common-item equating.
-- **Haebara**: Similar to Stocking-Lord but minimizes differences at the item level rather than the test level. Can be more robust when a few items function differently across groups.
+- **Mean-Mean**: Uses the ratio of mean discrimination and difference of mean difficulty across anchor items. Simplest; sensitive to outlier items.
+- **Mean-Sigma**: Uses the ratio of difficulty standard deviations across anchor items. Still closed-form. This is essentially what our flat IRT's test equating does.
+- **Haebara**: Minimizes squared differences between individual item characteristic curves (ICCs), integrated over the ability distribution. More robust because item-level discrepancies have bounded influence.
+- **Stocking-Lord**: Minimizes squared differences between test characteristic curves (TCCs — the sum of all anchor ICCs). Most widely used in operational testing. A single badly-fitting anchor item can have unbounded influence, but with 67 anchors this is manageable.
 
-These methods are well-studied, computationally cheap (they're just optimization problems on 2 parameters — slope and intercept), and don't require MCMC. The trade-off is that they assume the shared items measure the same construct in both chambers — an assumption that may not hold if, say, a bill is a routine procedural vote in one chamber but a contentious party-line vote in the other.
+Simulation studies (Kim and Kolen 2006) consistently find that **Haebara and Stocking-Lord yield more accurate linking** than Mean-Mean and Mean-Sigma. With 67 anchor items, all four methods should produce similar results, but Stocking-Lord is the standard choice.
 
-**IRT Linking with Differential Item Functioning (DIF)** (Holland and Wainer 1993). An extension that first tests whether each shared item functions equivalently across groups (using Wald, LR, or Lord's chi-squared tests), drops items that show DIF, then equates using the remaining "invariant" items. This addresses the concern about item equivalence head-on. Our EDA filter (removing near-unanimous votes) provides some protection against DIF, but a formal DIF analysis on the shared bills would be more rigorous.
+All four methods are computationally cheap — they're optimization problems on 2 parameters (slope and intercept) — and don't require MCMC. The trade-off is that they assume the shared items measure the same construct in both chambers.
+
+**Differential Item Functioning (DIF)** (Holland and Wainer 1993). Before using shared bills as anchors, one should test whether each bill functions equivalently across chambers. A bill that passes routinely in one chamber but provokes a party-line fight in the other violates the linking assumption. Methods available in Python include Mantel-Haenszel (via `CMH` package or `scipy`), logistic regression DIF (via `statsmodels`), and direct posterior comparison of per-chamber item parameter estimates.
+
+With 67 shared bills, we can afford to be conservative — dropping 10-15 items with DIF would still leave 50+ anchors, more than the 20-30 the literature recommends.
 
 ### Category 3: Alternative Estimation Strategies
 
-**emIRT** (Imai, Lo, and Olmsted 2016). Variational EM algorithm for IRT. Trades MCMC for a fast deterministic approximation. Implemented in R only (`emIRT` package). Reported to scale to congressional datasets (500+ legislators, 1,000+ votes). Could handle our joint model's dimensionality but would require an R dependency we've explicitly avoided.
+**emIRT** (Imai, Lo, and Olmsted 2016). Variational EM algorithm for IRT. Trades MCMC for a fast deterministic approximation. Implemented in R only. Could handle our dimensionality but requires an R dependency we've explicitly avoided.
 
-**Pathfinder** (Zhang et al. 2022). L-BFGS-based variational inference that finds multiple approximate posterior modes. Available in `pymc-extras` as `pmx.fit(method="pathfinder")`. Not a full posterior estimate — it provides starting points for MCMC. Two uses: (1) initialize NUTS chains near the correct mode; (2) serve as a standalone approximate posterior when MCMC is intractable.
+**Pathfinder** (Zhang et al. 2022). L-BFGS-based variational inference that finds multiple approximate posterior modes. Available in `pymc-extras`. Not a full posterior estimate — provides starting points for MCMC or a standalone approximate posterior.
 
-**Polya-Gamma Augmentation** (Polson, Scott, and Windle 2013). A data augmentation scheme that converts the logistic likelihood into a conditionally Gaussian problem, enabling Gibbs sampling. This replaces the geometric challenge of NUTS on a logistic likelihood with the algebraic efficiency of conjugate Gaussian updates. Published implementations exist (BayesLogit R package, pybayeslogit Python), but integrating with PyMC's model-building framework would require substantial custom code.
+**Normalizing Flow Adaptation** (nutpie experimental). nutpie's NF feature learns a nonlinear transformation that makes the posterior approximately Gaussian. Designed for models with ~1,000 parameters. On a 100-dimensional funnel model, it eliminated all divergences and improved minimum ESS from 31 to 1,836. Requires JAX backend and scales poorly beyond ~1,000 parameters (our model is right at the boundary). GPU helps significantly.
 
-**Normalizing Flow Adaptation** (nutpie experimental). nutpie's `flow_model` parameter uses a neural network to learn a nonlinear transformation of the posterior that makes it approximately Gaussian. This directly addresses the geometric pathologies (reflection ridges, funnels) that cause slow mixing. The feature was explicitly designed for models with ~1,000 parameters — almost exactly our joint model's size. However, the feature is experimental and may not be production-ready.
+### Political Science Precedent
 
-## Root Cause Diagnosis: Two Reinforcing Problems
+The field's most successful cross-chamber methods do not use concurrent calibration:
 
-The joint model's convergence failure has two distinct root causes that compound each other:
+- **DW-NOMINATE** uses bridge *legislators*, not shared items, and deterministic optimization, not MCMC.
+- **Shor-McCarty** uses *survey bridging* — exogenous data independent of the legislative process.
+- **Clinton, Jackman, and Rivers (2004)** use anchor constraints (fixing two legislators), not positive-beta constraints.
 
-### Problem 1: Reflection Mode Multimodality
+Notably, the legislative ideal point literature (Jackman/Arnold) uses **unconstrained beta** with skew-normal distributions rather than hard positive constraints — because in political science, unlike educational testing, negative discrimination has interpretive meaning (a bill where voting Yea indicates liberalism).
 
-With `beta ~ Normal(0, 1)`, each of the 420 bill discrimination parameters can be positive or negative. The likelihood is invariant under `(beta_j, xi) -> (-beta_j, -xi)` for each bill independently. The `pt.sort` constraint on group offsets breaks the *global* reflection (all betas flip simultaneously), but it cannot prevent *partial* reflections where a subset of betas flip.
+Erosheva and Curtis (2017) explicitly warn that "ensuring unique identification of a CFA model by requiring selected loadings to be positive may not lead to a satisfactory solution" due to convergence failures. Our 84th biennium experiment confirms this warning.
 
-This creates a posterior landscape with a combinatorial number of local modes — not 2^420 distinct modes (most are ruled out by the data), but enough ridges and saddle points to dramatically slow NUTS exploration. The sampler doesn't diverge (the geometry is smooth), but it takes many steps to traverse between regions, inflating autocorrelation and depressing ESS.
+## Revised Improvement Plan
 
-**Evidence**: The positive-beta experiment (LogNormal prior) reduced joint R-hat from 1.53 to 1.024 and ESS from 7 to 243 — a 35x improvement in ESS from eliminating the reflection ambiguity alone. This confirms that reflection modes are the dominant cause.
+Our experiment invalidated the original Priority 2 (LogNormal beta as currently implemented). The revised plan accounts for what we learned: **the positive constraint is the right idea, but the implementation must avoid creating boundary geometry.**
 
-### Problem 2: High-Dimensional Slow Mixing
+### Priority 1: Reparameterize the LogNormal (exp transform)
 
-Even after removing reflection modes, the joint model has ~600 free parameters (1,042 minus the 420 betas that could be removed by marginalizing, though we don't actually marginalize). NUTS mixing time scales as O(d^{1/4}) with dimension, meaning the 91st joint model (~1,042 params) mixes ~3.2x slower than the per-chamber House (~460 params).
+**Expected impact:** High. Should eliminate the 2,041 divergences while preserving the reflection-mode fix.
 
-But the scaling is worse than theoretical because:
+**The insight.** `beta ~ LogNormal(0, 0.5)` and `beta = exp(log_beta)` where `log_beta ~ Normal(0, 0.5)` produce **mathematically identical distributions** on beta. But the sampling geometry is completely different. With the first form, PyMC applies a log transform internally, creating high curvature near zero. With the second form, the sampler works directly with `log_beta`, which is a smooth Gaussian — no boundary, no curvature explosion, no Jacobian.
 
-1. **Block-diagonal structure**: ~83% of bills are chamber-specific. Their beta parameters have no gradient information from the other chamber, creating large blocks of the posterior that are only weakly coupled to the cross-chamber structure. The mass matrix adaptation must capture this block structure.
+This is the approach the Stan 2PL IRT tutorial uses and what the Stan discourse recommends. The `BetaPriorSpec` framework needs a new distribution type:
 
-2. **Three-level hierarchy**: The per-chamber model has two levels (party → legislator). The joint model adds a third (global → chamber → party → legislator). Each additional level introduces a funnel geometry where the group-level variance and the individual-level offsets are tightly coupled.
+```python
+case "lognormal_reparam":
+    log_beta = pm.Normal("log_beta", shape=n_votes, dims=dims, **self.params)
+    return pm.Deterministic("beta", pt.exp(log_beta), dims=dims)
+```
 
-3. **Structural missingness**: The vote matrix is ~50% structurally missing (House members don't vote on Senate-only bills and vice versa). This means the effective data-per-parameter ratio is lower than the raw observation count suggests.
+**Effort:** Low. Add a new case to `BetaPriorSpec.build()`, update `JOINT_BETA` to use it.
 
-**Evidence**: Even with LogNormal beta (removing Problem 1), the joint model's ESS was 243 — below the 400 threshold. The step size collapsed to 0.007-0.009 (vs. 0.06 for per-chamber House), and draw speed was ~1/second (vs. ~9/second per-chamber). The geometry is navigable but slow.
+**Risk:** Low. Mathematically equivalent to the current LogNormal; only the sampling geometry changes.
 
-## Improvement Plan
+### Priority 2: Widen the Prior to LogNormal(0, 1.0)
 
-Based on the literature survey and our experimental evidence, here is a prioritized plan for achieving joint model convergence. The priorities reflect a balance of expected impact, implementation effort, and risk.
+**Expected impact:** Moderate. The current LogNormal(0, 0.5) has 95% mass in [0.37, 2.69] — too tight for bills with genuinely low discrimination. Widening to LogNormal(0, 1.0) gives 95% mass in [0.14, 7.39], allowing near-zero values more easily. The Stan User's Guide IRT section uses `lognormal(0.5, 1)` — note sigma = 1.0, not 0.5.
 
-### Priority 1: Enable PCA Initialization for Joint Model
+**Effort:** One constant change. Can be combined with Priority 1.
 
-**Expected impact:** High. PCA init resolved per-chamber convergence failures (ADR-0023) and is already the proven solution for IRT mode-finding.
+### Priority 3: PCA Init (Already Implemented)
 
-**What to do:** Compute PCA PC1 on the combined vote matrix (House + Senate, with shared bills unified), then pass the resulting values as `xi_offset_initvals` to `build_joint_model()`. The infrastructure already exists — the parameter is accepted and plumbed through to nutpie's `initial_points`.
+PCA initialization for the joint model is now in production. On the 84th biennium, it eliminated the need for post-hoc sign correction (r=0.96 House, r=0.82 Senate). This should be retained regardless of other changes.
 
-**Effort:** Low. The combined vote matrix is already computed for flat IRT (`build_joint_vote_matrix()` in `irt.py`). Extract PC1, map to legislator slugs, pass to the joint model call at line 1753.
+### Priority 4: Tighter Alpha Prior
 
-**Risk:** Low. PCA init is a proven technique in our pipeline. Worst case: it helps but is not sufficient alone.
-
-### Priority 2: Constrain Beta > 0 (LogNormal Prior)
-
-**Expected impact:** High. Already demonstrated: LogNormal(0, 0.5) dropped joint R-hat from 1.53 to 1.024 and improved ESS from 7 to 243.
-
-**What to do:** Change `PRODUCTION_BETA` from `Normal(0, 1)` to `LogNormal(0, 0.5)` — or, better, use LogNormal only for the joint model while keeping Normal for per-chamber models (where it works fine). This could mean adding a `JOINT_BETA` constant.
-
-**Effort:** Low. The `BetaPriorSpec` infrastructure already supports LogNormal. Just pass it to the joint model call.
-
-**Risk:** Moderate. LogNormal constrains all bills to discriminate in the "natural" direction (voting Yea = more conservative on conservative bills). This is substantively reasonable for final-action votes (which dominate our filtered dataset) but could be wrong for procedural votes where Yea means "table the bill" or "recommit to committee." The per-chamber experiment showed slight ICC decrease (0.90 → 0.87 House) and moderate Senate ranking shifts (r ≈ 0.92).
-
-### Priority 3: Combine Priorities 1 + 2
-
-**Expected impact:** Very high. PCA init and LogNormal beta attack the two root causes independently (slow mode-finding and reflection multimodality). Combined, they may be sufficient.
-
-**Effort:** Low — it's just enabling both changes at once.
-
-### Priority 4: Increase Draws
-
-**Expected impact:** Moderate. If R-hat is acceptable (as with LogNormal beta, R-hat = 1.024), more draws should push ESS past 400. Doubling draws from 2,000 to 4,000 should roughly double ESS (to ~486 from the LogNormal experiment's 243).
-
-**What to do:** Pass `--n-samples 4000` (or 6000) to the joint model. Consider increasing `--n-tune` proportionally.
-
-**Effort:** Zero code changes. Just longer runtime — the LogNormal joint model took 56 minutes at 2,000 draws, so 4,000 draws would take ~112 minutes.
-
-**Risk:** Low, but expensive in wall-clock time.
-
-### Priority 5: Tighter Alpha Prior
-
-**Expected impact:** Low-moderate. The current `alpha ~ Normal(0, 5)` allows bill difficulty parameters to wander far from zero, creating additional geometric challenges. Tightening to `Normal(0, 2)` or `Normal(0, 3)` regularizes the posterior without changing substantive estimates (difficulty parameters are typically in [-3, 3] for legislative votes).
+The current `alpha ~ Normal(0, 5)` is very wide. Tightening to `Normal(0, 2)` or `Normal(0, 3)` reduces the posterior volume without changing substantive estimates (difficulty parameters are typically in [-3, 3] for legislative votes). Stacks with all other interventions.
 
 **Effort:** One line change.
 
-**Risk:** Low. The alpha prior is weakly informative; tightening it brings it closer to the data-generating range.
+### Priority 5: Combine Priorities 1-4 and Test
 
-### Priority 6: Normalizing Flow Adaptation (nutpie)
+Run the 84th pipeline again with: (a) reparameterized LogNormal(0, 1.0), (b) PCA init, (c) tighter alpha. If R-hat < 1.01, ESS > 400, and divergences = 0, we're done. If not, proceed to Priority 6.
 
-**Expected impact:** Potentially transformative. nutpie's normalizing flow feature was designed for exactly this use case — models with ~1,000 parameters and complex posterior geometries. It learns a nonlinear transformation that makes the posterior approximately Gaussian, directly addressing both the reflection ridge and the funnel geometry.
+### Priority 6: 1PL Joint Model (Eliminate Beta Entirely)
 
-**What to do:** Pass `flow_model=True` (or equivalent parameter) to nutpie. This is an experimental feature; check nutpie's current API for the exact parameter name and stability guarantees.
+**Expected impact:** High, by removing all 420 sign-flip axes and boundary pathologies. Fixing beta = 1 drops the model from ~1,042 to ~622 parameters.
 
-**Effort:** Low code change, moderate validation effort. The feature is experimental and may produce unexpected behavior.
+**The argument.** The joint model's role is cross-chamber scale alignment, not ideal point precision — the per-chamber models already provide precise estimates. A 1PL bridge with good convergence is more useful than a 2PL bridge that doesn't converge. The shared bill difficulty parameters (alpha) still provide the cross-chamber bridge.
 
-**Risk:** Moderate. Experimental feature. May not work, may change API between releases. Need to validate that flow-adapted samples produce correct posteriors.
+**Effort:** Moderate. Add a `fix_beta=True` option to `build_joint_graph()`.
 
-### Priority 7: Pathfinder Initialization
+### Priority 7: Two-Stage Stocking-Lord Linking (Escape Hatch)
 
-**Expected impact:** Moderate. Pathfinder finds approximate posterior modes via L-BFGS variational inference. Better than PCA for finding the correct mode in a multimodal posterior because it uses gradient information.
+**Expected impact:** High, by sidestepping MCMC entirely. If concurrent calibration proves intractable, separate-then-link achieves the same goal — cross-chamber comparable scores — using well-converged per-chamber estimates and a 2-parameter optimization.
 
-**What to do:** Install `pymc-extras`, run `pmx.fit(method="pathfinder")` on the joint model, extract the mode, and use it as initial points for nutpie sampling.
+**What to do:** (1) Extract posterior mean alpha/beta for the 67 shared bills from each chamber's InferenceData. (2) Run DIF screening to identify and exclude bills that function differently across chambers. (3) Compute Stocking-Lord linking coefficients (A, B) by minimizing the squared difference between test characteristic curves. (4) Transform Senate xi to the House scale: `xi_linked = A * xi_senate + B`. (5) Propagate uncertainty by computing (A, B) across multiple posterior draws.
 
-**Effort:** Moderate. New dependency (`pymc-extras`), new code to extract and format initial points.
+No Python package implements IRT linking. The R ecosystem has `equateIRT`, `plink`, and `SNSequate`, but the implementation is straightforward: Mean-Sigma and Mean-Mean are 5 lines of numpy; Stocking-Lord and Haebara are ~50 lines with `scipy.optimize.minimize`.
 
-**Risk:** Low-moderate. Pathfinder is published and peer-reviewed but its interaction with nutpie's own initialization is untested.
+**Why this is likely the production answer.** The political science literature's most successful cross-chamber scaling methods all use some form of separate-then-link. Simulation studies show concurrent calibration is theoretically superior, but only when it converges. With 67 anchor items and well-converged per-chamber posteriors, Stocking-Lord linking should produce high-quality common-scale estimates.
 
-### Priority 8: Two-Stage Linking (Escape Hatch)
+### Priority 8: Normalizing Flow Adaptation
 
-**Expected impact:** High, by sidestepping the problem. If concurrent calibration (the joint model) proves intractable, two-stage linking achieves the same goal — cross-chamber comparable scores — using a completely different approach.
+nutpie's NF feature could handle the joint model's posterior geometry. The feature was demonstrated on a 100-dimensional funnel model (eliminated all divergences, ESS 31 → 1,836) and designed for ~1,000 parameter models. However, it requires JAX backend, is experimental, and scales poorly at our model's size (right at the boundary). Fisher HMC (also experimental in nutpie) is a related approach that uses Fisher divergence for mass matrix adaptation. Both are promising but should not block the more practical approaches above.
 
-**What to do:** (1) Estimate per-chamber hierarchical models (already works). (2) Match shared bills across chambers. (3) Use Stocking-Lord or Haebara linking to find the affine transformation (slope, intercept) that places Senate scores on the House scale. (4) Transform Senate ideal points. This is a 2-parameter optimization problem, not an MCMC problem.
+### Deprioritized
 
-**Effort:** Moderate. The bill-matching infrastructure (`_match_bills_across_chambers`) already exists. Need to implement the Stocking-Lord criterion function and optimizer. The `equating` Python package may provide this, though the ecosystem is thin.
-
-**Risk:** Low computational risk (it's just optimization). The substantive risk is that shared bills may function differently across chambers (differential item functioning), which would bias the linking constants. A formal DIF test should precede linking.
-
-### Priority 9: Sparsity Priors on Beta
-
-**Expected impact:** Low-moderate. Many bills have near-zero discrimination (they pass nearly unanimously and provide no ideological information). A sparsity prior (horseshoe, half-Laplace) would shrink these uninformative betas toward zero, effectively reducing the model's dimension without pre-filtering.
-
-**What to do:** Implement a horseshoe prior on beta: `beta ~ Horseshoe(tau=1)` or the regularized horseshoe of Piironen and Vehtari (2017). The `BetaPriorSpec` framework would need a new distribution type.
-
-**Effort:** Moderate. New distribution in `BetaPriorSpec`, potential reparameterization needed for MCMC efficiency.
-
-**Risk:** Moderate. Horseshoe priors can create their own sampling difficulties (the "horseshoe funnel"). Need careful parameterization.
+- **Polya-Gamma augmentation**: Theoretically elegant but impractical — requires custom Gibbs sampler, no PyMC integration, and Gibbs mixes slowly in high dimensions.
+- **Horseshoe/sparsity priors on beta**: The horseshoe funnel creates its own sampling difficulties, and our EDA filter already removes near-unanimous bills.
+- **Mixed centering**: Could help marginally but adds implementation complexity and requires per-group tuning.
 
 ## Recommendation
 
-The most promising path forward combines Priorities 1-3: **PCA initialization + LogNormal beta + more draws**. These three interventions are low-effort, address both root causes, and build on proven techniques from our per-chamber work.
+The most likely path to a working joint model is **Priority 1 + 2 + 3 + 4**: reparameterized LogNormal beta with wider prior, PCA initialization (already done), and tighter alpha. This addresses all three root causes without MCMC compromises.
 
-If the combined approach achieves convergence, we're done. If not, Priority 6 (normalizing flow adaptation) is the next best bet — it's a fundamentally different approach to the geometric problem, designed for models at exactly our scale.
-
-Priority 8 (two-stage linking) remains the escape hatch. It trades model elegance for computational tractability and is essentially guaranteed to produce usable cross-chamber scores. The flat IRT already implements a basic version of this (mean-sigma equating); upgrading to Stocking-Lord would make it more robust.
-
-The field's consensus is clear: concurrent calibration (one big model) is theoretically ideal but computationally challenging, while separate-then-link is practical and well-validated. Shor and McCarty — the gold standard for state-level scaling — use an exogenous bridge (surveys), not a concurrent model. DW-NOMINATE uses bridge legislators, not shared bills. Our concurrent approach via shared bills is less common in the literature, partly because the bill overlap rate (17% in the 91st) may be too low for effective bridging.
-
-If Priorities 1-4 together do not achieve clean convergence (all diagnostics passing), we should seriously consider adopting two-stage Stocking-Lord linking as the production method, documenting the concurrent model as an aspirational benchmark in the experimental lab.
+If the reparameterized concurrent model still fails, **Priority 7 (Stocking-Lord linking)** is the production answer. It's not the theoretically elegant solution, but it's the one the field actually uses — and for good reason. With 67 anchor items and rock-solid per-chamber posteriors, it should produce excellent common-scale estimates. The concurrent model can remain in the experimental lab as an aspirational benchmark.
 
 ---
 
