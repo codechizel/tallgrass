@@ -37,7 +37,7 @@ If nutpie does NOT fix convergence, the problem is genuinely model-structural (t
 
 - **What changed:** Sampler switched from PyMC NUTS to nutpie Rust NUTS (Numba backend). PCA initialization removed — chains start from zeros.
 - **Why:** House is the problematic chamber. If nutpie fixes convergence here, it's the primary finding.
-- **Command:** `uv run python results/experiments/2026-02-27_nutpie-hierarchical/run_experiment.py`
+- **Command:** `uv run python results/experimental_lab/2026-02-27_nutpie-hierarchical/run_experiment.py`
 - **Output directory:** `run_01_house/`
 
 ### Run 2: nutpie Senate

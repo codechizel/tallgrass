@@ -426,9 +426,9 @@ This puts our implementation well ahead of what the PyMC community has produced.
 
 The joint model combines ~170 legislators across ~500+ unique votes with only ~70 shared cross-chamber bills. When it converges, results are excellent (91st: R-hat 1.004, 0 divergences, 93 min). When it doesn't, the exception handler catches it cleanly.
 
-### 6.3 IRT Convergence Failures in Historical Sessions (KNOWN, DOCUMENTED)
+### 6.3 IRT Convergence Failures in Historical Sessions (RESOLVED)
 
-5 of 16 chamber-sessions fail convergence (R-hat >> 1, ESS < 10): 84th House, 85th Senate, 86th House, 87th Senate, 89th House. These failures propagate to the hierarchical model.
+Previously, 5 of 16 chamber-sessions failed convergence with PyMC's default NUTS sampler: 84th House, 85th Senate, 86th House, 87th Senate, 89th House. **All 16/16 now pass** with the nutpie Rust NUTS sampler migration (ADR-0053, 2026-02-28). All sessions show R-hat < 1.01, ESS > 400, zero divergences.
 
 ---
 

@@ -31,28 +31,28 @@ We expect both to substantially improve R-hat and ESS for the House. We also exp
 ### Baseline (Current Production Model)
 
 - **What it is:** Per-chamber hierarchical IRT with `beta ~ Normal(0, 1)` (symmetric, allows negative values). PCA-informed initialization, 4 chains, `adapt_diag`.
-- **Command:** `uv run python results/experiments/2026-02-27_positive-beta/run_experiment.py --variant baseline`
+- **Command:** `uv run python results/experimental_lab/2026-02-27_positive-beta/run_experiment.py --variant baseline`
 - **Output directory:** `run_01_baseline/`
 
 ### Run 2: LogNormal Beta
 
 - **What changed:** `beta ~ LogNormal(0, 0.5)` instead of `Normal(0, 1)`. Prior median = 1.0, prior mean ≈ 1.13. All other settings identical.
 - **Why:** LogNormal is the standard positive-constraint prior in educational IRT (De Ayala 2009). It places most mass near 1.0 (moderate discrimination) while allowing near-zero values for uninformative bills.
-- **Command:** `uv run python results/experiments/2026-02-27_positive-beta/run_experiment.py --variant lognormal`
+- **Command:** `uv run python results/experimental_lab/2026-02-27_positive-beta/run_experiment.py --variant lognormal`
 - **Output directory:** `run_02_lognormal/`
 
 ### Run 3: HalfNormal Beta
 
 - **What changed:** `beta ~ HalfNormal(1)` instead of `Normal(0, 1)`. Hard zero floor, wider spread than LogNormal.
 - **Why:** Less informative than LogNormal about the expected magnitude. Good for checking sensitivity to the prior shape.
-- **Command:** `uv run python results/experiments/2026-02-27_positive-beta/run_experiment.py --variant halfnormal`
+- **Command:** `uv run python results/experimental_lab/2026-02-27_positive-beta/run_experiment.py --variant halfnormal`
 - **Output directory:** `run_03_halfnormal/`
 
 ### Run 4: Best Variant + Joint Model
 
 - **What changed:** Whichever variant performs best in Runs 2-3, applied to the full pipeline including the joint cross-chamber model.
 - **Why:** The joint model fails in all 8 sessions with the current parameterization. If positive beta fixes the per-chamber House, does it also fix the joint model?
-- **Command:** `uv run python results/experiments/2026-02-27_positive-beta/run_experiment.py --variant lognormal --include-joint`
+- **Command:** `uv run python results/experimental_lab/2026-02-27_positive-beta/run_experiment.py --variant lognormal --include-joint`
 - **Output directory:** `run_02_lognormal/` (joint results stored alongside per-chamber LogNormal outputs)
 
 ## How We Measured Success
@@ -168,5 +168,5 @@ No production code changes. The positive beta constraint is promising but needs 
 **Related documents:**
 - Theory and improvement plan: `docs/hierarchical-convergence-improvement.md`
 - ADR: `docs/adr/0047-positive-beta-constraint-experiment.md`
-- Previous experiment (4-chain): `results/experiments/2026-02-26_hierarchical-4-chains/`
+- Previous experiment (4-chain): `results/experimental_lab/2026-02-26_hierarchical-4-chains/`
 - Over-shrinkage analysis: `docs/hierarchical-shrinkage-deep-dive.md`

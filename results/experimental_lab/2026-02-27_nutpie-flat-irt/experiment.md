@@ -33,7 +33,7 @@ We believe nutpie will compile and sample the flat IRT model without issues beca
 
 - **What changed:** Sampler switched from PyMC NUTS to nutpie Rust NUTS (Numba backend). Same model, same anchors, same priors.
 - **Why:** Verify basic compatibility before testing harder hierarchical models.
-- **Command:** `uv run python results/experiments/2026-02-27_nutpie-flat-irt/run_experiment.py`
+- **Command:** `uv run python results/experimental_lab/2026-02-27_nutpie-flat-irt/run_experiment.py`
 - **Output directory:** `run_01_house/`
 
 ## How We Measured Success

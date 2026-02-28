@@ -162,7 +162,7 @@ All five additions have been implemented, tested, and wired into `main()` and th
 
 **How:** ~10 lines of NumPy. Impute nulls with row-mean (same as PCA), compute correlation matrix, extract eigenvalues. Print ratio, save to filtering manifest.
 
-**Impact on downstream:** None. Read-only diagnostic. But would have caught the 84th/86th House convergence failures earlier (those sessions likely have lower lambda1/lambda2 ratios).
+**Impact on downstream:** None. Read-only diagnostic. But would have helped diagnose the pre-nutpie-era 84th/86th House convergence issues earlier (those sessions likely have lower lambda1/lambda2 ratios). All 16/16 flat IRT sessions now converge with nutpie (ADR-0053).
 
 ### 5.3 Strategic Absence Diagnostic (Implemented)
 

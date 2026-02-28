@@ -4,6 +4,8 @@
 
 This document analyzes convergence failures in the Tallgrass hierarchical Bayesian IRT models, develops a theory for why the Senate converges but the House does not, and proposes a prioritized improvement plan grounded in both the Bayesian statistics literature and our empirical evidence across eight bienniums.
 
+> **Update (2026-02-28):** The flat IRT convergence failures documented here are **fully resolved** — all 16/16 chamber-sessions now pass with nutpie's Rust NUTS sampler (ADR-0053). The hierarchical per-chamber and joint model convergence issues described below remain open. nutpie was Priority 6 in the improvement plan and became the solution for flat IRT; hierarchical convergence improvements continue separately.
+
 ## The Problem
 
 After running the full analysis pipeline across all eight Kansas legislative bienniums (84th–91st, 2011–2026), a clear pattern emerges: the per-chamber Senate model reliably converges while the House model frequently does not, and the joint cross-chamber model fails catastrophically in every session.
