@@ -63,6 +63,10 @@ mca *args:
 irt *args:
     uv run python analysis/04_irt/irt.py {{args}}
 
+# Run 2D Bayesian IRT analysis (experimental)
+irt-2d *args:
+    uv run python analysis/04b_irt_2d/irt_2d.py {{args}}
+
 # Run clustering analysis
 clustering *args:
     uv run python analysis/05_clustering/clustering.py {{args}}
@@ -119,6 +123,7 @@ pipeline session="2025-26" *args:
     just pca      --session {{session}} --run-id "$RUN_ID" {{args}}
     just mca      --session {{session}} --run-id "$RUN_ID" {{args}}
     just irt      --session {{session}} --run-id "$RUN_ID" {{args}}
+    just irt-2d   --session {{session}} --run-id "$RUN_ID" {{args}}
     just umap     --session {{session}} --run-id "$RUN_ID" {{args}}
     just clustering --session {{session}} --run-id "$RUN_ID" {{args}}
     just network  --session {{session}} --run-id "$RUN_ID" {{args}}

@@ -6,6 +6,7 @@ Pipeline phases (in order):
   02c_mca          — Multiple Correspondence Analysis
   03_umap          — UMAP dimensionality reduction
   04_irt           — Bayesian IRT ideal points
+  04b_irt_2d       — 2D Bayesian IRT ideal points (experimental)
   05_clustering    — Voting bloc detection
   06_network       — Legislator network analysis
   07_indices       — Classical political science indices
@@ -40,6 +41,8 @@ _MODULE_MAP: dict[str, str] = {
     "umap_report": "03_umap",
     "irt": "04_irt",
     "irt_report": "04_irt",
+    "irt_2d": "04b_irt_2d",
+    "irt_2d_report": "04b_irt_2d",
     "clustering": "05_clustering",
     "clustering_report": "05_clustering",
     "network": "06_network",

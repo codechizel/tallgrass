@@ -1,7 +1,7 @@
 # ADR-0046: 2D IRT as Experimental Extension
 
 **Date:** 2026-02-26
-**Status:** Accepted
+**Status:** Accepted (see also ADR-0054 for pipeline integration)
 
 ## Context
 
@@ -45,5 +45,5 @@ Six research agents investigated the Python ecosystem, identification strategies
 - 3-6x runtime vs 1D (~25-50 min vs ~8 min for Senate)
 - PLT identification is more fragile than 1D anchor identification
 - Most legislators (95%+) will have Dim 2 near zero with wide HDIs — the dimension is only informative for ~3-5 extreme legislators
-- Not a pipeline phase: no HTML report, no RunContext integration, no automatic downstream consumption
+- ~~Not a pipeline phase: no HTML report, no RunContext integration, no automatic downstream consumption~~ **Superseded by ADR-0054:** now integrated as pipeline phase 04b with RunContext, HTML report, both chambers, and nutpie sampling
 - Convergence thresholds are relaxed; results should be treated as exploratory, not definitive

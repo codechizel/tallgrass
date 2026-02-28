@@ -26,11 +26,11 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 9. Cross-Session | [cross_session.md](cross_session.md) | Affine IRT alignment, name matching, shift thresholds, prediction transfer, detection validation |
 | 10. External Validation | [external_validation.md](external_validation.md) | SM name matching, correlation methodology, career-fixed vs session-specific, outlier z-scores |
 
-## Experimental
+## Pipeline Phase (Experimental)
 
 | Document | Summary |
 |----------|---------|
-| [irt_2d.md](irt_2d.md) | 2D M2PL IRT with PLT identification. Experimental extension to resolve the Tyson paradox (ADR-0046). |
+| [irt_2d.md](irt_2d.md) | 2D M2PL IRT with PLT identification. Pipeline phase 04b with relaxed convergence thresholds (ADR-0046, ADR-0054). |
 
 ## Investigations
 

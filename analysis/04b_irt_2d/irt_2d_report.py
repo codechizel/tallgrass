@@ -1,0 +1,445 @@
+"""2D IRT HTML report builder (EXPERIMENTAL).
+
+Builds sections for the 2D Bayesian IRT report: experimental status banner,
+model specification, convergence, ideal points, correlation with PCA, and
+interpretation guide per chamber.
+
+Usage (called from irt_2d.py):
+    from analysis.irt_2d_report import build_irt_2d_report
+    build_irt_2d_report(ctx.report, results=results, ...)
+"""
+
+from pathlib import Path
+
+import polars as pl
+
+try:
+    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
+
+
+def build_irt_2d_report(
+    report: ReportBuilder,
+    *,
+    results: dict[str, dict],
+    plots_dir: Path,
+    n_samples: int,
+    n_tune: int,
+    n_chains: int,
+) -> None:
+    """Build the full 2D IRT HTML report by adding sections to the ReportBuilder."""
+    _add_experimental_banner(report)
+    _add_model_specification(report)
+
+    for chamber, result in results.items():
+        _add_convergence_table(report, result, chamber)
+        _add_ideal_point_table(report, result, chamber)
+        _add_scatter_figure(report, plots_dir, chamber)
+        _add_dim1_vs_pc1_figure(report, plots_dir, chamber)
+        _add_dim2_vs_pc2_figure(report, plots_dir, chamber)
+        _add_correlation_table(report, result, chamber)
+
+    _add_interpretation_guide(report)
+    _add_analysis_parameters(report, n_samples, n_tune, n_chains)
+    print(f"  Report: {len(report._sections)} sections added")
+
+
+# ── Private section builders ─────────────────────────────────────────────────
+
+
+def _add_experimental_banner(report: ReportBuilder) -> None:
+    """Red-bordered experimental status banner — first section of the report."""
+    report.add(
+        TextSection(
+            id="experimental-status",
+            title="Experimental Status",
+            html=(
+                '<div style="border: 3px solid #E81B23; border-radius: 8px; '
+                'padding: 16px; margin: 16px 0; background: #FFF5F5;">'
+                '<h3 style="color: #E81B23; margin-top: 0;">EXPERIMENTAL: '
+                "Relaxed Convergence Thresholds</h3>"
+                "<p>This phase uses a 2D Bayesian IRT model with "
+                "<strong>relaxed convergence thresholds</strong> "
+                "(R-hat &lt; 1.05, ESS &gt; 200, divergences &lt; 50) "
+                "compared to the production 1D model "
+                "(R-hat &lt; 1.01, ESS &gt; 400, divergences &lt; 10).</p>"
+                "<p><strong>Dimension 2 credible intervals may be unreliable "
+                "for most legislators.</strong> The second dimension captures "
+                "~11% of variance and has inherently weak signal. Only legislators "
+                "with narrow Dim 2 HDIs have reliable second-dimension estimates.</p>"
+                "<p>The 2D model does NOT replace the 1D model. All downstream "
+                "phases (synthesis, profiles, cross-session) continue to use "
+                "1D ideal points.</p>"
+                "</div>"
+            ),
+        )
+    )
+
+
+def _add_model_specification(report: ReportBuilder) -> None:
+    """Text block: M2PL model specification with PLT identification."""
+    report.add(
+        TextSection(
+            id="model-specification",
+            title="Model Specification",
+            html=(
+                "<p><strong>Multidimensional 2-Parameter Logistic (M2PL) IRT</strong> "
+                "with Positive Lower Triangular (PLT) identification.</p>"
+                "<pre>"
+                "P(Yea | xi_i, alpha_j, beta_j) = logit^-1(sum_d(beta[j,d] * xi[i,d]) - alpha_j)\n"
+                "\n"
+                "xi_i    ~ Normal(0, 1)     per dimension, per legislator\n"
+                "alpha_j ~ Normal(0, 5)     per bill (difficulty)\n"
+                "beta_j  ~ PLT-constrained  per bill, per dimension\n"
+                "</pre>"
+                "<p><strong>PLT Identification:</strong></p>"
+                "<ul>"
+                "<li><code>beta[0, 1] = 0</code> &mdash; rotation anchor (first item "
+                "loads only on Dim 1)</li>"
+                "<li><code>beta[1, 1] &gt; 0</code> &mdash; HalfNormal prior "
+                "(positive diagonal, fixes Dim 2 sign)</li>"
+                "<li>Post-hoc Dim 1 sign check: Republican mean must be positive</li>"
+                "</ul>"
+                "<p>Initialization: PCA PC1 and PC2 scores (standardized) used as "
+                "starting values for xi via nutpie <code>initial_points</code>. "
+                "All other RVs are jittered; xi is not.</p>"
+            ),
+        )
+    )
+
+
+def _add_convergence_table(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: Convergence diagnostics with relaxed thresholds."""
+    diag = result["diagnostics"]
+    rows = [
+        {
+            "Metric": "R-hat (xi) max",
+            "Value": f"{diag['xi_rhat_max']:.4f}",
+            "Threshold": "< 1.05",
+            "Status": "OK" if diag["xi_rhat_max"] < 1.05 else "WARNING",
+        },
+        {
+            "Metric": "R-hat (alpha) max",
+            "Value": f"{diag['alpha_rhat_max']:.4f}",
+            "Threshold": "< 1.05",
+            "Status": "OK" if diag["alpha_rhat_max"] < 1.05 else "WARNING",
+        },
+        {
+            "Metric": "R-hat (beta) max",
+            "Value": f"{diag['beta_rhat_max']:.4f}",
+            "Threshold": "< 1.05",
+            "Status": "OK" if diag["beta_rhat_max"] < 1.05 else "WARNING",
+        },
+        {
+            "Metric": "ESS (xi) min",
+            "Value": f"{diag['xi_ess_min']:.0f}",
+            "Threshold": "> 200",
+            "Status": "OK" if diag["xi_ess_min"] > 200 else "WARNING",
+        },
+        {
+            "Metric": "ESS (alpha) min",
+            "Value": f"{diag['alpha_ess_min']:.0f}",
+            "Threshold": "> 200",
+            "Status": "OK" if diag["alpha_ess_min"] > 200 else "WARNING",
+        },
+        {
+            "Metric": "ESS (beta) min",
+            "Value": f"{diag['beta_ess_min']:.0f}",
+            "Threshold": "> 200",
+            "Status": "OK" if diag["beta_ess_min"] > 200 else "WARNING",
+        },
+        {
+            "Metric": "Tail ESS (xi) min",
+            "Value": f"{diag['xi_tail_ess_min']:.0f}",
+            "Threshold": "> 200",
+            "Status": "OK" if diag["xi_tail_ess_min"] > 200 else "WARNING",
+        },
+        {
+            "Metric": "Divergences",
+            "Value": str(diag["divergences"]),
+            "Threshold": "< 50",
+            "Status": "OK" if diag["divergences"] < 50 else "WARNING",
+        },
+    ]
+    for i, v in enumerate(diag["ebfmi"]):
+        rows.append(
+            {
+                "Metric": f"E-BFMI (chain {i})",
+                "Value": f"{v:.3f}",
+                "Threshold": "> 0.3",
+                "Status": "OK" if v > 0.3 else "WARNING",
+            }
+        )
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title=f"{chamber} — 2D IRT Convergence (Relaxed Thresholds)",
+        source_note="Thresholds are relaxed for the experimental 2D model.",
+    )
+    report.add(
+        TableSection(
+            id=f"convergence-2d-{chamber.lower()}",
+            title=f"{chamber} Convergence (2D IRT)",
+            html=html,
+        )
+    )
+
+
+def _add_ideal_point_table(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: All legislators ranked by Dim 1 with both dimensions and HDIs."""
+    ip = result["ideal_points"].sort("xi_dim1_mean", descending=True)
+
+    display_cols = [
+        "full_name",
+        "party",
+        "xi_dim1_mean",
+        "xi_dim1_hdi_3%",
+        "xi_dim1_hdi_97%",
+        "xi_dim2_mean",
+        "xi_dim2_hdi_3%",
+        "xi_dim2_hdi_97%",
+    ]
+    available = [c for c in display_cols if c in ip.columns]
+    df = ip.select(available)
+
+    html = make_gt(
+        df,
+        title=f"{chamber} — 2D Ideal Points (ranked by Dim 1)",
+        subtitle=f"{df.height} legislators, positive Dim 1 = conservative",
+        column_labels={
+            "full_name": "Legislator",
+            "party": "Party",
+            "xi_dim1_mean": "Dim 1",
+            "xi_dim1_hdi_3%": "Dim 1 HDI 3%",
+            "xi_dim1_hdi_97%": "Dim 1 HDI 97%",
+            "xi_dim2_mean": "Dim 2",
+            "xi_dim2_hdi_3%": "Dim 2 HDI 3%",
+            "xi_dim2_hdi_97%": "Dim 2 HDI 97%",
+        },
+        number_formats={
+            "xi_dim1_mean": "+.3f",
+            "xi_dim1_hdi_3%": "+.3f",
+            "xi_dim1_hdi_97%": "+.3f",
+            "xi_dim2_mean": "+.3f",
+            "xi_dim2_hdi_3%": "+.3f",
+            "xi_dim2_hdi_97%": "+.3f",
+        },
+        source_note="HDI = 95% Highest Density Interval. Dim 2 HDIs may be wide.",
+    )
+    report.add(
+        TableSection(
+            id=f"ideal-points-2d-{chamber.lower()}",
+            title=f"{chamber} 2D Ideal Points",
+            html=html,
+        )
+    )
+
+
+def _add_scatter_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"2d_scatter_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-2d-scatter-{chamber.lower()}",
+                f"{chamber} 2D Ideal Points Scatter",
+                path,
+                caption=(
+                    f"2D ideal points ({chamber}): Dim 1 (ideology) vs Dim 2 "
+                    "(contrarianism). Red = Republican, Blue = Democrat. "
+                    "Key legislators annotated."
+                ),
+            )
+        )
+
+
+def _add_dim1_vs_pc1_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"dim1_vs_pc1_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-dim1-pc1-{chamber.lower()}",
+                f"{chamber} Dim 1 vs PCA PC1",
+                path,
+                caption=(
+                    f"2D IRT Dimension 1 vs PCA PC1 ({chamber}). "
+                    "High correlation (r > 0.90) confirms Dim 1 captures ideology."
+                ),
+            )
+        )
+
+
+def _add_dim2_vs_pc2_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"dim2_vs_pc2_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-dim2-pc2-{chamber.lower()}",
+                f"{chamber} Dim 2 vs PCA PC2",
+                path,
+                caption=(
+                    f"2D IRT Dimension 2 vs PCA PC2 ({chamber}). "
+                    "Positive correlation confirms Dim 2 captures the "
+                    "secondary PCA pattern."
+                ),
+            )
+        )
+
+
+def _add_correlation_table(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: Correlation between 2D IRT dimensions and PCA components."""
+    corrs = result["correlations"]
+    df = pl.DataFrame(
+        [
+            {
+                "Comparison": "Dim 1 vs PCA PC1",
+                "Pearson r": corrs["dim1_vs_pc1_pearson"],
+                "Spearman rho": corrs["dim1_vs_pc1_spearman"],
+            },
+            {
+                "Comparison": "Dim 2 vs PCA PC2",
+                "Pearson r": corrs["dim2_vs_pc2_pearson"],
+                "Spearman rho": corrs["dim2_vs_pc2_spearman"],
+            },
+        ]
+    )
+    html = make_gt(
+        df,
+        title=f"{chamber} — 2D IRT vs PCA Correlation",
+        number_formats={"Pearson r": ".4f", "Spearman rho": ".4f"},
+        source_note="Dim 1 vs PC1: expect r > 0.90. Dim 2 vs PC2: expect positive correlation.",
+    )
+    report.add(
+        TableSection(
+            id=f"correlation-2d-{chamber.lower()}",
+            title=f"{chamber} 2D IRT vs PCA",
+            html=html,
+        )
+    )
+
+
+def _add_interpretation_guide(report: ReportBuilder) -> None:
+    """Text block: How to interpret the 2D ideal points."""
+    report.add(
+        TextSection(
+            id="interpretation-guide",
+            title="Interpreting 2D Ideal Points",
+            html=(
+                "<p><strong>Dimension 1 (Ideology)</strong> is the primary axis. "
+                "It captures the same liberal-conservative spectrum as the 1D IRT "
+                "model and PCA PC1. Positive = conservative, negative = liberal. "
+                "This dimension should be highly correlated (r &gt; 0.90) with "
+                "the 1D model.</p>"
+                "<p><strong>Dimension 2 (Secondary Pattern)</strong> captures "
+                "variation not explained by the primary ideological axis. In the "
+                "Kansas Senate (91st legislature), this captures "
+                "<strong>contrarianism</strong> &mdash; legislators who vote against "
+                "their own party on routine, low-discrimination bills. The clearest "
+                "example is Senator Caryn Tyson, who appears as the most conservative "
+                "legislator on Dim 1 but scores extreme on Dim 2 due to frequent "
+                "Nay votes on bills nearly all Republicans support.</p>"
+                "<p><strong>Wide Dim 2 HDIs</strong> are expected. For most "
+                "legislators, the second dimension has weak signal (~11% variance). "
+                "Only legislators with narrow Dim 2 HDIs have meaningfully "
+                "distinguished positions on this axis. A wide HDI means "
+                "&ldquo;we cannot tell where this legislator sits on Dim 2.&rdquo;</p>"
+                "<p><strong>Caution:</strong> The 2D model uses relaxed convergence "
+                "thresholds. Dim 2 posterior summaries should be treated as "
+                "exploratory, not definitive. The 1D model remains the canonical "
+                "baseline for all downstream analyses.</p>"
+            ),
+        )
+    )
+
+
+def _add_analysis_parameters(
+    report: ReportBuilder,
+    n_samples: int,
+    n_tune: int,
+    n_chains: int,
+) -> None:
+    """Table: Analysis parameters used in this run."""
+    try:
+        from analysis.irt_2d import (
+            ESS_THRESHOLD,
+            MAX_DIVERGENCES,
+            RANDOM_SEED,
+            RHAT_THRESHOLD,
+        )
+    except ModuleNotFoundError:
+        from irt_2d import (  # type: ignore[no-redef]
+            ESS_THRESHOLD,
+            MAX_DIVERGENCES,
+            RANDOM_SEED,
+            RHAT_THRESHOLD,
+        )
+
+    df = pl.DataFrame(
+        {
+            "Parameter": [
+                "Model",
+                "Dimensions",
+                "Identification",
+                "Sampler",
+                "Prior (xi)",
+                "Prior (alpha)",
+                "Prior (beta col 0)",
+                "Prior (beta[1,1])",
+                "MCMC Draws per Chain",
+                "Tuning Steps",
+                "Chains",
+                "Random Seed",
+                "R-hat Threshold",
+                "ESS Threshold",
+                "Max Divergences",
+            ],
+            "Value": [
+                "M2PL IRT (Bayesian, 2D)",
+                "2",
+                "Positive Lower Triangular (PLT)",
+                "nutpie (Rust NUTS, adaptive dual averaging)",
+                "Normal(0, 1) per dimension",
+                "Normal(0, 5)",
+                "Normal(0, 1) — unconstrained",
+                "HalfNormal(1) — positive diagonal",
+                str(n_samples),
+                str(n_tune),
+                str(n_chains),
+                str(RANDOM_SEED),
+                f"< {RHAT_THRESHOLD} (relaxed)",
+                f"> {ESS_THRESHOLD} (relaxed)",
+                f"< {MAX_DIVERGENCES} (relaxed)",
+            ],
+        }
+    )
+    html = make_gt(
+        df,
+        title="2D IRT Analysis Parameters (EXPERIMENTAL)",
+        source_note="Thresholds are relaxed compared to the production 1D model.",
+    )
+    report.add(
+        TableSection(
+            id="analysis-params-2d",
+            title="Analysis Parameters",
+            html=html,
+        )
+    )

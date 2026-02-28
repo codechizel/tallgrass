@@ -5,12 +5,11 @@ paths:
 
 # Analysis Framework
 
-## 12-Phase Pipeline
+## Pipeline
 
-EDA -> PCA -> MCA -> UMAP -> IRT -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles
+EDA -> PCA -> MCA -> IRT -> 2D IRT (experimental) -> UMAP -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles
 
-Cross-session validation compares across bienniums (separate from the per-session pipeline).
-External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only).
+Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only).
 
 ## Technology Preferences
 

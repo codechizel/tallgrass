@@ -1,9 +1,10 @@
 # 2D Bayesian IRT: Deep Dive
 
-**Date:** 2026-02-26
-**Status:** Experimental implementation
+**Date:** 2026-02-26 (experiment); 2026-02-28 (pipeline integration)
+**Status:** Pipeline phase 04b (experimental)
+**Script:** `analysis/04b_irt_2d/irt_2d.py`
 **Design doc:** `analysis/design/irt_2d.md`
-**ADR:** `docs/adr/0046-2d-irt-experimental.md`
+**ADRs:** `docs/adr/0046-2d-irt-experimental.md` (original), `docs/adr/0054-2d-irt-pipeline-integration.md` (pipeline)
 
 ---
 
@@ -224,30 +225,31 @@ Same approach as the hierarchical IRT model: after sampling, verify that the Rep
 
 ## 7. Integration Design
 
-### Experimental Phase
+### Pipeline Phase 04b (2026-02-28)
 
-The 2D IRT model is implemented as an **experimental script**, not a pipeline phase:
+The 2D IRT model is integrated as pipeline phase `04b_irt_2d` with experimental status (ADR-0054):
 
-- **File:** `analysis/experimental/irt_2d_experiment.py`
-- **Not in the numbered pipeline** (01_eda through 14_external_validation)
-- **No RunContext/HTML report** — console output + saved artifacts
-- **Runs on a single chamber** (Senate, where Tyson is) for speed
+- **Pipeline script:** `analysis/04b_irt_2d/irt_2d.py` (RunContext, HTML report, auto-primer)
+- **Original experiment:** `analysis/experimental/irt_2d_experiment.py` (preserved for reference)
+- **Runs both chambers** (House and Senate) — consistent with all other phases
+- **Sampler:** nutpie (Rust NUTS), consistent with all production MCMC (ADR-0051, ADR-0053)
+- **Pipeline:** `just irt-2d` standalone, or included in `just pipeline`
+- **Results:** `results/kansas/{session}/04b_irt_2d/{YYMMDD}.{n}/`
 
 ### Reuse from 1D IRT
 
-The experiment imports shared functions from `analysis.irt`:
+The phase imports shared functions from `analysis.irt`:
 - `load_eda_matrices()` — filtered vote matrices
 - `load_pca_scores()` — PCA scores for initialization and comparison
 - `load_metadata()` — rollcall and legislator metadata
 - `prepare_irt_data()` — wide-to-long conversion with index mappings
-- `select_anchors()` — PCA-based anchor selection (for 1D reference)
+- `select_anchors()` — PCA-based anchor selection (for reference logging)
 
 ### Downstream Consumption
 
-If the 2D model proves useful, downstream phases could consume:
-- `ideal_points_2d.parquet` — 2D ideal points for clustering, profiles
-- Dim 2 scores as a "contrarianism index" supplementing 1D IRT
-- Bill-level Dim 2 loadings identifying which votes are contrarian-discriminating
+2D scores are NOT fed into downstream phases (synthesis, profiles) — convergence caveats make this premature. Per-chamber outputs available for future integration:
+- `ideal_points_2d_{chamber}.parquet` — 2D ideal points with HDIs
+- `convergence_summary.json` — per-chamber diagnostics and correlations
 
 ### Relationship to 1D Model
 
@@ -298,7 +300,7 @@ This is the primary benefit. The 2D model answers:
 
 ### Summary
 
-The 2D IRT model ran on the Kansas Senate (42 legislators x 194 contested votes) in 2.8 minutes with 4 chains, 2000 draws, 2000 tune, and target_accept=0.95. PLT identification with PCA 2D initialization was used.
+The 2D IRT model ran on the Kansas Senate (42 legislators x 194 contested votes) in 2.8 minutes with 4 chains, 2000 draws, 2000 tune. PLT identification with PCA 2D initialization was used. (Original experiment used PyMC sampling; pipeline phase 04b uses nutpie.)
 
 ### Convergence
 

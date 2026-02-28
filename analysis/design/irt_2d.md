@@ -1,12 +1,12 @@
 # 2D IRT Design Choices
 
-**Script:** `analysis/experimental/irt_2d_experiment.py`
-**ADR:** `docs/adr/0046-2d-irt-experimental.md`
+**Script:** `analysis/04b_irt_2d/irt_2d.py` (pipeline phase), `analysis/experimental/irt_2d_experiment.py` (original experiment)
+**ADRs:** `docs/adr/0046-2d-irt-experimental.md`, `docs/adr/0054-2d-irt-pipeline-integration.md`
 **Deep dive:** `docs/2d-irt-deep-dive.md`
 
-## Status: Experimental
+## Status: Pipeline phase (experimental)
 
-The 2D IRT model is an experimental extension of the canonical 1D baseline. It is NOT a pipeline phase and does NOT replace the 1D model. The 1D model remains primary for all downstream analyses.
+The 2D IRT model is an experimental extension of the canonical 1D baseline, integrated as pipeline phase 04b. It runs **both chambers** (House and Senate) with RunContext integration. It does NOT replace the 1D model. The 1D model remains primary for all downstream analyses. Relaxed convergence thresholds are used (R-hat < 1.05, ESS > 200, divergences < 50).
 
 ## Model Specification
 
@@ -26,12 +26,13 @@ The dot product `beta_j · xi_i` replaces the 1D scalar product. Each bill discr
 
 ### MCMC Sampling
 
+Sampler: nutpie (Rust NUTS with adaptive dual averaging), consistent with all production MCMC (ADR-0051, ADR-0053).
+
 | Constant | Value | Justification |
 |----------|-------|---------------|
 | `N_SAMPLES` | 2000 | Same as 1D for comparability |
 | `N_TUNE` | 2000 | Doubled from 1D (1000). Harder posterior geometry needs longer adaptation. |
 | `N_CHAINS` | 4 | Following ADR-0045. PLT identification + PCA init should prevent mode-splitting. |
-| `TARGET_ACCEPT` | 0.95 | Higher than 1D (0.9). Correlated 2D posterior requires smaller step size. |
 | `RANDOM_SEED` | 42 | Consistency with 1D model. |
 
 ### Convergence Thresholds (Relaxed for Experimental)
@@ -109,7 +110,7 @@ xi_init = np.column_stack([
 ])
 ```
 
-- Uses `init='adapt_diag'` (no jitter), following ADR-0045
+- Passed via nutpie `initial_points={"xi": xi_init}` with `jitter_rvs` excluding xi
 - PCA orientation provides mode identification for Dim 1
 - PC2 orientation provides starting direction for Dim 2
 
@@ -123,16 +124,17 @@ The 1D IRT mode-splitting investigation (ADR-0023) showed that random initializa
 
 | File | Description |
 |------|-------------|
-| `ideal_points_2d.parquet` | legislator_slug, party, xi_dim1_{mean,hdi_3%,hdi_97%}, xi_dim2_{mean,hdi_3%,hdi_97%} |
-| `convergence_summary.json` | R-hat, ESS, divergences for all parameter groups |
+| `ideal_points_2d_house.parquet` | House 2D ideal points with HDIs |
+| `ideal_points_2d_senate.parquet` | Senate 2D ideal points with HDIs |
+| `convergence_summary.json` | Per-chamber R-hat, ESS, divergences, correlations |
 
-### Plots
+### Plots (per chamber)
 
 | File | Description |
 |------|-------------|
-| `2d_scatter.png` | Dim 1 vs Dim 2, party-colored, Tyson/Thompson annotated |
-| `dim1_vs_1d.png` | 2D Dim 1 vs 1D IRT ideal points, with Pearson r |
-| `dim2_vs_pc2.png` | 2D Dim 2 vs PCA PC2, with Pearson r |
+| `2d_scatter_{chamber}.png` | Dim 1 vs Dim 2, party-colored, Tyson/Thompson annotated |
+| `dim1_vs_pc1_{chamber}.png` | 2D Dim 1 vs PCA PC1, with Pearson r |
+| `dim2_vs_pc2_{chamber}.png` | 2D Dim 2 vs PCA PC2, with Pearson r |
 
 ### Success Criteria
 
