@@ -53,3 +53,5 @@ The `results/` directory is gitignored (like `data/`).
 - **Good**: Single `RunContext` class means all future analysis scripts get this for free
 - **Trade-off**: More disk usage (old runs accumulate) — acceptable given parquet compression and small dataset size
 - **Trade-off**: Analysis scripts must import `RunContext` instead of choosing their own output path — minimal overhead
+
+**See also:** ADR-0050 (numbered results directories), ADR-0052 (run-grouped results directories for pipeline atomicity).

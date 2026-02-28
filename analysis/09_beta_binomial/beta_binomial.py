@@ -34,9 +34,9 @@ from scipy import stats as sp_stats
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, resolve_upstream_dir
 
 try:
     from analysis.beta_binomial_report import build_beta_binomial_report
@@ -134,6 +134,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="KS Legislature Beta-Binomial Party Loyalty")
     parser.add_argument("--session", default="2025-26")
     parser.add_argument("--indices-dir", default=None, help="Override indices results directory")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     return parser.parse_args()
 
 
@@ -598,8 +599,9 @@ def main() -> None:
     ks = KSSession.from_session_string(args.session)
     results_root = ks.results_dir
 
-    indices_dir = (
-        Path(args.indices_dir) if args.indices_dir else results_root / "07_indices" / "latest"
+    indices_dir = resolve_upstream_dir(
+        "07_indices", results_root, args.run_id,
+        Path(args.indices_dir) if args.indices_dir else None,
     )
 
     with RunContext(
@@ -607,6 +609,7 @@ def main() -> None:
         analysis_name="09_beta_binomial",
         params=vars(args),
         primer=BETA_BINOMIAL_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature Beta-Binomial Party Loyalty — Session {args.session}")
         print(f"Indices:  {indices_dir}")

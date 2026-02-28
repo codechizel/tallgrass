@@ -53,9 +53,9 @@ from xgboost import XGBClassifier
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 
 try:
     from analysis.prediction_report import build_prediction_report
@@ -197,6 +197,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clustering-dir", default=None, help="Override clustering results dir")
     parser.add_argument("--network-dir", default=None, help="Override network results directory")
     parser.add_argument("--pca-dir", default=None, help="Override PCA results directory")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     parser.add_argument(
         "--skip-bill-passage",
         action="store_true",
@@ -1584,22 +1585,29 @@ def main() -> None:
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
 
     results_root = ks.results_dir
-    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "04_irt" / "latest"
-    clustering_dir = (
-        Path(args.clustering_dir)
-        if args.clustering_dir
-        else results_root / "05_clustering" / "latest"
+    irt_dir = resolve_upstream_dir(
+        "04_irt", results_root, args.run_id,
+        Path(args.irt_dir) if args.irt_dir else None,
     )
-    network_dir = (
-        Path(args.network_dir) if args.network_dir else results_root / "06_network" / "latest"
+    clustering_dir = resolve_upstream_dir(
+        "05_clustering", results_root, args.run_id,
+        Path(args.clustering_dir) if args.clustering_dir else None,
     )
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
+    network_dir = resolve_upstream_dir(
+        "06_network", results_root, args.run_id,
+        Path(args.network_dir) if args.network_dir else None,
+    )
+    pca_dir = resolve_upstream_dir(
+        "02_pca", results_root, args.run_id,
+        Path(args.pca_dir) if args.pca_dir else None,
+    )
 
     with RunContext(
         session=args.session,
         analysis_name="08_prediction",
         params=vars(args),
         primer=PREDICTION_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         # ── Phase 1: Load Data ──────────────────────────────────────────
         print_header("PHASE 1: LOADING DATA")

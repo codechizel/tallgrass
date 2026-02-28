@@ -40,15 +40,33 @@ def _read_manifest(path: Path) -> dict:
     return {}
 
 
-def load_all_upstream(results_base: Path) -> dict:
+def _resolve_phase_dir(results_base: Path, phase: str, run_id: str | None) -> Path:
+    """Resolve the output directory for an upstream phase.
+
+    When run_id is set: results_base/{run_id}/{phase}
+    Otherwise: results_base/{phase}/latest, falling back to results_base/latest/{phase}
+    """
+    if run_id is not None:
+        return results_base / run_id / phase
+    legacy = results_base / phase / "latest"
+    if legacy.exists():
+        return legacy
+    return results_base / "latest" / phase
+
+
+def load_all_upstream(results_base: Path, run_id: str | None = None) -> dict:
     """Read all parquets and manifests from the 10 upstream phases.
+
+    When run_id is set, reads from results_base/{run_id}/{phase}/ instead of
+    results_base/{phase}/latest/. Falls back to results_base/latest/{phase}
+    for new-layout sessions.
 
     Returns a dict with keys: manifests, and per-chamber parquet DataFrames.
     """
     upstream: dict = {"manifests": {}, "house": {}, "senate": {}, "plots": {}}
 
     for phase in UPSTREAM_PHASES:
-        phase_dir = results_base / phase / "latest"
+        phase_dir = _resolve_phase_dir(results_base, phase, run_id)
         data_dir = phase_dir / "data"
         plots_dir = phase_dir / "plots"
 

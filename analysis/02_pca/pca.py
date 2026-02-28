@@ -37,9 +37,9 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 
 try:
     from analysis.pca_report import build_pca_report
@@ -169,6 +169,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session", default="2025-26")
     parser.add_argument("--data-dir", default=None, help="Override data directory path")
     parser.add_argument("--eda-dir", default=None, help="Override EDA results directory")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     parser.add_argument(
         "--n-components",
         type=int,
@@ -1028,16 +1029,17 @@ def main() -> None:
 
     results_root = ks.results_dir
 
-    if args.eda_dir:
-        eda_dir = Path(args.eda_dir)
-    else:
-        eda_dir = results_root / "01_eda" / "latest"
+    eda_dir = resolve_upstream_dir(
+        "01_eda", results_root, args.run_id,
+        Path(args.eda_dir) if args.eda_dir else None,
+    )
 
     with RunContext(
         session=args.session,
         analysis_name="02_pca",
         params=vars(args),
         primer=PCA_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature PCA — Session {args.session}")
         print(f"Data:     {data_dir}")

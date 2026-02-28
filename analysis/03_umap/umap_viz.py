@@ -40,9 +40,9 @@ from sklearn.manifold import trustworthiness as sklearn_trustworthiness
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 
 try:
     from analysis.umap_report import build_umap_report
@@ -195,6 +195,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eda-dir", default=None, help="Override EDA results directory")
     parser.add_argument("--pca-dir", default=None, help="Override PCA results directory")
     parser.add_argument("--irt-dir", default=None, help="Override IRT results directory")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     parser.add_argument(
         "--n-neighbors",
         type=int,
@@ -930,19 +931,25 @@ def main() -> None:
 
     results_root = ks.results_dir
 
-    if args.eda_dir:
-        eda_dir = Path(args.eda_dir)
-    else:
-        eda_dir = results_root / "01_eda" / "latest"
-
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
-    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "04_irt" / "latest"
+    eda_dir = resolve_upstream_dir(
+        "01_eda", results_root, args.run_id,
+        Path(args.eda_dir) if args.eda_dir else None,
+    )
+    pca_dir = resolve_upstream_dir(
+        "02_pca", results_root, args.run_id,
+        Path(args.pca_dir) if args.pca_dir else None,
+    )
+    irt_dir = resolve_upstream_dir(
+        "04_irt", results_root, args.run_id,
+        Path(args.irt_dir) if args.irt_dir else None,
+    )
 
     with RunContext(
         session=args.session,
         analysis_name="03_umap",
         params=vars(args),
         primer=UMAP_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature UMAP -- Session {args.session}")
         print(f"Data:     {data_dir}")

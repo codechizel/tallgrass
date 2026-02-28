@@ -7,6 +7,17 @@ Every analysis script (EDA, PCA, IRT, etc.) uses RunContext to get:
   - A `latest` symlink pointing to the most recent run
   - A convenience report symlink in the session root (e.g. 01_eda_report.html → 01_eda/latest/...)
 
+Run-directory mode (pipeline runs):
+  When run_id is set, all phases write into a single grouped directory:
+    results/<session>/<run_id>/<analysis>/plots/ + data/
+  A session-level `latest` symlink points to the run directory.
+  Report convenience symlinks chain through latest/<phase>/.
+
+Legacy mode (individual phase runs):
+  When run_id is None, each phase writes to its own date directory:
+    results/<session>/<analysis>/<date>/plots/ + data/
+  A phase-level `latest` symlink points to the date directory.
+
 Usage:
     with RunContext(
         session="2025-26",
@@ -152,6 +163,48 @@ def _next_run_label(analysis_dir: Path, today: str) -> str:
     return f"{today}.{n}"
 
 
+def generate_run_id(session: str) -> str:
+    """Generate a run ID for grouping pipeline phases.
+
+    Format: {legislature}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}
+
+    Examples:
+        "2025-26" → "91st-2026-02-27T19-30-00"
+        "2024s"   → "2024s-2026-02-27T19-30-00"
+    """
+    normalized = _normalize_session(session)
+    # Extract legislature prefix (e.g. "91st" from "91st_2025-2026", or full string for specials)
+    prefix = normalized.split("_")[0] if "_" in normalized else normalized
+    ts = datetime.now(_CT).strftime("%Y-%m-%dT%H-%M-%S")
+    return f"{prefix}-{ts}"
+
+
+def resolve_upstream_dir(
+    phase: str,
+    results_root: Path,
+    run_id: str | None = None,
+    override: Path | None = None,
+) -> Path:
+    """Resolve the output directory for an upstream phase.
+
+    Precedence:
+      1. Explicit CLI override (e.g. --eda-dir /some/path)
+      2. Run-directory path: results_root/{run_id}/{phase}
+      3. Legacy phase path: results_root/{phase}/latest
+      4. New-layout fallback: results_root/latest/{phase}
+
+    The caller should verify the returned path exists before reading from it.
+    """
+    if override is not None:
+        return override
+    if run_id is not None:
+        return results_root / run_id / phase
+    legacy = results_root / phase / "latest"
+    if legacy.exists():
+        return legacy
+    return results_root / "latest" / phase
+
+
 class RunContext:
     """Context manager that sets up structured output for an analysis run.
 
@@ -174,27 +227,34 @@ class RunContext:
         params: dict | None = None,
         results_root: Path | None = None,
         primer: str | None = None,
+        run_id: str | None = None,
     ) -> None:
         self.session = _normalize_session(session)
         self.analysis_name = analysis_name
         self.params = params or {}
+        self.run_id = run_id
 
         from tallgrass.session import STATE_DIR
 
         root = results_root or (Path("results") / STATE_DIR)
         today = datetime.now(_CT).strftime("%Y-%m-%d")
+        self._session_root = root / self.session
 
-        # Parent of date dirs — where the `latest` symlink and primer live
-        self._analysis_dir = root / self.session / analysis_name
+        if run_id is not None:
+            # Run-directory mode: results/{session}/{run_id}/{analysis}/
+            self._analysis_dir = self._session_root / run_id / analysis_name
+            self.run_dir = self._analysis_dir
+            self._run_label = run_id
+        else:
+            # Legacy mode: results/{session}/{analysis}/{date}/
+            self._analysis_dir = self._session_root / analysis_name
+            run_label = _next_run_label(self._analysis_dir, today)
+            self.run_dir = self._analysis_dir / run_label
+            self._run_label = run_label
 
-        # Avoid clobbering same-day runs: append .1, .2, etc. if the date dir exists
-        run_label = _next_run_label(self._analysis_dir, today)
-
-        self.run_dir = self._analysis_dir / run_label
         self.plots_dir = self.run_dir / "plots"
         self.data_dir = self.run_dir / "data"
 
-        self._run_label = run_label
         self._today = today
         self._primer = primer
         self._tee: _TeeStream | None = None
@@ -236,9 +296,14 @@ class RunContext:
         self.plots_dir.mkdir(exist_ok=True)
         self.data_dir.mkdir(exist_ok=True)
 
-        # Write analysis primer (lives at the analysis level, not per-run)
+        # Write analysis primer
         if self._primer:
-            readme = self._analysis_dir / "README.md"
+            if self.run_id is not None:
+                # Run-directory mode: primer in the phase dir inside the run
+                readme = self._analysis_dir / "README.md"
+            else:
+                # Legacy mode: primer at the analysis level (parent of date dirs)
+                readme = self._analysis_dir / "README.md"
             readme.write_text(self._primer, encoding="utf-8")
 
         # Start capturing stdout
@@ -268,6 +333,7 @@ class RunContext:
             "session": self.session,
             "run_date": self._today,
             "run_label": self._run_label,
+            "run_id": self.run_id,
             "timestamp_start": (self._start_time.isoformat() if self._start_time else None),
             "timestamp_end": end_time.isoformat(),
             "elapsed_seconds": round(elapsed_seconds, 1),
@@ -292,22 +358,43 @@ class RunContext:
                 report_path = self.run_dir / f"{self.analysis_name}_report.html"
                 self.report.write(report_path)
 
-                # Create convenience symlink in session root
-                session_root = self._analysis_dir.parent
-                report_link = session_root / f"{self.analysis_name}_report.html"
-                if report_link.is_symlink() or report_link.exists():
-                    report_link.unlink()
-                report_link.symlink_to(
-                    Path(self.analysis_name) / "latest" / f"{self.analysis_name}_report.html"
-                )
+                if self.run_id is not None:
+                    # Run-directory mode: symlink chains through session-level latest
+                    report_link = self._session_root / f"{self.analysis_name}_report.html"
+                    if report_link.is_symlink() or report_link.exists():
+                        report_link.unlink()
+                    report_link.symlink_to(
+                        Path("latest")
+                        / self.analysis_name
+                        / f"{self.analysis_name}_report.html"
+                    )
+                else:
+                    # Legacy mode: symlink through phase-level latest
+                    session_root = self._analysis_dir.parent
+                    report_link = session_root / f"{self.analysis_name}_report.html"
+                    if report_link.is_symlink() or report_link.exists():
+                        report_link.unlink()
+                    report_link.symlink_to(
+                        Path(self.analysis_name)
+                        / "latest"
+                        / f"{self.analysis_name}_report.html"
+                    )
 
-        # Update latest symlink (relative so it's portable)
+        # Update latest symlink
         # Skip symlink update on failed runs so downstream phases don't see partial results
         if not failed:
-            latest = self._analysis_dir / "latest"
-            if latest.is_symlink() or latest.exists():
-                latest.unlink()
-            latest.symlink_to(self._run_label)
+            if self.run_id is not None:
+                # Run-directory mode: session-level `latest` → run_id (idempotent)
+                latest = self._session_root / "latest"
+                if latest.is_symlink() or latest.exists():
+                    latest.unlink()
+                latest.symlink_to(self.run_id)
+            else:
+                # Legacy mode: phase-level `latest` → date label
+                latest = self._analysis_dir / "latest"
+                if latest.is_symlink() or latest.exists():
+                    latest.unlink()
+                latest.symlink_to(self._run_label)
 
 
 def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:

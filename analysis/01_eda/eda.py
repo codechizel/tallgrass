@@ -182,6 +182,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="KS Legislature EDA")
     parser.add_argument("--session", default="2025-26")
     parser.add_argument("--data-dir", default=None, help="Override data directory path")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     return parser.parse_args()
 
 
@@ -2009,6 +2010,7 @@ def main() -> None:
         analysis_name="01_eda",
         params=vars(args),
         primer=EDA_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature EDA — Session {args.session}")
         print(f"Data:   {data_dir}")

@@ -107,6 +107,30 @@ profiles *args:
 external-validation *args:
     uv run python analysis/14_external_validation/external_validation.py {{args}}
 
+# Run full analysis pipeline for a session (all phases grouped under one run ID)
+pipeline session="2025-26" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RUN_ID=$(uv run python -c "from analysis.run_context import generate_run_id; print(generate_run_id('{{session}}'))")
+    echo "Pipeline run: $RUN_ID"
+    echo "Session:      {{session}}"
+    echo ""
+    just eda      --session {{session}} --run-id "$RUN_ID" {{args}}
+    just pca      --session {{session}} --run-id "$RUN_ID" {{args}}
+    just mca      --session {{session}} --run-id "$RUN_ID" {{args}}
+    just irt      --session {{session}} --run-id "$RUN_ID" {{args}}
+    just umap     --session {{session}} --run-id "$RUN_ID" {{args}}
+    just clustering --session {{session}} --run-id "$RUN_ID" {{args}}
+    just network  --session {{session}} --run-id "$RUN_ID" {{args}}
+    just indices  --session {{session}} --run-id "$RUN_ID" {{args}}
+    just prediction --session {{session}} --run-id "$RUN_ID" {{args}}
+    just betabinom --session {{session}} --run-id "$RUN_ID" {{args}}
+    just hierarchical --session {{session}} --run-id "$RUN_ID" {{args}}
+    just synthesis --session {{session}} --run-id "$RUN_ID" {{args}}
+    just profiles --session {{session}} --run-id "$RUN_ID" {{args}}
+    echo ""
+    echo "Pipeline complete: $RUN_ID"
+
 # Run all tests
 test *args:
     uv run pytest tests/ {{args}} -v

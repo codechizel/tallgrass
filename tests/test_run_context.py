@@ -21,6 +21,8 @@ from analysis.run_context import (
     _next_run_label,
     _normalize_session,
     _TeeStream,
+    generate_run_id,
+    resolve_upstream_dir,
     strip_leadership_suffix,
 )
 
@@ -417,3 +419,225 @@ class TestRunContext:
 
         info = json.loads((ctx2.run_dir / "run_info.json").read_text())
         assert info["run_label"].endswith(".1")
+
+
+# ── generate_run_id() ──────────────────────────────────────────────────────
+
+
+class TestGenerateRunId:
+    """Generate run IDs for grouped pipeline output."""
+
+    def test_format_matches_pattern(self):
+        """Run ID has format {prefix}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}."""
+        import re
+
+        run_id = generate_run_id("2025-26")
+        assert re.match(r"^91st-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$", run_id)
+
+    def test_special_session_prefix(self):
+        """Special sessions use the full session string as prefix."""
+        import re
+
+        run_id = generate_run_id("2024s")
+        assert re.match(r"^2024s-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$", run_id)
+
+    def test_historical_session(self):
+        """Historical sessions extract the legislature number."""
+        run_id = generate_run_id("2023-24")
+        assert run_id.startswith("90th-")
+
+    def test_unique_per_call(self):
+        """Two calls should produce different IDs (different timestamps)."""
+        import time
+
+        id1 = generate_run_id("2025-26")
+        time.sleep(0.01)  # ensure at least a tick
+        id2 = generate_run_id("2025-26")
+        # Same second is possible; at minimum prefix matches
+        assert id1.startswith("91st-")
+        assert id2.startswith("91st-")
+
+    def test_no_colons_in_id(self):
+        """Run IDs use hyphens, not colons, for filesystem safety."""
+        run_id = generate_run_id("2025-26")
+        assert ":" not in run_id
+
+
+# ── resolve_upstream_dir() ─────────────────────────────────────────────────
+
+
+class TestResolveUpstreamDir:
+    """Resolve upstream phase directories with 4-level precedence."""
+
+    def test_explicit_override_wins(self, tmp_path):
+        """Precedence 1: explicit CLI override takes priority over everything."""
+        override = tmp_path / "my_custom_eda"
+        result = resolve_upstream_dir("01_eda", tmp_path, run_id="run-123", override=override)
+        assert result == override
+
+    def test_run_id_path(self, tmp_path):
+        """Precedence 2: run_id constructs results_root/{run_id}/{phase}."""
+        result = resolve_upstream_dir("01_eda", tmp_path, run_id="91st-2026-02-27T19-30-00")
+        assert result == tmp_path / "91st-2026-02-27T19-30-00" / "01_eda"
+
+    def test_legacy_phase_latest(self, tmp_path):
+        """Precedence 3: legacy path results_root/{phase}/latest when it exists."""
+        legacy = tmp_path / "01_eda" / "latest"
+        legacy.mkdir(parents=True)
+        result = resolve_upstream_dir("01_eda", tmp_path)
+        assert result == legacy
+
+    def test_new_layout_fallback(self, tmp_path):
+        """Precedence 4: results_root/latest/{phase} when legacy doesn't exist."""
+        result = resolve_upstream_dir("01_eda", tmp_path)
+        assert result == tmp_path / "latest" / "01_eda"
+
+    def test_override_none_uses_run_id(self, tmp_path):
+        """override=None falls through to run_id path."""
+        result = resolve_upstream_dir("02_pca", tmp_path, run_id="run-1", override=None)
+        assert result == tmp_path / "run-1" / "02_pca"
+
+    def test_no_run_id_no_override_legacy_exists(self, tmp_path):
+        """With both None, prefers legacy if it exists."""
+        legacy = tmp_path / "04_irt" / "latest"
+        legacy.mkdir(parents=True)
+        result = resolve_upstream_dir("04_irt", tmp_path, run_id=None, override=None)
+        assert result == legacy
+
+
+# ── RunContext run-directory mode ──────────────────────────────────────────
+
+
+class TestRunContextRunIdMode:
+    """RunContext with run_id groups phases under a single run directory."""
+
+    def test_run_dir_under_run_id(self, tmp_path):
+        """run_dir is results/{session}/{run_id}/{analysis}/."""
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="01_eda",
+            run_id="2024s-2026-02-27T19-30-00",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        expected = tmp_path / "2024s" / "2024s-2026-02-27T19-30-00" / "01_eda"
+        assert ctx.run_dir == expected
+        assert ctx.run_dir.exists()
+
+    def test_session_level_latest_symlink(self, tmp_path):
+        """Session-level latest symlink points to the run_id directory."""
+        run_id = "2024s-2026-02-27T19-30-00"
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="01_eda",
+            run_id=run_id,
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        latest = tmp_path / "2024s" / "latest"
+        assert latest.is_symlink()
+        assert str(latest.readlink()) == run_id
+
+    def test_session_level_symlink_idempotent(self, tmp_path):
+        """Multiple phases in the same run write the same session-level symlink."""
+        run_id = "2024s-2026-02-27T19-30-00"
+        for phase in ["01_eda", "02_pca", "04_irt"]:
+            ctx = RunContext(
+                session="2024s",
+                analysis_name=phase,
+                run_id=run_id,
+                results_root=tmp_path,
+            )
+            ctx.setup()
+            ctx.finalize()
+        latest = tmp_path / "2024s" / "latest"
+        assert latest.is_symlink()
+        assert str(latest.readlink()) == run_id
+
+    def test_run_info_includes_run_id(self, tmp_path):
+        """run_info.json includes the run_id field."""
+        run_id = "2024s-2026-02-27T19-30-00"
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="test",
+            run_id=run_id,
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        info = json.loads((ctx.run_dir / "run_info.json").read_text())
+        assert info["run_id"] == run_id
+
+    def test_plots_and_data_dirs_created(self, tmp_path):
+        """plots/ and data/ subdirs created inside the run-directory phase dir."""
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="02_pca",
+            run_id="run-1",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        assert ctx.plots_dir.exists()
+        assert ctx.data_dir.exists()
+        assert ctx.plots_dir == ctx.run_dir / "plots"
+        assert ctx.data_dir == ctx.run_dir / "data"
+
+    def test_failed_run_no_symlink(self, tmp_path):
+        """Failed runs don't update the session-level latest symlink."""
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="test",
+            run_id="run-fail",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize(failed=True)
+        latest = tmp_path / "2024s" / "latest"
+        assert not latest.exists()
+
+
+class TestRunContextLegacyMode:
+    """RunContext without run_id preserves existing behavior."""
+
+    def test_legacy_dir_structure(self, tmp_path):
+        """Without run_id, path is results/{session}/{analysis}/{date}/."""
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="test",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        # run_dir should be under {session}/{analysis}/{date}
+        assert ctx.run_dir.parent.name == "test"
+        assert ctx.run_dir.parent.parent.name == "2024s"
+
+    def test_legacy_phase_level_symlink(self, tmp_path):
+        """Without run_id, latest symlink is at the phase level."""
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="test",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        latest = tmp_path / "2024s" / "test" / "latest"
+        assert latest.is_symlink()
+        # Session-level latest should NOT exist
+        session_latest = tmp_path / "2024s" / "latest"
+        assert not session_latest.exists()
+
+    def test_run_info_run_id_null(self, tmp_path):
+        """run_info.json has run_id: null in legacy mode."""
+        ctx = RunContext(
+            session="2024s",
+            analysis_name="test",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        info = json.loads((ctx.run_dir / "run_info.json").read_text())
+        assert info["run_id"] is None

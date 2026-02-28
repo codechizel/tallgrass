@@ -192,6 +192,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip cross-session prediction transfer (faster)",
     )
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     return parser.parse_args()
 
 
@@ -766,6 +767,7 @@ def main() -> None:
         analysis_name="13_cross_session",
         params=vars(args),
         primer=CROSS_SESSION_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print_header("Cross-Session Validation")
         print(f"  Session A: {session_a_label}")
@@ -806,8 +808,8 @@ def main() -> None:
 
         # ── Load upstream results ──
         print("\n── Loading upstream analysis results ──")
-        upstream_a = load_all_upstream(ks_a.results_dir)
-        upstream_b = load_all_upstream(ks_b.results_dir)
+        upstream_a = load_all_upstream(ks_a.results_dir, run_id=args.run_id)
+        upstream_b = load_all_upstream(ks_b.results_dir, run_id=args.run_id)
 
         # ── Per-chamber analysis ──
         all_results: dict = {

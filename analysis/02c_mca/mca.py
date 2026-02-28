@@ -39,9 +39,9 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 
 try:
     from analysis.mca_report import build_mca_report
@@ -156,6 +156,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session", default="2025-26")
     parser.add_argument("--data-dir", default=None, help="Override data directory path")
     parser.add_argument("--pca-dir", default=None, help="Override PCA results directory")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     parser.add_argument(
         "--n-components",
         type=int,
@@ -1026,7 +1027,10 @@ def main() -> None:
 
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
     results_root = ks.results_dir
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
+    pca_dir = resolve_upstream_dir(
+        "02_pca", results_root, args.run_id,
+        Path(args.pca_dir) if args.pca_dir else None,
+    )
 
     correction = args.correction if args.correction != "none" else "none"
 
@@ -1035,6 +1039,7 @@ def main() -> None:
         analysis_name="02c_mca",
         params=vars(args),
         primer=MCA_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"Tallgrass MCA — Session {args.session}")
         print(f"Data:       {data_dir}")

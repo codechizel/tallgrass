@@ -22,9 +22,10 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1238 tests)
+just test                                    # → uv run pytest tests/ -v (~1260 tests)
 just test-scraper                            # → pytest on scraper test files only
 just monitor                                 # → check running experiment status
+just pipeline 2025-26                        # → full analysis pipeline (all phases grouped)
 uv run tallgrass 2023                  # historical session (direct)
 uv run tallgrass 2024 --special        # special session (direct)
 ```
@@ -34,6 +35,8 @@ Analysis recipes (all pass `*args` through to the underlying script):
 `just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
+
+`just pipeline 2025-26` runs all 13 phases in order under a single run ID (ADR-0052). Each phase gets `--run-id` automatically.
 
 ## Build Philosophy
 
@@ -123,7 +126,15 @@ External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downl
 
 ## Results Directory
 
-Analysis outputs in `results/kansas/{session}/{NN_phase}/{date}/` with `latest` symlink (e.g. `results/kansas/91st_2025-2026/01_eda/2026-02-27/`). Phase directories use numbered prefixes matching the source layout (`01_eda`, `02_pca`, `04_irt`, etc.). Same-day runs append `.1`, `.2`, etc. `RunContext` manages structured output, elapsed timing, HTML reports, and auto-primers.
+Two output modes (ADR-0052):
+
+**Run-directory mode** (`just pipeline` or `--run-id`): all phases grouped under one run ID.
+`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91st-2026-02-27T19-30-00/01_eda/`). Run ID format: `{legislature}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}`.
+
+**Legacy mode** (individual phase runs, no `--run-id`): each phase writes to its own date directory.
+`results/kansas/{session}/{NN_phase}/{date}/` with a phase-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/01_eda/2026-02-27/`). Same-day runs append `.1`, `.2`, etc.
+
+Both modes use `RunContext` for structured output, elapsed timing, HTML reports, and auto-primers. `resolve_upstream_dir()` handles 4-level path resolution (CLI override → run_id → phase/latest → latest/phase) so phases find their upstream data in either layout.
 
 Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each contains `experiment.md` (structured record from TEMPLATE.md), `run_experiment.py`, and `run_NN_description/` output directories.
 
@@ -135,7 +146,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (51 decisions)
+- ADRs: `docs/adr/README.md` (52 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -191,7 +202,7 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Testing
 
 ```bash
-just test                    # 1238 tests
+just test                    # 1260 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

@@ -45,9 +45,9 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, resolve_upstream_dir
 
 try:
     from analysis.hierarchical_report import build_hierarchical_report
@@ -247,6 +247,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eda-dir", default=None, help="Override EDA results directory")
     parser.add_argument("--pca-dir", default=None, help="Override PCA results directory")
     parser.add_argument("--irt-dir", default=None, help="Override flat IRT results directory")
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     parser.add_argument(
         "--n-samples", type=int, default=HIER_N_SAMPLES, help="MCMC samples per chain"
     )
@@ -1545,15 +1546,25 @@ def main() -> None:
     results_root = ks.results_dir
 
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
-    eda_dir = Path(args.eda_dir) if args.eda_dir else results_root / "01_eda" / "latest"
-    pca_dir = Path(args.pca_dir) if args.pca_dir else results_root / "02_pca" / "latest"
-    irt_dir = Path(args.irt_dir) if args.irt_dir else results_root / "04_irt" / "latest"
+    eda_dir = resolve_upstream_dir(
+        "01_eda", results_root, args.run_id,
+        Path(args.eda_dir) if args.eda_dir else None,
+    )
+    pca_dir = resolve_upstream_dir(
+        "02_pca", results_root, args.run_id,
+        Path(args.pca_dir) if args.pca_dir else None,
+    )
+    irt_dir = resolve_upstream_dir(
+        "04_irt", results_root, args.run_id,
+        Path(args.irt_dir) if args.irt_dir else None,
+    )
 
     with RunContext(
         session=args.session,
         analysis_name="10_hierarchical",
         params=vars(args),
         primer=HIERARCHICAL_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature Hierarchical Bayesian IRT — Session {args.session}")
         print(f"Data:     {data_dir}")

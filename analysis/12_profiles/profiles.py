@@ -64,9 +64,9 @@ except ModuleNotFoundError:
     from profiles_report import build_profiles_report  # type: ignore[no-redef]
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext  # type: ignore[no-redef]
+    from run_context import RunContext, resolve_upstream_dir  # type: ignore[no-redef]
 
 try:
     from analysis.synthesis_data import (
@@ -604,6 +604,7 @@ def parse_args() -> argparse.Namespace:
             '(e.g., "Masterson,Blake Carpenter,Dietrich")'
         ),
     )
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     return parser.parse_args()
 
 
@@ -658,6 +659,7 @@ def main() -> None:
         analysis_name="12_profiles",
         params=vars(args),
         primer=PROFILES_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         from tallgrass.session import STATE_DIR
 
@@ -665,7 +667,7 @@ def main() -> None:
         print(f"Loading upstream data from {results_base}")
 
         # ── Load upstream ─────────────────────────────────────────────
-        upstream = load_all_upstream(results_base)
+        upstream = load_all_upstream(results_base, run_id=args.run_id)
 
         # ── Build legislator DataFrames ───────────────────────────────
         leg_dfs: dict[str, pl.DataFrame] = {}
@@ -717,9 +719,10 @@ def main() -> None:
 
         # ── Load IRT bill_params ──────────────────────────────────────
         bill_params: dict[str, pl.DataFrame] = {}
+        irt_phase_dir = resolve_upstream_dir("04_irt", results_base, args.run_id)
         for chamber in ("house", "senate"):
             bp = _read_parquet_safe(
-                results_base / "04_irt" / "latest" / "data" / f"bill_params_{chamber}.parquet"
+                irt_phase_dir / "data" / f"bill_params_{chamber}.parquet"
             )
             if bp is not None:
                 bill_params[chamber] = bp

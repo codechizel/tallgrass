@@ -40,9 +40,9 @@ from sklearn.metrics import adjusted_rand_score, cohen_kappa_score, normalized_m
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
 
 try:
     from analysis.network_report import build_network_report
@@ -186,6 +186,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--clustering-dir", default=None, help="Override clustering results directory"
     )
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     parser.add_argument(
         "--kappa-threshold",
         type=float,
@@ -2426,26 +2427,25 @@ def main() -> None:
 
     results_root = ks.results_dir
 
-    if args.eda_dir:
-        eda_dir = Path(args.eda_dir)
-    else:
-        eda_dir = results_root / "01_eda" / "latest"
-
-    if args.irt_dir:
-        irt_dir = Path(args.irt_dir)
-    else:
-        irt_dir = results_root / "04_irt" / "latest"
-
-    if args.clustering_dir:
-        clustering_dir = Path(args.clustering_dir)
-    else:
-        clustering_dir = results_root / "05_clustering" / "latest"
+    eda_dir = resolve_upstream_dir(
+        "01_eda", results_root, args.run_id,
+        Path(args.eda_dir) if args.eda_dir else None,
+    )
+    irt_dir = resolve_upstream_dir(
+        "04_irt", results_root, args.run_id,
+        Path(args.irt_dir) if args.irt_dir else None,
+    )
+    clustering_dir = resolve_upstream_dir(
+        "05_clustering", results_root, args.run_id,
+        Path(args.clustering_dir) if args.clustering_dir else None,
+    )
 
     with RunContext(
         session=args.session,
         analysis_name="06_network",
         params=vars(args),
         primer=NETWORK_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature Network Analysis — Session {args.session}")
         print(f"Data:        {data_dir}")

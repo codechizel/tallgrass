@@ -584,6 +584,7 @@ def parse_args() -> argparse.Namespace:
         default="2025-26",
         help="Session identifier (default: %(default)s)",
     )
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     return parser.parse_args()
 
 
@@ -598,6 +599,7 @@ def main() -> None:
         analysis_name="11_synthesis",
         params=vars(args),
         primer=SYNTHESIS_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         # Resolve results base path
         from tallgrass.session import STATE_DIR
@@ -606,7 +608,7 @@ def main() -> None:
         print(f"Loading upstream data from {results_base}")
 
         # ── Load ─────────────────────────────────────────────────────────
-        upstream = load_all_upstream(results_base)
+        upstream = load_all_upstream(results_base, run_id=args.run_id)
         manifests = upstream["manifests"]
 
         # ── Join ─────────────────────────────────────────────────────────

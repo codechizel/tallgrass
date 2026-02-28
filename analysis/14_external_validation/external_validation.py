@@ -34,9 +34,9 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext
+    from run_context import RunContext, resolve_upstream_dir
 
 try:
     from analysis.external_validation_report import build_external_validation_report
@@ -172,6 +172,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--hierarchical-dir", default=None, help="Override hierarchical IRT results directory"
     )
+    parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
     return parser.parse_args()
 
 
@@ -251,13 +252,16 @@ def _load_irt(
     chamber: str,
     irt_dir_override: Path | None = None,
     hierarchical_dir_override: Path | None = None,
+    run_id: str | None = None,
 ) -> pl.DataFrame | None:
     """Load IRT ideal points for a model/chamber combination."""
     if model == "flat":
-        base = irt_dir_override or (results_root / "04_irt" / "latest")
+        base = irt_dir_override or resolve_upstream_dir("04_irt", results_root, run_id)
         path = base / "data" / f"ideal_points_{chamber}.parquet"
     else:
-        base = hierarchical_dir_override or (results_root / "10_hierarchical" / "latest")
+        base = hierarchical_dir_override or resolve_upstream_dir(
+            "10_hierarchical", results_root, run_id
+        )
         path = base / "data" / f"hierarchical_ideal_points_{chamber}.parquet"
 
     if path.exists():
@@ -382,6 +386,7 @@ def main() -> None:
         analysis_name="14_external_validation",
         params=vars(args),
         primer=EXTERNAL_VALIDATION_PRIMER,
+        run_id=args.run_id,
     ) as ctx:
         print(f"KS Legislature External Validation (Shor-McCarty) — Session {primary_session}")
         print(f"Sessions:  {', '.join(sessions)}")
@@ -426,7 +431,9 @@ def main() -> None:
                         continue
 
                     ch = chamber.lower()
-                    irt_df = _load_irt(results_root, model, ch, irt_dir, hier_dir)
+                    irt_df = _load_irt(
+                        results_root, model, ch, irt_dir, hier_dir, run_id=args.run_id
+                    )
                     if irt_df is None:
                         continue
 
