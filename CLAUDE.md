@@ -163,6 +163,7 @@ Key references:
 - Hierarchical PCA init experiment: `docs/hierarchical-pca-init-experiment.md` (R-hat fix, ESS threshold analysis, ADR-0044)
 - 4-chain hierarchical IRT experiment: `docs/hierarchical-4-chain-experiment.md` (ESS fix, jitter mode-splitting discovery, adapt_diag fix)
 - Hierarchical convergence improvement: `docs/hierarchical-convergence-improvement.md` (House vs Senate theory, β>0 constraint, 9-priority improvement plan, experiment results)
+- Joint model deep dive: `docs/joint-model-deep-dive.md` (concurrent calibration failure, literature survey, 9-priority fix plan, test equating escape hatch)
 - Positive beta experiment: `results/experimental_lab/2026-02-27_positive-beta/experiment.md` (LogNormal fixes R-hat but not ESS; joint improves but still fails; positive β necessary but not sufficient)
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
 - Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)
