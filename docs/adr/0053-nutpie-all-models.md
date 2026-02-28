@@ -42,3 +42,4 @@ Implementation mirrors ADR-0051's pattern:
 
 **Risks:**
 - Joint model convergence may still fail (nutpie doesn't guarantee convergence for poorly identified models) — but can't be worse than PyMC's R-hat 1.53
+- **Update (ADR-0055):** Joint model now uses `JOINT_BETA` (`lognormal_reparam`) with `alpha_sigma=2.0` and PCA initialization. R-hat(xi) improved to 1.010 on 84th but 828 divergences remain. Stocking-Lord IRT linking added as production alternative for cross-chamber scaling.

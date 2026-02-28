@@ -148,7 +148,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (53 decisions)
+- ADRs: `docs/adr/README.md` (55 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -163,7 +163,7 @@ Key references:
 - Hierarchical PCA init experiment: `docs/hierarchical-pca-init-experiment.md` (R-hat fix, ESS threshold analysis, ADR-0044)
 - 4-chain hierarchical IRT experiment: `docs/hierarchical-4-chain-experiment.md` (ESS fix, jitter mode-splitting discovery, adapt_diag fix)
 - Hierarchical convergence improvement: `docs/hierarchical-convergence-improvement.md` (House vs Senate theory, β>0 constraint, 9-priority improvement plan, experiment results)
-- Joint model deep dive: `docs/joint-model-deep-dive.md` (concurrent calibration failure, literature survey, 9-priority fix plan, test equating escape hatch)
+- Joint model deep dive: `docs/joint-model-deep-dive.md` (concurrent calibration failure, reparameterized LogNormal experiments, Stocking-Lord IRT linking, production recommendation)
 - Positive beta experiment: `results/experimental_lab/2026-02-27_positive-beta/experiment.md` (LogNormal fixes R-hat but not ESS; joint improves but still fails; positive β necessary but not sufficient)
 - Prediction deep dive: `docs/prediction-deep-dive.md` (literature survey, code audit, IRT circularity analysis, test gaps)
 - Beta-Binomial deep dive: `docs/beta-binomial-deep-dive.md` (ecosystem survey, code audit, ddof fix, Tarone's test)

@@ -57,3 +57,7 @@ Experiment complete. Full results in `results/experimental_lab/2026-02-27_positi
 **Joint (LogNormal):** R-hat(xi) = 1.024, ESS(xi) = 243, 25 divergences. Improved from production (R-hat ~1.5, ESS ~7) but still fails.
 
 **Conclusion:** Positive beta is necessary (fixes R-hat) but not sufficient (trades ESS). The reflection mode theory is confirmed. Next steps: combine with more draws (Priority 7) or nutpie sampler (Priority 6) to address the remaining ESS shortfall.
+
+## Follow-Up: Reparameterized LogNormal (2026-02-28)
+
+The `pm.LogNormal` used in this experiment caused 2,041 divergences on the 84th biennium due to boundary geometry (curvature variation near beta = 0). ADR-0055 introduced `lognormal_reparam` — `log_beta ~ Normal(0, 1)`, `beta = exp(log_beta)` — mathematically identical but with smooth Gaussian sampling geometry. Result on 84th: divergences 2,041 → 828, R-hat(xi) 1.22 → 1.010. The boundary geometry problem identified here is fully resolved; the remaining 828 divergences are from the three-level hierarchy's funnel geometry. Stocking-Lord IRT linking was also added as a robust production alternative to concurrent calibration. See ADR-0055.

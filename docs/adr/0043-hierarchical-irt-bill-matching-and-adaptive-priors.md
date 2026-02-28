@@ -65,3 +65,4 @@ Following Gelman (2015) on informative priors when group counts are small. The t
 - Shor, B., McCarty, N., & Berry, C. (2011). Methodological issues in bridging ideal points. SSRN Working Paper.
 - `docs/joint-hierarchical-irt-diagnosis.md` — full diagnosis of the broken joint model
 - `docs/hierarchical-shrinkage-deep-dive.md` — literature survey on J=2 over-shrinkage
+- [ADR-0055](0055-reparameterized-beta-and-irt-linking.md) — Reparameterized beta + IRT linking (builds on shared bills for anchor extraction)

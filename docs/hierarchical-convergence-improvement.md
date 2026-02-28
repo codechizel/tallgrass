@@ -316,11 +316,12 @@ The next most impactful step is **Priority 7 (more draws)** combined with LogNor
 Updated based on experiment results:
 
 1. ~~**Priority 1 (β > 0):** Confirmed effective for R-hat. LogNormal(0, 0.5) is the preferred variant.~~ **DONE**
-2. **Next:** Priority 7 (more draws, 4,000+) with LogNormal beta. If House per-chamber passes, deploy to production.
-3. **For joint model:** Priority 6 (nutpie) is the most promising path. If available, test before adding more complexity.
-4. **If nutpie unavailable or insufficient:** Priority 2 (per-chamber init for joint) + Priority 3 (tighter α).
-5. **If joint still fails:** Priority 5 (ADVI init), then Priority 9 (1PL fallback).
-6. **Long-term:** Priority 4 (mixed centering) and Priority 8 (hierarchical bill priors) for robustness.
+2. ~~**Priority 6 (nutpie):** Deployed to production for all models (ADR-0051, ADR-0053). Per-chamber convergence fully resolved — all 16/16 sessions pass.~~ **DONE**
+3. ~~**Priority 2 (PCA init for joint):** Implemented. Eliminates need for post-hoc sign correction (r=0.97 House, r=0.89 Senate on 84th).~~ **DONE**
+4. ~~**Priority 3 (tighter α):** Joint model alpha tightened to Normal(0, 2). Configurable via `alpha_sigma` parameter.~~ **DONE**
+5. ~~**Priority 1 revised (lognormal_reparam):** `pm.LogNormal` boundary geometry caused 2,041 divergences. Reparameterized to `exp(Normal(0, 1))` — divergences 2,041 → 828, R-hat(xi) 1.22 → 1.010 (ADR-0055).~~ **DONE**
+6. ~~**Stocking-Lord linking (new):** Implemented all 4 IRT linking methods as production alternative. All methods agree (r=1.000 pairwise on 84th). See ADR-0055.~~ **DONE**
+7. **Remaining:** Joint model still has 828 divergences and poor hyperparameter mixing (mu_chamber R-hat 1.10, ESS 39). Options: 1PL joint model (eliminate beta entirely), collapse hierarchy to 2 levels, normalizing flow adaptation, or accept Stocking-Lord linking as the production answer.
 
 ## References
 
@@ -343,3 +344,5 @@ Updated based on experiment results:
 - [Joint Hierarchical IRT Diagnosis](joint-hierarchical-irt-diagnosis.md) — bill-matching bug and fix
 - [2D IRT Deep Dive](2d-irt-deep-dive.md) — PLT identification, Tyson paradox
 - [Apple Silicon MCMC Tuning](apple-silicon-mcmc-tuning.md) — hardware scheduling for parallel chains
+- [Joint Model Deep Dive](joint-model-deep-dive.md) — concurrent calibration failure diagnosis, reparameterized beta experiments, Stocking-Lord linking
+- [ADR-0055](adr/0055-reparameterized-beta-and-irt-linking.md) — reparameterized LogNormal beta + IRT scale linking

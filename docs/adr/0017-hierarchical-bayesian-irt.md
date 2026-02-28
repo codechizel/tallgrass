@@ -88,3 +88,9 @@ The two critical problems identified in ADR-0042 and `docs/joint-hierarchical-ir
 2. **Group-size-adaptive priors**: New constants `SMALL_GROUP_THRESHOLD = 20` and `SMALL_GROUP_SIGMA_SCALE = 0.5`. Both `build_per_chamber_model()` and `build_joint_model()` now use `HalfNormal(0.5)` for groups with < 20 members (Gelman 2015). This prevents the catastrophic convergence failures (R-hat > 1.8, ESS < 10) observed in small groups like Senate Democrats.
 
 See ADR-0043 for the full decision record. Test count: 39 → 48 hierarchical tests.
+
+## Update: Reparameterized LogNormal Beta and IRT Linking (2026-02-28)
+
+The joint model's beta prior was changed from `Normal(0, 1)` to a reparameterized LogNormal: `log_beta ~ Normal(0, 1)`, `beta = exp(log_beta)`. This eliminates the reflection mode multimodality (each bill's discrimination is positive) without the boundary geometry catastrophe that `pm.LogNormal` caused (2,041 divergences). The reparameterized joint model on the 84th achieves R-hat(xi) = 1.010 — borderline passing — but 828 divergences and poor hyperparameter mixing remain.
+
+A separate-then-link approach was added as the production alternative: `irt_linking.py` implements Stocking-Lord, Haebara, Mean-Sigma, and Mean-Mean linking using shared anchor bills. Sign-aware anchor extraction handles unconstrained per-chamber betas (filter sign-disagreeing items, normalize to positive discrimination). On the 84th: 40 of 67 anchors usable, all methods agree on rank order (r = 1.000), S-L linked vs joint r = 0.97/0.89. See ADR-0055 for the full decision record.

@@ -79,3 +79,5 @@ Full diagnosis of the bill-matching bug written to `docs/joint-hierarchical-irt-
 - The AUC `nan` for single-class holdouts means some 84th-session prediction metrics are missing. This is correct behavior (AUC is undefined for a single class) but means the prediction report must handle nans gracefully.
 
 **Next step:** ~~Refactor `build_joint_model()` to match bills by `bill_number` and create shared beta parameters for matched bills, as described in `docs/joint-hierarchical-irt-diagnosis.md`.~~ **Done in ADR-0043** — bill-matching and group-size-adaptive priors implemented.
+
+**Further evolution:** ADR-0055 (2026-02-28) adds a reparameterized LogNormal beta prior (`exp(Normal(0, 1))`) to the joint model, eliminating the reflection mode multimodality that contributed to sign flips. With the `lognormal_reparam` prior and PCA initialization, `fix_joint_sign_convention()` is no longer triggered (r = 0.97 House, r = 0.89 Senate on the 84th). Stocking-Lord IRT linking was also added as a production alternative to the joint model for cross-chamber placement.

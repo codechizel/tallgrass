@@ -20,6 +20,8 @@ Implement a lightweight experiment framework with three components:
 
 Factor the bill discrimination (beta) prior into a frozen dataclass. Production functions gain a `beta_prior` parameter with `PRODUCTION_BETA` as the default. Zero behavior change for production callers. Experiments pass alternative specs to the same functions — no code duplication.
 
+Two production constants are defined: `PRODUCTION_BETA = BetaPriorSpec("normal", {"mu": 0, "sigma": 1})` for per-chamber models, and `JOINT_BETA = BetaPriorSpec("lognormal_reparam", {"mu": 0, "sigma": 1})` for the joint model. The `lognormal_reparam` case uses `exp(Normal(0, 1))` to produce positive discrimination without boundary geometry (ADR-0055). Supported distribution types: `normal`, `lognormal`, `lognormal_reparam`, `halfnormal`.
+
 ### 2. Experiment Monitoring (`analysis/experiment_monitor.py`)
 
 - **PlatformCheck**: validates Apple Silicon constraints (thread caps, C++ compiler, concurrent MCMC processes) before sampling begins
@@ -60,4 +62,5 @@ Factor the bill discrimination (beta) prior into a frozen dataclass. Production 
 - [ADR-0044](0044-hierarchical-pca-informed-init.md) — PCA-informed initialization
 - [ADR-0045](0045-4-chain-hierarchical-irt.md) — 4-chain with adapt_diag
 - [ADR-0047](0047-positive-beta-constraint-experiment.md) — Positive beta experiment (motivation)
+- [ADR-0055](0055-reparameterized-beta-and-irt-linking.md) — Reparameterized LogNormal and IRT linking (uses BetaPriorSpec)
 - [Experiment Framework Deep Dive](../experiment-framework-deep-dive.md) — Full ecosystem survey and design rationale

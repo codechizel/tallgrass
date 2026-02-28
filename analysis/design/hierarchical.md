@@ -64,7 +64,23 @@
 
 **Identification:** The joint model uses `pt.sort` ordering within each chamber's pair of party offsets (House D < House R, Senate D < Senate R) plus shared bill parameters for cross-chamber sign and scale identification. A safety net (`fix_joint_sign_convention()`) compares joint xi with per-chamber hierarchical xi and negates flipped chambers, but should not trigger when shared bills provide sufficient bridging.
 
+**Beta prior (ADR-0055):** The joint model uses `JOINT_BETA = BetaPriorSpec("lognormal_reparam", {"mu": 0, "sigma": 1})` — `log_beta ~ Normal(0, 1)`, `beta = exp(log_beta)`. This constrains all discrimination to be positive, eliminating the ~365-axis reflection mode multimodality without the boundary geometry catastrophe of `pm.LogNormal`. Per-chamber models continue to use `PRODUCTION_BETA = BetaPriorSpec("normal", {"mu": 0, "sigma": 1})` since they converge perfectly with unconstrained beta.
+
+**Alpha prior:** The joint model uses `alpha ~ Normal(0, 2)` (configurable via `alpha_sigma` parameter, default 5.0). Tighter than the per-chamber `Normal(0, 5)` to reduce posterior volume without changing substantive estimates.
+
 **Adaptive priors (ADR-0043):** Groups with fewer than `SMALL_GROUP_THRESHOLD` (20) members get `sigma_within ~ HalfNormal(SMALL_GROUP_SIGMA_SCALE)` (0.5) to prevent convergence failures in small groups (Gelman 2015).
+
+### IRT scale linking (separate-then-link alternative)
+
+**Decision:** Implement Stocking-Lord, Haebara, Mean-Sigma, and Mean-Mean linking in `irt_linking.py` as a production alternative to the joint model for cross-chamber scaling.
+
+**Rationale:** The joint model fails convergence in all 8 bienniums even with the reparameterized beta (828 divergences on the 84th). The per-chamber models converge perfectly. Stocking-Lord linking uses anchor items (shared bills) to find an affine transformation `xi_linked = A * xi_senate + B` that places Senate ideal points on the House scale. This is the approach used by the field's most successful cross-chamber scaling methods (Shor-McCarty, DW-NOMINATE Common Space).
+
+**Sign-aware anchor extraction:** Per-chamber betas can be negative (unconstrained Normal prior). `extract_anchor_params()` filters anchor items where the two chambers disagree on discrimination sign and normalizes retained items to positive discrimination. On the 84th: 40 of 67 anchors usable (27 dropped for sign disagreement).
+
+**Sensitivity check:** All four methods are run as a robustness check. If they agree on rank order, the linking is robust. On the 84th: all pairwise correlations r = 1.000.
+
+See ADR-0055 for the full decision record.
 
 ### Variance decomposition via ICC
 
