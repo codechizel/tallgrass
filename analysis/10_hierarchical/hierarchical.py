@@ -60,6 +60,11 @@ except ModuleNotFoundError:
     from model_spec import JOINT_BETA, PRODUCTION_BETA, BetaPriorSpec  # type: ignore[no-redef]
 
 try:
+    from analysis.irt_linking import compare_linking_methods
+except ModuleNotFoundError:
+    from irt_linking import compare_linking_methods  # type: ignore[no-redef]
+
+try:
     from analysis.irt import (
         ESS_THRESHOLD,
         MAX_DIVERGENCES,
@@ -233,7 +238,7 @@ SMALL_GROUP_THRESHOLD = 20
 SMALL_GROUP_SIGMA_SCALE = 0.5
 
 # Convergence diagnostic variable lists
-HIER_CONVERGENCE_VARS = ["xi", "mu_party", "sigma_within", "alpha", "beta"]
+HIER_CONVERGENCE_VARS = ["xi", "mu_party", "sigma_within", "alpha", "beta", "log_beta"]
 JOINT_EXTRA_VARS = ["mu_group", "mu_chamber", "sigma_chamber", "sigma_party"]
 
 
@@ -564,6 +569,7 @@ def build_joint_graph(
     senate_data: dict,
     rollcalls: pl.DataFrame | None = None,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    alpha_sigma: float = 5.0,
 ) -> tuple[pm.Model, dict]:
     """Build 3-level joint cross-chamber hierarchical IRT model graph (no sampling).
 
@@ -581,6 +587,8 @@ def build_joint_graph(
         rollcalls: Optional rollcalls DataFrame for bill matching across chambers.
         beta_prior: Specification for the bill discrimination prior.
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        alpha_sigma: Standard deviation for the bill difficulty prior.
+            Defaults to 5.0 (legacy). Joint model uses 2.0 for tighter regularization.
 
     Returns (pm.Model, combined_data_dict).
     """
@@ -734,8 +742,9 @@ def build_joint_graph(
         )
 
         # --- Bill parameters ---
-        alpha = pm.Normal("alpha", mu=0, sigma=5, shape=n_votes, dims="vote")
+        alpha = pm.Normal("alpha", mu=0, sigma=alpha_sigma, shape=n_votes, dims="vote")
         beta = beta_prior.build(n_votes)
+        print(f"  Alpha prior: Normal(mu=0, sigma={alpha_sigma})")
         print(f"  Beta prior: {beta_prior.describe()}")
 
         # --- Likelihood ---
@@ -771,6 +780,7 @@ def build_joint_model(
     cores: int | None = None,
     target_accept: float = HIER_TARGET_ACCEPT,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    alpha_sigma: float = 5.0,
     callback=None,
     xi_offset_initvals: np.ndarray | None = None,
 ) -> tuple[az.InferenceData, dict, float]:
@@ -782,6 +792,8 @@ def build_joint_model(
     Args:
         beta_prior: Specification for the bill discrimination prior.
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        alpha_sigma: Standard deviation for the bill difficulty prior.
+            Defaults to 5.0 (legacy). Joint model uses 2.0 for tighter regularization.
         callback: Accepted for API compatibility but ignored.
             nutpie does not support PyMC-style callbacks.
         xi_offset_initvals: Optional initial xi_offset values (from PCA).
@@ -800,7 +812,8 @@ def build_joint_model(
         print(f"  Note: cores={cores} ignored (nutpie manages its own threads)")
 
     model, combined_data = build_joint_graph(
-        house_data, senate_data, rollcalls=rollcalls, beta_prior=beta_prior
+        house_data, senate_data, rollcalls=rollcalls, beta_prior=beta_prior,
+        alpha_sigma=alpha_sigma,
     )
 
     # --- Compile with nutpie ---
@@ -1786,6 +1799,7 @@ def main() -> None:
                     rollcalls=rollcalls,
                     cores=args.cores,
                     beta_prior=JOINT_BETA,
+                    alpha_sigma=2.0,
                     xi_offset_initvals=joint_xi_init,
                 )
 
@@ -1827,6 +1841,131 @@ def main() -> None:
                 joint_results = None
         else:
             print("\n  Skipping joint model (--skip-joint)")
+
+        # ── Stocking-Lord linking (separate-then-link alternative to joint model) ──
+        linking_results: dict | None = None
+        if (
+            "House" in per_chamber_results
+            and "Senate" in per_chamber_results
+            and rollcalls is not None
+        ):
+            print_header("STOCKING-LORD LINKING")
+            try:
+                house_data_link = per_chamber_results["House"]["data"]
+                senate_data_link = per_chamber_results["Senate"]["data"]
+
+                matched_bills, _, _ = _match_bills_across_chambers(
+                    house_data_link["vote_ids"],
+                    senate_data_link["vote_ids"],
+                    rollcalls,
+                )
+                print(f"  Anchor items: {len(matched_bills)} shared bills")
+
+                house_idata_link = per_chamber_results["House"]["idata"]
+                senate_idata_link = per_chamber_results["Senate"]["idata"]
+
+                # Run all four methods as sensitivity check
+                all_methods = compare_linking_methods(
+                    house_idata_link,
+                    senate_idata_link,
+                    matched_bills,
+                    house_data_link["vote_ids"],
+                    senate_data_link["vote_ids"],
+                    reference="House",
+                )
+
+                # Report sign-filtering diagnostics from first method
+                first_result = next(iter(all_methods.values()))
+                n_usable = first_result["n_usable"]
+                n_sign = first_result["n_sign_disagreement"]
+                print(
+                    f"  Sign-filtered: {n_usable} usable, "
+                    f"{n_sign} dropped (cross-chamber sign disagreement)"
+                )
+
+                # Report results
+                print("\n  Linking coefficients (Senate → House scale):")
+                print(f"  {'Method':<20s} {'A':>8s} {'B':>8s}")
+                print(f"  {'─' * 20} {'─' * 8} {'─' * 8}")
+                for name, res in all_methods.items():
+                    print(f"  {name:<20s} {res['A']:>8.4f} {res['B']:>8.4f}")
+
+                # Use Stocking-Lord as primary
+                sl = all_methods["stocking_lord"]
+                print("\n  Primary method: Stocking-Lord")
+                print(f"  A = {sl['A']:.4f}, B = {sl['B']:.4f}")
+                print(
+                    f"  Interpretation: Senate xi_linked = "
+                    f"{sl['A']:.4f} * xi_senate + {sl['B']:+.4f}"
+                )
+
+                # Correlation between methods (xi_senate_linked)
+                sl_xi = sl["xi_senate_linked"]
+                for name, res in all_methods.items():
+                    if name != "stocking_lord":
+                        r = float(np.corrcoef(sl_xi, res["xi_senate_linked"])[0, 1])
+                        print(f"  S-L vs {name}: r = {r:.6f}")
+
+                # Save linked ideal points
+                house_slugs = house_data_link["leg_slugs"]
+                senate_slugs = senate_data_link["leg_slugs"]
+
+                linked_rows = []
+                for i, slug in enumerate(house_slugs):
+                    linked_rows.append({
+                        "legislator_slug": slug,
+                        "chamber": "House",
+                        "xi_linked": float(sl["xi_house_linked"][i]),
+                        "xi_sd": float(sl["xi_house_sd"][i]),
+                    })
+                for i, slug in enumerate(senate_slugs):
+                    linked_rows.append({
+                        "legislator_slug": slug,
+                        "chamber": "Senate",
+                        "xi_linked": float(sl["xi_senate_linked"][i]),
+                        "xi_sd": float(sl["xi_senate_sd"][i]),
+                    })
+
+                linked_df = pl.DataFrame(linked_rows).sort("xi_linked", descending=True)
+                linked_df.write_parquet(
+                    ctx.data_dir / "hierarchical_ideal_points_linked.parquet"
+                )
+                print("\n  Saved: hierarchical_ideal_points_linked.parquet")
+                print(f"  {linked_df.height} legislators on common scale")
+
+                # Compare with joint model if available
+                if joint_results is not None:
+                    joint_ip = joint_results["ideal_points"]
+                    for chamber, slugs, xi_linked in [
+                        ("House", house_slugs, sl["xi_house_linked"]),
+                        ("Senate", senate_slugs, sl["xi_senate_linked"]),
+                    ]:
+                        slug_to_linked = dict(zip(slugs, xi_linked))
+                        joint_slugs = joint_ip.filter(
+                            pl.col("legislator_slug").is_in(slugs)
+                        )["legislator_slug"].to_list()
+                        joint_xi = joint_ip.filter(
+                            pl.col("legislator_slug").is_in(slugs)
+                        )["xi_mean"].to_numpy()
+                        linked_xi_matched = np.array(
+                            [slug_to_linked[s] for s in joint_slugs]
+                        )
+                        r = float(np.corrcoef(joint_xi, linked_xi_matched)[0, 1])
+                        print(f"  {chamber} S-L linked vs joint: r = {r:.4f}")
+
+                linking_results = {
+                    "all_methods": all_methods,
+                    "primary": sl,
+                    "matched_bills": matched_bills,
+                    "linked_df": linked_df,
+                }
+
+            except Exception as e:
+                print(f"\n  WARNING: Stocking-Lord linking failed: {e}")
+                import traceback
+
+                traceback.print_exc()
+                linking_results = None  # noqa: F841
 
         # ── HTML Report ──
         print_header("HTML REPORT")

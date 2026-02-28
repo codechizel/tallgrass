@@ -189,7 +189,8 @@ Key references:
 
 Three components eliminate code duplication in MCMC experiments (ADR-0048):
 
-- **`analysis/10_hierarchical/model_spec.py`** — `BetaPriorSpec` frozen dataclass + `PRODUCTION_BETA`. Both `build_per_chamber_model()` and `build_joint_model()` accept `beta_prior=` parameter (defaults to production). Experiments pass alternative specs — no code duplication. `build_per_chamber_graph()` returns the PyMC model without sampling (importable by experiments).
+- **`analysis/10_hierarchical/model_spec.py`** — `BetaPriorSpec` frozen dataclass + `PRODUCTION_BETA`, `JOINT_BETA`. Both `build_per_chamber_model()` and `build_joint_model()` accept `beta_prior=` parameter (defaults to production). Joint model uses `JOINT_BETA` (`lognormal_reparam`: exp(Normal(0,1)) for positive discrimination without boundary geometry). Experiments pass alternative specs — no code duplication. `build_per_chamber_graph()` returns the PyMC model without sampling (importable by experiments).
+- **`analysis/10_hierarchical/irt_linking.py`** — IRT scale linking for cross-chamber alignment. Implements Stocking-Lord, Haebara, Mean-Sigma, and Mean-Mean linking using shared (anchor) bills. Sign-aware anchor extraction handles unconstrained per-chamber betas. Production alternative to concurrent calibration (joint model).
 - **`analysis/experiment_monitor.py`** — `PlatformCheck` (validates Apple Silicon constraints before sampling), monitoring callback (`setproctitle` + atomic JSON status file), `ExperimentLifecycle` (PID lock, process group, cleanup). `just monitor` shows experiment progress.
 - **`analysis/experiment_runner.py`** — `ExperimentConfig` frozen dataclass + `run_experiment()`. Orchestrates: platform check → data load → per-chamber models → optional joint → HTML report → metrics.json. 799-line experiment scripts become ~25-line configs.
 

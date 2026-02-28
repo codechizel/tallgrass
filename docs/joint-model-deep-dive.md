@@ -199,81 +199,127 @@ Notably, the legislative ideal point literature (Jackman/Arnold) uses **unconstr
 
 Erosheva and Curtis (2017) explicitly warn that "ensuring unique identification of a CFA model by requiring selected loadings to be positive may not lead to a satisfactory solution" due to convergence failures. Our 84th biennium experiment confirms this warning.
 
-## Revised Improvement Plan
+## Experiment 2: Reparameterized LogNormal + Tighter Alpha (84th Biennium)
 
-Our experiment invalidated the original Priority 2 (LogNormal beta as currently implemented). The revised plan accounts for what we learned: **the positive constraint is the right idea, but the implementation must avoid creating boundary geometry.**
+### What We Changed
 
-### Priority 1: Reparameterize the LogNormal (exp transform)
+Based on Experiment 1's diagnosis, we implemented three changes:
 
-**Expected impact:** High. Should eliminate the 2,041 divergences while preserving the reflection-mode fix.
+1. **exp(Normal) reparameterization.** Instead of `pm.LogNormal("beta", ...)`, we use `log_beta ~ Normal(0, 1)` and `beta = exp(log_beta)`. Mathematically identical distribution on beta, but the sampler works with smooth Gaussian geometry — no boundary curvature, no Jacobian correction. This is the Stan 2PL IRT tutorial approach. Added as `lognormal_reparam` case in `BetaPriorSpec.build()`.
 
-**The insight.** `beta ~ LogNormal(0, 0.5)` and `beta = exp(log_beta)` where `log_beta ~ Normal(0, 0.5)` produce **mathematically identical distributions** on beta. But the sampling geometry is completely different. With the first form, PyMC applies a log transform internally, creating high curvature near zero. With the second form, the sampler works directly with `log_beta`, which is a smooth Gaussian — no boundary, no curvature explosion, no Jacobian.
+2. **Wider prior (sigma = 1.0).** `exp(Normal(0, 1))` has prior median = 1.0 and 95% interval [0.14, 7.39] — wide enough for bills with near-zero discrimination. The Stan User's Guide IRT section uses `lognormal(0.5, 1)` with sigma = 1.0.
 
-This is the approach the Stan 2PL IRT tutorial uses and what the Stan discourse recommends. The `BetaPriorSpec` framework needs a new distribution type:
+3. **Tighter alpha prior (sigma = 2.0).** Changed from `Normal(0, 5)` to `Normal(0, 2)`. Difficulty parameters are typically in [-3, 3] for legislative votes; the wider prior added unnecessary posterior volume.
 
-```python
-case "lognormal_reparam":
-    log_beta = pm.Normal("log_beta", shape=n_votes, dims=dims, **self.params)
-    return pm.Deterministic("beta", pt.exp(log_beta), dims=dims)
-```
+### Results
 
-**Effort:** Low. Add a new case to `BetaPriorSpec.build()`, update `JOINT_BETA` to use it.
+**Joint model: dramatic improvement, still not converged.**
 
-**Risk:** Low. Mathematically equivalent to the current LogNormal; only the sampling geometry changes.
+| Metric | Baseline | Exp 1 (LogNormal) | Exp 2 (Reparam) |
+|--------|----------|-------------------|-----------------|
+| R-hat(xi) max | 1.5362 | 1.2225 | **1.0098** |
+| ESS(xi) min | 7 | 14 | **378** |
+| Divergences | 10 | 2,041 | **828** |
+| mu_chamber R-hat | — | — | 1.10 |
+| sigma_chamber R-hat | — | — | 1.08 |
+| sigma_party R-hat | — | — | 1.03 |
+| Sign correction | Yes | No | **No** |
 
-### Priority 2: Widen the Prior to LogNormal(0, 1.0)
+The reparameterization eliminated the boundary geometry catastrophe (2,041 → 828 divergences) while preserving the reflection-mode fix. R-hat(xi) dropped to 1.0098 — just barely passing the 1.01 threshold. But ESS(xi) = 378 is below the 400 minimum, and the hyperparameters (`mu_chamber`, `sigma_chamber`) are clearly not converged.
 
-**Expected impact:** Moderate. The current LogNormal(0, 0.5) has 95% mass in [0.37, 2.69] — too tight for bills with genuinely low discrimination. Widening to LogNormal(0, 1.0) gives 95% mass in [0.14, 7.39], allowing near-zero values more easily. The Stan User's Guide IRT section uses `lognormal(0.5, 1)` — note sigma = 1.0, not 0.5.
+### Interpretation
 
-**Effort:** One constant change. Can be combined with Priority 1.
+The exp(Normal) reparameterization was a major win: it delivered the positive-beta constraint without the sampling pathology. The remaining 828 divergences and poor hyperparameter mixing are caused by the **3-level hierarchy itself** — the chamber-level funnel geometry. With only 2 chamber offsets and 4 group offsets, `sigma_chamber` (ESS = 39) and `sigma_party` (ESS = 140) are poorly informed by data. The sampler oscillates between exploring the outer hierarchy (requiring wide step sizes) and the 365-dimensional bill parameter space (requiring narrow step sizes).
 
-### Priority 3: PCA Init (Already Implemented)
+This is Neal's funnel problem applied to a three-level model: the top-level variance parameters create extreme correlations with the parameters they govern. Non-centered parameterization (which we already use for xi) mitigates this for the legislator level but doesn't fully address the chamber and party levels.
 
-PCA initialization for the joint model is now in production. On the 84th biennium, it eliminated the need for post-hoc sign correction (r=0.96 House, r=0.82 Senate). This should be retained regardless of other changes.
+## Experiment 3: Stocking-Lord Linking (84th Biennium)
 
-### Priority 4: Tighter Alpha Prior
+### Implementation
 
-The current `alpha ~ Normal(0, 5)` is very wide. Tightening to `Normal(0, 2)` or `Normal(0, 3)` reduces the posterior volume without changing substantive estimates (difficulty parameters are typically in [-3, 3] for legislative votes). Stacks with all other interventions.
+We implemented all four IRT linking methods in `analysis/10_hierarchical/irt_linking.py`:
 
-**Effort:** One line change.
+- **Stocking-Lord**: Minimizes squared difference between test characteristic curves (TCCs) over a standard-normal-weighted theta grid.
+- **Haebara**: Minimizes squared ICC differences per item — more robust to individual outlier items.
+- **Mean-Sigma**: Closed-form using SD ratio of difficulty parameters.
+- **Mean-Mean**: Closed-form using mean ratio of discrimination parameters.
 
-### Priority 5: Combine Priorities 1-4 and Test
+The linking pipeline: extract posterior mean alpha/beta for the 67 shared bills from each chamber's well-converged per-chamber InferenceData, compute linking coefficients (A, B), and transform Senate ideal points to the House scale: `xi_linked = A * xi_senate + B`.
 
-Run the 84th pipeline again with: (a) reparameterized LogNormal(0, 1.0), (b) PCA init, (c) tighter alpha. If R-hat < 1.01, ESS > 400, and divergences = 0, we're done. If not, proceed to Priority 6.
+### Initial Results (Sign-Naive) — Degenerate
 
-### Priority 6: 1PL Joint Model (Eliminate Beta Entirely)
+The first attempt used raw posterior mean betas without sign correction:
 
-**Expected impact:** High, by removing all 420 sign-flip axes and boundary pathologies. Fixing beta = 1 drops the model from ~1,042 to ~622 parameters.
+| Method | A | B | Notes |
+|--------|---|---|-------|
+| Stocking-Lord | 703.44 | -15.46 | **Degenerate** |
+| Haebara | 0.71 | -1.79 | Reasonable |
+| Mean-Sigma | 0.65 | -0.08 | Reasonable |
+| Mean-Mean | -0.41 | -3.35 | Negative A — sign issue |
 
-**The argument.** The joint model's role is cross-chamber scale alignment, not ideal point precision — the per-chamber models already provide precise estimates. A 1PL bridge with good convergence is more useful than a 2PL bridge that doesn't converge. The shared bill difficulty parameters (alpha) still provide the cross-chamber bridge.
+The Stocking-Lord optimizer found a degenerate minimum, and Mean-Mean produced a negative A. The root cause: per-chamber models use `beta ~ Normal(0, 1)` which allows negative discrimination. When an anchor item has `a_house = 0.5` but `a_senate = -0.3` (the same bill discriminating in opposite directions due to sign indeterminacy), the TCC criterion is ill-conditioned and the optimizer exploits the curvature.
 
-**Effort:** Moderate. Add a `fix_beta=True` option to `build_joint_graph()`.
+### The Fix: Sign-Aware Anchor Extraction
 
-### Priority 7: Two-Stage Stocking-Lord Linking (Escape Hatch)
+In standard IRT test equating, discrimination is always positive (constrained by design). Our unconstrained per-chamber betas introduce sign ambiguity. The fix is two-step:
 
-**Expected impact:** High, by sidestepping MCMC entirely. If concurrent calibration proves intractable, separate-then-link achieves the same goal — cross-chamber comparable scores — using well-converged per-chamber estimates and a 2-parameter optimization.
+1. **Filter**: Exclude anchor items where the two chambers disagree on sign direction (a bill with positive beta in one chamber and negative in the other violates the linking assumption — it may represent genuine differential item functioning, or just the sign indeterminacy of unconstrained IRT).
 
-**What to do:** (1) Extract posterior mean alpha/beta for the 67 shared bills from each chamber's InferenceData. (2) Run DIF screening to identify and exclude bills that function differently across chambers. (3) Compute Stocking-Lord linking coefficients (A, B) by minimizing the squared difference between test characteristic curves. (4) Transform Senate xi to the House scale: `xi_linked = A * xi_senate + B`. (5) Propagate uncertainty by computing (A, B) across multiple posterior draws.
+2. **Normalize**: For retained items, take `|beta|` as discrimination and flip alpha accordingly (the ICC `a*theta - b` is invariant under `(a, b) → (-a, -b)`).
 
-No Python package implements IRT linking. The R ecosystem has `equateIRT`, `plink`, and `SNSequate`, but the implementation is straightforward: Mean-Sigma and Mean-Mean are 5 lines of numpy; Stocking-Lord and Haebara are ~50 lines with `scipy.optimize.minimize`.
+This is implemented in `extract_anchor_params()` which now returns a `n_dropped` count for diagnostic transparency.
 
-**Why this is likely the production answer.** The political science literature's most successful cross-chamber scaling methods all use some form of separate-then-link. Simulation studies show concurrent calibration is theoretically superior, but only when it converges. With 67 anchor items and well-converged per-chamber posteriors, Stocking-Lord linking should produce high-quality common-scale estimates.
+### Final Results (Sign-Filtered) — All Methods Agree
 
-### Priority 8: Normalizing Flow Adaptation
+After sign-aware extraction, 40 of 67 anchor items are usable (27 dropped for cross-chamber sign disagreement):
 
-nutpie's NF feature could handle the joint model's posterior geometry. The feature was demonstrated on a 100-dimensional funnel model (eliminated all divergences, ESS 31 → 1,836) and designed for ~1,000 parameter models. However, it requires JAX backend, is experimental, and scales poorly at our model's size (right at the boundary). Fisher HMC (also experimental in nutpie) is a related approach that uses Fisher divergence for mass matrix adaptation. Both are promising but should not block the more practical approaches above.
+| Method | A | B |
+|--------|---|---|
+| Stocking-Lord | 1.03 | 0.69 |
+| Haebara | 0.76 | 0.58 |
+| Mean-Sigma | 0.67 | 0.63 |
+| Mean-Mean | 0.86 | 0.58 |
 
-### Deprioritized
+All four methods produce positive, reasonable A values (0.67-1.03). Rank-order correlation between all method pairs is r = 1.000 — the ideal point rankings are robust to method choice. The methods disagree on the *magnitude* of the scale stretch (A ranges from 0.67 to 1.03), but the relative ordering of legislators is identical.
 
-- **Polya-Gamma augmentation**: Theoretically elegant but impractical — requires custom Gibbs sampler, no PyMC integration, and Gibbs mixes slowly in high dimensions.
-- **Horseshoe/sparsity priors on beta**: The horseshoe funnel creates its own sampling difficulties, and our EDA filter already removes near-unanimous bills.
-- **Mixed centering**: Could help marginally but adds implementation complexity and requires per-group tuning.
+Stocking-Lord A = 1.03 means the Senate scale is almost identical to the House scale, with a B = 0.69 rightward shift — consistent with the 84th Senate being slightly more conservative on average.
 
-## Recommendation
+**Validation against joint model**: S-L linked ideal points correlate with joint model estimates at r = 0.967 (House) and r = 0.894 (Senate). Given that the joint model itself has questionable convergence (828 divergences), this agreement is encouraging — the linking recovers essentially the same information without MCMC risks.
 
-The most likely path to a working joint model is **Priority 1 + 2 + 3 + 4**: reparameterized LogNormal beta with wider prior, PCA initialization (already done), and tighter alpha. This addresses all three root causes without MCMC compromises.
+**40% sign disagreement is notable.** Of 67 shared bills, 27 (40%) have opposite sign discrimination across chambers. This could reflect genuine DIF (the bill discriminates differently depending on chamber dynamics) or it could be an artifact of sign indeterminacy in unconstrained IRT. A proper DIF analysis would distinguish between these cases. Even after excluding 27 items, the remaining 40 anchors is well above the 20-30 minimum the literature recommends.
 
-If the reparameterized concurrent model still fails, **Priority 7 (Stocking-Lord linking)** is the production answer. It's not the theoretically elegant solution, but it's the one the field actually uses — and for good reason. With 67 anchor items and rock-solid per-chamber posteriors, it should produce excellent common-scale estimates. The concurrent model can remain in the experimental lab as an aspirational benchmark.
+## Current Status and Remaining Work
+
+### What Works
+
+- **Per-chamber models**: Perfect convergence across all 8 bienniums. Rock-solid ideal points validated against Shor-McCarty (House r = 0.975, Senate r = 0.950).
+- **exp(Normal) reparameterization**: Eliminates the LogNormal boundary catastrophe. The `lognormal_reparam` case in `BetaPriorSpec` provides positive beta without sampling pathology.
+- **PCA initialization**: Eliminates the need for post-hoc sign correction.
+- **IRT linking infrastructure**: All four methods implemented, sign-aware anchor extraction, integrated into the hierarchical pipeline. All methods agree on rank order (r = 1.000 pairwise). S-L linked vs joint: r = 0.97 (House), r = 0.89 (Senate).
+
+### What Doesn't Work Yet
+
+- **Joint model convergence**: R-hat(xi) = 1.0098 (borderline), ESS(xi) = 378 (below threshold), 828 divergences, hyperparameters failing. The 3-level hierarchy's funnel geometry is the remaining obstacle.
+
+### Improvement Plan
+
+The priorities are now:
+
+1. **Validate sign-aware Stocking-Lord linking** on the 84th biennium. If Haebara and Stocking-Lord agree on A and B after sign filtering, the linking is robust.
+
+2. **1PL joint model** as a simplified concurrent calibration. Drop beta entirely (fix beta = 1), reducing the model from ~1,042 to ~622 parameters and eliminating all sign-flip axes. The per-chamber 2PL models provide precise estimates; the 1PL joint model only needs to provide the cross-chamber scale alignment.
+
+3. **Collapse the hierarchy** to two levels. Replace the chamber → party → legislator hierarchy with a simpler party → legislator hierarchy (4 groups), eliminating the poorly-identified `sigma_chamber` and `mu_chamber` parameters. The chamber distinction is already captured by the 4-group structure (HD, HR, SD, SR).
+
+4. **DIF screening** for anchor items. Before linking, test each shared bill for differential item functioning. Bills that discriminate differently across chambers should be excluded. With 67 anchors, we can drop 10-15 and still have plenty.
+
+5. **Normalizing flow adaptation** (nutpie experimental). If the joint model is worth pursuing, nutpie's NF feature was designed for exactly this class of problem (~1,000 parameter models with funnel geometry). Requires JAX backend.
+
+### Recommendation
+
+**Stocking-Lord linking is the production path.** The per-chamber models are excellent, the anchor items are plentiful, and the method is what the field actually uses. The joint model should continue as an experimental benchmark — if it eventually converges, it provides a theoretical gold standard — but the pipeline should not depend on it.
+
+The key insight from these experiments: concurrent calibration (one big MCMC) is theoretically superior but practically fragile for legislative IRT. Separate-then-link (per-chamber MCMC + 2-parameter optimization) is theoretically inferior but robust, transparent, and well-validated by decades of psychometric practice.
 
 ---
 
@@ -286,3 +332,4 @@ If the reparameterized concurrent model still fails, **Priority 7 (Stocking-Lord
 - Hierarchical shrinkage: `docs/hierarchical-shrinkage-deep-dive.md`
 - PCA init experiment: `docs/hierarchical-pca-init-experiment.md`
 - Model specification: `analysis/10_hierarchical/model_spec.py`
+- IRT linking: `analysis/10_hierarchical/irt_linking.py` (Stocking-Lord, Haebara, Mean-Sigma, Mean-Mean)
