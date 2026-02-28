@@ -341,49 +341,52 @@ Key findings:
 - Single-process execution confirmed (Rust threads, no child processes)
 - `log_likelihood` group absent as expected (nutpie issue #150)
 
-### Experiment 2: Hierarchical Per-Chamber with Numba (Medium Risk) — IN PROGRESS
+### Experiment 2: Hierarchical Per-Chamber with Numba — COMPLETE
 
 **Script:** `results/experimental_lab/2026-02-27_nutpie-hierarchical/run_experiment.py`
 
-Test the model that matters most — the hierarchical IRT that currently fails on House. Both chambers (House then Senate), 4 chains, 2000 draws, 1500 tune, no PCA init.
+Tested the hierarchical IRT on both chambers (4 chains, 2000 draws, 1500 tune, no PCA init).
 
-1. Build the 91st House/Senate hierarchical per-chamber models
-2. Compile with Numba backend
-3. Sample with nutpie (no PCA init — let nutpie find the mode from zeros)
-4. Compare convergence: R-hat, ESS, divergences vs PyMC baseline
-5. Compare ideal points: correlation with PyMC hierarchical and flat IRT baselines
-6. Time the run
+**Results:** House ALL PASSED (R-hat 1.004, ESS 1,294). Senate FAILED — reflection mode-splitting without PCA init (R-hat 1.53, ESS 7). The House has enough data (130 legislators, 35k observations) for nutpie's mass matrix adaptation to break the reflection symmetry. The Senate's smaller dataset (42 legislators, 7.7k observations) does not.
 
-**Key question**: Does nutpie's standard adaptation (without NF) resolve the House convergence failure?
+### Experiment 2b: Hierarchical + PCA Init — COMPLETE
 
-### Experiment 3: Normalizing Flow on Hierarchical (High Value, Medium Risk)
+**Script:** `results/experimental_lab/2026-02-27_nutpie-hierarchical/run_experiment_pca_init.py`
 
-The main event — test whether NF adaptation resolves the convergence plateau.
+Added PCA-informed `xi_offset` initialization to fix the Senate mode-splitting.
+
+**Key finding — `jitter_rvs` matters:** Setting `jitter_rvs=set()` (disable all jitter) causes `sigma_within` (HalfNormal) to initialize at its support point (~0), producing `log(0) = -inf` in unconstrained space → "Invalid initial point." The fix: `jitter_rvs = {rv for rv in model.free_RVs if rv.name != "xi_offset"}` — jitter all RVs except the PCA-initialized one.
+
+**Results:** Both chambers ALL PASSED. Senate: R-hat 1.001, ESS 1,658 (was 1.53/7 without PCA). House: R-hat 1.003, ESS 1,204. Ideal points identical to PyMC production (|r| = 1.0000 both chambers). Sampling time comparable (House 201s, Senate 42s).
+
+**Conclusion:** nutpie + PCA init is ready for production use on per-chamber models. NF adaptation is unnecessary for per-chamber — only needed for the joint model.
+
+### Experiment 3: Normalizing Flow on Joint Model (High Value, Medium Risk)
+
+Test whether NF adaptation resolves the joint cross-chamber convergence failure (0/8 bienniums pass with PyMC).
 
 1. Compile with JAX backend (`gradient_backend="jax"`)
 2. Enable normalizing flow adaptation
-3. Run on 91st House (694 parameters — within NF range)
-4. Check: R-hat (target < 1.01), ESS (target > 400), divergences, NF loss value
-5. If House passes, run on Senate for comparison
-6. Compare ideal points with PyMC and flat IRT baselines
-
-**Key question**: Does NF bring House R-hat below 1.01 — turning a 1/8 pass rate into reliable convergence?
-
-### Experiment 4: Joint Model (High Risk, High Reward)
-
-Test the joint cross-chamber model that currently fails 8/8.
-
-1. Compile with JAX backend
-2. Enable NF adaptation
 3. Run on 91st joint model (1,042 parameters — at NF limit)
-4. Monitor NF loss value — if > 6, the model may be too difficult
+4. Check: R-hat (target < 1.01), ESS (target > 400), divergences, NF loss value
 5. Compare ideal points with per-chamber hierarchical baselines
 
 **Key question**: Can NF push the joint model past the convergence threshold, or is 1,042 parameters beyond the limit?
 
-### Production Migration (Only After All Experiments Pass)
+### Experiment 4: Joint Model with NF (High Risk, High Reward)
 
-If experiments 1-3 succeed:
+Test the joint cross-chamber model that currently fails 8/8.
+
+1. Compile with JAX backend + NF adaptation
+2. Run on 91st joint model (1,042 parameters — at NF limit)
+3. Monitor NF loss value — if > 6, the model may be too difficult
+4. Compare ideal points with per-chamber hierarchical baselines
+
+**Key question**: Can NF push the joint model past the convergence threshold, or is 1,042 parameters beyond the limit?
+
+### Production Migration (Only After Per-Chamber Experiments Pass)
+
+Per-chamber experiments 1-2b have all succeeded. Production migration path:
 
 1. Add `nutpie` as a required dependency (not optional)
 2. Create a `sampler` module in `analysis/` that wraps the PyMC-to-nutpie transition

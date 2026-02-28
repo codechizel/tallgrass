@@ -241,17 +241,22 @@ def run_chamber(
     print_header(f"COMPILING WITH NUTPIE (Numba + PCA init) — {chamber}")
     import nutpie
 
+    # Jitter all RVs EXCEPT xi_offset — PCA init provides orientation for xi_offset,
+    # but sigma_within (HalfNormal) needs jitter to avoid log(0)=-inf at its support point.
+    # jitter_rvs=set() disables ALL jitter, which is too aggressive for nutpie.
+    jitter_rvs = {rv for rv in model.free_RVs if rv.name != "xi_offset"}
+
     t_compile = time.time()
     try:
         compiled = nutpie.compile_pymc_model(
             model,
             initial_points={"xi_offset": xi_offset_initvals},
-            jitter_rvs=set(),  # No jitter — PCA initvals provide orientation (ADR-0045)
+            jitter_rvs=jitter_rvs,
         )
         compile_time = time.time() - t_compile
         print(f"  Compilation SUCCESS in {compile_time:.1f}s")
         print("  initial_points: xi_offset from PCA PC1 (standardized)")
-        print("  jitter_rvs: disabled (matching production adapt_diag, no jitter)")
+        print(f"  jitter_rvs: {[rv.name for rv in jitter_rvs]} (xi_offset excluded)")
     except Exception as e:
         compile_time = time.time() - t_compile
         print(f"  Compilation FAILED after {compile_time:.1f}s")

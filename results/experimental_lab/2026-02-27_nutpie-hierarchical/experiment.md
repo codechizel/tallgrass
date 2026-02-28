@@ -95,9 +95,31 @@ Point estimates are identical to PyMC production for both chambers (|r| > 0.999)
 
 2. **PCA initialization is still needed for small chambers.** The Senate's convergence failure confirms that IRT reflection mode-splitting is a genuine model property, not a PyMC-specific bug. Smaller datasets don't provide enough information to break the symmetry.
 
-3. **nutpie + PCA init is the natural next step.** Experiment 2b tests `compile_pymc_model(initial_points={"xi_offset": pca_values}, jitter_rvs=set())` — nutpie's equivalent of PyMC's `initvals` + `adapt_diag` (no jitter).
+3. **nutpie + PCA init resolves BOTH chambers.** Experiment 2b confirms: with PCA-informed `xi_offset` initialization, Senate R-hat drops from 1.53 to 1.001, ESS jumps from 7 to 1,658. House stays clean (R-hat 1.003, ESS 1,204). Both chambers produce identical ideal points to PyMC production (|r| = 1.0000).
 
-4. **Experiment 3 (normalizing flows) is likely unnecessary for per-chamber models.** If nutpie + PCA init fixes both chambers, NF adaptation becomes an optimization for sampling efficiency rather than a convergence fix.
+4. **nutpie's `jitter_rvs` parameter is critical.** Setting `jitter_rvs=set()` (disable all jitter) causes `sigma_within` (HalfNormal) to initialize at its support point (~0), producing `log(0) = -inf` in unconstrained space. The fix: jitter all RVs **except** `xi_offset` (which gets PCA values), matching the spirit of PyMC's `adapt_diag` (no jitter on initvals, but safe defaults elsewhere).
+
+5. **Experiment 3 (normalizing flows) is unnecessary for per-chamber models.** nutpie + PCA init fixes both chambers. NF adaptation becomes an optimization for the joint cross-chamber model only.
+
+## Experiment 2b Results
+
+### Summary Table
+
+| Metric | nutpie House (no PCA) | nutpie+PCA House | nutpie Senate (no PCA) | nutpie+PCA Senate |
+|--------|----------------------|------------------|----------------------|-------------------|
+| R-hat(xi) max | 1.0040 (OK) | **1.0027** (OK) | 1.5320 (FAIL) | **1.0010** (OK) |
+| R-hat(mu_party) max | 1.0046 (OK) | 1.0065 (OK) | 1.5319 (FAIL) | **1.0012** (OK) |
+| R-hat(sigma_within) max | 1.0030 (OK) | 1.0037 (OK) | 1.5289 (FAIL) | **1.0011** (OK) |
+| ESS(xi) min | 1294 (OK) | 1204 (OK) | 7 (FAIL) | **1658** (OK) |
+| Divergences | 0 | 0 | 0 | 0 |
+| E-BFMI min | 0.770 | 0.793 | 0.822 | 0.815 |
+| \|r\| vs PyMC hier | 1.0000 | 1.0000 | 0.9998 | 1.0000 |
+| \|r\| vs flat IRT | 0.9869 | 0.9868 | 0.9762 | 0.9764 |
+| Sample time (s) | 206.6 | 200.6 | 37.2 | 42.0 |
+
+### Key Finding
+
+**nutpie + PCA init is ready for production use.** Both chambers converge cleanly, produce identical rankings to PyMC, and sample in comparable time. The `jitter_rvs` parameter must exclude only the PCA-initialized variable while allowing jitter on all others.
 
 ## Changes Made
 
