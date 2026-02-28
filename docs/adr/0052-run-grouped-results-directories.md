@@ -21,6 +21,7 @@ Example: `91-260228`
 
 ### Directory layout
 
+**Pipeline runs (run-grouped):**
 ```
 results/kansas/91st_2025-2026/
   91-260228/                         ← run directory
@@ -31,6 +32,19 @@ results/kansas/91st_2025-2026/
   latest → 91-260228                 ← session-level symlink
   01_eda_report.html → latest/01_eda/01_eda_report.html
 ```
+
+**Cross-session (flat — no phase nesting):**
+```
+results/kansas/cross-session/
+  90-vs-91/                          ← comparison directory
+    260226/                          ← YYMMDD run
+      plots/  data/  run_info.json  run_log.txt  90-vs-91_report.html
+    latest → 260226
+  90-vs-91_report.html → 90-vs-91/latest/90-vs-91_report.html
+```
+
+**Legacy mode (individual phase runs):**
+Date directories use YYMMDD format (e.g. `260227`). Same-day collisions append `.1`, `.2`, etc.
 
 ### New functions in `run_context.py`
 

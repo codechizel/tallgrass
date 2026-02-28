@@ -132,7 +132,9 @@ Two output modes (ADR-0052):
 `results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91-260228/01_eda/`). Run ID format: `{bb}-{YYMMDD}` (e.g. `91-260228`). Same-day collisions append `.1`, `.2`, etc.
 
 **Legacy mode** (individual phase runs, no `--run-id`): each phase writes to its own date directory.
-`results/kansas/{session}/{NN_phase}/{date}/` with a phase-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/01_eda/2026-02-27/`). Same-day runs append `.1`, `.2`, etc.
+`results/kansas/{session}/{NN_phase}/{YYMMDD}/` with a phase-level `latest` symlink. Same-day runs append `.1`, `.2`, etc.
+
+**Cross-session:** `results/kansas/cross-session/{aa}-vs-{bb}/{YYMMDD}/` where `aa`/`bb` are legislature numbers. Flat structure (no phase subdirectory). Example: `results/kansas/cross-session/90-vs-91/260226/`.
 
 Both modes use `RunContext` for structured output, elapsed timing, HTML reports, and auto-primers. `resolve_upstream_dir()` handles 4-level path resolution (CLI override → run_id → phase/latest → latest/phase) so phases find their upstream data in either layout.
 

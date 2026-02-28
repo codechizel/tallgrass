@@ -111,35 +111,35 @@ class TestNextRunLabel:
     """Unique run labels avoid clobbering same-day results."""
 
     def test_first_run_returns_bare_date(self, tmp_path):
-        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23"
+        assert _next_run_label(tmp_path, "260223") == "260223"
 
     def test_second_run_returns_dot_1(self, tmp_path):
-        (tmp_path / "2026-02-23").mkdir()
-        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23.1"
+        (tmp_path / "260223").mkdir()
+        assert _next_run_label(tmp_path, "260223") == "260223.1"
 
     def test_third_run_returns_dot_2(self, tmp_path):
-        (tmp_path / "2026-02-23").mkdir()
-        (tmp_path / "2026-02-23.1").mkdir()
-        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23.2"
+        (tmp_path / "260223").mkdir()
+        (tmp_path / "260223.1").mkdir()
+        assert _next_run_label(tmp_path, "260223") == "260223.2"
 
     def test_gap_fills_next_available(self, tmp_path):
         """If .1 exists but .2 doesn't, next is .2 even if .3 exists."""
-        (tmp_path / "2026-02-23").mkdir()
-        (tmp_path / "2026-02-23.1").mkdir()
-        (tmp_path / "2026-02-23.3").mkdir()  # gap at .2
-        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23.2"
+        (tmp_path / "260223").mkdir()
+        (tmp_path / "260223.1").mkdir()
+        (tmp_path / "260223.3").mkdir()  # gap at .2
+        assert _next_run_label(tmp_path, "260223") == "260223.2"
 
     def test_symlink_not_counted_as_existing(self, tmp_path):
         """A 'latest' symlink named like a date doesn't trigger suffixing."""
         target = tmp_path / "something"
         target.mkdir()
-        (tmp_path / "2026-02-23").symlink_to(target)
-        assert _next_run_label(tmp_path, "2026-02-23") == "2026-02-23"
+        (tmp_path / "260223").symlink_to(target)
+        assert _next_run_label(tmp_path, "260223") == "260223"
 
     def test_nonexistent_analysis_dir(self, tmp_path):
         """Works even if the analysis dir doesn't exist yet."""
         nonexistent = tmp_path / "does_not_exist"
-        assert _next_run_label(nonexistent, "2026-02-23") == "2026-02-23"
+        assert _next_run_label(nonexistent, "260223") == "260223"
 
 
 # ── _format_elapsed() ────────────────────────────────────────────────────────

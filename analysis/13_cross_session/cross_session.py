@@ -13,7 +13,7 @@ Usage:
   uv run python analysis/cross_session.py --chambers house
   uv run python analysis/cross_session.py --skip-prediction
 
-Outputs (in results/kansas/cross-session/<pair>/validation/<date>/):
+Outputs (in results/kansas/cross-session/<pair>/<YYMMDD>/):
   - data/:   Parquet files (ideology_shift, metric_stability, prediction_transfer)
   - plots/:  PNG visualizations (shift scatter, movers, turnover, prediction AUC)
   - filtering_manifest.json, run_info.json, run_log.txt
@@ -758,13 +758,15 @@ def main() -> None:
     ks_b = KSSession.from_session_string(args.session_b)
     session_a_label = ks_a.output_name
     session_b_label = ks_b.output_name
-    comparison_label = f"{ks_a.legislature_name}-vs-{ks_b.legislature_name}"
+    comparison_label = (
+        f"{ks_a.legislature_number}-vs-{ks_b.legislature_number}"
+    )
 
     chambers = ["house", "senate"] if args.chambers == "both" else [args.chambers]
 
     with RunContext(
-        session=f"cross-session/{comparison_label}",
-        analysis_name="13_cross_session",
+        session="cross-session",
+        analysis_name=comparison_label,
         params=vars(args),
         primer=CROSS_SESSION_PRIMER,
         run_id=args.run_id,

@@ -147,9 +147,9 @@ def _format_elapsed(seconds: float) -> str:
 def _next_run_label(analysis_dir: Path, today: str) -> str:
     """Return a unique run label for today, appending .1, .2, etc. if needed.
 
-    First run of the day:  "2026-02-23"
-    Second run:            "2026-02-23.1"
-    Third run:             "2026-02-23.2"
+    First run of the day:  "260223"
+    Second run:            "260223.1"
+    Third run:             "260223.2"
 
     Checks for existing directories (not symlinks) under *analysis_dir*.
     """
@@ -257,7 +257,7 @@ class RunContext:
         from tallgrass.session import STATE_DIR
 
         root = results_root or (Path("results") / STATE_DIR)
-        today = datetime.now(_CT).strftime("%Y-%m-%d")
+        today = datetime.now(_CT).strftime("%y%m%d")
         self._session_root = root / self.session
 
         if run_id is not None:
