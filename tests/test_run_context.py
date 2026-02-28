@@ -108,38 +108,37 @@ class TestNormalizeSession:
 
 
 class TestNextRunLabel:
-    """Unique run labels avoid clobbering same-day results."""
+    """Unique run labels always include .N suffix starting at .1."""
 
-    def test_first_run_returns_bare_date(self, tmp_path):
-        assert _next_run_label(tmp_path, "260223") == "260223"
-
-    def test_second_run_returns_dot_1(self, tmp_path):
-        (tmp_path / "260223").mkdir()
+    def test_first_run_returns_dot_1(self, tmp_path):
         assert _next_run_label(tmp_path, "260223") == "260223.1"
 
-    def test_third_run_returns_dot_2(self, tmp_path):
-        (tmp_path / "260223").mkdir()
+    def test_second_run_returns_dot_2(self, tmp_path):
         (tmp_path / "260223.1").mkdir()
         assert _next_run_label(tmp_path, "260223") == "260223.2"
 
+    def test_third_run_returns_dot_3(self, tmp_path):
+        (tmp_path / "260223.1").mkdir()
+        (tmp_path / "260223.2").mkdir()
+        assert _next_run_label(tmp_path, "260223") == "260223.3"
+
     def test_gap_fills_next_available(self, tmp_path):
         """If .1 exists but .2 doesn't, next is .2 even if .3 exists."""
-        (tmp_path / "260223").mkdir()
         (tmp_path / "260223.1").mkdir()
         (tmp_path / "260223.3").mkdir()  # gap at .2
         assert _next_run_label(tmp_path, "260223") == "260223.2"
 
     def test_symlink_not_counted_as_existing(self, tmp_path):
-        """A 'latest' symlink named like a date doesn't trigger suffixing."""
+        """A symlink doesn't count as an existing run."""
         target = tmp_path / "something"
         target.mkdir()
-        (tmp_path / "260223").symlink_to(target)
-        assert _next_run_label(tmp_path, "260223") == "260223"
+        (tmp_path / "260223.1").symlink_to(target)
+        assert _next_run_label(tmp_path, "260223") == "260223.1"
 
     def test_nonexistent_analysis_dir(self, tmp_path):
         """Works even if the analysis dir doesn't exist yet."""
         nonexistent = tmp_path / "does_not_exist"
-        assert _next_run_label(nonexistent, "260223") == "260223"
+        assert _next_run_label(nonexistent, "260223") == "260223.1"
 
 
 # ── _format_elapsed() ────────────────────────────────────────────────────────
@@ -347,7 +346,7 @@ class TestRunContext:
         assert ctx.params == {}
 
     def test_consecutive_runs_get_separate_dirs(self, tmp_path):
-        """Second run on same day gets .1 suffix, not clobbered."""
+        """Second run on same day gets .2 suffix."""
         ctx1 = RunContext(
             session="2024s",
             analysis_name="test",
@@ -359,6 +358,7 @@ class TestRunContext:
 
         first_run_dir = ctx1.run_dir
         assert first_run_dir.exists()
+        assert first_run_dir.name.endswith(".1")
 
         ctx2 = RunContext(
             session="2024s",
@@ -372,7 +372,7 @@ class TestRunContext:
         second_run_dir = ctx2.run_dir
         assert second_run_dir.exists()
         assert first_run_dir != second_run_dir
-        assert second_run_dir.name.endswith(".1")
+        assert second_run_dir.name.endswith(".2")
 
         # First run's output preserved
         assert "first run output" in (first_run_dir / "run_log.txt").read_text()
@@ -383,8 +383,8 @@ class TestRunContext:
         assert latest.is_symlink()
         assert latest.resolve() == second_run_dir.resolve()
 
-    def test_third_run_gets_suffix_2(self, tmp_path):
-        """Third same-day run gets .2 suffix."""
+    def test_third_run_gets_suffix_3(self, tmp_path):
+        """Third same-day run gets .3 suffix."""
         for _ in range(3):
             ctx = RunContext(
                 session="2024s",
@@ -394,30 +394,22 @@ class TestRunContext:
             ctx.setup()
             ctx.finalize()
 
-        # Should have bare date, .1, and .2
+        # Should have .1, .2, and .3
         analysis_dir = tmp_path / "2024s" / "test"
         today = ctx._today
-        assert (analysis_dir / today).exists()
         assert (analysis_dir / f"{today}.1").exists()
         assert (analysis_dir / f"{today}.2").exists()
+        assert (analysis_dir / f"{today}.3").exists()
 
     def test_run_info_includes_run_label(self, tmp_path):
         """run_info.json records the run_label for traceability."""
-        # Create first run to occupy the bare date dir
         ctx1 = RunContext(
             session="2024s", analysis_name="test", results_root=tmp_path
         )
         ctx1.setup()
         ctx1.finalize()
 
-        # Second run gets .1 suffix
-        ctx2 = RunContext(
-            session="2024s", analysis_name="test", results_root=tmp_path
-        )
-        ctx2.setup()
-        ctx2.finalize()
-
-        info = json.loads((ctx2.run_dir / "run_info.json").read_text())
+        info = json.loads((ctx1.run_dir / "run_info.json").read_text())
         assert info["run_label"].endswith(".1")
 
 
@@ -428,18 +420,23 @@ class TestGenerateRunId:
     """Generate run IDs for grouped pipeline output."""
 
     def test_format_matches_pattern(self):
-        """Run ID has format {bb}-{YYMMDD}."""
+        """Run ID has format {bb}-{YYMMDD}.{n}."""
         import re
 
         run_id = generate_run_id("2025-26")
-        assert re.match(r"^91-\d{6}$", run_id)
+        assert re.match(r"^91-\d{6}\.\d+$", run_id)
+
+    def test_first_run_starts_at_dot_1(self):
+        """First run always gets .1 suffix."""
+        run_id = generate_run_id("2025-26")
+        assert run_id.endswith(".1")
 
     def test_special_session_prefix(self):
         """Special sessions use the full session string as prefix."""
         import re
 
         run_id = generate_run_id("2024s")
-        assert re.match(r"^2024s-\d{6}$", run_id)
+        assert re.match(r"^2024s-\d{6}\.\d+$", run_id)
 
     def test_historical_session(self):
         """Historical sessions extract the legislature number."""
@@ -447,20 +444,22 @@ class TestGenerateRunId:
         assert run_id.startswith("90-")
 
     def test_same_day_without_root(self):
-        """Without results_root, same-day calls produce the same base ID."""
+        """Without results_root, same-day calls always produce .1."""
         id1 = generate_run_id("2025-26")
         id2 = generate_run_id("2025-26")
-        assert id1 == id2  # No collision detection without results_root
+        assert id1 == id2
+        assert id1.endswith(".1")
 
     def test_same_day_collision_with_root(self, tmp_path):
-        """With results_root, same-day runs get .1, .2 suffixes."""
+        """With results_root, same-day runs increment: .1, .2, .3."""
         id1 = generate_run_id("2025-26", results_root=tmp_path)
+        assert id1.endswith(".1")
         (tmp_path / id1).mkdir()
         id2 = generate_run_id("2025-26", results_root=tmp_path)
-        assert id2 == f"{id1}.1"
+        assert id2.endswith(".2")
         (tmp_path / id2).mkdir()
         id3 = generate_run_id("2025-26", results_root=tmp_path)
-        assert id3 == f"{id1}.2"
+        assert id3.endswith(".3")
 
     def test_no_colons_in_id(self):
         """Run IDs use hyphens, not colons, for filesystem safety."""

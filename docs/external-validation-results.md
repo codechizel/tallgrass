@@ -2,7 +2,7 @@
 
 **How we verified our Kansas Legislature ideal points against an independent national dataset — and what we found.**
 
-*2026-02-24*
+*Updated 2026-02-28 — expanded from 88th-only to all 5 overlapping bienniums (84th-88th)*
 
 ---
 
@@ -36,9 +36,9 @@ Think of it this way: Shor-McCarty built a professionally calibrated scale. We b
 
 Our pipeline estimates ideology scores per legislative session (a two-year biennium). Shor-McCarty assigns each legislator a single career-level score. This means we can't compare them for every session — only for the years that overlap.
 
-The overlap window is **2011 to 2020**, covering the 84th through 88th Kansas Legislatures. We started with the most recent overlapping session: the **88th Legislature (2019-2020)**.
+The overlap window is **2011 to 2020**, covering the 84th through 88th Kansas Legislatures — five independent two-year sessions. We validated all five.
 
-For each legislator who served in the 88th Legislature and appears in the Shor-McCarty dataset, we have two ideology scores:
+For each legislator who served in a given biennium and appears in the Shor-McCarty dataset, we have two ideology scores:
 
 - **Our score** (`xi_mean`): estimated from Kansas roll call votes using Bayesian Item Response Theory
 - **Their score** (`np_score`): estimated independently by Shor and McCarty using national bridging methodology
@@ -63,35 +63,48 @@ Our target was **r > 0.85** (good agreement). Published studies in this field ty
 
 Before computing any correlations, we had to match legislators across the two datasets. Our data uses names like "John Alcala" while Shor-McCarty uses "Alcala, John." We built a name normalization algorithm that converts both to a common format ("john alcala"), handling middle names, suffixes like "Jr." and "Sr.", and leadership titles like "- President."
 
-The matching worked remarkably well:
+Matching rates across all five bienniums were consistently above 99%:
 
-- **House**: 127 of 128 legislators matched (**99.2%**) — 85 Republicans, 42 Democrats
-- **Senate**: 41 of 41 legislators matched (**100%**) — 30 Republicans, 11 Democrats
-
-Only one House member couldn't be matched, likely someone who entered the legislature after Shor-McCarty's coverage ended in 2020.
+- **House**: 112-130 matched per session (99-100% match rate)
+- **Senate**: 37-41 matched per session (100% match rate in 4 of 5 sessions)
 
 ### The Correlation Table
 
-Here are the headline numbers. We tested two versions of our model: the standard ("flat") IRT and a more sophisticated hierarchical version that partially pools information within parties.
+Here are the headline numbers across all five bienniums. We tested two versions of our model: the standard ("flat") IRT and a more sophisticated hierarchical version that partially pools information within parties.
 
-| Model | Chamber | Pearson r | Spearman ρ | Matched | Quality |
-|-------|---------|-----------|------------|---------|---------|
-| Flat IRT | House | **0.981** | 0.962 | 127 | Strong |
-| Flat IRT | Senate | **0.929** | 0.962 | 41 | Strong |
-| Hierarchical IRT | House | **0.984** | 0.973 | 127 | Strong |
-| Hierarchical IRT | Senate | -0.541 | -0.109 | 41 | Concern |
+**Flat IRT vs Shor-McCarty:**
 
-*Pearson r measures linear agreement. Spearman ρ measures rank-order agreement (do the two methods agree on who's more conservative than whom?). "Matched" is the number of legislators present in both datasets.*
+| Biennium | House r | House n | Senate r | Senate n |
+|----------|---------|---------|----------|----------|
+| 84th (2011-12) | **0.975** | 112 | **0.914** | 37 |
+| 85th (2013-14) | **0.968** | 116 | **0.963** | 39 |
+| 86th (2015-16) | **0.975** | 128 | **0.919** | 40 |
+| 87th (2017-18) | **0.966** | 130 | **0.953** | 41 |
+| 88th (2019-20) | **0.981** | 127 | **0.929** | 41 |
+| **Pooled** | **0.975** | **278** | **0.912** | **77** |
+
+**Hierarchical IRT vs Shor-McCarty:**
+
+| Biennium | House r | House n | Senate r | Senate n |
+|----------|---------|---------|----------|----------|
+| 84th (2011-12) | **0.986** | 112 | **0.945** | 37 |
+| 85th (2013-14) | **0.985** | 116 | **0.986** | 39 |
+| 86th (2015-16) | **0.990** | 128 | **0.987** | 40 |
+| 87th (2017-18) | **0.983** | 130 | **0.991** | 40 |
+| 88th (2019-20) | **0.984** | 127 | **0.969** | 41 |
+| **Pooled** | **0.974** | **278** | **0.950** | **77** |
+
+*Pearson r measures linear agreement. Spearman ρ measures rank-order agreement. "Matched" is the number of legislators present in both datasets. All 20 per-session correlations are rated "strong" (r > 0.90).*
 
 ### What These Numbers Mean
 
-**House (both models): r = 0.98.** This is exceptional. Out of 127 matched House members, our pipeline and Shor-McCarty agree almost perfectly on where each legislator falls on the ideological spectrum. A correlation of 0.98 means that if you picked any two House members at random, the two methods would agree on which one is more conservative more than 99% of the time.
+**Every single correlation is "strong."** Across 5 bienniums, 2 chambers, and 2 models — 20 individual correlations — all exceed r = 0.90. This is not a single lucky session; it is a consistent pattern spanning a decade of Kansas legislative history.
 
-To put this in perspective: if you measured everyone's height with two different rulers, you'd expect a correlation very close to 1.0. Our ideology scores are nearly that consistent with the gold standard.
+**House (both models): r = 0.966-0.990.** Our pipeline and Shor-McCarty agree almost perfectly on where each legislator falls on the ideological spectrum. A correlation of 0.98 means that if you picked any two House members at random, the two methods would agree on which one is more conservative more than 99% of the time.
 
-**Senate (flat model): r = 0.93.** Still strong, though slightly lower than the House. This makes sense: with only 41 senators (versus 127 representatives), each individual has more influence on the correlation, and the Shor-McCarty career-level score has less data per senator to work with.
+**Senate (flat model): r = 0.914-0.963.** Still strong, though slightly lower than the House. This makes sense: with only 37-41 senators (versus 112-130 representatives), each individual has more influence on the correlation, and the Shor-McCarty career-level score has less data per senator to work with.
 
-**Senate (hierarchical model): r = -0.54.** This is the one bad result, and it has a clear technical explanation (see the next section). It does *not* mean our Senate scores are wrong — the flat model's r = 0.93 confirms they're solid. It means our hierarchical model has a specific problem with small chambers.
+**Hierarchical beats flat on Senate.** This is the biggest change from our initial 88th-only validation. The hierarchical model now matches or outperforms the flat model for Senate in every biennium — reaching r = 0.991 for the 87th. The nutpie Rust NUTS sampler migration (ADR-0051, ADR-0053) and convergence improvements (adaptive priors, PCA-informed initialization) resolved the over-shrinkage problem that produced the inverted r = -0.54 in our original 88th-only analysis.
 
 ---
 
@@ -99,33 +112,29 @@ To put this in perspective: if you measured everyone's height with two different
 
 Numbers tell you the correlation is strong. Pictures show you *how* it's strong.
 
-### House: Flat IRT vs. Shor-McCarty
+Each scatter plot shows one dot per legislator, arranged in a diagonal line from bottom-left (most liberal) to upper-right (most conservative). Democrats cluster in the lower-left corner, Republicans fill the upper-right half. The closer the dots hug the regression line, the stronger the agreement.
 
-The House scatter plot shows 127 dots — one per legislator — arranged in a tight diagonal line from bottom-left (most liberal) to upper-right (most conservative). Democrats cluster in the lower-left corner, Republicans fill the upper-right half.
+Across all five bienniums and both chambers, the pattern is remarkably consistent: tight diagonals with no wild outliers. Republicans show slightly more spread than Democrats, reflecting the genuine intra-party ideological variation that our earlier analyses identified.
 
-The dots hug the regression line so closely that you can barely see the gray confidence band around it. There are no wild outliers — no legislator that one method says is very liberal while the other says is very conservative. The tightest cluster is among Democrats, who form an especially compact group. Republicans show slightly more spread, reflecting the genuine intra-party ideological variation that our earlier analyses identified.
-
-The most liberal legislator in both datasets: **Rui Xu** (D-House), who our model scores at -2.93 and Shor-McCarty scores at -1.40 (the scales differ, but the ranking agrees). The most conservative: **Trevor Jacobs** (R-House), at +3.20 in our model and +1.74 in Shor-McCarty's.
-
-### Senate: Flat IRT vs. Shor-McCarty
-
-The Senate scatter plot has only 41 dots, so each legislator is more visible. The overall pattern is the same — a clear diagonal from liberal Democrats to conservative Republicans — but with more scatter around the line, which is expected with fewer data points.
-
-The most interesting story is **Jim Denning**, the Republican Senate Majority Leader. Our model places him at -0.58 (surprisingly moderate for a Republican), while Shor-McCarty places him at +0.75 (solidly conservative). That's the largest discrepancy in the Senate. But it's not mysterious: as Majority Leader during the 2019-2020 session, Denning's voting likely reflected the strategic compromises that come with managing a caucus rather than purely expressing personal ideology. Shor-McCarty's career score captures who Denning was across his whole tenure; our session-specific score captures what he did during those particular two years.
+The most notable individual-level discrepancies tend to involve legislative leaders. For example, in the 88th, **Jim Denning** (Senate Majority Leader) shows the largest gap: our model places him as moderate-for-a-Republican (-0.58) while Shor-McCarty places him as solidly conservative (+0.75). This likely reflects the strategic compromises of caucus management during the 2019-2020 session — exactly the kind of difference you'd expect between a session-specific score and a career-level score.
 
 ---
 
-## Why the Hierarchical Senate Model Failed (and Why That's Actually Informative)
+## How We Fixed the Hierarchical Senate Model
 
-The one concerning result — the hierarchical model's r = -0.54 for the Senate — deserves explanation, because it illustrates a real statistical phenomenon.
+Our original 88th-only analysis (February 2026) showed an alarming result: the hierarchical Senate model produced r = -0.54 — an *inverted* correlation. The model was getting the rank ordering backwards.
 
-Our hierarchical model uses "partial pooling." Think of it like a teacher grading on a curve within each class section. Instead of evaluating every student against the entire school, the model first groups legislators by party and then estimates each individual's position partly based on how their party typically votes.
+The cause was "over-shrinkage." Our hierarchical model uses partial pooling — it groups legislators by party and estimates each individual's position partly based on their party's average. With only 11 Senate Democrats, the model pulled everyone too close to their party mean, erasing the individual differences that make the scores useful.
 
-This works well when there are enough legislators per group. With 85 Republicans and 42 Democrats in the House (127 total), there's plenty of data to estimate both the group tendencies and the individual deviations. The hierarchical House model actually *outperforms* the flat model (r = 0.984 vs. 0.981).
+Three improvements fixed this:
 
-But the Senate has only 30 Republicans and 11 Democrats. With groups this small, the model "over-shrinks" — it pulls everyone too close to their party's average, erasing the individual differences that make the scores useful. It's like the teacher deciding that all students in a 10-person class must have gotten roughly the same score, because the class is too small to be confident about individual differences.
+1. **nutpie Rust NUTS sampler** (ADR-0051, ADR-0053) — replaced PyMC's default sampler with a Rust-based sampler that uses normalizing flow adaptation, dramatically improving sampling in the correlated posterior geometry that small-group hierarchical models create.
 
-This is a textbook limitation of hierarchical models with small groups, and it's exactly the kind of finding that external validation is designed to catch. Without the Shor-McCarty comparison, we wouldn't know the hierarchical Senate scores have this problem. Now we do, and analysts can use the flat model for Senate analysis with confidence.
+2. **Group-size-adaptive priors** (ADR-0043) — for party groups smaller than 20 legislators, the model now uses a tighter prior on within-party spread (`HalfNormal(0.5)` instead of `HalfNormal(1.0)`), preventing the sampler from exploring unreasonable configurations.
+
+3. **PCA-informed initialization** (ADR-0044) — starting the sampler near the PCA solution prevents it from getting stuck in spurious modes during warmup.
+
+The result: hierarchical Senate correlations now range from r = 0.945 to 0.991 across all five bienniums — consistently *outperforming* the flat model. This validates the hierarchical approach and confirms that the original failure was a sampler convergence problem, not a fundamental limitation of partial pooling at Senate scale.
 
 ---
 
@@ -133,17 +142,18 @@ This is a textbook limitation of hierarchical models with small groups, and it's
 
 ### The Good News
 
-Our core methodology is validated. The flat IRT model — the one used throughout the pipeline — produces ideology scores that agree with the national gold standard at r = 0.93 to 0.98. This means:
+Our methodology is definitively validated — not on one session, but across a full decade. Both IRT models produce ideology scores that agree with the national gold standard at r = 0.91 to 0.99. This means:
 
-1. **The rank orderings are real.** When we say Legislator A is more conservative than Legislator B, an independent national dataset agrees.
+1. **The rank orderings are real.** When we say Legislator A is more conservative than Legislator B, an independent national dataset agrees — consistently, across five different sessions with different legislators and different legislative agendas.
 2. **The party separation is real.** The gap between the most conservative Democrat and the most liberal Republican in our data matches the gap in Shor-McCarty's data.
 3. **The intra-party variation is real.** The differences we find among Republicans — which is the most analytically interesting signal in a supermajority state — are not artifacts of our methodology.
+4. **The hierarchical model works.** After convergence improvements (nutpie sampler, adaptive priors, PCA init), the hierarchical model matches or exceeds flat IRT validation in every biennium, including the Senate.
+5. **Historical data is trustworthy.** Even the 84th biennium (2011-2012), which has known data quality issues (~30% missing ODT votes), validates at r = 0.975 (flat House) and r = 0.986 (hierarchical House).
 
 ### The Caveats
 
-- **We've validated one biennium so far** (88th, 2019-2020). Four more overlapping bienniums (84th through 87th) remain to be tested. If the correlation is equally strong across all five, that's definitive. If it drops for earlier sessions (especially the 84th, which has known data quality issues), that tells us something about historical data, not methodology.
 - **Shor-McCarty's coverage ends in 2020.** For the 89th Legislature (2021-2022) and beyond, we cannot perform this validation. Our results for recent sessions stand on the strength of the methodology validated here, plus cross-session stability checks.
-- **Career scores vs. session scores.** Shor-McCarty gives each legislator one score for their entire career. We give each legislator a score per session. Legislators who genuinely change over time will show up as "disagreements" even if both methods are correct. Jim Denning's discrepancy may reflect exactly this.
+- **Career scores vs. session scores.** Shor-McCarty gives each legislator one score for their entire career. We give each legislator a score per session. Legislators who genuinely change over time will show up as "disagreements" even if both methods are correct.
 
 ---
 
@@ -151,7 +161,7 @@ Our core methodology is validated. The flat IRT model — the one used throughou
 
 This validation step sits outside the regular 12-phase analysis pipeline. It doesn't change any scores or modify any results. It answers a single question: *can we trust the numbers?*
 
-The answer, for the flat IRT model, is yes. The correlation of r = 0.98 in the House and r = 0.93 in the Senate places our pipeline's accuracy squarely within the range of published academic studies in this field. We are now on the same footing as the peer-reviewed literature in terms of methodological credibility.
+The answer is yes — for both models, across all five overlapping bienniums. Twenty out of twenty per-session correlations exceed r = 0.90. Pooled correlations range from r = 0.912 (flat Senate) to r = 0.975 (flat House). This places our pipeline squarely within — and often above — the range of published academic studies in this field.
 
 ---
 
@@ -160,8 +170,8 @@ The answer, for the flat IRT model, is yes. The correlation of r = 0.98 in the H
 For readers who want the specifics:
 
 - **Shor-McCarty data source**: Harvard Dataverse, doi:10.7910/DVN/NWSYOS, CC0 license. Variable used: `np_score` (national common space score).
-- **Our data**: Bayesian 2PL IRT ideal points estimated via PyMC (4 chains, 2000 tuning + 2000 draws). PCA-informed chain initialization per ADR-0023.
-- **Matching**: Two-phase name normalization. Phase 1: exact match on lowercase "first last" + chamber. Phase 2: last-name-only + district number tiebreaker. Overall match rate: 99.4% (168/169).
-- **Correlation method**: Pearson r for linear agreement, Spearman ρ for rank agreement. 95% confidence intervals via Fisher z-transformation.
-- **Code**: `analysis/14_external_validation/external_validation.py` (runner), `analysis/14_external_validation/external_validation_data.py` (pure logic), `analysis/14_external_validation/external_validation_report.py` (HTML report builder). Design doc at `analysis/design/external_validation.md`. ADR-0025.
+- **Our data**: Bayesian 2PL IRT ideal points estimated via nutpie Rust NUTS sampler (2 chains, 1500 tuning + 2000 draws). PCA-informed chain initialization per ADR-0023. Both flat and hierarchical models validated.
+- **Matching**: Two-phase name normalization. Phase 1: exact match on lowercase "first last" + chamber. Phase 2: last-name-only + district number tiebreaker. Overall match rate: 99%+ across all bienniums.
+- **Correlation method**: Pearson r for linear agreement, Spearman ρ for rank agreement. 95% confidence intervals via Fisher z-transformation. Pooled analysis deduplicates by legislator (most recent session).
+- **Code**: `analysis/14_external_validation/external_validation.py` (runner), `analysis/14_external_validation/external_validation_data.py` (pure logic), `analysis/14_external_validation/external_validation_report.py` (HTML report builder). Design doc at `analysis/design/external_validation.md`. ADR-0025. Run all 5 bienniums with `just external-validation --all-sessions`.
 - **Reference**: Shor, B. and N. McCarty. 2011. "The Ideological Mapping of American Legislatures." *American Political Science Review* 105(3): 530-551.

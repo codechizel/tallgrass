@@ -13,7 +13,7 @@ Usage:
   uv run python analysis/cross_session.py --chambers house
   uv run python analysis/cross_session.py --skip-prediction
 
-Outputs (in results/kansas/cross-session/<pair>/<YYMMDD>/):
+Outputs (in results/kansas/cross-session/<pair>/<YYMMDD>.n/):
   - data/:   Parquet files (ideology_shift, metric_stability, prediction_transfer)
   - plots/:  PNG visualizations (shift scatter, movers, turnover, prediction AUC)
   - filtering_manifest.json, run_info.json, run_log.txt

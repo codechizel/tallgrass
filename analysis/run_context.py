@@ -1,7 +1,7 @@
 """Reusable run context for structured analysis output.
 
 Every analysis script (EDA, PCA, IRT, etc.) uses RunContext to get:
-  - Structured output directories: results/<session>/<analysis>/<date>/plots/ + data/
+  - Structured output directories: results/<session>/<analysis>/<YYMMDD>.n/plots/ + data/
   - Automatic console log capture (run_log.txt)
   - Run metadata (run_info.json): git hash, timestamp, parameters
   - A `latest` symlink pointing to the most recent run
@@ -145,20 +145,16 @@ def _format_elapsed(seconds: float) -> str:
 
 
 def _next_run_label(analysis_dir: Path, today: str) -> str:
-    """Return a unique run label for today, appending .1, .2, etc. if needed.
+    """Return a unique run label for today, starting at .1.
 
-    First run of the day:  "260223"
-    Second run:            "260223.1"
-    Third run:             "260223.2"
+    First run of the day:  "260223.1"
+    Second run:            "260223.2"
+    Third run:             "260223.3"
 
     Checks for existing directories (not symlinks) under *analysis_dir*.
     """
-    if not (analysis_dir / today).exists() or (analysis_dir / today).is_symlink():
-        return today
-
-    # The bare date dir exists — find the next available suffix
     n = 1
-    while (analysis_dir / f"{today}.{n}").exists():
+    while (analysis_dir / f"{today}.{n}").exists() and not (analysis_dir / f"{today}.{n}").is_symlink():
         n += 1
     return f"{today}.{n}"
 
@@ -166,18 +162,17 @@ def _next_run_label(analysis_dir: Path, today: str) -> str:
 def generate_run_id(session: str, results_root: Path | None = None) -> str:
     """Generate a run ID for grouping pipeline phases.
 
-    Format: {bb}-{YYMMDD} where bb is the legislature number.
-    Same-day collisions get .1, .2, etc. suffixes.
+    Format: {bb}-{YYMMDD}.{n} where bb is the legislature number and n starts at 1.
 
     Examples:
-        "2025-26" → "91-260227"
-        "2024s"   → "2024s-260227"
-        "2025-26" (second run same day) → "91-260227.1"
+        "2025-26" → "91-260227.1"
+        "2024s"   → "2024s-260227.1"
+        "2025-26" (second run same day) → "91-260227.2"
 
     Args:
         session: Session string (e.g. "2025-26", "2024s").
         results_root: Optional results root for collision checking.
-            If provided, appends .1, .2, etc. for same-day runs.
+            If provided, skips existing directories to find next available.
     """
     normalized = _normalize_session(session)
     # Extract legislature prefix (e.g. "91st" from "91st_2025-2026", or full string for specials)
@@ -188,13 +183,11 @@ def generate_run_id(session: str, results_root: Path | None = None) -> str:
     base = f"{prefix}-{ts}"
 
     if results_root is None:
-        return base
+        return f"{base}.1"
 
-    # Check for same-day collisions
-    if not (results_root / base).exists() or (results_root / base).is_symlink():
-        return base
+    # Find next available increment
     n = 1
-    while (results_root / f"{base}.{n}").exists():
+    while (results_root / f"{base}.{n}").exists() and not (results_root / f"{base}.{n}").is_symlink():
         n += 1
     return f"{base}.{n}"
 

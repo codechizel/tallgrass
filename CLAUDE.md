@@ -129,12 +129,12 @@ External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downl
 Two output modes (ADR-0052):
 
 **Run-directory mode** (`just pipeline` or `--run-id`): all phases grouped under one run ID.
-`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91-260228/01_eda/`). Run ID format: `{bb}-{YYMMDD}` (e.g. `91-260228`). Same-day collisions append `.1`, `.2`, etc.
+`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91-260228.1/01_eda/`). Run ID format: `{bb}-{YYMMDD}.{n}` where n starts at 1 (e.g. `91-260228.1`, second run same day: `91-260228.2`).
 
 **Legacy mode** (individual phase runs, no `--run-id`): each phase writes to its own date directory.
-`results/kansas/{session}/{NN_phase}/{YYMMDD}/` with a phase-level `latest` symlink. Same-day runs append `.1`, `.2`, etc.
+`results/kansas/{session}/{NN_phase}/{YYMMDD}.{n}/` with a phase-level `latest` symlink. Numbering starts at `.1`.
 
-**Cross-session:** `results/kansas/cross-session/{aa}-vs-{bb}/{YYMMDD}/` where `aa`/`bb` are legislature numbers. Flat structure (no phase subdirectory). Example: `results/kansas/cross-session/90-vs-91/260226/`.
+**Cross-session:** `results/kansas/cross-session/{aa}-vs-{bb}/{YYMMDD}.{n}/` where `aa`/`bb` are legislature numbers. Flat structure (no phase subdirectory). Example: `results/kansas/cross-session/90-vs-91/260226.1/`.
 
 Both modes use `RunContext` for structured output, elapsed timing, HTML reports, and auto-primers. `resolve_upstream_dir()` handles 4-level path resolution (CLI override → run_id → phase/latest → latest/phase) so phases find their upstream data in either layout.
 

@@ -357,7 +357,7 @@ just cross-session --skip-prediction                       # Faster (skip XGBoos
 ### 6.4 Output Structure
 
 ```
-results/kansas/cross-session/90-vs-91/YYMMDD/
+results/kansas/cross-session/90-vs-91/YYMMDD.n/
 ├── data/
 │   ├── ideology_shift_{chamber}.parquet
 │   ├── metric_stability_{chamber}.parquet

@@ -497,6 +497,7 @@ def main() -> None:
                         matched.with_columns(
                             pl.lit(session_name).alias("session"),
                             pl.lit(model).alias("model"),
+                            pl.lit(chamber).alias("chamber"),
                         )
                     )
                     all_unmatched.append(unmatched)
@@ -507,7 +508,7 @@ def main() -> None:
         pooled_results: dict[str, dict] = {}
         if args.all_sessions and all_matched:
             print_header("POOLED ANALYSIS")
-            pooled_df = pl.concat(all_matched)
+            pooled_df = pl.concat(all_matched, how="diagonal")
 
             for model in models:
                 for chamber in ["House", "Senate"]:

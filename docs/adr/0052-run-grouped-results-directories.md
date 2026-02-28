@@ -15,21 +15,21 @@ Add a `--run-id` parameter to all phase scripts and `RunContext`. When set, outp
 
 ### Run ID format
 
-`{bb}-{YYMMDD}` where `bb` is the legislature number (ordinal suffix stripped). Same-day collisions append `.1`, `.2`, etc.
+`{bb}-{YYMMDD}.{n}` where `bb` is the legislature number (ordinal suffix stripped) and `n` starts at 1. Subsequent same-day runs increment: `.2`, `.3`, etc.
 
-Example: `91-260228`
+Example: `91-260228.1`
 
 ### Directory layout
 
 **Pipeline runs (run-grouped):**
 ```
 results/kansas/91st_2025-2026/
-  91-260228/                         ← run directory
+  91-260228.1/                       ← run directory
     01_eda/
       plots/  data/  run_info.json  run_log.txt
     02_pca/
       ...
-  latest → 91-260228                 ← session-level symlink
+  latest → 91-260228.1               ← session-level symlink
   01_eda_report.html → latest/01_eda/01_eda_report.html
 ```
 
@@ -37,14 +37,14 @@ results/kansas/91st_2025-2026/
 ```
 results/kansas/cross-session/
   90-vs-91/                          ← comparison directory
-    260226/                          ← YYMMDD run
+    260226.1/                        ← YYMMDD.n run
       plots/  data/  run_info.json  run_log.txt  90-vs-91_report.html
-    latest → 260226
+    latest → 260226.1
   90-vs-91_report.html → 90-vs-91/latest/90-vs-91_report.html
 ```
 
 **Legacy mode (individual phase runs):**
-Date directories use YYMMDD format (e.g. `260227`). Same-day collisions append `.1`, `.2`, etc.
+Date directories use `YYMMDD.n` format (e.g. `260227.1`). Numbering always starts at `.1`.
 
 ### New functions in `run_context.py`
 
