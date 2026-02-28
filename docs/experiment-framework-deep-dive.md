@@ -1,6 +1,6 @@
 # Experiment Framework: Design Patterns, Ecosystem Survey, and Implementation Plan
 
-*February 2026*
+*February 2026* — Updated 2026-02-28: All production MCMC now uses nutpie (ADR-0051, ADR-0053). PyMC `callback` and `cores` references in the monitoring sections are historical.
 
 This document analyzes how the Tallgrass project currently manages experiments, surveys the Python ecosystem for experiment management tools and design patterns, and proposes a lightweight framework that eliminates code duplication, enforces platform constraints, and keeps experiments cleanly separated from production code.
 

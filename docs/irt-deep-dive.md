@@ -141,7 +141,7 @@ Our test equating approach (scale factor A from shared bill discrimination SDs, 
 
 ### Model Specification: Correct
 
-The PyMC model in `build_and_sample()` (`irt.py:1094-1197`) implements the 2PL correctly:
+The model graph in `build_irt_graph()` (extracted in ADR-0053; compiled and sampled via nutpie in `build_and_sample()`) implements the 2PL correctly:
 
 ```python
 xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg - n_anchors)
@@ -152,7 +152,7 @@ eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
 pm.Bernoulli("obs", logit_p=eta, observed=y, dims="obs_id")
 ```
 
-The hierarchical model in `build_per_chamber_model()` (`hierarchical.py:290-362`) is also correct:
+The hierarchical model graph in `build_per_chamber_graph()` (compiled and sampled via nutpie in `build_per_chamber_model()`) is also correct:
 
 ```python
 mu_party_raw = pm.Normal("mu_party_raw", mu=0, sigma=2, shape=n_parties)
@@ -231,7 +231,7 @@ The test suite covered data transformation logic thoroughly but had zero coverag
 
 | Component | Coverage | Risk | Status |
 |-----------|----------|------|--------|
-| MCMC sampling (`build_and_sample`) | 0% | High | Requires integration test (Tier 3) |
+| MCMC sampling (`build_irt_graph` + `build_and_sample`) | graph: **3 tests** | ~~High~~ Medium | Graph-builder tests added (ADR-0053); nutpie integration test Tier 3 |
 | Convergence diagnostics (`check_convergence`) | ~~0%~~ **9 tests** | ~~High~~ Low | **ADDRESSED** — R-hat, bulk-ESS, tail-ESS, divergences, E-BFMI, mode-split |
 | Posterior extraction (`extract_ideal_points`, `extract_bill_parameters`) | ~~0%~~ **12 tests** | ~~High~~ Low | **ADDRESSED** — schema, sorting, HDI, metadata |
 | PCA-informed initialization | 0% | Medium | Requires integration test (Tier 3) |

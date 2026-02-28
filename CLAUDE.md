@@ -146,7 +146,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (52 decisions)
+- ADRs: `docs/adr/README.md` (53 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -176,7 +176,7 @@ Key references:
 - Nutpie deep dive: `docs/nutpie-deep-dive.md` (Rust NUTS sampler, normalizing flow adaptation, integration plan)
 - Nutpie flat IRT experiment: `docs/nutpie-flat-irt-experiment.md` (Experiment 1 results: compilation, sampling, sign flip, |r|=0.994 vs PyMC)
 - Nutpie hierarchical experiment: `results/experimental_lab/2026-02-27_nutpie-hierarchical/experiment.md` (Experiment 2: hierarchical per-chamber with Numba, House convergence test)
-- Nutpie production migration: ADR-0051 (per-chamber hierarchical IRT migrated to nutpie Rust NUTS)
+- Nutpie production migration: ADR-0051 (per-chamber hierarchical), ADR-0053 (flat IRT + joint hierarchical — all models now use nutpie)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
@@ -194,8 +194,7 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Concurrency
 
 - **Scraper**: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), sequential parse. Never mutate shared state during fetch.
-- **MCMC (per-chamber hierarchical)**: nutpie Rust NUTS sampler — single process, Rust threads for parallel chains (ADR-0051). PCA-informed init via `initial_points`; `jitter_rvs` excludes `xi_offset`. `build_per_chamber_graph()` builds model, `build_per_chamber_model()` compiles+samples.
-- **MCMC (joint + flat IRT)**: PyMC NUTS with `cores=n_chains` for parallel chains. PCA-informed init default (ADR-0023). Joint model uses 4 chains with `adapt_diag` (no jitter) when PCA initvals provided (ADR-0045).
+- **MCMC (all models)**: nutpie Rust NUTS sampler — single process, Rust threads for parallel chains (ADR-0051, ADR-0053). Graph-building functions (`build_per_chamber_graph()`, `build_joint_graph()`, `build_irt_graph()`) return PyMC models without sampling. Sampling functions compile with `nutpie.compile_pymc_model()` and sample with `nutpie.sample()`. PCA-informed init via `initial_points`; `jitter_rvs` excludes the PCA-initialized variable.
 - **Apple Silicon (M3 Pro, 6P+6E)**: run bienniums sequentially; cap thread pools (`OMP_NUM_THREADS=6`); never use `taskpolicy -c background`. See ADR-0022.
 - **PyTensor C compiler**: PyTensor requires `clang++`/`g++` for C-compiled kernels. Without it, falls back to pure Python (~18x slower). Common failure: Xcode update requires opening Xcode.app to accept license. Justfile exports `PATH` with `/usr/bin` to prevent stripped-PATH failures.
 

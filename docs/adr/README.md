@@ -80,6 +80,7 @@ What are the trade-offs?
 | [0050](0050-numbered-results-directories.md) | Numbered results directories (align with source layout) | Accepted | 2026-02-27 |
 | [0051](0051-nutpie-production-hierarchical.md) | nutpie Rust NUTS for per-chamber hierarchical IRT | Accepted | 2026-02-27 |
 | [0052](0052-run-grouped-results-directories.md) | Run-grouped results directories for pipeline atomicity | Accepted | 2026-02-27 |
+| [0053](0053-nutpie-all-models.md) | nutpie Rust NUTS for all MCMC models (flat IRT + joint hierarchical) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

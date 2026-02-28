@@ -1,5 +1,7 @@
 # Apple Silicon Tuning for MCMC Workloads
 
+> **Note (2026-02-28):** All production MCMC models now use nutpie's Rust NUTS sampler (ADR-0051, ADR-0053), which runs chains via Rust threads in a single process — no Python multiprocessing. The failure modes in §2 (sequential chain throttling) and §3 (batch CPU saturation) that involved PyMC's `cores` parameter are historical. The thread pool cap (§1), batch sequencing (§3), and QoS rules (§4) still apply because BLAS/OpenMP threads are still used for gradient computation.
+
 How we tuned Bayesian MCMC sampling on an M3 Pro, and what we learned about performance and efficiency cores the hard way.
 
 **Hardware:** MacBook Pro M3 Pro, 36 GB unified memory, 6 performance (P) cores + 6 efficiency (E) cores.
@@ -91,7 +93,7 @@ These are the five rules we now follow for all CPU-intensive analysis on Apple S
 
 1. **Cap thread pools to the P-core count.** Set `OMP_NUM_THREADS` and `OPENBLAS_NUM_THREADS` to the number of performance cores (6 on M3 Pro). This prevents NumPy/SciPy/PyTensor from spawning threads that land on E-cores.
 
-2. **Run MCMC chains in parallel.** Use `cores=n_chains` (or just accept PyMC's default, which already does this). Parallel chains avoid the thermal throttling that slows sequential chain 2 by ~50%.
+2. **Run MCMC chains in parallel.** nutpie runs chains via Rust threads automatically (no configuration needed). With PyMC (historical/experimental scripts), use `cores=n_chains`. Parallel chains avoid the thermal throttling that slows sequential chain 2 by ~50%.
 
 3. **Run bienniums sequentially.** Never run multiple MCMC jobs at the same time. The macOS scheduler will push overflow work to E-cores, and the resulting slowdown is worse than just waiting.
 
@@ -138,7 +140,7 @@ The joint model for the 91st Legislature remains the bottleneck at 93 minutes �
 
 These findings generalize to any sustained numerical workload on Apple Silicon:
 
-- **PyMC / Stan / NumPyro** — any MCMC sampler that uses multiprocessing for parallel chains
+- **nutpie / PyMC / Stan / NumPyro** — any MCMC sampler using internal threading or multiprocessing
 - **scikit-learn** — random forests, gradient boosting with `n_jobs=-1`
 - **PyTorch / JAX training loops** — extended GPU-free computation
 - **Large matrix operations** — anything that triggers OpenMP/BLAS threading

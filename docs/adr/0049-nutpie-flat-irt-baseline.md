@@ -42,9 +42,15 @@ The sign flip (r = -0.994) is IRT reflection invariance — nutpie found the mir
 
 **Dependency added:** `nutpie>=0.14` (installed as dev dependency for experiments)
 
+## Outcome
+
+This baseline validated nutpie for flat IRT and directly led to production migration: ADR-0051 (per-chamber hierarchical) and ADR-0053 (flat IRT + joint hierarchical — all models now use nutpie).
+
 ## Related
 
 - [ADR-0006](0006-irt-implementation-choices.md) — Flat IRT model design
 - [ADR-0048](0048-experiment-framework.md) — Experiment framework used here
+- [ADR-0051](0051-nutpie-production-hierarchical.md) — Per-chamber production migration
+- [ADR-0053](0053-nutpie-all-models.md) — All models migrated to nutpie
 - [Nutpie Deep Dive](../nutpie-deep-dive.md) — Full architecture and integration plan
 - [Experiment Results](../nutpie-flat-irt-experiment.md) — Detailed write-up

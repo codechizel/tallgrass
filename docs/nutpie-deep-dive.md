@@ -363,7 +363,9 @@ Added PCA-informed `xi_offset` initialization to fix the Senate mode-splitting.
 
 ### Experiment 3: Normalizing Flow on Joint Model (High Value, Medium Risk)
 
-Test whether NF adaptation resolves the joint cross-chamber convergence failure (0/8 bienniums pass with PyMC).
+**Status:** Superseded by ADR-0053. The joint model was migrated to nutpie's Rust NUTS (Numba backend) without NF adaptation. NF remains a future option if the joint model still fails convergence with nutpie's standard sampler.
+
+~~Test whether NF adaptation resolves the joint cross-chamber convergence failure (0/8 bienniums pass with PyMC).~~
 
 1. Compile with JAX backend (`gradient_backend="jax"`)
 2. Enable normalizing flow adaptation
@@ -373,9 +375,9 @@ Test whether NF adaptation resolves the joint cross-chamber convergence failure 
 
 **Key question**: Can NF push the joint model past the convergence threshold, or is 1,042 parameters beyond the limit?
 
-### Experiment 4: Joint Model with NF (High Risk, High Reward)
+### Experiment 4: NF Adaptation on Joint Model (Future — if standard nutpie insufficient)
 
-Test the joint cross-chamber model that currently fails 8/8.
+**Status:** Not yet needed. ADR-0053 migrated the joint model to nutpie's standard Rust NUTS (Numba backend, no NF). If the joint model still fails convergence with nutpie, NF adaptation is the next lever.
 
 1. Compile with JAX backend + NF adaptation
 2. Run on 91st joint model (1,042 parameters — at NF limit)
@@ -384,18 +386,15 @@ Test the joint cross-chamber model that currently fails 8/8.
 
 **Key question**: Can NF push the joint model past the convergence threshold, or is 1,042 parameters beyond the limit?
 
-### Production Migration (Only After Per-Chamber Experiments Pass)
+### Production Migration — COMPLETE
 
-Per-chamber experiments 1-2b have all succeeded. Production migration path:
+All production models migrated to nutpie (ADR-0051, ADR-0053):
 
-1. Add `nutpie` as a required dependency (not optional)
-2. Create a `sampler` module in `analysis/` that wraps the PyMC-to-nutpie transition
-3. Update `build_per_chamber_model()` and `build_and_sample()` to use nutpie
-4. Replace `pm.sample(callback=...)` monitoring with `sampler.inspect()` non-blocking pattern
-5. Update convergence baselines in `docs/analytic-flags.md` (R-hat/ESS numbers will change)
-6. Update Apple Silicon tuning docs (no multiprocessing concerns)
-7. Run the full 8-biennium pipeline and compare with PyMC baseline
-8. Write ADR documenting the migration decision
+- `build_irt_graph()` + `build_and_sample()` — flat 2PL IRT
+- `build_per_chamber_graph()` + `build_per_chamber_model()` — per-chamber hierarchical
+- `build_joint_graph()` + `build_joint_model()` — joint cross-chamber hierarchical
+
+Pattern: graph-builder returns `pm.Model`, sampling function compiles with `nutpie.compile_pymc_model()` and samples with `nutpie.sample()`. PCA init via `initial_points`, `jitter_rvs` excludes PCA-initialized variable. `callback`, `target_accept`, `cores` accepted but ignored for API compatibility.
 
 ### What We Keep Regardless
 
@@ -407,9 +406,9 @@ Per-chamber experiments 1-2b have all succeeded. Production migration path:
 
 ## The Monitoring Story Simplifies
 
-With nutpie, the three-layer monitoring approach from the experiment framework deep dive collapses:
+With nutpie (now the production sampler for all models), the three-layer monitoring approach from the experiment framework deep dive collapses:
 
-| Layer | With PyMC (multiprocessing) | With nutpie (single process) |
+| Layer | PyMC (historical) | nutpie (current) |
 |-------|---------------------------|------------------------------|
 | Process titles | Parent + 4 child titles | One process title |
 | Status file | PyMC callback writes JSON | `sampler.inspect()` returns actual InferenceData |

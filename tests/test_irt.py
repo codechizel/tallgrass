@@ -28,6 +28,7 @@ from analysis.irt import (
     PARADOX_YEA_GAP,
     RHAT_THRESHOLD,
     _detect_forest_highlights,
+    build_irt_graph,
     build_joint_vote_matrix,
     check_convergence,
     equate_chambers,
@@ -254,6 +255,48 @@ class TestSelectAnchors:
         cons_idx, cons_slug, _, _ = select_anchors(pca_scores, matrix, "Senate")
         # A has 1/5 = 20% < 50%, so B (PC1=5.5) should be the anchor
         assert cons_slug == "sen_b_b_1"
+
+
+# ── build_irt_graph tests ─────────────────────────────────────────────────────
+
+
+class TestBuildIrtGraph:
+    """Tests for build_irt_graph model construction.
+
+    Run: uv run pytest tests/test_irt.py::TestBuildIrtGraph -v
+    """
+
+    def test_build_irt_graph_returns_model(self, senate_matrix: pl.DataFrame) -> None:
+        """build_irt_graph should return a PyMC model with expected free RVs."""
+        import pymc as pm
+
+        data = prepare_irt_data(senate_matrix, "Senate")
+        anchors = [(0, 1.0), (5, -1.0)]
+        model = build_irt_graph(data, anchors)
+        assert isinstance(model, pm.Model)
+        rv_names = {rv.name for rv in model.free_RVs}
+        assert "xi_free" in rv_names
+        assert "alpha" in rv_names
+        assert "beta" in rv_names
+
+    def test_build_irt_graph_coords(self, senate_matrix: pl.DataFrame) -> None:
+        """build_irt_graph model should have legislator, vote, obs_id coords."""
+        data = prepare_irt_data(senate_matrix, "Senate")
+        anchors = [(0, 1.0), (5, -1.0)]
+        model = build_irt_graph(data, anchors)
+        assert "legislator" in model.coords
+        assert "vote" in model.coords
+        assert "obs_id" in model.coords
+        assert len(model.coords["legislator"]) == data["n_legislators"]
+        assert len(model.coords["vote"]) == data["n_votes"]
+
+    def test_build_irt_graph_xi_free_shape(self, senate_matrix: pl.DataFrame) -> None:
+        """xi_free should have shape n_legislators - n_anchors."""
+        data = prepare_irt_data(senate_matrix, "Senate")
+        anchors = [(0, 1.0), (5, -1.0)]
+        model = build_irt_graph(data, anchors)
+        xi_free_rv = [rv for rv in model.free_RVs if rv.name == "xi_free"][0]
+        assert xi_free_rv.type.shape[0] == data["n_legislators"] - len(anchors)
 
 
 # ── filter_vote_matrix_for_sensitivity tests ──────────────────────────────────

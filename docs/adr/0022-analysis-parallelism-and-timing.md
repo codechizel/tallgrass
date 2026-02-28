@@ -1,7 +1,7 @@
 # ADR-0022: Analysis Parallelism and Runtime Timing
 
 **Date:** 2026-02-23
-**Status:** Accepted
+**Status:** Accepted (MCMC parallelism superseded by ADR-0051/ADR-0053 — all models now use nutpie Rust threads instead of PyMC multiprocessing; XGBoost parallelism and runtime timing remain current)
 
 ## Context
 

@@ -559,22 +559,16 @@ def _match_bills_across_chambers(
     return matched, house_only, senate_only
 
 
-def build_joint_model(
+def build_joint_graph(
     house_data: dict,
     senate_data: dict,
-    n_samples: int,
-    n_tune: int,
-    n_chains: int,
     rollcalls: pl.DataFrame | None = None,
-    cores: int | None = None,
-    target_accept: float = HIER_TARGET_ACCEPT,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
-    callback=None,
-) -> tuple[az.InferenceData, dict, float]:
-    """Build 3-level joint cross-chamber hierarchical IRT model.
+) -> tuple[pm.Model, dict]:
+    """Build 3-level joint cross-chamber hierarchical IRT model graph (no sampling).
 
     Model structure:
-        mu_global → mu_group (4 groups: HD, HR, SD, SR) → xi → likelihood
+        mu_global → mu_chamber → mu_group (4 groups: HD, HR, SD, SR) → xi → likelihood
 
     When rollcalls is provided, bills are matched across chambers by bill_number
     to create shared alpha/beta parameters. These shared items bridge the chambers,
@@ -582,11 +576,13 @@ def build_joint_model(
     Without rollcalls, falls back to vote_id deduplication (no shared items).
 
     Args:
+        house_data: Per-chamber data dict from prepare_hierarchical_data() for House.
+        senate_data: Per-chamber data dict from prepare_hierarchical_data() for Senate.
+        rollcalls: Optional rollcalls DataFrame for bill matching across chambers.
         beta_prior: Specification for the bill discrimination prior.
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
-        callback: Optional PyMC sampling callback (e.g. for experiment monitoring).
 
-    Returns (InferenceData, combined_data_dict, sampling_time_seconds).
+    Returns (pm.Model, combined_data_dict).
     """
     # Combine legislator data
     n_house = house_data["n_legislators"]
@@ -698,7 +694,7 @@ def build_joint_model(
         "obs_id": np.arange(n_obs),
     }
 
-    with pm.Model(coords=coords):
+    with pm.Model(coords=coords) as model:
         # --- Chamber-level ---
         mu_global = pm.Normal("mu_global", mu=0, sigma=2)
         sigma_chamber = pm.HalfNormal("sigma_chamber", sigma=1)
@@ -746,28 +742,6 @@ def build_joint_model(
         eta = beta[combined_vote_idx] * xi[combined_leg_idx] - alpha[combined_vote_idx]
         pm.Bernoulli("obs", logit_p=eta, observed=combined_y, dims="obs_id")
 
-        # --- Sample ---
-        print(f"  Joint: {n_samples} draws, {n_tune} tune, {n_chains} chains")
-        print(f"  {n_leg} legislators, {n_votes} votes ({n_shared} shared), {n_obs} observations")
-        print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
-
-        sample_kwargs: dict = {}
-        if callback is not None:
-            sample_kwargs["callback"] = callback
-
-        t0 = time.time()
-        idata = pm.sample(
-            draws=n_samples,
-            tune=n_tune,
-            chains=n_chains,
-            cores=cores if cores is not None else n_chains,
-            target_accept=target_accept,
-            random_seed=RANDOM_SEED,
-            progressbar=True,
-            **sample_kwargs,
-        )
-        sampling_time = time.time() - t0
-
     combined_data = {
         "leg_slugs": all_slugs,
         "vote_ids": all_vote_ids,
@@ -783,6 +757,92 @@ def build_joint_model(
         "n_senate": n_senate,
         "matched_bills": matched_bills,
     }
+
+    return model, combined_data
+
+
+def build_joint_model(
+    house_data: dict,
+    senate_data: dict,
+    n_samples: int,
+    n_tune: int,
+    n_chains: int,
+    rollcalls: pl.DataFrame | None = None,
+    cores: int | None = None,
+    target_accept: float = HIER_TARGET_ACCEPT,
+    beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    callback=None,
+    xi_offset_initvals: np.ndarray | None = None,
+) -> tuple[az.InferenceData, dict, float]:
+    """Build 3-level joint cross-chamber hierarchical IRT and sample with nutpie.
+
+    Builds the model graph via build_joint_graph(), then compiles and samples
+    with nutpie's Rust NUTS sampler (ADR-0053).
+
+    Args:
+        beta_prior: Specification for the bill discrimination prior.
+            Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        callback: Accepted for API compatibility but ignored.
+            nutpie does not support PyMC-style callbacks.
+        xi_offset_initvals: Optional initial xi_offset values (from PCA).
+            If provided, all chains start near these values.
+
+    Returns (InferenceData, combined_data_dict, sampling_time_seconds).
+    """
+    if callback is not None:
+        print("  Note: callback ignored (nutpie does not support PyMC callbacks)")
+    if target_accept != HIER_TARGET_ACCEPT:
+        print(
+            f"  Note: target_accept={target_accept} ignored "
+            "(nutpie uses adaptive dual averaging)"
+        )
+    if cores is not None:
+        print(f"  Note: cores={cores} ignored (nutpie manages its own threads)")
+
+    model, combined_data = build_joint_graph(
+        house_data, senate_data, rollcalls=rollcalls, beta_prior=beta_prior
+    )
+
+    # --- Compile with nutpie ---
+    compile_kwargs: dict = {}
+    if xi_offset_initvals is not None:
+        # PCA init for xi_offset; jitter all OTHER RVs.
+        # Critical: jitter_rvs=set() would cause HalfNormal sigma_within to
+        # initialize at its support point (~0), producing log(0)=-inf.
+        compile_kwargs["initial_points"] = {"xi_offset": xi_offset_initvals}
+        compile_kwargs["jitter_rvs"] = {
+            rv for rv in model.free_RVs if rv.name != "xi_offset"
+        }
+        print(
+            f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
+            f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
+        )
+        jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
+        print(f"  jitter_rvs: {jittered} (xi_offset excluded)")
+
+    print("  Compiling model with nutpie...")
+    compiled = nutpie.compile_pymc_model(model, **compile_kwargs)
+
+    # --- Sample ---
+    n_shared = combined_data["n_shared_bills"]
+    n_leg = combined_data["n_legislators"]
+    n_votes = combined_data["n_votes"]
+    n_obs = combined_data["n_obs"]
+    print(f"  Joint: {n_samples} draws, {n_tune} tune, {n_chains} chains")
+    print(f"  {n_leg} legislators, {n_votes} votes ({n_shared} shared), {n_obs} observations")
+    print(f"  seed={RANDOM_SEED}, sampler=nutpie (Rust NUTS)")
+
+    t0 = time.time()
+    idata = nutpie.sample(
+        compiled,
+        draws=n_samples,
+        tune=n_tune,
+        chains=n_chains,
+        seed=RANDOM_SEED,
+        progress_bar=True,
+        store_divergences=True,
+    )
+    sampling_time = time.time() - t0
 
     print(f"  Joint sampling complete in {sampling_time:.1f}s")
     return idata, combined_data, sampling_time

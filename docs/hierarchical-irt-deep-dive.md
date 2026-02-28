@@ -212,9 +212,9 @@ Joint-specific variables are added dynamically (lines 530-532). Both lists could
 
 ### 2.7 Issue 6: No PCA-Informed Init for Hierarchical (Substantive Gap)
 
-**File:** `analysis/10_hierarchical/hierarchical.py`, `build_per_chamber_model()`, lines 350-358
+**File:** `analysis/10_hierarchical/hierarchical.py`, `build_per_chamber_graph()` + `build_per_chamber_model()`
 
-The flat IRT model uses PCA-informed chain initialization (ADR-0023). The hierarchical model uses PyMC's default initialization. For sessions where the flat IRT fails convergence (5 of 16 chamber-sessions), the hierarchical model also fails, and PCA-informed init might help.
+**Resolved:** PCA-informed initialization was implemented (ADR-0044) and both per-chamber and flat models now use nutpie with PCA init (ADR-0051, ADR-0053). The joint model accepts optional `xi_offset_initvals` for future PCA init.
 
 **Recommendation:** Low priority. The hierarchical structure provides sufficient initialization guidance for most sessions. Test on one failing session before committing.
 
@@ -512,7 +512,7 @@ External validation compares both flat and hierarchical ideal points against Sho
 ### Won't Fix (Correct As-Is)
 
 - **Non-centered parameterization:** Standard best practice (Papaspiliopoulos et al. 2007). Centered would be slightly more efficient for House Republicans (N~90) but the safety margin is worth it.
-- **PyMC over NumPyro:** Migration cost exceeds speedup benefit at our scale. Try `sample_numpyro_nuts()` as a drop-in if speed becomes critical.
+- **Sampler choice:** All models now use nutpie Rust NUTS (ADR-0051, ADR-0053). NumPyro migration not warranted.
 - **No PCA-informed init for hierarchical:** Party structure provides sufficient initialization guidance.
 - **ICC with `ddof=0`:** Correct — 2 parties is the population, not a sample.
 - **`PARTY_COLORS["Independent"]`** imported but unused in this phase: Intentional (pulled in with other IRT constants).

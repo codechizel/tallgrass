@@ -27,6 +27,7 @@ from analysis.hierarchical import (
     SMALL_GROUP_SIGMA_SCALE,
     SMALL_GROUP_THRESHOLD,
     _match_bills_across_chambers,
+    build_joint_graph,
     build_per_chamber_graph,
     compute_flat_hier_correlation,
     compute_variance_decomposition,
@@ -354,6 +355,114 @@ class TestBuildHierarchicalModel:
         assert "party" in model.coords
         assert len(model.coords["legislator"]) == data["n_legislators"]
         assert len(model.coords["vote"]) == data["n_votes"]
+
+
+# ── TestBuildJointGraph ─────────────────────────────────────────────────────
+
+
+class TestBuildJointGraph:
+    """Tests for build_joint_graph model construction.
+
+    Run: uv run pytest tests/test_hierarchical.py::TestBuildJointGraph -v
+    """
+
+    @pytest.fixture
+    def senate_matrix(self) -> pl.DataFrame:
+        """Synthetic Senate vote matrix: 4 legislators x 3 votes."""
+        return pl.DataFrame(
+            {
+                "legislator_slug": [
+                    "sen_i_i_1",
+                    "sen_j_j_1",
+                    "sen_k_k_1",
+                    "sen_l_l_1",
+                ],
+                "v5": [1, 1, 0, 0],
+                "v6": [1, 0, 1, 0],
+                "v7": [0, 1, 0, 1],
+            }
+        )
+
+    @pytest.fixture
+    def senate_legislators(self) -> pl.DataFrame:
+        """Legislator metadata matching senate_matrix."""
+        return pl.DataFrame(
+            {
+                "name": ["I", "J", "K", "L"],
+                "full_name": ["I I", "J J", "K K", "L L"],
+                "slug": ["sen_i_i_1", "sen_j_j_1", "sen_k_k_1", "sen_l_l_1"],
+                "chamber": ["Senate"] * 4,
+                "party": ["Republican"] * 2 + ["Democrat"] * 2,
+                "district": [9, 10, 11, 12],
+                "member_url": [""] * 4,
+            }
+        )
+
+    def test_build_joint_graph_returns_model_and_data(
+        self,
+        house_matrix: pl.DataFrame,
+        legislators: pl.DataFrame,
+        senate_matrix: pl.DataFrame,
+        senate_legislators: pl.DataFrame,
+    ) -> None:
+        """build_joint_graph should return (pm.Model, dict) with expected free RVs."""
+        import pymc as pm
+
+        house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        senate_data = prepare_hierarchical_data(
+            senate_matrix, senate_legislators, "Senate"
+        )
+        model, combined_data = build_joint_graph(house_data, senate_data)
+        assert isinstance(model, pm.Model)
+        assert isinstance(combined_data, dict)
+        rv_names = {rv.name for rv in model.free_RVs}
+        assert "mu_global" in rv_names
+        assert "sigma_chamber" in rv_names
+        assert "chamber_offset" in rv_names
+        assert "sigma_party" in rv_names
+        assert "group_offset_raw" in rv_names
+        assert "sigma_within" in rv_names
+        assert "xi_offset" in rv_names
+        assert "alpha" in rv_names
+
+    def test_build_joint_graph_coords(
+        self,
+        house_matrix: pl.DataFrame,
+        legislators: pl.DataFrame,
+        senate_matrix: pl.DataFrame,
+        senate_legislators: pl.DataFrame,
+    ) -> None:
+        """build_joint_graph model should have legislator, vote, group, chamber coords."""
+        house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        senate_data = prepare_hierarchical_data(
+            senate_matrix, senate_legislators, "Senate"
+        )
+        model, combined_data = build_joint_graph(house_data, senate_data)
+        assert "legislator" in model.coords
+        assert "vote" in model.coords
+        assert "group" in model.coords
+        assert "chamber" in model.coords
+        assert len(model.coords["legislator"]) == combined_data["n_legislators"]
+        assert len(model.coords["vote"]) == combined_data["n_votes"]
+        assert len(model.coords["group"]) == 4
+        assert len(model.coords["chamber"]) == 2
+
+    def test_build_joint_graph_combined_data(
+        self,
+        house_matrix: pl.DataFrame,
+        legislators: pl.DataFrame,
+        senate_matrix: pl.DataFrame,
+        senate_legislators: pl.DataFrame,
+    ) -> None:
+        """combined_data should have correct legislator counts."""
+        house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        senate_data = prepare_hierarchical_data(
+            senate_matrix, senate_legislators, "Senate"
+        )
+        _, combined_data = build_joint_graph(house_data, senate_data)
+        assert combined_data["n_house"] == house_data["n_legislators"]
+        assert combined_data["n_senate"] == senate_data["n_legislators"]
+        assert combined_data["n_legislators"] == house_data["n_legislators"] + senate_data["n_legislators"]
 
 
 # ── TestExtractHierarchicalResults ───────────────────────────────────────────

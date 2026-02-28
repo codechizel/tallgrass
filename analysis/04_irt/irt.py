@@ -30,6 +30,7 @@ matplotlib.use("Agg")
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
+import nutpie
 import polars as pl
 import pymc as pm
 import pytensor.tensor as pt
@@ -1086,33 +1087,23 @@ def select_anchors(
     return cons_idx, cons_slug, lib_idx, lib_slug
 
 
-# ── Phase 3: Build and Sample PyMC Model ────────────────────────────────────
+# ── Phase 3: Build and Sample IRT Model ──────────────────────────────────────
 
 
-def build_and_sample(
+def build_irt_graph(
     data: dict,
     anchors: list[tuple[int, float]],
-    n_samples: int,
-    n_tune: int,
-    n_chains: int,
-    target_accept: float = TARGET_ACCEPT,
-    xi_initvals: np.ndarray | None = None,
-) -> tuple[az.InferenceData, float]:
-    """Build 2PL IRT model with anchor constraints and sample with NUTS.
+) -> pm.Model:
+    """Build 2PL IRT model graph with anchor constraints (no sampling).
 
-    Args:
-        data: IRT data dict from prepare_irt_data().
-        anchors: List of (legislator_index, fixed_value) pairs. Typically 2 for
-            per-chamber models [(cons_idx, +1.0), (lib_idx, -1.0)] or 4 for the
-            joint model (one conservative + one liberal from each chamber).
-        n_samples: MCMC posterior draws per chain.
-        n_tune: MCMC tuning steps (discarded).
-        n_chains: Number of independent MCMC chains.
-        target_accept: NUTS target acceptance probability.
-        xi_initvals: Optional initial xi values for free parameters (from PCA).
-            If provided, all chains start near these values with small jitter.
+    Model structure:
+        xi_free ~ Normal(0, 1) for non-anchor legislators
+        xi = anchors inserted at fixed positions + xi_free elsewhere
+        alpha ~ Normal(0, 5)  -- bill difficulty
+        beta ~ Normal(0, 1)   -- bill discrimination
+        P(Yea) = logit^-1(beta * xi - alpha)
 
-    Returns (InferenceData, sampling_time_seconds).
+    Returns the PyMC model for use with nutpie or pm.sample().
     """
     leg_idx = data["leg_idx"]
     vote_idx = data["vote_idx"]
@@ -1128,7 +1119,7 @@ def build_and_sample(
         "obs_id": np.arange(data["n_obs"]),
     }
 
-    with pm.Model(coords=coords):
+    with pm.Model(coords=coords) as model:
         # --- Legislator ideal points with anchors ---
         xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg - n_anchors)
 
@@ -1155,33 +1146,78 @@ def build_and_sample(
         eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
         pm.Bernoulli("obs", logit_p=eta, observed=y, dims="obs_id")
 
-        # --- Sample ---
-        print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
-        print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
-        print(f"  Anchors: {n_anchors} fixed legislators")
+    return model
 
-        # Build initvals if PCA-informed initialization requested (ADR-0023, ADR-0045)
-        sample_kwargs: dict = {}
-        if xi_initvals is not None:
-            sample_kwargs["initvals"] = {"xi_free": xi_initvals}
-            # Use adapt_diag (no jitter) when PCA initvals provided.
-            # Jitter can push chains past the reflection mode boundary.
-            sample_kwargs["init"] = "adapt_diag"
-            print(f"  PCA-informed initvals: {len(xi_initvals)} free parameters")
-            print("  init='adapt_diag' (no jitter — PCA initvals provide orientation)")
 
-        t0 = time.time()
-        idata = pm.sample(
-            draws=n_samples,
-            tune=n_tune,
-            chains=n_chains,
-            cores=n_chains,
-            target_accept=target_accept,
-            random_seed=RANDOM_SEED,
-            progressbar=True,
-            **sample_kwargs,
+def build_and_sample(
+    data: dict,
+    anchors: list[tuple[int, float]],
+    n_samples: int,
+    n_tune: int,
+    n_chains: int,
+    target_accept: float = TARGET_ACCEPT,
+    xi_initvals: np.ndarray | None = None,
+) -> tuple[az.InferenceData, float]:
+    """Build 2PL IRT model with anchor constraints and sample with nutpie.
+
+    Builds the model graph via build_irt_graph(), then compiles and samples
+    with nutpie's Rust NUTS sampler (ADR-0053).
+
+    Args:
+        data: IRT data dict from prepare_irt_data().
+        anchors: List of (legislator_index, fixed_value) pairs. Typically 2 for
+            per-chamber models [(cons_idx, +1.0), (lib_idx, -1.0)] or 4 for the
+            joint model (one conservative + one liberal from each chamber).
+        n_samples: MCMC posterior draws per chain.
+        n_tune: MCMC tuning steps (discarded).
+        n_chains: Number of independent MCMC chains.
+        target_accept: Accepted for API compatibility but ignored.
+            nutpie uses adaptive dual averaging.
+        xi_initvals: Optional initial xi values for free parameters (from PCA).
+            If provided, all chains start near these values.
+
+    Returns (InferenceData, sampling_time_seconds).
+    """
+    if target_accept != TARGET_ACCEPT:
+        print(
+            f"  Note: target_accept={target_accept} ignored "
+            "(nutpie uses adaptive dual averaging)"
         )
-        sampling_time = time.time() - t0
+
+    model = build_irt_graph(data, anchors)
+    n_anchors = len(anchors)
+
+    # --- Compile with nutpie ---
+    compile_kwargs: dict = {}
+    if xi_initvals is not None:
+        # PCA init for xi_free; jitter all OTHER RVs.
+        compile_kwargs["initial_points"] = {"xi_free": xi_initvals}
+        compile_kwargs["jitter_rvs"] = {
+            rv for rv in model.free_RVs if rv.name != "xi_free"
+        }
+        print(f"  PCA-informed initvals: {len(xi_initvals)} free parameters")
+        jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
+        print(f"  jitter_rvs: {jittered} (xi_free excluded)")
+
+    print("  Compiling model with nutpie...")
+    compiled = nutpie.compile_pymc_model(model, **compile_kwargs)
+
+    # --- Sample ---
+    print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
+    print(f"  seed={RANDOM_SEED}, sampler=nutpie (Rust NUTS)")
+    print(f"  Anchors: {n_anchors} fixed legislators")
+
+    t0 = time.time()
+    idata = nutpie.sample(
+        compiled,
+        draws=n_samples,
+        tune=n_tune,
+        chains=n_chains,
+        seed=RANDOM_SEED,
+        progress_bar=True,
+        store_divergences=True,
+    )
+    sampling_time = time.time() - t0
 
     print(f"  Sampling complete in {sampling_time:.1f}s")
     return idata, sampling_time

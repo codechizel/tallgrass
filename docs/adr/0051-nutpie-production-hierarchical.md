@@ -40,10 +40,10 @@ Key implementation details:
 - `build_per_chamber_graph()` is now importable by experiments (eliminates model code duplication)
 
 **Loses:**
-- PyMC `callback` parameter no longer functional for per-chamber (still works for joint model)
+- PyMC `callback` parameter no longer functional for per-chamber (also dropped for joint in ADR-0053)
 - `target_accept` no longer directly controllable for per-chamber
 - `cores` parameter no longer meaningful for per-chamber (nutpie manages its own threads)
 
-**Scope limitation:**
-- Joint model stays on PyMC until a separate experiment validates nutpie for 3-level models
+**Scope limitation (superseded by ADR-0053):**
+- ~~Joint model stays on PyMC until a separate experiment validates nutpie for 3-level models~~ — migrated in ADR-0053
 - `OMP_NUM_THREADS=6` cap remains (still needed for BLAS in gradient computation)
