@@ -428,39 +428,51 @@ class TestGenerateRunId:
     """Generate run IDs for grouped pipeline output."""
 
     def test_format_matches_pattern(self):
-        """Run ID has format {prefix}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}."""
+        """Run ID has format {bb}-{YYMMDD}."""
         import re
 
         run_id = generate_run_id("2025-26")
-        assert re.match(r"^91st-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$", run_id)
+        assert re.match(r"^91-\d{6}$", run_id)
 
     def test_special_session_prefix(self):
         """Special sessions use the full session string as prefix."""
         import re
 
         run_id = generate_run_id("2024s")
-        assert re.match(r"^2024s-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$", run_id)
+        assert re.match(r"^2024s-\d{6}$", run_id)
 
     def test_historical_session(self):
         """Historical sessions extract the legislature number."""
         run_id = generate_run_id("2023-24")
-        assert run_id.startswith("90th-")
+        assert run_id.startswith("90-")
 
-    def test_unique_per_call(self):
-        """Two calls should produce different IDs (different timestamps)."""
-        import time
-
+    def test_same_day_without_root(self):
+        """Without results_root, same-day calls produce the same base ID."""
         id1 = generate_run_id("2025-26")
-        time.sleep(0.01)  # ensure at least a tick
         id2 = generate_run_id("2025-26")
-        # Same second is possible; at minimum prefix matches
-        assert id1.startswith("91st-")
-        assert id2.startswith("91st-")
+        assert id1 == id2  # No collision detection without results_root
+
+    def test_same_day_collision_with_root(self, tmp_path):
+        """With results_root, same-day runs get .1, .2 suffixes."""
+        id1 = generate_run_id("2025-26", results_root=tmp_path)
+        (tmp_path / id1).mkdir()
+        id2 = generate_run_id("2025-26", results_root=tmp_path)
+        assert id2 == f"{id1}.1"
+        (tmp_path / id2).mkdir()
+        id3 = generate_run_id("2025-26", results_root=tmp_path)
+        assert id3 == f"{id1}.2"
 
     def test_no_colons_in_id(self):
         """Run IDs use hyphens, not colons, for filesystem safety."""
         run_id = generate_run_id("2025-26")
         assert ":" not in run_id
+
+    def test_ordinal_suffix_stripped(self):
+        """Legislature ordinal suffix (st/nd/rd/th) should be stripped."""
+        run_id = generate_run_id("2025-26")
+        assert run_id.startswith("91-")  # not "91st-"
+        run_id_84 = generate_run_id("2011-12")
+        assert run_id_84.startswith("84-")  # not "84th-"
 
 
 # ── resolve_upstream_dir() ─────────────────────────────────────────────────

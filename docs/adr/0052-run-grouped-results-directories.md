@@ -15,26 +15,26 @@ Add a `--run-id` parameter to all phase scripts and `RunContext`. When set, outp
 
 ### Run ID format
 
-`{legislature}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}` (hyphens, no colons for filesystem safety).
+`{bb}-{YYMMDD}` where `bb` is the legislature number (ordinal suffix stripped). Same-day collisions append `.1`, `.2`, etc.
 
-Example: `91st-2026-02-27T19-30-00`
+Example: `91-260228`
 
 ### Directory layout
 
 ```
 results/kansas/91st_2025-2026/
-  91st-2026-02-27T19-30-00/        ← run directory
+  91-260228/                         ← run directory
     01_eda/
       plots/  data/  run_info.json  run_log.txt
     02_pca/
       ...
-  latest → 91st-2026-02-27T19-30-00   ← session-level symlink
+  latest → 91-260228                 ← session-level symlink
   01_eda_report.html → latest/01_eda/01_eda_report.html
 ```
 
 ### New functions in `run_context.py`
 
-- **`generate_run_id(session)`** — creates a run ID from session + CT timestamp
+- **`generate_run_id(session, results_root=None)`** — creates a run ID from session + date, with optional collision detection
 - **`resolve_upstream_dir(phase, results_root, run_id, override)`** — 4-level precedence: (1) explicit CLI override, (2) `results_root/{run_id}/{phase}`, (3) `results_root/{phase}/latest`, (4) `results_root/latest/{phase}`
 
 ### Pipeline recipe

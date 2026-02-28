@@ -111,7 +111,7 @@ external-validation *args:
 pipeline session="2025-26" *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    RUN_ID=$(uv run python -c "from analysis.run_context import generate_run_id; print(generate_run_id('{{session}}'))")
+    RUN_ID=$(uv run python -c "from tallgrass.session import KSSession; from analysis.run_context import generate_run_id; ks = KSSession.from_session_string('{{session}}'); print(generate_run_id('{{session}}', results_root=ks.results_dir))")
     echo "Pipeline run: $RUN_ID"
     echo "Session:      {{session}}"
     echo ""

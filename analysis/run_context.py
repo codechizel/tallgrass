@@ -163,20 +163,40 @@ def _next_run_label(analysis_dir: Path, today: str) -> str:
     return f"{today}.{n}"
 
 
-def generate_run_id(session: str) -> str:
+def generate_run_id(session: str, results_root: Path | None = None) -> str:
     """Generate a run ID for grouping pipeline phases.
 
-    Format: {legislature}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}
+    Format: {bb}-{YYMMDD} where bb is the legislature number.
+    Same-day collisions get .1, .2, etc. suffixes.
 
     Examples:
-        "2025-26" → "91st-2026-02-27T19-30-00"
-        "2024s"   → "2024s-2026-02-27T19-30-00"
+        "2025-26" → "91-260227"
+        "2024s"   → "2024s-260227"
+        "2025-26" (second run same day) → "91-260227.1"
+
+    Args:
+        session: Session string (e.g. "2025-26", "2024s").
+        results_root: Optional results root for collision checking.
+            If provided, appends .1, .2, etc. for same-day runs.
     """
     normalized = _normalize_session(session)
     # Extract legislature prefix (e.g. "91st" from "91st_2025-2026", or full string for specials)
     prefix = normalized.split("_")[0] if "_" in normalized else normalized
-    ts = datetime.now(_CT).strftime("%Y-%m-%dT%H-%M-%S")
-    return f"{prefix}-{ts}"
+    # Strip ordinal suffix (e.g. "91st" → "91", "84th" → "84")
+    prefix = re.sub(r"(st|nd|rd|th)$", "", prefix)
+    ts = datetime.now(_CT).strftime("%y%m%d")
+    base = f"{prefix}-{ts}"
+
+    if results_root is None:
+        return base
+
+    # Check for same-day collisions
+    if not (results_root / base).exists() or (results_root / base).is_symlink():
+        return base
+    n = 1
+    while (results_root / f"{base}.{n}").exists():
+        n += 1
+    return f"{base}.{n}"
 
 
 def resolve_upstream_dir(

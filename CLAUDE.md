@@ -129,7 +129,7 @@ External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downl
 Two output modes (ADR-0052):
 
 **Run-directory mode** (`just pipeline` or `--run-id`): all phases grouped under one run ID.
-`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91st-2026-02-27T19-30-00/01_eda/`). Run ID format: `{legislature}-{YYYY}-{MM}-{DD}T{HH}-{MM}-{SS}`.
+`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91-260228/01_eda/`). Run ID format: `{bb}-{YYMMDD}` (e.g. `91-260228`). Same-day collisions append `.1`, `.2`, etc.
 
 **Legacy mode** (individual phase runs, no `--run-id`): each phase writes to its own date directory.
 `results/kansas/{session}/{NN_phase}/{date}/` with a phase-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/01_eda/2026-02-27/`). Same-day runs append `.1`, `.2`, etc.
