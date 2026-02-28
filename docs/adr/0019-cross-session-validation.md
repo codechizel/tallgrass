@@ -57,7 +57,7 @@ Use the same affine transformation approach already proven for cross-chamber equ
 - Compare: same roles flagged? Same threshold behavior?
 - If thresholds fail on 2023-24, propose adaptive alternatives.
 
-**Output location:** `results/kansas/cross-session/<pair>/validation/YYYY-MM-DD/` (e.g., `cross-session/90th-vs-91st/validation/2026-02-22/`). The comparison pair is encoded in the path so that multiple pairwise comparisons (89th-vs-90th, 90th-vs-91st, 89th-vs-91st) each get their own `latest` symlink. RunContext's `_normalize_session` passes the `cross-session/90th-vs-91st` session string through unchanged (it only transforms "YYYY-YY" patterns).
+**Output location:** `results/kansas/cross-session/<pair>/<YYMMDD>/` (e.g., `cross-session/90-vs-91/260222/`). The comparison pair uses legislature numbers (e.g., `90-vs-91`) so that multiple pairwise comparisons each get their own `latest` symlink. RunContext uses `session="cross-session"` with `analysis_name=comparison_label`, producing a flat structure with no phase subdirectory.
 
 ## Consequences
 
