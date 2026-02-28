@@ -135,7 +135,7 @@ See `.claude/rules/analysis-framework.md` for the full 13-phase pipeline, report
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (50 decisions)
+- ADRs: `docs/adr/README.md` (51 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - External validation: `docs/external-validation-results.md` (general-audience results article)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
@@ -165,6 +165,7 @@ Key references:
 - Nutpie deep dive: `docs/nutpie-deep-dive.md` (Rust NUTS sampler, normalizing flow adaptation, integration plan)
 - Nutpie flat IRT experiment: `docs/nutpie-flat-irt-experiment.md` (Experiment 1 results: compilation, sampling, sign flip, |r|=0.994 vs PyMC)
 - Nutpie hierarchical experiment: `results/experimental_lab/2026-02-27_nutpie-hierarchical/experiment.md` (Experiment 2: hierarchical per-chamber with Numba, House convergence test)
+- Nutpie production migration: ADR-0051 (per-chamber hierarchical IRT migrated to nutpie Rust NUTS)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
@@ -173,7 +174,7 @@ Key references:
 
 Three components eliminate code duplication in MCMC experiments (ADR-0048):
 
-- **`analysis/10_hierarchical/model_spec.py`** — `BetaPriorSpec` frozen dataclass + `PRODUCTION_BETA`. Both `build_per_chamber_model()` and `build_joint_model()` accept `beta_prior=` parameter (defaults to production). Experiments pass alternative specs — no code duplication.
+- **`analysis/10_hierarchical/model_spec.py`** — `BetaPriorSpec` frozen dataclass + `PRODUCTION_BETA`. Both `build_per_chamber_model()` and `build_joint_model()` accept `beta_prior=` parameter (defaults to production). Experiments pass alternative specs — no code duplication. `build_per_chamber_graph()` returns the PyMC model without sampling (importable by experiments).
 - **`analysis/experiment_monitor.py`** — `PlatformCheck` (validates Apple Silicon constraints before sampling), monitoring callback (`setproctitle` + atomic JSON status file), `ExperimentLifecycle` (PID lock, process group, cleanup). `just monitor` shows experiment progress.
 - **`analysis/experiment_runner.py`** — `ExperimentConfig` frozen dataclass + `run_experiment()`. Orchestrates: platform check → data load → per-chamber models → optional joint → HTML report → metrics.json. 799-line experiment scripts become ~25-line configs.
 
@@ -182,7 +183,8 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Concurrency
 
 - **Scraper**: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), sequential parse. Never mutate shared state during fetch.
-- **MCMC**: `cores=n_chains` for parallel chains. PCA-informed init default (ADR-0023). Hierarchical IRT uses 4 chains with `adapt_diag` (no jitter) when PCA initvals provided (ADR-0045).
+- **MCMC (per-chamber hierarchical)**: nutpie Rust NUTS sampler — single process, Rust threads for parallel chains (ADR-0051). PCA-informed init via `initial_points`; `jitter_rvs` excludes `xi_offset`. `build_per_chamber_graph()` builds model, `build_per_chamber_model()` compiles+samples.
+- **MCMC (joint + flat IRT)**: PyMC NUTS with `cores=n_chains` for parallel chains. PCA-informed init default (ADR-0023). Joint model uses 4 chains with `adapt_diag` (no jitter) when PCA initvals provided (ADR-0045).
 - **Apple Silicon (M3 Pro, 6P+6E)**: run bienniums sequentially; cap thread pools (`OMP_NUM_THREADS=6`); never use `taskpolicy -c background`. See ADR-0022.
 - **PyTensor C compiler**: PyTensor requires `clang++`/`g++` for C-compiled kernels. Without it, falls back to pure Python (~18x slower). Common failure: Xcode update requires opening Xcode.app to accept license. Justfile exports `PATH` with `/usr/bin` to prevent stripped-PATH failures.
 

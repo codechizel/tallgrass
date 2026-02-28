@@ -27,6 +27,7 @@ from analysis.hierarchical import (
     SMALL_GROUP_SIGMA_SCALE,
     SMALL_GROUP_THRESHOLD,
     _match_bills_across_chambers,
+    build_per_chamber_graph,
     compute_flat_hier_correlation,
     compute_variance_decomposition,
     extract_group_params,
@@ -326,6 +327,33 @@ class TestBuildHierarchicalModel:
         raw = np.array([-1.0, 2.0])
         sorted_vals = pt.sort(pt.as_tensor_variable(raw)).eval()
         np.testing.assert_array_almost_equal(sorted_vals, raw)
+
+    def test_build_per_chamber_graph_returns_model(
+        self, house_matrix: pl.DataFrame, legislators: pl.DataFrame
+    ) -> None:
+        """build_per_chamber_graph should return a PyMC model with expected RVs."""
+        import pymc as pm
+
+        data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        model = build_per_chamber_graph(data)
+        assert isinstance(model, pm.Model)
+        rv_names = {rv.name for rv in model.free_RVs}
+        assert "xi_offset" in rv_names
+        assert "alpha" in rv_names
+        assert "mu_party_raw" in rv_names
+        assert "sigma_within" in rv_names
+
+    def test_build_per_chamber_graph_coords(
+        self, house_matrix: pl.DataFrame, legislators: pl.DataFrame
+    ) -> None:
+        """build_per_chamber_graph model should have legislator and vote coords."""
+        data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        model = build_per_chamber_graph(data)
+        assert "legislator" in model.coords
+        assert "vote" in model.coords
+        assert "party" in model.coords
+        assert len(model.coords["legislator"]) == data["n_legislators"]
+        assert len(model.coords["vote"]) == data["n_votes"]
 
 
 # ── TestExtractHierarchicalResults ───────────────────────────────────────────

@@ -36,6 +36,7 @@ matplotlib.use("Agg")
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
+import nutpie
 import polars as pl
 import pymc as pm
 import pytensor.tensor as pt
@@ -337,32 +338,17 @@ def prepare_hierarchical_data(
 # ── Phase 2: Build and Sample Models ────────────────────────────────────────
 
 
-def build_per_chamber_model(
+def build_per_chamber_graph(
     data: dict,
-    n_samples: int,
-    n_tune: int,
-    n_chains: int,
-    cores: int | None = None,
-    target_accept: float = HIER_TARGET_ACCEPT,
-    xi_offset_initvals: np.ndarray | None = None,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
-    callback=None,
-) -> tuple[az.InferenceData, float]:
-    """Build 2-level hierarchical IRT and sample with NUTS.
+) -> pm.Model:
+    """Build 2-level hierarchical IRT model graph (no sampling).
 
     Model structure:
         mu_party (sorted) → xi (non-centered) → likelihood
         sigma_within (per party) controls within-party spread
 
-    Args:
-        xi_offset_initvals: Optional initial xi_offset values (from PCA).
-            If provided, all chains start near these values. This prevents
-            reflection mode-splitting — see ADR-0044.
-        beta_prior: Specification for the bill discrimination prior.
-            Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
-        callback: Optional PyMC sampling callback (e.g. for experiment monitoring).
-
-    Returns (InferenceData, sampling_time_seconds).
+    Returns the PyMC model for use with nutpie or pm.sample().
     """
     leg_idx = data["leg_idx"]
     vote_idx = data["vote_idx"]
@@ -394,7 +380,7 @@ def build_per_chamber_model(
         "obs_id": np.arange(data["n_obs"]),
     }
 
-    with pm.Model(coords=coords):
+    with pm.Model(coords=coords) as model:
         # --- Party-level parameters ---
         # Raw party means, then sort for identification (D < R)
         mu_party_raw = pm.Normal("mu_party_raw", mu=0, sigma=2, shape=n_parties)
@@ -422,40 +408,82 @@ def build_per_chamber_model(
         eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
         pm.Bernoulli("obs", logit_p=eta, observed=y, dims="obs_id")
 
-        # --- Sample ---
-        print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
-        print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
+    return model
 
-        # PCA-informed initialization of xi_offset (ADR-0044, ADR-0045)
-        sample_kwargs: dict = {}
-        if xi_offset_initvals is not None:
-            sample_kwargs["initvals"] = {"xi_offset": xi_offset_initvals}
-            # Use adapt_diag (no jitter) when PCA initvals provided.
-            # jitter+adapt_diag adds random perturbation that can push chains
-            # past the reflection mode boundary, causing mode-splitting with
-            # 4+ chains. PCA init already orients chains correctly.
-            sample_kwargs["init"] = "adapt_diag"
-            print(
-                f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
-                f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
-            )
-            print("  init='adapt_diag' (no jitter — PCA initvals provide orientation)")
 
-        if callback is not None:
-            sample_kwargs["callback"] = callback
+def build_per_chamber_model(
+    data: dict,
+    n_samples: int,
+    n_tune: int,
+    n_chains: int,
+    cores: int | None = None,
+    target_accept: float = HIER_TARGET_ACCEPT,
+    xi_offset_initvals: np.ndarray | None = None,
+    beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    callback=None,
+) -> tuple[az.InferenceData, float]:
+    """Build 2-level hierarchical IRT and sample with nutpie's Rust NUTS.
 
-        t0 = time.time()
-        idata = pm.sample(
-            draws=n_samples,
-            tune=n_tune,
-            chains=n_chains,
-            cores=cores if cores is not None else n_chains,
-            target_accept=target_accept,
-            random_seed=RANDOM_SEED,
-            progressbar=True,
-            **sample_kwargs,
+    Builds the model graph via build_per_chamber_graph(), then compiles and
+    samples with nutpie. PCA-informed initialization is passed via
+    nutpie.compile_pymc_model(initial_points=...).
+
+    Args:
+        xi_offset_initvals: Optional initial xi_offset values (from PCA).
+            If provided, all chains start near these values. This prevents
+            reflection mode-splitting — see ADR-0044.
+        beta_prior: Specification for the bill discrimination prior.
+            Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        callback: Accepted for API compatibility (experiment runner) but ignored.
+            nutpie does not support PyMC-style callbacks.
+
+    Returns (InferenceData, sampling_time_seconds).
+    """
+    if callback is not None:
+        print("  Note: callback ignored (nutpie does not support PyMC callbacks)")
+    if target_accept != HIER_TARGET_ACCEPT:
+        print(
+            f"  Note: target_accept={target_accept} ignored "
+            "(nutpie uses adaptive dual averaging)"
         )
-        sampling_time = time.time() - t0
+
+    model = build_per_chamber_graph(data, beta_prior)
+
+    # --- Compile with nutpie ---
+    compile_kwargs: dict = {}
+    if xi_offset_initvals is not None:
+        # PCA init for xi_offset; jitter all OTHER RVs.
+        # Critical: jitter_rvs=set() would cause HalfNormal sigma_within to
+        # initialize at its support point (~0), producing log(0)=-inf.
+        compile_kwargs["initial_points"] = {"xi_offset": xi_offset_initvals}
+        compile_kwargs["jitter_rvs"] = {
+            rv for rv in model.free_RVs if rv.name != "xi_offset"
+        }
+        print(
+            f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
+            f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
+        )
+        jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
+        print(f"  jitter_rvs: {jittered} (xi_offset excluded)")
+
+    print("  Compiling model with nutpie...")
+    compiled = nutpie.compile_pymc_model(model, **compile_kwargs)
+
+    # --- Sample ---
+    print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
+    print(f"  seed={RANDOM_SEED}, sampler=nutpie (Rust NUTS)")
+
+    t0 = time.time()
+    idata = nutpie.sample(
+        compiled,
+        draws=n_samples,
+        tune=n_tune,
+        chains=n_chains,
+        seed=RANDOM_SEED,
+        progress_bar=True,
+        store_divergences=True,
+    )
+    sampling_time = time.time() - t0
 
     print(f"  Sampling complete in {sampling_time:.1f}s")
     return idata, sampling_time
