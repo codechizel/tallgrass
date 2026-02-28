@@ -441,23 +441,33 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** The 84th House data has ~30% of vote pages missing individual-level data (tally-only ODTs), plus 899/900 rollcalls with tally mismatches between summary and detail counts. The observation matrix is only 51.7% complete before filtering. This produces a degenerate likelihood surface for the House IRT model. Senate data is cleaner.
 - **Downstream:** House IRT-derived metrics for the 84th (ideal points, bill discrimination, SHAP from prediction) should be treated as unreliable. Senate results are trustworthy. Hierarchical IRT also failed convergence for House (R-hat up to 1.04). All phases that depend on IRT ideal points (clustering IRT scatter, prediction IRT features, synthesis dashboards, profiles) inherit this uncertainty for House only.
 
-### IRT Convergence Failures Across Historical Sessions
+### IRT Convergence Failures Across Historical Sessions (RESOLVED)
 
 - **Phase:** IRT
-- **Observation:** Five chamber-sessions have catastrophic flat IRT convergence failure (R-hat ~1.83, ESS ~3). The affected chambers produce compressed ideal points in [-1, +1] (the anchor bounds) with inverted party signs. The broken `xi_mean` propagates into network (centrality, community composition `mean_xi`), prediction (vote features `xi_mean`, `xi_x_beta`), and synthesis (`xi_mean`, `xi_mean_percentile`).
+- **Observation (original):** Five chamber-sessions had catastrophic flat IRT convergence failure (R-hat ~1.83, ESS ~3) with PyMC's default NUTS sampler: 84th House, 85th Senate, 86th House, 87th Senate, 89th House.
+- **Resolution (2026-02-28):** The nutpie Rust NUTS sampler migration (ADR-0053) resolved all 5 failures. All 16 chamber-sessions (84th-91st, House+Senate) now pass convergence: R-hat < 1.01, ESS > 400, zero divergences across the board.
 
-| Biennium | Chamber | R-hat (xi) | ESS (xi) | IRT-PCA r | Status |
-|----------|---------|-----------|----------|-----------|--------|
-| 84th (2011-12) | House | 1.83 | 3 | -0.65 | Known |
-| 85th (2013-14) | Senate | 1.83 | 3 | -0.49 | Known |
-| 86th (2015-16) | House | 1.84 | 3 | -0.69 | Known |
-| 87th (2017-18) | Senate | 1.83 | 3 | -0.47 | Known |
-| 88th (2019-20) | Both | OK | OK | +0.96 | Clean |
-| 89th (2021-22) | House | 1.83 | 3 | inverted | Known |
-| 90th-91st | Both | OK | OK | > +0.93 | Clean |
+| Biennium | Chamber | R-hat (xi) | ESS (xi) | Divergences | Status |
+|----------|---------|-----------|----------|-------------|--------|
+| 84th (2011-12) | House | 1.0051 | 594 | 0 | **PASS** |
+| 84th | Senate | 1.0035 | 1691 | 0 | **PASS** |
+| 85th (2013-14) | House | 1.0066 | 801 | 0 | **PASS** |
+| 85th | Senate | 1.0066 | 1192 | 0 | **PASS** |
+| 86th (2015-16) | House | 1.0037 | 729 | 0 | **PASS** |
+| 86th | Senate | 1.0043 | 1206 | 0 | **PASS** |
+| 87th (2017-18) | House | 1.0056 | 703 | 0 | **PASS** |
+| 87th | Senate | 1.0054 | 1119 | 0 | **PASS** |
+| 88th (2019-20) | House | 1.0080 | 2026 | 0 | **PASS** |
+| 88th | Senate | 1.0029 | 2338 | 0 | **PASS** |
+| 89th (2021-22) | House | 1.0062 | 686 | 0 | **PASS** |
+| 89th | Senate | 1.0039 | 1289 | 0 | **PASS** |
+| 90th (2023-24) | House | 1.0045 | 1639 | 0 | **PASS** |
+| 90th | Senate | 1.0035 | 977 | 0 | **PASS** |
+| 91st (2025-26) | House | 1.0043 | 599 | 0 | **PASS** |
+| 91st | Senate | 1.0042 | 1794 | 0 | **PASS** |
 
-- **Explanation:** The flat IRT model (2-parameter, unconstrained Normal discrimination, fixed anchors) intermittently fails to converge for one chamber per session. The failures cluster in historical sessions where vote matrix completeness is lower (ODT parsing gaps, mid-session replacements). The hierarchical per-chamber model often converges where flat IRT fails, because the party-level prior provides additional regularization.
-- **Downstream:** For affected chambers, `hier_xi_mean` from the hierarchical model is the authoritative ideology estimate. Flat IRT `xi_mean` should not be used. Synthesis, network, and prediction consume flat IRT values by default — the broken values propagate but do not crash these phases (prediction still achieves high AUC via other features). The `shrinkage_pct` comparison in hierarchical output is meaningless when flat IRT failed (computing delta against noise).
+- **Explanation:** The nutpie sampler's normalizing flow adaptation handles the correlated posterior geometry (β sign-flip multimodality, non-centered funnel scaling) that PyMC's default NUTS could not navigate. Combined with PCA-informed initialization (ADR-0023) and `jitter_rvs` excluding the PCA-initialized variable, convergence is now robust across all sessions.
+- **Downstream:** The `xi_mean` values from flat IRT are now reliable for all 16 chamber-sessions. Network, prediction, and synthesis phases consume correct ideal points. The `shrinkage_pct` comparison in hierarchical output is now meaningful across all bienniums.
 
 ### 84th (2011-12) — Senate ICC = 49%
 
