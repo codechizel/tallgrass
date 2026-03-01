@@ -15,6 +15,8 @@ import pytest
 from tallgrass.cli import main
 from tallgrass.session import CURRENT_BIENNIUM_START
 
+pytestmark = pytest.mark.scraper
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 

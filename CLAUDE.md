@@ -22,8 +22,9 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1421 tests)
-just test-scraper                            # → pytest on scraper test files only
+just test                                    # → uv run pytest tests/ -v (~1469 tests)
+just test-scraper                            # → pytest -m scraper (~264 tests)
+just test-fast                               # → pytest -m "not slow" (skip integration)
 just monitor                                 # → check running experiment status
 just pipeline 2025-26                        # → full analysis pipeline (all phases grouped)
 uv run tallgrass 2023                  # historical session (direct)
@@ -146,7 +147,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (59 decisions)
+- ADRs: `docs/adr/README.md` (60 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -208,9 +209,12 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Testing
 
 ```bash
-just test                    # 1421 tests
-just test-scraper            # scraper tests only
+just test                    # 1469 tests
+just test-scraper            # scraper tests only (-m scraper)
+just test-fast               # skip slow/integration tests (-m "not slow")
 just check                   # full check (lint + typecheck + tests)
 ```
+
+Pytest markers: `@pytest.mark.scraper` (scraper pipeline), `@pytest.mark.integration` (end-to-end/real-data), `@pytest.mark.slow` (>5s). Registered in `pyproject.toml`.
 
 See `.claude/rules/testing.md` for test file inventory and conventions.

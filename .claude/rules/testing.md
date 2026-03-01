@@ -8,11 +8,22 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1421)
-just test-scraper            # scraper tests only
+just test                    # run all tests (~1469)
+just test-scraper            # scraper tests only (-m scraper, ~264)
+just test-fast               # skip slow tests (-m "not slow", ~1445)
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
+uv run pytest tests/ -m integration  # integration tests only
+uv run pytest tests/ -m "not scraper"  # analysis tests only
 ```
+
+## Markers
+
+Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-class decorators).
+
+- `@pytest.mark.scraper` — scraper pipeline tests (8 files, ~264 tests)
+- `@pytest.mark.integration` — end-to-end and real-data tests (~29 tests)
+- `@pytest.mark.slow` — tests that take >5 seconds (~24 tests)
 
 ## Conventions
 
@@ -58,6 +69,12 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_tsa.py` — rolling PCA drift, sign alignment, party trajectories, early-vs-late, Rice timeseries, weekly aggregation, PELT changepoints, joint detection, penalty sensitivity, vote matrix, veto cross-reference, Desposato correction, short-session warnings, imputation sensitivity, variance-change detection (~64 tests)
 - `tests/test_dynamic_irt.py` — global roster, name dedup, cross-biennium stacking, bridge coverage, model structure, polarization decomposition, top movers, static correlation, report smoke tests (~50 tests)
 - `tests/test_wnominate.py` — vote matrix conversion, polarity selection, result parsing, sign alignment, three-way correlations, comparison table, eigenvalues (~25 tests)
+
+## Integration & Structure Test Files
+
+- `tests/test_report_structure.py` — HTML report skeleton: TOC anchors, section ordering, numbering, container types, duplicate IDs, empty report, CSS embedding, make_gt integration (~22 tests)
+- `tests/test_integration_pipeline.py` — end-to-end: synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution, generate_run_id (~26 tests). Marked `@pytest.mark.integration`.
+- `tests/test_data_integrity.py` — real-data CSV structural tests (~24 tests). Marked `@pytest.mark.integration` + `@pytest.mark.slow`.
 
 ## Manual Verification
 

@@ -10,7 +10,11 @@ Run: uv run pytest tests/test_session.py -v
 
 from pathlib import Path
 
+import pytest
+
 from tallgrass.session import KSSession, _ordinal
+
+pytestmark = pytest.mark.scraper
 
 # ── _ordinal() ───────────────────────────────────────────────────────────────
 

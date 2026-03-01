@@ -13,6 +13,8 @@ from io import BytesIO
 
 import pytest
 
+pytestmark = pytest.mark.scraper
+
 from tallgrass.odt_parser import (
     OdtMetadata,
     _classify_motion,

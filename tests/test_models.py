@@ -14,6 +14,8 @@ import pytest
 from tallgrass.models import IndividualVote, RollCall
 from tallgrass.scraper import FetchFailure, VoteLink
 
+pytestmark = pytest.mark.scraper
+
 # ── IndividualVote ───────────────────────────────────────────────────────────
 
 

@@ -155,7 +155,11 @@ test *args:
 
 # Run scraper tests only
 test-scraper *args:
-    uv run pytest tests/test_session.py tests/test_scraper_pure.py tests/test_scraper_html.py tests/test_models.py tests/test_output.py tests/test_cli.py {{args}} -v
+    uv run pytest tests/ -m scraper {{args}} -v
+
+# Run fast tests (skip slow/integration)
+test-fast *args:
+    uv run pytest tests/ -m "not slow" {{args}} -v
 
 # Type check with ty (scraper must pass clean, analysis warnings-only)
 typecheck:

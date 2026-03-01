@@ -12,6 +12,8 @@ import pytest
 
 from tallgrass.session import KSSession
 
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
+
 # ── Constants ────────────────────────────────────────────────────────────────
 
 _SESSION = KSSession.from_year(2025)

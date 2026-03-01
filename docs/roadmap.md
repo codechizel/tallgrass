@@ -112,12 +112,12 @@ Full analysis with literature references, ecosystem comparison, and code audit: 
 
 All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that RunContext auto-writes to `README.md` in every phase output directory. Each primer covers: Purpose, Method, Inputs, Outputs, Interpretation Guide, and Caveats. The project-level primer (`docs/analysis-primer.md`) provides the general-audience overview.
 
-### Test Suite Expansion — **In Progress**
+### ~~Test Suite Expansion~~ — Done
 
-~1421 tests across scraper and analysis modules. All passing. Remaining gaps:
-- Integration tests that run a mini end-to-end pipeline on fixture data
-- Snapshot tests for HTML report output stability
-- Test markers (`@pytest.mark.slow`, `@pytest.mark.scraper`, `@pytest.mark.integration`) for selective test runs
+1469 tests across scraper and analysis modules. All passing. Three gaps closed:
+- **Integration tests**: `test_integration_pipeline.py` — synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution (26 tests)
+- **HTML report structural tests**: `test_report_structure.py` — TOC anchors, section ordering, numbering, container types, empty report, CSS embedding, make_gt integration (22 tests)
+- **Pytest markers**: `@pytest.mark.scraper` (264 tests), `@pytest.mark.integration` (29 tests), `@pytest.mark.slow` (24 tests). Registered in `pyproject.toml`. Recipes: `just test-scraper`, `just test-fast`
 
 ---
 

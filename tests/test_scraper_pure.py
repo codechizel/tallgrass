@@ -15,6 +15,8 @@ import pytest
 
 from tallgrass.scraper import FetchResult, KSVoteScraper, _normalize_bill_code
 
+pytestmark = pytest.mark.scraper
+
 # ── _normalize_bill_code() ───────────────────────────────────────────────────
 
 

@@ -119,6 +119,7 @@ What are the trade-offs?
 | [0050](0050-numbered-results-directories.md) | Numbered results directories |
 | [0052](0052-run-grouped-results-directories.md) | Run-grouped results directories |
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions |
+| [0060](0060-test-suite-expansion.md) | Test suite expansion (markers, integration, report structure) |
 
 ## Chronological Index
 
@@ -183,6 +184,7 @@ What are the trade-offs?
 | [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints, language policy update) | Accepted | 2026-02-28 |
 | [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn, polarization decomposition) | Accepted | 2026-02-28 |
 | [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase (R subprocess, field-standard comparison) | Accepted | 2026-02-28 |
+| [0060](0060-test-suite-expansion.md) | Test suite expansion (markers, integration tests, report structure tests) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

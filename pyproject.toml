@@ -49,6 +49,11 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "scraper: scraper pipeline tests",
+    "integration: end-to-end and real-data tests",
+    "slow: tests that take >5 seconds",
+]
 
 [tool.ruff]
 line-length = 100

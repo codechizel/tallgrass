@@ -17,6 +17,8 @@ from bs4 import BeautifulSoup
 
 from tallgrass.scraper import KSVoteScraper, _clean_text
 
+pytestmark = pytest.mark.scraper
+
 # ── _clean_text() ────────────────────────────────────────────────────────────
 # Bug #5: get_text(strip=True) drops spaces around inline <a> elements.
 
