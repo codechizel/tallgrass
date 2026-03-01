@@ -19,6 +19,7 @@ Pipeline phases (in order):
   14_external_validation — Shor-McCarty comparison
   15_tsa              — Time series analysis (drift + changepoints)
   16_dynamic_irt      — Dynamic ideal points (state-space IRT)
+  17_wnominate        — W-NOMINATE + Optimal Classification validation
 
 Shared infrastructure at root: run_context.py, report.py
 
@@ -78,6 +79,9 @@ _MODULE_MAP: dict[str, str] = {
     "dynamic_irt": "16_dynamic_irt",
     "dynamic_irt_data": "16_dynamic_irt",
     "dynamic_irt_report": "16_dynamic_irt",
+    "wnominate": "17_wnominate",
+    "wnominate_data": "17_wnominate",
+    "wnominate_report": "17_wnominate",
     "irt_beta_experiment": "experimental",
 }
 

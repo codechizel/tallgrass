@@ -50,14 +50,15 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 4b | 2D Bayesian IRT (Pipeline, Experimental) | 2026-02-26 (experiment), 2026-02-28 (pipeline) | M2PL model with PLT identification to resolve Tyson paradox. Pipeline phase 04b: both chambers, nutpie sampling, RunContext/HTML report, relaxed convergence thresholds. Deep dive: `docs/2d-irt-deep-dive.md`, design: `analysis/design/irt_2d.md`, ADR-0046, ADR-0054. |
 | 15 | Time Series Analysis | 2026-02-28 | Rolling-window PCA ideological drift + PELT changepoint detection on weekly Rice. Per-chamber analysis, penalty sensitivity, veto override cross-reference. Uses `ruptures` library. Deep dive: `docs/tsa-deep-dive.md`, design: `analysis/design/tsa.md`, ADR-0057. |
 | 16 | Dynamic Ideal Points (Martin-Quinn) | 2026-02-28 | State-space IRT across 8 bienniums (84th-91st). Non-centered random walk with per-party evolution SD. PyMC + nutpie. Conversion vs. replacement polarization decomposition. Bridge coverage analysis. 58 tests. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`, design: `analysis/design/dynamic_irt.md`, ADR-0058. |
+| 17 | W-NOMINATE + OC Validation | 2026-02-28 | Field-standard legislative scaling comparison. W-NOMINATE (Poole & Rosenthal) + Optimal Classification (Poole 2000) via R subprocess. 3×3 correlation matrix (IRT/WNOM/OC), per-chamber scatter plots, 2D W-NOMINATE space, eigenvalue scree, fit statistics. Validation-only (does not feed downstream). Deep dive: `docs/w-nominate-deep-dive.md`, design: `analysis/design/wnominate.md`, ADR-0059. |
 
 ---
 
 ## Next Up (Prioritized)
 
-### 1. W-NOMINATE
+### ~~1. W-NOMINATE~~ — Done (Phase 17)
 
-**Priority:** High — field-standard legislative scaling method. Every published paper on Congress uses it. Having a W-NOMINATE comparison lets us say "our Bayesian IRT correlates at r=X with W-NOMINATE" — a sentence political scientists trust immediately. R is now allowed for field-standard methods where no Python equivalent exists. Uses `rpy2` to call `wnominate` from Python.
+Completed 2026-02-28. See Completed Phases table above.
 
 ### 2. DIME/CFscores External Validation (Second Source)
 
@@ -67,9 +68,9 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 
 **Priority:** Medium — cross-model PPC comparison (flat IRT vs hierarchical vs 2D IRT). Already partially integrated into the IRT phase. Now that all three IRT variants are implemented, a unified comparison has real value for model selection.
 
-### 4. Optimal Classification
+### ~~4. Optimal Classification~~ — Done (Phase 17)
 
-**Priority:** Low — nonparametric legislative scaling. Diminishing returns if W-NOMINATE is already done. R-only (`oc` package). Would provide a third scaling comparison point but unlikely to reveal findings beyond W-NOMINATE + IRT.
+Completed 2026-02-28. Bundled with W-NOMINATE in Phase 17. See Completed Phases table above.
 
 ### 5. Latent Class Mixture Models
 
@@ -107,15 +108,16 @@ Full analysis with literature references, ecosystem comparison, and code audit: 
 
 ## Other Backlog
 
-### Per-Phase Results Primers
+### ~~Per-Phase Results Primers~~ — Done
 
-Each results directory should have a `README.md` explaining the analysis for non-code readers. Low priority — the HTML reports serve this role for now, and the project-level primer (`docs/analysis-primer.md`) provides the general-audience overview.
+All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that RunContext auto-writes to `README.md` in every phase output directory. Each primer covers: Purpose, Method, Inputs, Outputs, Interpretation Guide, and Caveats. The project-level primer (`docs/analysis-primer.md`) provides the general-audience overview.
 
-### Test Suite Expansion
+### Test Suite Expansion — **In Progress**
 
-~1260 tests across scraper and analysis modules. All passing. Coverage could be expanded:
+~1421 tests across scraper and analysis modules. All passing. Remaining gaps:
 - Integration tests that run a mini end-to-end pipeline on fixture data
 - Snapshot tests for HTML report output stability
+- Test markers (`@pytest.mark.slow`, `@pytest.mark.scraper`, `@pytest.mark.integration`) for selective test runs
 
 ---
 
@@ -160,8 +162,8 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 09 | PCA | DIM | Completed (PCA) |
 | 10 | MCA / Correspondence Analysis | DIM | Completed (MCA, Phase 2c) |
 | 11 | UMAP / t-SNE | DIM | Completed (UMAP, Phase 2b) |
-| 12 | W-NOMINATE | DIM | **Planned** — item #1 above |
-| 13 | Optimal Classification | DIM | **Planned** — item #4 above |
+| 12 | W-NOMINATE | DIM | Completed (W-NOMINATE + OC, Phase 17) |
+| 13 | Optimal Classification | DIM | Completed (W-NOMINATE + OC, Phase 17) |
 | 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
 | 16 | Hierarchical Bayesian Model | BAY | Completed (Hierarchical IRT, Phase 8) |
@@ -182,7 +184,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — item #3 above |
 | 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **Planned** — item #7 above |
 
-**Score: 25 completed, 7 rejected, 4 planned, 1 partial = 37 total**
+**Score: 27 completed, 7 rejected, 2 planned, 1 partial = 37 total**
 
 Note: Methods 29-37 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R; TSA Hardening from deep dive).
 
@@ -191,7 +193,7 @@ Note: Methods 29-37 are newly added items (Dynamic Ideal Points, DIME/CFscores, 
 ## Key Architectural Decisions Still Standing
 
 - **Polars over pandas** everywhere
-- **Python-first, R where necessary** — R allowed via rpy2 for field-standard methods with no Python equivalent (W-NOMINATE, Optimal Classification)
+- **Python-first, R where necessary** — R allowed via subprocess for field-standard methods with no Python equivalent (W-NOMINATE, Optimal Classification in Phase 17; emIRT in Phase 16)
 - **Ruff + ty + uv** — all-Astral toolchain (lint, type check, package management)
 - **IRT ideal points are the primary feature** — prediction confirmed this; everything else is marginal
 - **Chambers analyzed separately** unless explicitly doing cross-chamber comparison

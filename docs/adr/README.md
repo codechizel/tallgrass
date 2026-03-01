@@ -97,6 +97,7 @@ What are the trade-offs?
 | [0025](0025-external-validation-shor-mccarty.md) | External validation against Shor-McCarty scores |
 | [0035](0035-cross-session-deep-dive-improvements.md) | Cross-session deep dive improvements |
 | [0039](0039-cross-session-validation-enhancements.md) | Cross-session validation enhancements |
+| [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase |
 
 ### Infrastructure
 
@@ -181,6 +182,7 @@ What are the trade-offs?
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions (eliminate legacy mode orphan directories) | Accepted | 2026-02-28 |
 | [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints, language policy update) | Accepted | 2026-02-28 |
 | [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn, polarization decomposition) | Accepted | 2026-02-28 |
+| [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase (R subprocess, field-standard comparison) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

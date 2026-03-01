@@ -9,7 +9,7 @@ paths:
 
 EDA -> PCA -> MCA -> IRT -> 2D IRT (experimental) -> UMAP -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles -> TSA
 
-Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only). Dynamic IRT (Phase 16) is a cross-session phase using Martin-Quinn state-space IRT across all 8 bienniums (ADR-0058).
+Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only). Dynamic IRT (Phase 16) is a cross-session phase using Martin-Quinn state-space IRT across all 8 bienniums (ADR-0058). W-NOMINATE + OC (Phase 17) is a standalone validation phase comparing IRT to field-standard legislative scaling methods via R subprocess (ADR-0059).
 
 ## Technology Preferences
 
@@ -54,6 +54,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
 - `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation. Deep dive: `docs/tsa-deep-dive.md`
 - `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`
+- `wnominate.md` — Field-standard comparison (W-NOMINATE, Optimal Classification), R subprocess, validation-only design. Deep dive: `docs/w-nominate-deep-dive.md`
 
 ## Key Data Structures
 

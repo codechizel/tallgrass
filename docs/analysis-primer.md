@@ -36,6 +36,7 @@ Here's the full pipeline at a glance:
 14. **Cross-Session Validation** — Check whether our findings hold up over time.
 15. **Time Series Analysis** — Track how legislators and parties change *during* a session.
 16. **Dynamic Ideal Points** — Track how legislators move across *multiple* sessions (years, not weeks).
+17. **W-NOMINATE + Optimal Classification** — Compare our IRT scores against the field-standard methods used in every published paper on Congress.
 
 Let's walk through each one.
 
@@ -493,3 +494,27 @@ These limitations aren't failures — they're the honest boundaries of what quan
 - **[IRT Deep Dive](irt-deep-dive.md)** — Field survey of IRT implementations, code audit against best practices, and test gap analysis.
 - **[IRT Field Survey](irt-field-survey.md)** — The IRT identification problem, how the field solves it, our unconstrained β contribution, and why Python has no production IRT package for legislative analysis.
 - **[Dynamic Ideal Points Deep Dive](dynamic-ideal-points-deep-dive.md)** — Ecosystem survey of dynamic IRT methods, Martin-Quinn model theory, state-space parameterization, and Kansas-specific considerations.
+- **[W-NOMINATE Deep Dive](w-nominate-deep-dive.md)** — Literature survey of W-NOMINATE and Optimal Classification, ecosystem comparison, and validation design.
+
+---
+
+## Step 17: W-NOMINATE + Optimal Classification — The Gold Standard Check
+
+### What it is
+
+W-NOMINATE (Poole & Rosenthal) is *the* method for scaling legislative votes. Virtually every published paper on Congress uses it. Optimal Classification (Poole 2000) is its nonparametric cousin. This step runs both methods on the same Kansas data and compares the results to our Bayesian IRT ideal points.
+
+### Why it matters
+
+Until this step, all our validation has been internal — IRT correlates with PCA, holdout accuracy is high, cross-session scores are stable. But none of that proves we're measuring what political scientists mean by "ideology." Comparing to W-NOMINATE lets us say "our scores correlate at r = X with the field standard" — a sentence that political scientists trust immediately.
+
+### What to look for
+
+- **IRT vs W-NOMINATE r > 0.95**: The standard result in the literature. This means our Bayesian IRT and the MLE-based field standard essentially agree.
+- **IRT vs OC r > 0.90**: Expected. OC is nonparametric (no distributional assumptions), so slightly lower correlation is normal.
+- **W-NOMINATE 2D plot**: Shows legislators inside a unit circle. Dimension 1 = left-right ideology. If dimension 2 shows meaningful structure, that's interesting — it could be a social vs. fiscal split, or something Kansas-specific.
+- **Scree plot**: Sharp eigenvalue drop after dimension 1 confirms Kansas voting is primarily one-dimensional.
+
+### What it does NOT do
+
+This is a validation-only phase. The W-NOMINATE and OC results do *not* feed into any downstream analysis (synthesis, profiles, etc.). They exist solely to validate our IRT ideal points against an external benchmark.

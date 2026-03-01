@@ -119,6 +119,10 @@ tsa *args:
 dynamic-irt *args:
     uv run python analysis/16_dynamic_irt/dynamic_irt.py {{args}}
 
+# Run W-NOMINATE + Optimal Classification validation
+wnominate *args:
+    uv run python analysis/17_wnominate/wnominate.py {{args}}
+
 # Run full analysis pipeline for a session (all phases grouped under one run ID)
 pipeline session="2025-26" *args:
     #!/usr/bin/env bash
