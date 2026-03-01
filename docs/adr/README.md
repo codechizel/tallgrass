@@ -81,6 +81,7 @@ What are the trade-offs?
 | [0029](0029-leiden-community-detection.md) | Leiden community detection (replacing Louvain) |
 | [0031](0031-prediction-deep-dive-improvements.md) | Prediction deep dive improvements |
 | [0034](0034-synthesis-deep-dive-improvements.md) | Synthesis deep dive improvements |
+| [0064](0064-lca-latent-class-analysis.md) | Latent Class Analysis (Phase 5b) |
 
 ### Time Series
 
@@ -191,6 +192,7 @@ What are the trade-offs?
 | [0061](0061-tsa-r-enrichment.md) | TSA R enrichment (CROPS penalty selection + Bai-Perron CIs) | Accepted | 2026-02-28 |
 | [0062](0062-dime-cfscore-external-validation.md) | DIME/CFscore external validation (Phase 14b, campaign-finance ideology) | Accepted | 2026-02-28 |
 | [0063](0063-ppc-loo-standalone-phase.md) | Standalone PPC + LOO-CV phase (Phase 4c) | Accepted | 2026-02-28 |
+| [0064](0064-lca-latent-class-analysis.md) | Latent Class Analysis (Phase 5b) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

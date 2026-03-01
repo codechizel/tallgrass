@@ -75,6 +75,10 @@ ppc *args:
 clustering *args:
     uv run python analysis/05_clustering/clustering.py {{args}}
 
+# Run latent class analysis
+lca *args:
+    uv run python analysis/05b_lca/lca.py {{args}}
+
 # Run network analysis
 network *args:
     uv run python analysis/06_network/network.py {{args}}
@@ -146,6 +150,7 @@ pipeline session="2025-26" *args:
     just irt-2d   --session {{session}} --run-id "$RUN_ID" {{args}}
     just umap     --session {{session}} --run-id "$RUN_ID" {{args}}
     just clustering --session {{session}} --run-id "$RUN_ID" {{args}}
+    just lca      --session {{session}} --run-id "$RUN_ID" {{args}}
     just network  --session {{session}} --run-id "$RUN_ID" {{args}}
     just indices  --session {{session}} --run-id "$RUN_ID" {{args}}
     just prediction --session {{session}} --run-id "$RUN_ID" {{args}}

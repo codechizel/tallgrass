@@ -52,6 +52,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 16 | Dynamic Ideal Points (Martin-Quinn) | 2026-02-28 | State-space IRT across 8 bienniums (84th-91st). Non-centered random walk with per-party evolution SD. PyMC + nutpie. Conversion vs. replacement polarization decomposition. Bridge coverage analysis. 58 tests. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`, design: `analysis/design/dynamic_irt.md`, ADR-0058. |
 | 17 | W-NOMINATE + OC Validation | 2026-02-28 | Field-standard legislative scaling comparison. W-NOMINATE (Poole & Rosenthal) + Optimal Classification (Poole 2000) via R subprocess. 3×3 correlation matrix (IRT/WNOM/OC), per-chamber scatter plots, 2D W-NOMINATE space, eigenvalue scree, fit statistics. Validation-only (does not feed downstream). Deep dive: `docs/w-nominate-deep-dive.md`, design: `analysis/design/wnominate.md`, ADR-0059. |
 | 4c | PPC + LOO-CV Model Comparison | 2026-02-28 | PPC battery (Yea rate, accuracy, GMP, APRE) + item/person fit + Yen's Q3 local dependence + LOO-CV model comparison across flat 1D, 2D IRT, and hierarchical IRT. Manual numpy log-likelihood (no PyMC rebuild). Graceful degradation for missing models. 60 tests. Design: `analysis/design/ppc.md`, ADR-0063. |
+| 5b | Latent Class Analysis | 2026-02-28 | Bernoulli mixture (LCA) on binary vote matrix via StepMix. BIC model selection (K=1..8), Salsa effect detection (profile correlations), IRT cross-validation, Phase 5 ARI comparison, within-party LCA. Correct generative model for binary data. Deep dive: `docs/latent-class-deep-dive.md`, design: `analysis/design/lca.md`. |
 
 ---
 
@@ -73,11 +74,9 @@ Completed 2026-02-28. PPC battery (Yea rate, accuracy, GMP, APRE) + item/person 
 
 Completed 2026-02-28. Bundled with W-NOMINATE in Phase 17. See Completed Phases table above.
 
-### 5. Latent Class Mixture Models → Phase 5b
+### ~~5. Latent Class Mixture Models~~ — Done (Phase 5b)
 
-**Priority:** Low — probabilistic alternative to k-means for discrete faction discovery. Documented in `Analytic_Methods/28_CLU_latent_class_mixture_models.md`. Clustering already showed within-party variation is continuous, not factional. Would formalize that null result but unlikely to discover anything new.
-
-Natural "b" phase of Phase 5 (Clustering). Would likely confirm the null result.
+Completed 2026-02-28. Bernoulli mixture model (LCA) on binary vote matrix using StepMix. BIC model selection, Salsa effect detection, IRT cross-validation, Phase 5 ARI comparison, within-party LCA. Confirms null result: correct generative model for binary votes. Deep dive: `docs/latent-class-deep-dive.md`, design: `analysis/design/lca.md`.
 
 ### 6. Bipartite Bill-Legislator Network → Phase 6b
 
@@ -181,13 +180,13 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 25 | SHAP Analysis | PRD | Completed (Prediction) |
 | 26 | Ideological Drift | TSA | Completed (TSA, Phase 15) |
 | 27 | Changepoint Detection | TSA | Completed (TSA, Phase 15) |
-| 28 | Latent Class Mixture Models | CLU | **Planned** — Phase 5b |
+| 28 | Latent Class Mixture Models | CLU | Completed (LCA, Phase 5b) |
 | 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | Completed (Dynamic IRT, Phase 16) |
 | 30 | DIME/CFscores External Validation | VAL | Completed — Phase 14b (ADR-0062) |
 | 31 | Standalone Posterior Predictive Checks | BAY | **Done** — Phase 4c (ADR-0063) |
 | 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | Completed — item #7 above |
 
-**Score: 29 completed, 7 rejected, 1 planned, 1 in progress, 1 partial = 39 total**
+**Score: 32 completed, 7 rejected = 39 total**
 
 Note: Methods 29-32 are additions beyond the original 28 (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, TSA Hardening).
 

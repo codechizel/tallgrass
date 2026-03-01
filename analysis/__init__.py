@@ -9,6 +9,7 @@ Pipeline phases (in order):
   04b_irt_2d       — 2D Bayesian IRT ideal points (experimental)
   04c_ppc          — Posterior predictive checks + LOO-CV model comparison
   05_clustering    — Voting bloc detection
+  05b_lca          — Latent Class Analysis (Bernoulli mixture)
   06_network       — Legislator network analysis
   07_indices       — Classical political science indices
   08_prediction    — Vote prediction (XGBoost)
@@ -50,6 +51,8 @@ _MODULE_MAP: dict[str, str] = {
     "irt_2d_report": "04b_irt_2d",
     "clustering": "05_clustering",
     "clustering_report": "05_clustering",
+    "lca": "05b_lca",
+    "lca_report": "05b_lca",
     "network": "06_network",
     "network_report": "06_network",
     "indices": "07_indices",
