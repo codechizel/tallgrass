@@ -120,7 +120,7 @@ All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that Ru
 
 ### ~~Test Suite Expansion~~ — Done
 
-1469 tests across scraper and analysis modules. All passing. Three gaps closed:
+1490 tests across scraper and analysis modules. All passing. Three gaps closed:
 - **Integration tests**: `test_integration_pipeline.py` — synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution (26 tests)
 - **HTML report structural tests**: `test_report_structure.py` — TOC anchors, section ordering, numbering, container types, empty report, CSS embedding, make_gt integration (22 tests)
 - **Pytest markers**: `@pytest.mark.scraper` (264 tests), `@pytest.mark.integration` (29 tests), `@pytest.mark.slow` (24 tests). Registered in `pyproject.toml`. Recipes: `just test-scraper`, `just test-fast`

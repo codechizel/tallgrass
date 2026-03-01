@@ -210,7 +210,7 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Testing
 
 ```bash
-just test                    # 1469 tests
+just test                    # 1490 tests
 just test-scraper            # scraper tests only (-m scraper)
 just test-fast               # skip slow/integration tests (-m "not slow")
 just check                   # full check (lint + typecheck + tests)
