@@ -1,6 +1,10 @@
 """Configuration constants for the KS Legislature vote scraper."""
 
-from importlib.metadata import version
+try:
+    from importlib.metadata import version as _pkg_version
+    _VERSION = _pkg_version("tallgrass")
+except Exception:
+    _VERSION = "dev"
 
 BASE_URL = "https://www.kslegislature.gov"
 
@@ -16,11 +20,11 @@ WAVE_COOLDOWN = 90  # seconds to wait between retry waves
 WAVE_WORKERS = 2  # reduced concurrency during retry waves
 WAVE_DELAY = 0.5  # slower rate limit during retry waves (vs 0.15s normal)
 
-CACHE_FILENAME_MAX_LENGTH = 200  # max chars for cached file names (filesystem safety)
-BILL_TITLE_MAX_LENGTH = 500  # truncate bill titles beyond this length
+CACHE_FILENAME_MAX_LENGTH = 200  # filesystem safety — ext4 limit is 255 chars
+BILL_TITLE_MAX_LENGTH = 500  # truncate excessively long titles for display
 
 USER_AGENT = (
-    f"Tallgrass/{version('tallgrass')} "
+    f"Tallgrass/{_VERSION} "
     "(Research project; collecting public roll call vote data; "
-    "contact: joseph.claeys@gmail.com)"
+    "https://github.com/codechizel/tallgrass)"
 )
