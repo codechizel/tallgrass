@@ -43,7 +43,7 @@ After completing a feature or fix, **always update documentation before committi
 - ATX-style headings (`#`, `##`, `###`). Fenced code blocks with language tags.
 - Prefer tables over bullet lists for structured multi-column data.
 - Analysis primers: auto-written by `RunContext` from the `primer` parameter. Structure: Purpose, Method, Inputs, Outputs, Interpretation Guide, Caveats.
-- ADRs: one decision per file in `docs/adr/`. Follow template in `docs/adr/README.md`. Update the index table.
+- ADRs: one decision per file in `docs/adr/`. Follow template in `docs/adr/README.md`. Update both the topic section and chronological index.
 
 ## Pre-Commit Checklist
 1. Run `just lint` — must pass
