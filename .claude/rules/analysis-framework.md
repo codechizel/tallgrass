@@ -9,7 +9,7 @@ paths:
 
 EDA -> PCA -> MCA -> IRT -> 2D IRT (experimental) -> UMAP -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles -> TSA
 
-Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only).
+Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only). Dynamic IRT (Phase 16) is a cross-session phase using Martin-Quinn state-space IRT across all 8 bienniums (ADR-0058).
 
 ## Technology Preferences
 
@@ -51,7 +51,8 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `synthesis.md` — Data-driven detection thresholds, graceful degradation
 - `cross_session.md` — Affine IRT alignment, name matching, prediction transfer
 - `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
-- `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation
+- `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation. Deep dive: `docs/tsa-deep-dive.md`
+- `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage
 
 ## Key Data Structures
 

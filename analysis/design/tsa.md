@@ -85,3 +85,9 @@ Rather than depending on Phase 07 (Indices) output, TSA recomputes Rice from raw
 - **Top movers** identified here can be investigated further in Phase 12 (Profiles).
 - **Penalty sensitivity** provides a robustness check — only changepoints stable across penalties should be reported in narratives.
 - **Veto override cross-reference** tests whether override coalitions disrupted normal cohesion patterns.
+
+## See Also
+
+- Deep dive: `docs/tsa-deep-dive.md` (literature survey, ecosystem comparison, code audit, 7 recommendations)
+- ADR: `docs/adr/0057-time-series-analysis.md`
+- Roadmap gaps: `docs/roadmap.md` item #8 (TSA Hardening)

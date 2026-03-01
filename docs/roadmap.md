@@ -48,41 +48,37 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | PCA-Informed Init for Hierarchical IRT | 2026-02-26 | Experiment proved PCA init fixes House R-hat (1.0102→1.0026) with r=0.999996 agreement. Implemented as default in `build_per_chamber_model()`. Per-chain ESS reporting added. ADR-0044. Article: `docs/hierarchical-pca-init-experiment.md`. |
 | — | 4-Chain Hierarchical IRT Experiment | 2026-02-26 | 4 chains resolve both ESS warnings (xi: 397→564, mu_party: 356→512) at +4% wall time. Discovered jitter mode-splitting: `jitter+adapt_diag` causes R-hat ~1.53 with 4 chains; fix is `adapt_diag` with PCA init. Run 3 unnecessary. Article: `docs/hierarchical-4-chain-experiment.md`. |
 | 4b | 2D Bayesian IRT (Pipeline, Experimental) | 2026-02-26 (experiment), 2026-02-28 (pipeline) | M2PL model with PLT identification to resolve Tyson paradox. Pipeline phase 04b: both chambers, nutpie sampling, RunContext/HTML report, relaxed convergence thresholds. Deep dive: `docs/2d-irt-deep-dive.md`, design: `analysis/design/irt_2d.md`, ADR-0046, ADR-0054. |
-| 15 | Time Series Analysis | 2026-02-28 | Rolling-window PCA ideological drift + PELT changepoint detection on weekly Rice. Per-chamber analysis, penalty sensitivity, veto override cross-reference. Uses `ruptures` library. Design: `analysis/design/tsa.md`. |
+| 15 | Time Series Analysis | 2026-02-28 | Rolling-window PCA ideological drift + PELT changepoint detection on weekly Rice. Per-chamber analysis, penalty sensitivity, veto override cross-reference. Uses `ruptures` library. Deep dive: `docs/tsa-deep-dive.md`, design: `analysis/design/tsa.md`, ADR-0057. |
 
 ---
 
 ## Next Up (Prioritized)
 
-### 1. Dynamic Ideal Points (Martin-Quinn)
-
-**Priority:** High — 8 bienniums of data (84th-91st) make this immediately powerful. State-space model tracks legislator positions across bienniums, answering "who moved, and when?" Within-biennium drift already rejected (2-year window too short); the value is in the cross-biennium trajectory. Cross-session validation is complete, so this is unblocked.
-
-### 2. W-NOMINATE (Phase 16)
+### 1. W-NOMINATE
 
 **Priority:** High — field-standard legislative scaling method. Every published paper on Congress uses it. Having a W-NOMINATE comparison lets us say "our Bayesian IRT correlates at r=X with W-NOMINATE" — a sentence political scientists trust immediately. R is now allowed for field-standard methods where no Python equivalent exists. Uses `rpy2` to call `wnominate` from Python.
 
-### 3. DIME/CFscores External Validation (Second Source)
+### 2. DIME/CFscores External Validation (Second Source)
 
 **Priority:** Medium — campaign-finance-based ideology from Bonica's DIME project ([data.stanford.edu/dime](https://data.stanford.edu/dime)). Completely independent data source — captures who *donors* think you are, not how you vote. Within-party correlation with Shor-McCarty is only 0.65-0.67, so intra-Republican resolution may be limited. Value is in triangulation: "does the money agree with the votes?" See `docs/method-evaluation.md`.
 
-### 4. Standalone Posterior Predictive Checks
+### 3. Standalone Posterior Predictive Checks
 
 **Priority:** Medium — cross-model PPC comparison (flat IRT vs hierarchical vs 2D IRT). Already partially integrated into the IRT phase. Now that all three IRT variants are implemented, a unified comparison has real value for model selection.
 
-### 5. Optimal Classification
+### 4. Optimal Classification
 
 **Priority:** Low — nonparametric legislative scaling. Diminishing returns if W-NOMINATE is already done. R-only (`oc` package). Would provide a third scaling comparison point but unlikely to reveal findings beyond W-NOMINATE + IRT.
 
-### 6. Latent Class Mixture Models
+### 5. Latent Class Mixture Models
 
 **Priority:** Low — probabilistic alternative to k-means for discrete faction discovery. Documented in `Analytic_Methods/28_CLU_latent_class_mixture_models.md`. Clustering already showed within-party variation is continuous, not factional. Would formalize that null result but unlikely to discover anything new.
 
-### 7. Bipartite Bill-Legislator Network
+### 6. Bipartite Bill-Legislator Network
 
 **Priority:** Low — two-mode network connecting legislators to bills. Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. The Kappa-based co-voting network already captures the same structure more efficiently. Genuinely redundant.
 
-### 8. TSA Hardening (Phase 15 Gaps)
+### 7. TSA Hardening (Phase 15 Gaps)
 
 **Priority:** Low-Medium — seven improvements identified in the TSA deep dive (`docs/tsa-deep-dive.md`). All are refinements to a working phase, not missing functionality.
 
