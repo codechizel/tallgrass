@@ -7,6 +7,7 @@ Pipeline phases (in order):
   03_umap          — UMAP dimensionality reduction
   04_irt           — Bayesian IRT ideal points
   04b_irt_2d       — 2D Bayesian IRT ideal points (experimental)
+  04c_ppc          — Posterior predictive checks + LOO-CV model comparison
   05_clustering    — Voting bloc detection
   06_network       — Legislator network analysis
   07_indices       — Classical political science indices
@@ -84,6 +85,9 @@ _MODULE_MAP: dict[str, str] = {
     "dynamic_irt": "16_dynamic_irt",
     "dynamic_irt_data": "16_dynamic_irt",
     "dynamic_irt_report": "16_dynamic_irt",
+    "ppc": "04c_ppc",
+    "ppc_data": "04c_ppc",
+    "ppc_report": "04c_ppc",
     "wnominate": "17_wnominate",
     "wnominate_data": "17_wnominate",
     "wnominate_report": "17_wnominate",

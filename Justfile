@@ -67,6 +67,10 @@ irt *args:
 irt-2d *args:
     uv run python analysis/04b_irt_2d/irt_2d.py {{args}}
 
+# Run posterior predictive checks + LOO-CV model comparison
+ppc *args:
+    uv run python analysis/04c_ppc/ppc.py {{args}}
+
 # Run clustering analysis
 clustering *args:
     uv run python analysis/05_clustering/clustering.py {{args}}

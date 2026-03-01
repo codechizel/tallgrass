@@ -51,6 +51,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 15 | Time Series Analysis | 2026-02-28 | Rolling-window PCA ideological drift + PELT changepoint detection on weekly Rice. Per-chamber analysis, penalty sensitivity, veto override cross-reference. Uses `ruptures` library. Deep dive: `docs/tsa-deep-dive.md`, design: `analysis/design/tsa.md`, ADR-0057. |
 | 16 | Dynamic Ideal Points (Martin-Quinn) | 2026-02-28 | State-space IRT across 8 bienniums (84th-91st). Non-centered random walk with per-party evolution SD. PyMC + nutpie. Conversion vs. replacement polarization decomposition. Bridge coverage analysis. 58 tests. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`, design: `analysis/design/dynamic_irt.md`, ADR-0058. |
 | 17 | W-NOMINATE + OC Validation | 2026-02-28 | Field-standard legislative scaling comparison. W-NOMINATE (Poole & Rosenthal) + Optimal Classification (Poole 2000) via R subprocess. 3×3 correlation matrix (IRT/WNOM/OC), per-chamber scatter plots, 2D W-NOMINATE space, eigenvalue scree, fit statistics. Validation-only (does not feed downstream). Deep dive: `docs/w-nominate-deep-dive.md`, design: `analysis/design/wnominate.md`, ADR-0059. |
+| 4c | PPC + LOO-CV Model Comparison | 2026-02-28 | PPC battery (Yea rate, accuracy, GMP, APRE) + item/person fit + Yen's Q3 local dependence + LOO-CV model comparison across flat 1D, 2D IRT, and hierarchical IRT. Manual numpy log-likelihood (no PyMC rebuild). Graceful degradation for missing models. 60 tests. Design: `analysis/design/ppc.md`, ADR-0063. |
 
 ---
 
@@ -64,11 +65,9 @@ Completed 2026-02-28. See Completed Phases table above.
 
 Completed 2026-02-28. Campaign-finance-based ideology from Bonica's DIME project (V4.0, ODC-BY). Validates 84th-89th bienniums (6 bienniums, one beyond Shor-McCarty). Reuses Phase 14 infrastructure (correlations, outliers, name normalization). See `docs/dime-cfscore-deep-dive.md`, ADR-0062.
 
-### 3. Standalone Posterior Predictive Checks → Phase 4c
+### ~~3. Standalone Posterior Predictive Checks~~ — Done (Phase 4c)
 
-**Priority:** Medium — cross-model PPC comparison (flat IRT vs hierarchical vs 2D IRT). Already partially integrated into the IRT phase. Now that all three IRT variants are implemented, a unified comparison has real value for model selection.
-
-Natural "c" phase in the IRT family (after 4 = flat IRT, 4b = 2D IRT). Internal validation — less urgent given strong external validation from Shor-McCarty and W-NOMINATE.
+Completed 2026-02-28. PPC battery (Yea rate, accuracy, GMP, APRE) + item/person fit + Yen's Q3 local dependence + LOO-CV model comparison across flat 1D, 2D IRT, and hierarchical IRT. Manual numpy log-likelihood (no PyMC rebuild). Graceful degradation for missing models. 60 tests. See ADR-0063, `analysis/design/ppc.md`.
 
 ### ~~4. Optimal Classification~~ — Done (Phase 17)
 
@@ -171,7 +170,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
 | 16 | Hierarchical Bayesian Model | BAY | Completed (Hierarchical IRT, Phase 8) |
-| 17 | Posterior Predictive Checks | BAY | Partial (embedded in IRT) |
+| 17 | Posterior Predictive Checks | BAY | **Done** — Phase 4 basic + Phase 4c standalone |
 | 18 | Hierarchical Clustering | CLU | Completed (Clustering) |
 | 19 | K-Means / GMM Clustering | CLU | Completed (Clustering) |
 | 20 | Co-Voting Network | NET | Completed (Network) |
@@ -184,13 +183,13 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 27 | Changepoint Detection | TSA | Completed (TSA, Phase 15) |
 | 28 | Latent Class Mixture Models | CLU | **Planned** — Phase 5b |
 | 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | Completed (Dynamic IRT, Phase 16) |
-| 30 | DIME/CFscores External Validation | VAL | **Completed** — Phase 14b (ADR-0062) |
-| 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — Phase 4c |
-| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **In Progress** — item #7 above |
+| 30 | DIME/CFscores External Validation | VAL | Completed — Phase 14b (ADR-0062) |
+| 31 | Standalone Posterior Predictive Checks | BAY | **Done** — Phase 4c (ADR-0063) |
+| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | Completed — item #7 above |
 
-**Score: 28 completed, 7 rejected, 1 planned, 1 partial = 37 total**
+**Score: 29 completed, 7 rejected, 1 planned, 1 in progress, 1 partial = 39 total**
 
-Note: Methods 29-37 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R; TSA Hardening from deep dive).
+Note: Methods 29-32 are additions beyond the original 28 (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, TSA Hardening).
 
 ---
 

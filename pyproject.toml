@@ -138,6 +138,8 @@ allowed-unresolved-imports = [
     "model_spec",
     "irt_linking",
     "irt_2d_report",
+    "ppc_data",
+    "ppc_report",
     "experiment_monitor",
     "experiment_runner",
     # Qualified analysis.* imports (resolved by PEP 302 meta-path finder at runtime)
@@ -153,6 +155,9 @@ allowed-unresolved-imports = [
     "analysis.irt_report",
     "analysis.irt_2d",
     "analysis.irt_2d_report",
+    "analysis.ppc",
+    "analysis.ppc_data",
+    "analysis.ppc_report",
     "analysis.irt_linking",
     "analysis.clustering",
     "analysis.clustering_report",

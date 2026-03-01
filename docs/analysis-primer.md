@@ -37,6 +37,7 @@ Here's the full pipeline at a glance:
 15. **Time Series Analysis** — Track how legislators and parties change *during* a session.
 16. **Dynamic Ideal Points** — Track how legislators move across *multiple* sessions (years, not weeks).
 17. **W-NOMINATE + Optimal Classification** — Compare our IRT scores against the field-standard methods used in every published paper on Congress.
+18. **Posterior Predictive Checks + LOO-CV** — Does each IRT model reproduce its own data? Which model fits best?
 
 Let's walk through each one.
 
@@ -518,3 +519,26 @@ Until this step, all our validation has been internal — IRT correlates with PC
 ### What it does NOT do
 
 This is a validation-only phase. The W-NOMINATE and OC results do *not* feed into any downstream analysis (synthesis, profiles, etc.). They exist solely to validate our IRT ideal points against an external benchmark.
+
+---
+
+## Step 18: Posterior Predictive Checks + LOO-CV — Internal Model Validation
+
+### What it does
+
+This step asks two questions. First: does each IRT model reproduce the voting patterns it was trained on? Second: which model fits best after accounting for complexity?
+
+We have three IRT models — flat 1D, 2D (experimental), and hierarchical. External validation (Shor-McCarty, DIME, W-NOMINATE) confirms they agree with *outside* data. But that doesn't tell us whether a model gets its *own* data right. Posterior predictive checks (PPCs) answer that by simulating 500 "fake" legislatures from each model and comparing key statistics to the real Kansas Legislature.
+
+### Key results to look for
+
+- **Bayesian p-value in [0.1, 0.9]**: The model is well-calibrated for that statistic. Values near 0 or 1 mean systematic misfit.
+- **GMP (Geometric Mean Probability)**: How confident the model is in correct predictions. Above 0.7 is good. Unlike accuracy, GMP penalizes confident *wrong* predictions.
+- **APRE (Aggregate Proportional Reduction in Error)**: How much better the model is than just guessing the most common outcome. This matters because 82% of Kansas votes are Yea — raw accuracy of 82% is meaningless.
+- **Misfitting items/persons (< 5%)**: Specific votes or legislators the model struggles with.
+- **Yen's Q3**: Residual correlations between items after accounting for ideology. If the 1D model shows Q3 violations (|Q3| > 0.2) that the 2D model resolves, the second dimension is empirically justified.
+- **LOO-CV (ELPD)**: Leave-one-out cross-validation estimates out-of-sample predictive accuracy without refitting. Higher ELPD = better model. Differences larger than 2× the standard error are meaningful.
+
+### What it does NOT do
+
+Like W-NOMINATE, this is validation-only. The PPC and LOO-CV results do *not* feed into downstream analysis. They exist to validate model fit and inform model selection.

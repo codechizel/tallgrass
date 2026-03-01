@@ -776,6 +776,10 @@ def main() -> None:
                 f"  Saved: ideal_points_2d_{chamber_lower}.parquet ({ideal_2d.height} legislators)"
             )
 
+            nc_path = ctx.data_dir / f"idata_{chamber_lower}.nc"
+            idata.to_netcdf(str(nc_path))
+            print(f"  Saved: idata_{chamber_lower}.nc")
+
             # ── Generate plots ──
             plot_2d_scatter(ideal_2d, chamber, ctx.plots_dir)
             plot_dim1_vs_pc1(ideal_2d, pca_scores, chamber, ctx.plots_dir)
