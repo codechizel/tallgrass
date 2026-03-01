@@ -13,7 +13,7 @@ Phase 15 (TSA) adds temporal analysis to the Tallgrass pipeline via two compleme
 - Our choice of **ruptures + PELT with RBF kernel** is the canonical Python choice for offline changepoint detection. No alternative library offers a compelling reason to switch.
 - **Rolling PCA** is a pragmatic choice over dynamic IRT (Martin-Quinn), trading statistical rigor for speed (seconds vs. hours). The correlation between PC1 and IRT ideal points (r > 0.95 in our data) validates this trade-off for within-session drift detection.
 - The **Rice Index** is the correct cohesion metric for Kansas data (two-option voting, no strategic abstention culture). Carey's UNITY and Hix's Agreement Index solve problems we don't have.
-- Our implementation is clean and well-tested (64 tests), with **five of seven improvements now resolved**: Desposato small-group correction, explicit short-session validation, finer penalty grid, imputation sensitivity check, and variance-change detection test. Two remain: CROPS exact penalty selection (approximated by 25-point `np.linspace` grid) and Bai-Perron confidence intervals (deferred to rpy2 infrastructure).
+- Our implementation is clean and well-tested (85 tests), with **all seven improvements resolved**: Desposato small-group correction, explicit short-session validation, finer penalty grid, imputation sensitivity check, variance-change detection test, CROPS exact penalty selection (via R `changepoint` subprocess), and Bai-Perron confidence intervals (via R `strucchange` subprocess). R enrichment is optional — Python-only PELT always runs.
 - The R ecosystem remains dominant for dynamic ideal points (`idealstan`, `emIRT`, `MCMCpack`). If dynamic ideal points become a priority, `idealstan` (Stan-based, supports random walk/AR(1)/GP priors) is the strongest single tool. A PyMC native implementation using `GaussianRandomWalk` priors is also viable given our existing infrastructure.
 
 ---
@@ -233,10 +233,12 @@ Phase 15 follows the established pattern from Phase 7 (Indices): `parse_args()` 
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `analysis/15_tsa/tsa.py` | ~1,464 | Main script: data loading, 14 core functions, 8 plotting functions, main() |
-| `analysis/15_tsa/tsa_report.py` | ~538 | HTML report builder: 12 section builders |
-| `analysis/design/tsa.md` | ~100 | Design document |
-| `tests/test_tsa.py` | ~1,319 | 64 tests across 16 test classes |
+| `analysis/15_tsa/tsa.py` | ~1,560 | Main script: data loading, 14 core functions, 10 plotting functions, R integration, main() |
+| `analysis/15_tsa/tsa_r_data.py` | ~190 | Pure R result parsing: CROPS, Bai-Perron, elbow detection, PELT/BP merge |
+| `analysis/15_tsa/tsa_strucchange.R` | ~105 | R script: CROPS (`changepoint`) + Bai-Perron (`strucchange`) |
+| `analysis/15_tsa/tsa_report.py` | ~680 | HTML report builder: 16 section builders (4 new for R enrichment) |
+| `analysis/design/tsa.md` | ~140 | Design document |
+| `tests/test_tsa.py` | ~1,560 | 85 tests across 22 test classes |
 
 ### 5.2 Constants
 
@@ -249,7 +251,7 @@ Phase 15 follows the established pattern from Phase 7 (Indices): `parse_args()` 
 | `PELT_PENALTY_DEFAULT` | 10.0 | Moderate (sensitivity range: 3–50) | Empirical; CROPS would be better |
 | `PELT_MIN_SIZE` | 5 | Minimum 5 weeks per segment | 3–7 reasonable |
 | `WEEKLY_AGG_DAYS` | 7 | Calendar week aggregation | Fixed; natural legislative boundary |
-| `SENSITIVITY_PENALTIES` | [3, 5, 10, 15, 25, 50] | Explores parameter space | Discrete approximation of CROPS |
+| `SENSITIVITY_PENALTIES` | `np.linspace(1,50,25)` | Explores parameter space | 25-point grid; CROPS provides exact solution path when R available |
 | `TOP_MOVERS_N` | 10 | Headline count | Arbitrary; 5–15 reasonable |
 | `MIN_TOTAL_VOTES` | 20 | Session-wide filter (matches Phase 1 EDA) | Established |
 
@@ -300,26 +302,22 @@ All decisions documented in `analysis/design/tsa.md` are correctly implemented:
 ### 5.6 Weaknesses
 
 1. ~~**Silent failure on short sessions**~~: **RESOLVED.** `warnings.warn()` now fires in `rolling_window_pca()` (n_votes < window_size), `compute_early_vs_late()` (n_votes < 2 * MIN_WINDOW_VOTES), and `main()` (too few weekly obs for changepoints).
-2. **No formal uncertainty**: Rolling PCA produces point estimates only. PELT returns point estimates of changepoint locations with no confidence intervals. The penalty sensitivity sweep is an indirect proxy.
+2. ~~**No formal uncertainty**~~: **PARTIALLY RESOLVED.** Rolling PCA still produces point estimates only, but PELT changepoint locations now have Bai-Perron 95% confidence intervals (when R is available). The penalty sensitivity sweep remains as an additional robustness check.
 3. ~~**Mean imputation bias**~~: **RESOLVED.** `compute_imputation_sensitivity()` runs both column-mean and listwise deletion, reports correlation. Integrated into `main()` and filtering manifest.
 4. ~~**Desposato bias unaddressed**~~: **RESOLVED.** `desposato_corrected_rice()` implements Monte Carlo correction (Desposato 2005). Applied by default via `correct_size_bias=True` in `build_rice_timeseries()`. 6 new tests.
 5. ~~**Discrete penalty search**~~: **RESOLVED.** Replaced 6-point grid with `np.linspace(1, 50, 25)` (25 evenly-spaced penalties). Smoother elbow plots at negligible computational cost.
-6. **No Bai-Perron inference**: PELT identifies changepoint locations but provides no confidence intervals. Bai-Perron tests (available in R's `strucchange` and `mbreaks`) provide formal hypothesis tests and dating intervals. **Deferred** to rpy2 infrastructure (W-NOMINATE).
+6. ~~**No Bai-Perron inference**~~: **RESOLVED.** Bai-Perron 95% CIs via R `strucchange` subprocess (ADR-0061). PELT breaks cross-referenced with BP breaks for dual-method confirmation.
 7. **Polars deprecation**: `is_in` with a Series of the same dtype triggers a deprecation warning in Polars ≥0.20. One instance was fixed (`build_vote_matrix`, line 183); patterns elsewhere in the codebase may recur.
 
 ---
 
 ## Part 6: Recommendations
 
-### Recommendation 1: Add CROPS for Penalty Selection
+### Recommendation 1: Add CROPS for Penalty Selection — RESOLVED
 
-**Priority**: Medium
-**Effort**: Low
-**Impact**: Replaces ad-hoc penalty grid with exact solution path
+**Status**: Implemented (2026-02-28)
 
-CROPS (Changepoints for a Range of Penalties) efficiently computes all optimal segmentations across a continuous penalty range. `ruptures` supports this natively via `rpt.Pelt(model="rbf").fit(signal).predict(pen=penalty)` for individual penalties, but the full CROPS algorithm requires iterating: for any given penalty range [β_min, β_max], CROPS finds the exact set of distinct segmentations. The R `changepoint` package implements this as `cpt.var(..., method="PELT", penalty="CROPS")`.
-
-In Python with ruptures, CROPS can be approximated by sweeping a finer penalty grid (e.g., `np.linspace(1, 100, 200)`), but this is computationally wasteful. A true CROPS implementation would be a contribution to the ruptures ecosystem. For now, a finer grid (20–30 penalties instead of 6) would improve our sensitivity analysis at negligible computational cost.
+CROPS implemented via R's `changepoint::cpt.mean(penalty="CROPS")` subprocess. The R script (`tsa_strucchange.R`) finds the exact penalty thresholds where the optimal segmentation changes. `tsa_r_data.py` parses the result and identifies the elbow (largest marginal jump). Solution path plotted as a step function with elbow marker. R is optional — Python-only PELT with 25-point `np.linspace` grid always runs as baseline. ADR-0061.
 
 ### Recommendation 2: Desposato Small-Group Correction — RESOLVED
 
@@ -351,13 +349,11 @@ Replaced `SENSITIVITY_PENALTIES = [3, 5, 10, 15, 25, 50]` with `np.linspace(1, 5
 
 `TestVarianceChangeDetection::test_detects_variance_change` verifies RBF kernel detects a variance change with constant mean (Normal(0.7, 0.02) → Normal(0.7, 0.15)). Validates the specific advantage of RBF over L1/L2 cost functions.
 
-### Recommendation 7: Consider Bai-Perron for Formal Inference
+### Recommendation 7: Consider Bai-Perron for Formal Inference — RESOLVED
 
-**Priority**: Low (future)
-**Effort**: Medium (requires R interop)
-**Impact**: Formal confidence intervals on changepoint locations
+**Status**: Implemented (2026-02-28)
 
-For publication-quality results, Bai-Perron structural break tests provide formal F-statistics, confidence intervals on break dates, and information-criterion-based model selection. This is the econometric gold standard and would complement PELT's penalty-based approach. Available in R's `strucchange` and `mbreaks` packages; could be called via `rpy2` consistent with the project's language policy.
+Bai-Perron implemented via R's `strucchange::breakpoints()` + `confint()` subprocess. Provides formal 95% confidence intervals on break date locations. `tsa_r_data.py` parses results, maps R 1-based indices to dates, and cross-references with PELT breaks. PELT breaks within a Bai-Perron CI are "confirmed" by two independent methods. Plotted as Rice line + break lines + shaded CI bands. ADR-0061.
 
 ---
 

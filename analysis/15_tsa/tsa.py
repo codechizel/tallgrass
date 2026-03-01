@@ -8,7 +8,7 @@ changepoint detection on Rice Index time series. Answers two questions:
 
 Usage:
   uv run python analysis/15_tsa/tsa.py [--session 2025-26] [--run-id ID]
-      [--skip-drift] [--skip-changepoints] [--penalty 10.0]
+      [--skip-drift] [--skip-changepoints] [--penalty 10.0] [--skip-r]
 
 Outputs (in results/<session>/<run_id>/15_tsa/):
   - data/:   Parquet files (drift scores, Rice timeseries, changepoints)
@@ -18,7 +18,10 @@ Outputs (in results/<session>/<run_id>/15_tsa/):
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -43,6 +46,23 @@ try:
     from analysis.tsa_report import build_tsa_report
 except ModuleNotFoundError:
     from tsa_report import build_tsa_report  # type: ignore[no-redef]
+
+try:
+    from analysis.tsa_r_data import (
+        find_crops_elbow,
+        merge_bai_perron_with_pelt,
+        parse_bai_perron_result,
+        parse_crops_result,
+        prepare_rice_signal_csv,
+    )
+except ModuleNotFoundError:
+    from tsa_r_data import (  # type: ignore[no-redef]
+        find_crops_elbow,
+        merge_bai_perron_with_pelt,
+        parse_bai_perron_result,
+        parse_crops_result,
+        prepare_rice_signal_csv,
+    )
 
 # ── Primer ───────────────────────────────────────────────────────────────────
 
@@ -78,6 +98,8 @@ Two independent analyses per chamber:
 - Drift trajectories (party means, individual movers)
 - Changepoint locations with dates and contextual annotations
 - Penalty sensitivity analysis (robustness check)
+- CROPS solution path (exact penalty thresholds, when R available)
+- Bai-Perron 95% confidence intervals on break dates (when R available)
 
 ## Interpretation Guide
 
@@ -89,6 +111,10 @@ Two independent analyses per chamber:
   Cross-reference with legislative calendar.
 - **Penalty sensitivity**: Stable changepoints across penalties are robust;
   sensitive ones are artifacts.
+- **CROPS solution path**: Step plot of changepoints vs penalty. The elbow marks
+  the penalty where adding changepoints yields diminishing returns.
+- **Bai-Perron CIs**: 95% confidence intervals on break dates. Narrow intervals
+  = precisely dated breaks. Wide intervals = imprecise timing.
 
 ## Caveats
 
@@ -97,6 +123,8 @@ Two independent analyses per chamber:
 - PELT assumes i.i.d. within segments. Legislative voting has serial correlation, so
   changepoints should be interpreted as approximate boundaries, not exact transitions.
 - Weekly Rice aggregation smooths daily variation. Individual high-drama days may be averaged away.
+- CROPS and Bai-Perron require R with `changepoint`, `strucchange`, and `jsonlite` packages.
+  When R is unavailable, the analysis runs Python-only PELT without these enrichments.
 """
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -117,6 +145,12 @@ PARTY_COLORS = {
     "Democrat": "#0015BC",
     "Independent": "#999999",
 }
+
+# R enrichment constants
+CROPS_PEN_MIN = 1.0
+CROPS_PEN_MAX = 50.0
+BAI_PERRON_MAX_BREAKS = 5
+R_SUBPROCESS_TIMEOUT = 120
 
 # ── Data Loading ─────────────────────────────────────────────────────────────
 
@@ -896,6 +930,92 @@ def cross_reference_veto_overrides(
     )
 
 
+# ── R Enrichment ────────────────────────────────────────────────────────────
+
+
+def check_tsa_r_packages() -> bool:
+    """Verify Rscript and required R packages (changepoint, strucchange, jsonlite)."""
+    if shutil.which("Rscript") is None:
+        return False
+
+    pkgs = '"changepoint","strucchange","jsonlite"'
+    check_script = f"cat(all(sapply(c({pkgs}), requireNamespace, quietly=TRUE)))"
+    try:
+        result = subprocess.run(
+            ["Rscript", "-e", check_script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return "TRUE" in result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def run_r_tsa(
+    weekly: pl.DataFrame,
+    party: str,
+    output_dir: Path,
+    min_pen: float = CROPS_PEN_MIN,
+    max_pen: float = CROPS_PEN_MAX,
+    max_breaks: int = BAI_PERRON_MAX_BREAKS,
+) -> bool:
+    """Run CROPS + Bai-Perron via R subprocess for one party. Returns True on success."""
+    r_script = Path(__file__).parent / "tsa_strucchange.R"
+    if not r_script.exists():
+        print(f"  ERROR: R script not found at {r_script}")
+        return False
+
+    signal_df = prepare_rice_signal_csv(weekly, party)
+    if signal_df.height == 0:
+        return False
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".csv", delete=False, prefix="tsa_signal_"
+    ) as f:
+        input_csv = Path(f.name)
+        signal_df.write_csv(f.name)
+
+    try:
+        result = subprocess.run(
+            [
+                "Rscript",
+                str(r_script),
+                str(input_csv),
+                str(output_dir),
+                party,
+                str(min_pen),
+                str(max_pen),
+                str(max_breaks),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=R_SUBPROCESS_TIMEOUT,
+        )
+
+        if result.stdout:
+            for line in result.stdout.strip().split("\n"):
+                print(f"  [R] {line}")
+
+        if result.returncode != 0:
+            print(f"  R enrichment failed for {party} (exit code {result.returncode})")
+            if result.stderr:
+                for line in result.stderr.strip().split("\n")[:5]:
+                    print(f"  [R stderr] {line}")
+            return False
+
+        return True
+
+    except subprocess.TimeoutExpired:
+        print(f"  ERROR: R subprocess timed out ({R_SUBPROCESS_TIMEOUT}s)")
+        return False
+    except FileNotFoundError:
+        print("  ERROR: Rscript not found")
+        return False
+    finally:
+        input_csv.unlink(missing_ok=True)
+
+
 # ── Plotting ─────────────────────────────────────────────────────────────────
 
 
@@ -1202,6 +1322,96 @@ def plot_penalty_sensitivity(
     save_fig(fig, plots_dir / f"penalty_sensitivity_{chamber.lower()}.png")
 
 
+def plot_crops_solution_path(
+    crops_df: pl.DataFrame,
+    elbow: float | None,
+    party: str,
+    chamber: str,
+    plots_dir: Path,
+) -> None:
+    """Step plot of CROPS solution path (changepoints vs penalty) with elbow marker."""
+    if crops_df is None or crops_df.height == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    penalties = crops_df["penalty"].to_list()
+    n_cps = crops_df["n_changepoints"].to_list()
+
+    ax.step(penalties, n_cps, where="post", color=PARTY_COLORS.get(party, "#333333"), linewidth=2)
+    ax.scatter(penalties, n_cps, color=PARTY_COLORS.get(party, "#333333"), s=30, zorder=5)
+
+    if elbow is not None:
+        # Find the n_changepoints at the elbow
+        elbow_row = crops_df.filter(pl.col("penalty") == elbow)
+        if elbow_row.height > 0:
+            elbow_n = elbow_row["n_changepoints"][0]
+            ax.axvline(elbow, color="red", linestyle="--", alpha=0.7, linewidth=1.5)
+            ax.scatter([elbow], [elbow_n], color="red", s=100, zorder=10, marker="D")
+            ax.annotate(
+                f"Elbow (pen={elbow:.1f})",
+                xy=(elbow, elbow_n),
+                xytext=(elbow + 2, elbow_n + 0.5),
+                fontsize=9,
+                arrowprops={"arrowstyle": "->", "color": "red"},
+                color="red",
+            )
+
+    ax.set_xlabel("Penalty")
+    ax.set_ylabel("Number of Changepoints")
+    ax.set_title(
+        f"{chamber} {party} — CROPS Solution Path\n"
+        "Each step = exact penalty threshold where optimal segmentation changes"
+    )
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    save_fig(fig, plots_dir / f"crops_{party.lower()}_{chamber.lower()}.png")
+
+
+def plot_bai_perron_ci(
+    bp_df: pl.DataFrame,
+    weekly: pl.DataFrame,
+    party: str,
+    chamber: str,
+    plots_dir: Path,
+) -> None:
+    """Rice line + break lines + shaded CI bands from Bai-Perron."""
+    if bp_df is None or bp_df.height == 0:
+        return
+
+    pdata = weekly.filter(pl.col("party") == party).sort("week_start")
+    if pdata.height == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    dates = pdata["week_start"].to_list()
+    values = pdata["mean_rice"].to_numpy()
+
+    ax.plot(dates, values, color=PARTY_COLORS.get(party, "#666666"), linewidth=1.5)
+    ax.fill_between(dates, values, alpha=0.1, color=PARTY_COLORS.get(party, "#666666"))
+
+    for row in bp_df.iter_rows(named=True):
+        bp_date = row["break_date"]
+        ci_lo = row["ci_lower_date"]
+        ci_hi = row["ci_upper_date"]
+
+        # Break line
+        ax.axvline(bp_date, color="red", linestyle="--", alpha=0.8, linewidth=1.5)
+
+        # CI band
+        ax.axvspan(ci_lo, ci_hi, alpha=0.15, color="red")
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Weekly Mean Rice Index")
+    ax.set_title(
+        f"{chamber} {party} — Bai-Perron Structural Breaks with 95% CIs\n"
+        "Red dashed = break date, shaded = 95% confidence interval"
+    )
+    ax.grid(True, alpha=0.3)
+    fig.autofmt_xdate()
+    fig.tight_layout()
+    save_fig(fig, plots_dir / f"bai_perron_{party.lower()}_{chamber.lower()}.png")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
@@ -1232,6 +1442,11 @@ def parse_args() -> argparse.Namespace:
         default=PELT_PENALTY_DEFAULT,
         help=f"PELT penalty parameter (default: {PELT_PENALTY_DEFAULT})",
     )
+    parser.add_argument(
+        "--skip-r",
+        action="store_true",
+        help="Skip R enrichment (CROPS + Bai-Perron) even if R is available",
+    )
     return parser.parse_args()
 
 
@@ -1261,6 +1476,15 @@ def main() -> None:
         print(f"  Votes:      {votes.height:,} rows")
         print(f"  Roll calls: {rollcalls.height:,} rows")
         print(f"  Legislators: {legislators.height:,} rows")
+
+        # R enrichment check
+        r_available = not args.skip_r and check_tsa_r_packages()
+        if args.skip_r:
+            print("  R enrichment: skipped (--skip-r)")
+        elif r_available:
+            print("  R enrichment: available (CROPS + Bai-Perron)")
+        else:
+            print("  R enrichment: unavailable (install R + changepoint, strucchange, jsonlite)")
 
         results: dict[str, dict] = {}
 
@@ -1401,6 +1625,80 @@ def main() -> None:
                         plot_penalty_sensitivity(sensitivity, chamber, ctx.plots_dir)
                         cp_results["sensitivity"] = sensitivity
 
+                    # R enrichment: CROPS + Bai-Perron (per-party)
+                    if r_available:
+                        print("\n  --- R Enrichment (CROPS + Bai-Perron) ---")
+                        from datetime import date as _date
+
+                        for party in ["Republican", "Democrat"]:
+                            pdata = weekly.filter(pl.col("party") == party).sort("week_start")
+                            if pdata.height < 2 * PELT_MIN_SIZE:
+                                continue
+
+                            success = run_r_tsa(weekly, party, ctx.data_dir)
+                            if not success:
+                                continue
+
+                            # Parse CROPS result
+                            crops_path = ctx.data_dir / f"crops_{party.lower()}.json"
+                            if crops_path.exists():
+                                with open(crops_path) as f:
+                                    crops_json = json.load(f)
+                                crops_df = parse_crops_result(crops_json)
+                                if crops_df is not None:
+                                    elbow = find_crops_elbow(crops_df)
+                                    crops_df.write_parquet(
+                                        ctx.data_dir
+                                        / f"crops_{party.lower()}_{chamber.lower()}.parquet"
+                                    )
+                                    plot_crops_solution_path(
+                                        crops_df, elbow, party, chamber, ctx.plots_dir
+                                    )
+                                    cp_results[f"{party}_crops"] = {
+                                        "n_segmentations": crops_df.height,
+                                        "elbow_penalty": elbow,
+                                    }
+                                    if elbow is not None:
+                                        print(f"  {party} CROPS elbow: penalty={elbow:.1f}")
+
+                            # Parse Bai-Perron result
+                            bp_path = ctx.data_dir / f"bai_perron_{party.lower()}.json"
+                            if bp_path.exists():
+                                with open(bp_path) as f:
+                                    bp_json = json.load(f)
+                                weekly_dates = [
+                                    _date.fromisoformat(str(d)[:10])
+                                    for d in pdata["week_start"].to_list()
+                                ]
+                                bp_df = parse_bai_perron_result(bp_json, weekly_dates)
+                                if bp_df is not None:
+                                    bp_df.write_parquet(
+                                        ctx.data_dir
+                                        / f"bai_perron_{party.lower()}_{chamber.lower()}.parquet"
+                                    )
+                                    plot_bai_perron_ci(
+                                        bp_df, weekly, party, chamber, ctx.plots_dir
+                                    )
+                                    n_bp = bp_df.height
+                                    print(f"  {party} Bai-Perron: {n_bp} breaks with 95% CIs")
+                                    cp_results[f"{party}_bai_perron"] = {
+                                        "n_breaks": n_bp,
+                                        "bp_df": bp_df,
+                                    }
+
+                                    # Merge with PELT
+                                    pelt_dates = cp_results.get(party, {}).get("cp_dates", [])
+                                    if pelt_dates:
+                                        merged = merge_bai_perron_with_pelt(pelt_dates, bp_df)
+                                        n_confirmed = merged.filter(
+                                            pl.col("bp_confirmed")
+                                        ).height
+                                        print(
+                                            f"  {party} PELT/BP merge: "
+                                            f"{n_confirmed}/{len(pelt_dates)} confirmed"
+                                        )
+                                        cp_results[f"{party}_merge"] = merged
+
                     # Veto override cross-reference
                     all_cp_dates = []
                     for party_key in ["Republican", "Democrat"]:
@@ -1443,6 +1741,10 @@ def main() -> None:
                 for ch, r in results.items()
             },
         }
+        if r_available:
+            manifest["constants"]["CROPS_PEN_MIN"] = CROPS_PEN_MIN
+            manifest["constants"]["CROPS_PEN_MAX"] = CROPS_PEN_MAX
+            manifest["constants"]["BAI_PERRON_MAX_BREAKS"] = BAI_PERRON_MAX_BREAKS
         with open(ctx.run_dir / "filtering_manifest.json", "w") as f:
             json.dump(manifest, f, indent=2)
 
@@ -1455,6 +1757,7 @@ def main() -> None:
                 skip_drift=args.skip_drift,
                 skip_changepoints=args.skip_changepoints,
                 penalty=args.penalty,
+                r_available=r_available,
             )
 
         print_header("Time Series Analysis Complete")

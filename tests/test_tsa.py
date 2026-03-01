@@ -2,10 +2,11 @@
 
 Covers rolling-window PCA, sign alignment, party trajectories, early/late comparison,
 top movers, Rice timeseries, weekly aggregation, PELT changepoint detection,
-joint detection, and penalty sensitivity.
+joint detection, penalty sensitivity, and R enrichment (CROPS + Bai-Perron).
 """
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,7 @@ from analysis.tsa import (
     align_pc_signs,
     build_rice_timeseries,
     build_vote_matrix,
+    check_tsa_r_packages,
     compute_early_vs_late,
     compute_imputation_sensitivity,
     compute_party_trajectories,
@@ -30,6 +32,13 @@ from analysis.tsa import (
     find_top_movers,
     rolling_window_pca,
     run_penalty_sensitivity,
+)
+from analysis.tsa_r_data import (
+    find_crops_elbow,
+    merge_bai_perron_with_pelt,
+    parse_bai_perron_result,
+    parse_crops_result,
+    prepare_rice_signal_csv,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -1317,3 +1326,274 @@ class TestVarianceChangeDetection:
         # Should detect at least one changepoint near the variance shift
         assert len(interior_cps) >= 1
         assert any(20 <= c <= 40 for c in interior_cps)
+
+
+# ── R Enrichment Tests ──────────────────────────────────────────────────────
+
+
+class TestPrepareRiceSignal:
+    """Tests for prepare_rice_signal_csv().
+
+    Run: pytest tests/test_tsa.py::TestPrepareRiceSignal -v
+    """
+
+    def test_filters_to_party(self):
+        """Returns only rows for the requested party."""
+        weekly = pl.DataFrame(
+            {
+                "week_start": [date(2025, 1, 6)] * 4,
+                "party": ["Republican", "Democrat", "Republican", "Democrat"],
+                "mean_rice": [0.9, 0.8, 0.85, 0.75],
+                "n_votes": [10, 8, 12, 7],
+            }
+        )
+        result = prepare_rice_signal_csv(weekly, "Republican")
+        assert result.columns == ["mean_rice"]
+        assert result.height == 2
+
+    def test_sorted_chronologically(self):
+        """Output is sorted by week_start (chronological)."""
+        weekly = pl.DataFrame(
+            {
+                "week_start": [date(2025, 3, 1), date(2025, 1, 1), date(2025, 2, 1)],
+                "party": ["Republican"] * 3,
+                "mean_rice": [0.7, 0.9, 0.8],
+                "n_votes": [10, 10, 10],
+            }
+        )
+        result = prepare_rice_signal_csv(weekly, "Republican")
+        assert result["mean_rice"].to_list() == [0.9, 0.8, 0.7]
+
+    def test_single_column_output(self):
+        """Output has exactly one column: mean_rice."""
+        weekly = pl.DataFrame(
+            {
+                "week_start": [date(2025, 1, 6)],
+                "party": ["Republican"],
+                "mean_rice": [0.85],
+                "n_votes": [10],
+            }
+        )
+        result = prepare_rice_signal_csv(weekly, "Republican")
+        assert result.columns == ["mean_rice"]
+
+    def test_empty_party(self):
+        """Returns empty DataFrame when party not present."""
+        weekly = pl.DataFrame(
+            {
+                "week_start": [date(2025, 1, 6)],
+                "party": ["Republican"],
+                "mean_rice": [0.85],
+                "n_votes": [10],
+            }
+        )
+        result = prepare_rice_signal_csv(weekly, "Democrat")
+        assert result.height == 0
+        assert result.columns == ["mean_rice"]
+
+
+class TestParseCropsResult:
+    """Tests for parse_crops_result().
+
+    Run: pytest tests/test_tsa.py::TestParseCropsResult -v
+    """
+
+    def test_valid_json(self):
+        """Parses valid CROPS JSON into DataFrame."""
+        crops_json = {
+            "penalties": [5.0, 10.0, 20.0, 40.0],
+            "n_changepoints": [4, 2, 1, 0],
+        }
+        result = parse_crops_result(crops_json)
+        assert result is not None
+        assert result.height == 4
+        assert "penalty" in result.columns
+        assert "n_changepoints" in result.columns
+        # Should be sorted by penalty
+        assert result["penalty"].to_list() == [5.0, 10.0, 20.0, 40.0]
+
+    def test_error_key(self):
+        """Returns None when JSON contains error key."""
+        result = parse_crops_result({"error": "CROPS failed"})
+        assert result is None
+
+    def test_empty_arrays(self):
+        """Returns None for empty arrays."""
+        result = parse_crops_result({"penalties": [], "n_changepoints": []})
+        assert result is None
+
+    def test_mismatched_lengths(self):
+        """Returns None when arrays have different lengths."""
+        result = parse_crops_result({"penalties": [1.0, 2.0], "n_changepoints": [3]})
+        assert result is None
+
+
+class TestParseBaiPerronResult:
+    """Tests for parse_bai_perron_result().
+
+    Run: pytest tests/test_tsa.py::TestParseBaiPerronResult -v
+    """
+
+    def test_valid_breaks_with_dates(self):
+        """Parses valid BP JSON and maps R 1-based indices to dates."""
+        dates = [date(2025, 1, 6) + __import__("datetime").timedelta(weeks=i) for i in range(30)]
+        bp_json = {
+            "breakpoints": [10, 20],
+            "ci_lower": [8, 18],
+            "ci_upper": [12, 22],
+        }
+        result = parse_bai_perron_result(bp_json, dates)
+        assert result is not None
+        assert result.height == 2
+        # R 1-based → 0-based: breakpoint 10 → index 9
+        assert result["break_index"].to_list() == [9, 19]
+        assert result["ci_lower_index"].to_list() == [7, 17]
+        assert result["ci_upper_index"].to_list() == [11, 21]
+
+    def test_no_breaks(self):
+        """Returns None when no breakpoints found."""
+        dates = [date(2025, 1, 6)]
+        result = parse_bai_perron_result({"breakpoints": []}, dates)
+        assert result is None
+
+    def test_error_key(self):
+        """Returns None when JSON contains error key."""
+        dates = [date(2025, 1, 6)]
+        result = parse_bai_perron_result({"error": "strucchange failed"}, dates)
+        assert result is None
+
+    def test_one_based_to_zero_based(self):
+        """Confirms R 1-based indices are converted to 0-based."""
+        dates = [date(2025, 1, 6) + __import__("datetime").timedelta(weeks=i) for i in range(10)]
+        bp_json = {
+            "breakpoints": [1],  # R index 1 = Python index 0
+            "ci_lower": [1],
+            "ci_upper": [3],
+        }
+        result = parse_bai_perron_result(bp_json, dates)
+        assert result is not None
+        assert result["break_index"][0] == 0
+        assert result["ci_upper_index"][0] == 2
+
+    def test_clamps_out_of_range_indices(self):
+        """Clamps indices that exceed the date list length."""
+        dates = [date(2025, 1, 6) + __import__("datetime").timedelta(weeks=i) for i in range(5)]
+        bp_json = {
+            "breakpoints": [10],  # Beyond range (n=5)
+            "ci_lower": [1],
+            "ci_upper": [20],
+        }
+        result = parse_bai_perron_result(bp_json, dates)
+        assert result is not None
+        assert result["break_index"][0] == 4  # Clamped to n-1
+        assert result["ci_upper_index"][0] == 4
+
+
+class TestFindCropsElbow:
+    """Tests for find_crops_elbow().
+
+    Run: pytest tests/test_tsa.py::TestFindCropsElbow -v
+    """
+
+    def test_clear_elbow(self):
+        """Finds elbow at the largest jump in changepoint count."""
+        crops_df = pl.DataFrame(
+            {
+                "penalty": [2.0, 5.0, 10.0, 20.0, 40.0],
+                "n_changepoints": [8, 4, 2, 1, 1],
+            }
+        )
+        elbow = find_crops_elbow(crops_df)
+        assert elbow is not None
+        # Largest jump: 8→4 (jump=4) at penalty boundary 2→5
+        assert elbow == 5.0
+
+    def test_single_segmentation(self):
+        """Returns None when all penalties give the same segmentation."""
+        crops_df = pl.DataFrame(
+            {
+                "penalty": [5.0, 10.0],
+                "n_changepoints": [2, 2],
+            }
+        )
+        # No jump → max_jump stays 0 → elbow is None
+        elbow = find_crops_elbow(crops_df)
+        assert elbow is None
+
+    def test_none_on_insufficient_data(self):
+        """Returns None with fewer than 2 rows."""
+        crops_df = pl.DataFrame({"penalty": [5.0], "n_changepoints": [2]})
+        assert find_crops_elbow(crops_df) is None
+
+    def test_none_input(self):
+        """Returns None when crops_df is None."""
+        assert find_crops_elbow(None) is None
+
+
+class TestMergeBaiPerronWithPelt:
+    """Tests for merge_bai_perron_with_pelt().
+
+    Run: pytest tests/test_tsa.py::TestMergeBaiPerronWithPelt -v
+    """
+
+    def test_matching_breaks_confirmed(self):
+        """PELT break within max_days_apart of BP break is confirmed."""
+        bp_df = pl.DataFrame(
+            {
+                "break_index": [10],
+                "break_date": [date(2025, 3, 15)],
+                "ci_lower_index": [8],
+                "ci_upper_index": [12],
+                "ci_lower_date": [date(2025, 3, 1)],
+                "ci_upper_date": [date(2025, 3, 29)],
+            }
+        )
+        result = merge_bai_perron_with_pelt(["2025-03-17"], bp_df, max_days_apart=14)
+        assert result.height == 1
+        assert result["bp_confirmed"][0] is True
+        assert result["ci_window_days"][0] == 28
+
+    def test_distant_breaks_not_confirmed(self):
+        """PELT break far from any BP break is not confirmed."""
+        bp_df = pl.DataFrame(
+            {
+                "break_index": [10],
+                "break_date": [date(2025, 3, 15)],
+                "ci_lower_index": [8],
+                "ci_upper_index": [12],
+                "ci_lower_date": [date(2025, 3, 1)],
+                "ci_upper_date": [date(2025, 3, 29)],
+            }
+        )
+        result = merge_bai_perron_with_pelt(["2025-06-01"], bp_df, max_days_apart=14)
+        assert result.height == 1
+        assert result["bp_confirmed"][0] is False
+
+    def test_empty_pelt_dates(self):
+        """Returns empty DataFrame when no PELT dates provided."""
+        bp_df = pl.DataFrame(
+            {
+                "break_index": [10],
+                "break_date": [date(2025, 3, 15)],
+                "ci_lower_index": [8],
+                "ci_upper_index": [12],
+                "ci_lower_date": [date(2025, 3, 1)],
+                "ci_upper_date": [date(2025, 3, 29)],
+            }
+        )
+        result = merge_bai_perron_with_pelt([], bp_df)
+        assert result.height == 0
+
+
+class TestCheckTsaRPackages:
+    """Tests for check_tsa_r_packages().
+
+    Run: pytest tests/test_tsa.py::TestCheckTsaRPackages -v
+    """
+
+    def test_returns_false_when_rscript_missing(self, monkeypatch):
+        """Returns False when Rscript is not on PATH."""
+        import shutil
+
+        monkeypatch.setattr(shutil, "which", lambda _: None)
+        assert check_tsa_r_packages() is False

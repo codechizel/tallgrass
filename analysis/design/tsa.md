@@ -89,15 +89,46 @@ Rather than depending on Phase 07 (Indices) output, TSA recomputes Rice from raw
 - No version-coupling between phases.
 - Rice computation is simple enough that duplication is cheaper than dependency management.
 
+### CROPS Penalty Selection (R Enrichment)
+
+CROPS (Changepoints for a Range of Penalties, Haynes et al. 2017) finds the *exact* penalty thresholds where the optimal segmentation changes, replacing the 25-point `np.linspace` grid with the true solution path. Implemented via R's `changepoint::cpt.mean(penalty="CROPS")`. The elbow (largest marginal jump) identifies the penalty of diminishing returns.
+
+| Constant | Value | Justification |
+|----------|-------|---------------|
+| `CROPS_PEN_MIN` | 1.0 | Lower bound of penalty search range |
+| `CROPS_PEN_MAX` | 50.0 | Upper bound (matches SENSITIVITY_PENALTIES range) |
+
+### Bai-Perron Confidence Intervals (R Enrichment)
+
+Bai-Perron (1998, 2003) provides formal 95% confidence intervals on structural break date locations, complementing PELT's point estimates. Implemented via R's `strucchange::breakpoints()` + `confint()`. PELT breaks that fall within a Bai-Perron CI are "confirmed" by two independent methods.
+
+| Constant | Value | Justification |
+|----------|-------|---------------|
+| `BAI_PERRON_MAX_BREAKS` | 5 | Maximum breaks searched; safe limit computed from signal length |
+| `R_SUBPROCESS_TIMEOUT` | 120s | Generous timeout for R subprocess |
+
+### R Integration Pattern
+
+Follows the Phase 17 (W-NOMINATE) subprocess template:
+
+1. Write temp CSV (single `mean_rice` column) from Polars DataFrame
+2. Call `Rscript tsa_strucchange.R <args>` with `subprocess.run()`
+3. R writes JSON output files (one per analysis per party)
+4. Python parses JSON via `tsa_r_data.py` (pure functions, no I/O)
+5. `tryCatch` around each R block — failures write `{"error": "..."}` (non-fatal)
+
+R is optional: `check_tsa_r_packages()` auto-detects availability; `--skip-r` forces Python-only mode.
+
 ## Downstream Implications
 
 - **Changepoint dates** can be cross-referenced with the legislative calendar for contextual interpretation.
 - **Top movers** identified here can be investigated further in Phase 12 (Profiles).
 - **Penalty sensitivity** provides a robustness check — only changepoints stable across penalties should be reported in narratives.
 - **Veto override cross-reference** tests whether override coalitions disrupted normal cohesion patterns.
+- **CROPS elbow** provides principled penalty selection to complement or replace the manual sweep.
+- **Bai-Perron CIs** provide publication-quality dating uncertainty for structural breaks.
 
 ## See Also
 
-- Deep dive: `docs/tsa-deep-dive.md` (literature survey, ecosystem comparison, code audit, 7 recommendations)
-- ADR: `docs/adr/0057-time-series-analysis.md`
-- Roadmap gaps: `docs/roadmap.md` item #8 (TSA Hardening)
+- Deep dive: `docs/tsa-deep-dive.md` (literature survey, ecosystem comparison, code audit, 7 recommendations — all resolved)
+- ADRs: `docs/adr/0057-time-series-analysis.md`, `docs/adr/0061-tsa-r-enrichment.md`

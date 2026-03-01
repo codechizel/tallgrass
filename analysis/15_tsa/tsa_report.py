@@ -43,6 +43,7 @@ def build_tsa_report(
     skip_drift: bool = False,
     skip_changepoints: bool = False,
     penalty: float = 10.0,
+    r_available: bool = False,
 ) -> None:
     """Build the full TSA HTML report by adding sections to the ReportBuilder."""
     _add_data_summary(report, results)
@@ -61,9 +62,18 @@ def build_tsa_report(
             _add_changepoint_summary_table(report, result, chamber)
         _add_changepoint_interpretation(report)
 
+        # R enrichment sections (CROPS + Bai-Perron)
+        if r_available:
+            for chamber, result in results.items():
+                _add_crops_figures(report, plots_dir, chamber)
+            for chamber, result in results.items():
+                _add_bai_perron_table(report, result, chamber)
+                _add_bai_perron_figures(report, plots_dir, chamber)
+            _add_r_enrichment_interpretation(report)
+
         _add_veto_crossref_table(report, results)
 
-    _add_analysis_parameters(report, penalty, results=results)
+    _add_analysis_parameters(report, penalty, results=results, r_available=r_available)
 
     print(f"  Report: {len(report._sections)} sections added")
 
@@ -425,6 +435,145 @@ def _add_changepoint_interpretation(report: ReportBuilder) -> None:
     )
 
 
+def _add_crops_figures(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Add CROPS solution path figures for a chamber."""
+    ch = chamber.lower()
+
+    for party in ["republican", "democrat"]:
+        path = plots_dir / f"crops_{party}_{ch}.png"
+        if path.exists():
+            party_label = party.title()
+            report.add(
+                FigureSection.from_file(
+                    f"fig-crops-{party}-{ch}",
+                    f"{chamber} {party_label} CROPS Solution Path",
+                    path,
+                    caption=(
+                        f"Exact penalty thresholds where the optimal segmentation changes "
+                        f"for {party_label}s. Each step = one fewer changepoint. Diamond = "
+                        f"elbow (penalty of diminishing returns)."
+                    ),
+                )
+            )
+
+
+def _add_bai_perron_table(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: Bai-Perron break dates with 95% confidence intervals."""
+    cp_results = result.get("changepoints", {})
+    if not cp_results:
+        return
+
+    rows = []
+    for party in ["Republican", "Democrat"]:
+        bp_key = f"{party}_bai_perron"
+        if bp_key not in cp_results:
+            continue
+        bp_data = cp_results[bp_key]
+        bp_df = bp_data.get("bp_df")
+        if bp_df is None or bp_df.height == 0:
+            continue
+
+        for bp_row in bp_df.iter_rows(named=True):
+            ci_lo = str(bp_row["ci_lower_date"])[:10]
+            ci_hi = str(bp_row["ci_upper_date"])[:10]
+            bp_date = str(bp_row["break_date"])[:10]
+            ci_lo_d = __import__("datetime").date.fromisoformat(ci_lo)
+            ci_hi_d = __import__("datetime").date.fromisoformat(ci_hi)
+            window = (ci_hi_d - ci_lo_d).days
+
+            rows.append(
+                {
+                    "Party": party,
+                    "Break Date": bp_date,
+                    "95% CI Lower": ci_lo,
+                    "95% CI Upper": ci_hi,
+                    "Window (days)": window,
+                }
+            )
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    html = make_gt(
+        df,
+        title=f"{chamber} — Bai-Perron Structural Breaks with Confidence Intervals",
+        subtitle="Formal 95% CIs on break date locations (Bai & Perron 2003)",
+        source_note=(
+            "Narrow windows = precisely dated breaks. Wide windows = uncertainty in timing. "
+            "Bai-Perron uses regression-based inference (F-tests), complementing PELT's "
+            "penalty-based approach."
+        ),
+    )
+    report.add(
+        TableSection(
+            id=f"bp-ci-{chamber.lower()}",
+            title=f"{chamber} Bai-Perron Confidence Intervals",
+            html=html,
+        )
+    )
+
+
+def _add_bai_perron_figures(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Add Bai-Perron CI figures for a chamber."""
+    ch = chamber.lower()
+
+    for party in ["republican", "democrat"]:
+        path = plots_dir / f"bai_perron_{party}_{ch}.png"
+        if path.exists():
+            party_label = party.title()
+            report.add(
+                FigureSection.from_file(
+                    f"fig-bp-{party}-{ch}",
+                    f"{chamber} {party_label} Bai-Perron Breaks with 95% CIs",
+                    path,
+                    caption=(
+                        f"Weekly Rice Index for {party_label}s with Bai-Perron structural "
+                        f"breaks (red dashed lines) and 95% confidence intervals (shaded bands)."
+                    ),
+                )
+            )
+
+
+def _add_r_enrichment_interpretation(report: ReportBuilder) -> None:
+    """Text block: interpreting CROPS and Bai-Perron results."""
+    report.add(
+        TextSection(
+            id="r-enrichment-interpretation",
+            title="Interpreting CROPS and Bai-Perron Results",
+            html=(
+                "<p><strong>CROPS</strong> (Changepoints for a Range of Penalties, Haynes et al. "
+                "2017) finds the <em>exact</em> penalty thresholds where the optimal segmentation "
+                "changes. Unlike a manual penalty sweep, CROPS guarantees that no intermediate "
+                "penalties produce different results. The solution path shows a step function — "
+                "each step is one fewer changepoint. The <strong>elbow</strong> is the penalty "
+                "where adding more changepoints yields the steepest diminishing returns.</p>"
+                "<p><strong>Bai-Perron</strong> (1998, 2003) complements PELT by providing formal "
+                "95% confidence intervals on break date locations. PELT gives point estimates; "
+                "Bai-Perron gives intervals. A narrow confidence interval means the break is "
+                "precisely dated — the data strongly pinpoints when cohesion changed. A wide "
+                "interval means the transition was gradual or the evidence is weaker.</p>"
+                "<p><strong>PELT/BP cross-reference:</strong> When a PELT break falls within a "
+                "Bai-Perron confidence interval, the break is <em>confirmed</em> by two "
+                "independent methods using different statistical frameworks (penalized likelihood "
+                "vs regression F-tests). Confirmed breaks are the most robust findings.</p>"
+            ),
+        )
+    )
+
+
 def _add_veto_crossref_table(
     report: ReportBuilder,
     results: dict[str, dict],
@@ -471,6 +620,7 @@ def _add_analysis_parameters(
     report: ReportBuilder,
     penalty: float,
     results: dict[str, dict] | None = None,
+    r_available: bool = False,
 ) -> None:
     """Table: All constants and settings used in this run."""
     params = [
@@ -522,6 +672,16 @@ def _add_analysis_parameters(
             params.append("Imputation Sensitivity")
             values.append(f"r = {mean_corr:.3f}")
             descs.append("Correlation between column-mean and listwise deletion drift scores")
+
+    # Add R enrichment parameters
+    if r_available:
+        params.extend(["CROPS Penalty Range", "Bai-Perron Max Breaks", "R Enrichment"])
+        values.extend(["[1.0, 50.0]", "5", "Enabled (changepoint + strucchange)"])
+        descs.extend([
+            "CROPS penalty search range for exact solution path",
+            "Maximum number of Bai-Perron structural breaks",
+            "R subprocess for CROPS penalty selection and Bai-Perron CIs",
+        ])
 
     df = pl.DataFrame({"Parameter": params, "Value": values, "Description": descs})
     html = make_gt(

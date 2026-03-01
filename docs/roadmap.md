@@ -60,29 +60,35 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 
 Completed 2026-02-28. See Completed Phases table above.
 
-### 2. DIME/CFscores External Validation (Second Source)
+### 2. DIME/CFscores External Validation → Phase 14b
 
 **Priority:** Medium — campaign-finance-based ideology from Bonica's DIME project ([data.stanford.edu/dime](https://data.stanford.edu/dime)). Completely independent data source — captures who *donors* think you are, not how you vote. Within-party correlation with Shor-McCarty is only 0.65-0.67, so intra-Republican resolution may be limited. Value is in triangulation: "does the money agree with the votes?" See `docs/method-evaluation.md`.
 
-### 3. Standalone Posterior Predictive Checks
+Natural "b" phase of Phase 14 (External Validation / Shor-McCarty). Reuses existing infrastructure: external data download, legislator name matching, correlation analysis, scatter plots. Highest-value remaining item — the only one that brings genuinely new information (campaign finance vs. votes) rather than reshuffling existing data.
+
+### 3. Standalone Posterior Predictive Checks → Phase 4c
 
 **Priority:** Medium — cross-model PPC comparison (flat IRT vs hierarchical vs 2D IRT). Already partially integrated into the IRT phase. Now that all three IRT variants are implemented, a unified comparison has real value for model selection.
+
+Natural "c" phase in the IRT family (after 4 = flat IRT, 4b = 2D IRT). Internal validation — less urgent given strong external validation from Shor-McCarty and W-NOMINATE.
 
 ### ~~4. Optimal Classification~~ — Done (Phase 17)
 
 Completed 2026-02-28. Bundled with W-NOMINATE in Phase 17. See Completed Phases table above.
 
-### 5. Latent Class Mixture Models
+### 5. Latent Class Mixture Models → Phase 5b
 
 **Priority:** Low — probabilistic alternative to k-means for discrete faction discovery. Documented in `Analytic_Methods/28_CLU_latent_class_mixture_models.md`. Clustering already showed within-party variation is continuous, not factional. Would formalize that null result but unlikely to discover anything new.
 
-### 6. Bipartite Bill-Legislator Network
+Natural "b" phase of Phase 5 (Clustering). Would likely confirm the null result.
 
-**Priority:** Low — two-mode network connecting legislators to bills. Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. The Kappa-based co-voting network already captures the same structure more efficiently. Genuinely redundant.
+### 6. Bipartite Bill-Legislator Network → Phase 6b
 
-### 7. TSA Hardening (Phase 15 Gaps)
+**Priority:** Low — two-mode network connecting legislators to bills. Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. The Kappa-based co-voting network already captures the same structure more efficiently. Genuinely redundant. Recommend leaving this one alone.
 
-**Priority:** Low-Medium — seven improvements identified in the TSA deep dive. **Five resolved** (2026-02-28), two remain.
+### ~~7. TSA Hardening (Phase 15 Gaps)~~ — Done
+
+**Completed** (2026-02-28). All seven improvements from the TSA deep dive are resolved.
 
 | Gap | Status | Notes |
 |-----|--------|-------|
@@ -91,10 +97,10 @@ Completed 2026-02-28. Bundled with W-NOMINATE in Phase 17. See Completed Phases 
 | **Short-session validation** | **Done** | `warnings.warn()` in 3 locations. 2 new tests. |
 | **Imputation sensitivity check** | **Done** | `compute_imputation_sensitivity()` integrated into `main()`. 2 new tests. |
 | **Variance-change detection test** | **Done** | `TestVarianceChangeDetection::test_detects_variance_change`. |
-| **CROPS penalty selection** | Open | Approximated by 25-point grid. True CROPS needs `ruptures` extension. |
-| **Bai-Perron confidence intervals** | Deferred | Blocked on rpy2 infrastructure (W-NOMINATE). |
+| **CROPS penalty selection** | **Done** | R `changepoint::cpt.mean(penalty="CROPS")` via subprocess. ADR-0061. |
+| **Bai-Perron confidence intervals** | **Done** | R `strucchange::breakpoints()` + `confint()` via subprocess. ADR-0061. |
 
-Full analysis with literature references, ecosystem comparison, and code audit: [`docs/tsa-deep-dive.md`](tsa-deep-dive.md). Design doc: [`analysis/design/tsa.md`](../analysis/design/tsa.md). ADR-0057.
+R enrichment is optional — `--skip-r` for Python-only mode. 21 new tests (85 total). Full analysis: [`docs/tsa-deep-dive.md`](tsa-deep-dive.md). Design doc: [`analysis/design/tsa.md`](../analysis/design/tsa.md). ADRs: 0057, 0061.
 
 ---
 
@@ -178,11 +184,11 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 25 | SHAP Analysis | PRD | Completed (Prediction) |
 | 26 | Ideological Drift | TSA | Completed (TSA, Phase 15) |
 | 27 | Changepoint Detection | TSA | Completed (TSA, Phase 15) |
-| 28 | Latent Class Mixture Models | CLU | **Planned** — item #5 above |
+| 28 | Latent Class Mixture Models | CLU | **Planned** — Phase 5b |
 | 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | Completed (Dynamic IRT, Phase 16) |
-| 30 | DIME/CFscores External Validation | VAL | **Planned** — item #2 above |
-| 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — item #3 above |
-| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **Planned** — item #7 above |
+| 30 | DIME/CFscores External Validation | VAL | **Planned** — Phase 14b |
+| 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — Phase 4c |
+| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **In Progress** — item #7 above |
 
 **Score: 27 completed, 7 rejected, 2 planned, 1 partial = 37 total**
 

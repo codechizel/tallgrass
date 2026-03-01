@@ -87,6 +87,7 @@ What are the trade-offs?
 | ADR | Title |
 |-----|-------|
 | [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints) |
+| [0061](0061-tsa-r-enrichment.md) | TSA R enrichment (CROPS penalty selection + Bai-Perron CIs) |
 | [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn) |
 
 ### Validation
@@ -185,6 +186,7 @@ What are the trade-offs?
 | [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn, polarization decomposition) | Accepted | 2026-02-28 |
 | [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase (R subprocess, field-standard comparison) | Accepted | 2026-02-28 |
 | [0060](0060-test-suite-expansion.md) | Test suite expansion (markers, integration tests, report structure tests) | Accepted | 2026-02-28 |
+| [0061](0061-tsa-r-enrichment.md) | TSA R enrichment (CROPS penalty selection + Bai-Perron CIs) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1469)
+just test                    # run all tests (~1490)
 just test-scraper            # scraper tests only (-m scraper, ~264)
 just test-fast               # skip slow tests (-m "not slow", ~1445)
 just check                   # full check (lint + typecheck + tests)
@@ -66,7 +66,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_synthesis.py` — synthesis data loading, build_legislator_df joins, _extract_best_auc, detect_all integration, minority mavericks, Democrat-majority paradox (~47 tests)
 - `tests/test_synthesis_detect.py` — maverick, bridge-builder, metric paradox detection, annotation slugs, threshold constants, percentile modes (~33 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
-- `tests/test_tsa.py` — rolling PCA drift, sign alignment, party trajectories, early-vs-late, Rice timeseries, weekly aggregation, PELT changepoints, joint detection, penalty sensitivity, vote matrix, veto cross-reference, Desposato correction, short-session warnings, imputation sensitivity, variance-change detection (~64 tests)
+- `tests/test_tsa.py` — rolling PCA drift, sign alignment, party trajectories, early-vs-late, Rice timeseries, weekly aggregation, PELT changepoints, joint detection, penalty sensitivity, vote matrix, veto cross-reference, Desposato correction, short-session warnings, imputation sensitivity, variance-change detection, CROPS parsing, Bai-Perron parsing, elbow detection, PELT/BP merge, R package check (~85 tests)
 - `tests/test_dynamic_irt.py` — global roster, name dedup, cross-biennium stacking, bridge coverage, model structure, polarization decomposition, top movers, static correlation, report smoke tests (~50 tests)
 - `tests/test_wnominate.py` — vote matrix conversion, polarity selection, result parsing, sign alignment, three-way correlations, comparison table, eigenvalues (~25 tests)
 

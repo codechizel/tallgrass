@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1469 tests)
+just test                                    # → uv run pytest tests/ -v (~1490 tests)
 just test-scraper                            # → pytest -m scraper (~264 tests)
 just test-fast                               # → pytest -m "not slow" (skip integration)
 just monitor                                 # → check running experiment status
@@ -147,7 +147,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (60 decisions)
+- ADRs: `docs/adr/README.md` (61 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -172,7 +172,8 @@ Key references:
 - Cross-session deep dive: `docs/cross-session-deep-dive.md` (ecosystem survey, code audit, 3 bugs fixed, 18 new tests)
 - Scraper deep dive: `docs/scraper-deep-dive.md` (ecosystem comparison, code audit, data quality review, test gap analysis)
 - 2D IRT deep dive: `docs/2d-irt-deep-dive.md` (ecosystem survey, PLT identification, Tyson paradox resolution, pipeline phase 04b)
-- TSA deep dive: `docs/tsa-deep-dive.md` (literature survey, ecosystem comparison, code audit, 7 recommendations)
+- TSA deep dive: `docs/tsa-deep-dive.md` (literature survey, ecosystem comparison, code audit, 7 recommendations — all resolved)
+- TSA R enrichment: ADR-0061 (CROPS penalty selection + Bai-Perron CIs via R subprocess)
 - Dynamic ideal points: `docs/dynamic-ideal-points-deep-dive.md` (ecosystem survey, Martin-Quinn model, state-space IRT, decomposition)
 - W-NOMINATE + OC: `docs/w-nominate-deep-dive.md` (field-standard comparison, R subprocess, validation-only design); design: `analysis/design/wnominate.md`
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (bb25, topic modeling, retrieval, open questions)

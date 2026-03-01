@@ -52,7 +52,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `synthesis.md` — Data-driven detection thresholds, graceful degradation
 - `cross_session.md` — Affine IRT alignment, name matching, prediction transfer
 - `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
-- `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation. Deep dive: `docs/tsa-deep-dive.md`
+- `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation, CROPS penalty selection + Bai-Perron CIs (R enrichment). Deep dive: `docs/tsa-deep-dive.md`
 - `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`
 - `wnominate.md` — Field-standard comparison (W-NOMINATE, Optimal Classification), R subprocess, validation-only design. Deep dive: `docs/w-nominate-deep-dive.md`
 
