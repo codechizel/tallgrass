@@ -96,6 +96,8 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | **Finer penalty grid** | Trivial | Replace 6-point grid with 25–50 points. Computational cost is negligible (PELT is O(n), n ≈ 30–50 weekly observations). Produces a smoother sensitivity plot. |
 | **Bai-Perron confidence intervals** | Medium | Formal confidence intervals on changepoint locations via R's `strucchange` or `mbreaks` (called via `rpy2`). The econometric gold standard. Would complement PELT's point estimates. Depends on R interop being established (W-NOMINATE would set this up). |
 
+Full analysis with literature references, ecosystem comparison, and code audit: [`docs/tsa-deep-dive.md`](tsa-deep-dive.md). Design doc: [`analysis/design/tsa.md`](../analysis/design/tsa.md). ADR-0057.
+
 ---
 
 ## Completed (Formerly Deferred)
