@@ -677,11 +677,13 @@ def _add_analysis_parameters(
     if r_available:
         params.extend(["CROPS Penalty Range", "Bai-Perron Max Breaks", "R Enrichment"])
         values.extend(["[1.0, 50.0]", "5", "Enabled (changepoint + strucchange)"])
-        descs.extend([
-            "CROPS penalty search range for exact solution path",
-            "Maximum number of Bai-Perron structural breaks",
-            "R subprocess for CROPS penalty selection and Bai-Perron CIs",
-        ])
+        descs.extend(
+            [
+                "CROPS penalty search range for exact solution path",
+                "Maximum number of Bai-Perron structural breaks",
+                "R subprocess for CROPS penalty selection and Bai-Perron CIs",
+            ]
+        )
 
     df = pl.DataFrame({"Parameter": params, "Value": values, "Description": descs})
     html = make_gt(

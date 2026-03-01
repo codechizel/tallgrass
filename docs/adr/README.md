@@ -117,7 +117,7 @@ What are the trade-offs?
 | [0021](0021-independent-party-handling.md) | Independent party handling across pipeline |
 | [0022](0022-analysis-parallelism-and-timing.md) | Analysis parallelism and runtime timing |
 | [0024](0024-instruction-file-restructure.md) | Instruction file restructure |
-| [0030](adr-0030-analysis-directory-restructuring.md) | Analysis directory restructuring (numbered subdirs + PEP 302) |
+| [0030](0030-analysis-directory-restructuring.md) | Analysis directory restructuring (numbered subdirs + PEP 302) |
 | [0037](0037-pipeline-review-fixes.md) | Pipeline review fixes |
 | [0038](0038-python-314-modernization.md) | Python 3.14 modernization |
 | [0040](0040-rename-to-tallgrass.md) | Rename package to Tallgrass |
@@ -126,6 +126,7 @@ What are the trade-offs?
 | [0052](0052-run-grouped-results-directories.md) | Run-grouped results directories |
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions |
 | [0060](0060-test-suite-expansion.md) | Test suite expansion (markers, integration, report structure) |
+| [0067](0067-open-source-readiness.md) | Open-source readiness polish |
 
 ## Chronological Index
 
@@ -160,7 +161,7 @@ What are the trade-offs?
 | [0027](0027-umap-validation-and-robustness.md) | UMAP validation and robustness improvements | Accepted | 2026-02-24 |
 | [0028](0028-clustering-deep-dive-improvements.md) | Clustering deep dive improvements | Accepted | 2026-02-24 |
 | [0029](0029-leiden-community-detection.md) | Leiden community detection (replacing Louvain) | Accepted | 2026-02-24 |
-| [0030](adr-0030-analysis-directory-restructuring.md) | Analysis directory restructuring (numbered subdirs + PEP 302) | Accepted | 2026-02-25 |
+| [0030](0030-analysis-directory-restructuring.md) | Analysis directory restructuring (numbered subdirs + PEP 302) | Accepted | 2026-02-25 |
 | [0031](0031-prediction-deep-dive-improvements.md) | Prediction deep dive improvements (holdout eval, Brier/log-loss, IRT caveat) | Accepted | 2026-02-25 |
 | [0032](0032-beta-binomial-deep-dive-improvements.md) | Beta-Binomial deep dive improvements (ddof fix, Tarone's test, output columns) | Accepted | 2026-02-25 |
 | [0033](0033-hierarchical-irt-deep-dive-improvements.md) | Hierarchical IRT deep dive improvements (small-group warning, ICC rename, 9 tests) | Accepted | 2026-02-25 |
@@ -197,6 +198,7 @@ What are the trade-offs?
 | [0064](0064-lca-latent-class-analysis.md) | Latent Class Analysis (Phase 5b) | Accepted | 2026-02-28 |
 | [0065](0065-bipartite-network-phase.md) | Bipartite Bill-Legislator Network (Phase 6b) | Accepted | 2026-02-28 |
 | [0066](0066-84th-pipeline-stress-test-fixes.md) | 84th pipeline stress test fixes (8 bugs, 1 enhancement) | Accepted | 2026-03-01 |
+| [0067](0067-open-source-readiness.md) | Open-source readiness polish (LICENSE, README, 9 bug fixes, 16 tests, CI expansion) | Accepted | 2026-03-01 |
 
 ## Creating a New ADR
 

@@ -584,5 +584,5 @@ obs ~ Bernoulli(logit(beta * xi - alpha))
 # Import MAX_DIVERGENCES from the main module for the convergence section
 try:
     from analysis.dynamic_irt import MAX_DIVERGENCES
-except (ModuleNotFoundError, ImportError):
+except ModuleNotFoundError, ImportError:
     MAX_DIVERGENCES = 50  # type: ignore[assignment]

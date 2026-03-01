@@ -13,7 +13,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.tsa import (
     WINDOW_SIZE,
@@ -116,7 +116,7 @@ def _make_votes(
                 {
                     "legislator_slug": slug,
                     "vote_id": vote_id,
-                    "vote_category": cat,
+                    "vote": cat,
                     "party": "Republican",
                 }
             )
@@ -128,7 +128,7 @@ def _make_votes(
                 {
                     "legislator_slug": slug,
                     "vote_id": vote_id,
-                    "vote_category": cat,
+                    "vote": cat,
                     "party": "Democrat",
                 }
             )
@@ -708,7 +708,7 @@ class TestBuildRiceTimeseries:
             {
                 "legislator_slug": ["rep_r001", "rep_r002", "rep_r003", "rep_r004"],
                 "vote_id": ["v1"] * 4,
-                "vote_category": ["Yea", "Yea", "Yea", "Nay"],
+                "vote": ["Yea", "Yea", "Yea", "Nay"],
                 "party": ["Republican"] * 4,
             }
         )
@@ -740,7 +740,7 @@ class TestBuildRiceTimeseries:
             {
                 "legislator_slug": [f"rep_r{i:03d}" for i in range(5)],
                 "vote_id": ["v1"] * 5,
-                "vote_category": ["Yea"] * 5,
+                "vote": ["Yea"] * 5,
                 "party": ["Republican"] * 5,
             }
         )
@@ -770,7 +770,7 @@ class TestBuildRiceTimeseries:
             {
                 "legislator_slug": [f"rep_r{i:03d}" for i in range(4)],
                 "vote_id": ["v1"] * 4,
-                "vote_category": ["Yea", "Yea", "Nay", "Nay"],
+                "vote": ["Yea", "Yea", "Nay", "Nay"],
                 "party": ["Republican"] * 4,
             }
         )
@@ -809,7 +809,7 @@ class TestBuildRiceTimeseries:
             {
                 "legislator_slug": [f"rep_r{i:03d}" for i in range(4)],
                 "vote_id": ["v1"] * 4,
-                "vote_category": ["Yea", "Yea", "Yea", "Nay"],
+                "vote": ["Yea", "Yea", "Yea", "Nay"],
                 "party": ["Republican"] * 4,
             }
         )
@@ -843,7 +843,7 @@ class TestBuildRiceTimeseries:
             {
                 "legislator_slug": ["rep_r001"] * 2,
                 "vote_id": ["v2", "v1"],
-                "vote_category": ["Yea", "Yea"],
+                "vote": ["Yea", "Yea"],
                 "party": ["Republican"] * 2,
             }
         )
@@ -872,7 +872,7 @@ class TestBuildRiceTimeseries:
             {
                 "legislator_slug": ["rep_r001", "sen_r001"],
                 "vote_id": ["v1", "v2"],
-                "vote_category": ["Yea", "Yea"],
+                "vote": ["Yea", "Yea"],
                 "party": ["Republican", "Republican"],
             }
         )

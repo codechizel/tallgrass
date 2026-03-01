@@ -510,17 +510,19 @@ def compute_bill_polarization(
         rc = rc_dict.get(vid, {})
         bill_number = rc.get("bill_number", bp.get("bill_number", ""))
 
-        rows.append({
-            "vote_id": vid,
-            "polarization": round(polarization, 4),
-            "pct_r_yea": round(pct_r, 4),
-            "pct_d_yea": round(pct_d, 4),
-            "n_r": r_total,
-            "n_d": d_total,
-            "bill_number": bill_number,
-            "short_title": rc.get("short_title", ""),
-            "beta_mean": bp.get("beta_mean", None),
-        })
+        rows.append(
+            {
+                "vote_id": vid,
+                "polarization": round(polarization, 4),
+                "pct_r_yea": round(pct_r, 4),
+                "pct_d_yea": round(pct_d, 4),
+                "n_r": r_total,
+                "n_d": d_total,
+                "bill_number": bill_number,
+                "short_title": rc.get("short_title", ""),
+                "beta_mean": bp.get("beta_mean", None),
+            }
+        )
 
     df = pl.DataFrame(rows)
     if df.height > 0:
@@ -584,17 +586,19 @@ def identify_bridge_bills(
     rows: list[dict] = []
     for vid, btwn in bill_betweenness.items():
         pol = pol_dict.get(vid, {})
-        rows.append({
-            "vote_id": vid,
-            "betweenness": round(btwn, 6),
-            "polarization": pol.get("polarization", None),
-            "bill_number": pol.get("bill_number", B.nodes[vid].get("bill_number", "")),
-            "short_title": pol.get("short_title", B.nodes[vid].get("short_title", "")),
-            "pct_r_yea": pol.get("pct_r_yea", None),
-            "pct_d_yea": pol.get("pct_d_yea", None),
-            "beta_mean": bp_dict.get(vid, None),
-            "degree": B.degree(vid),
-        })
+        rows.append(
+            {
+                "vote_id": vid,
+                "betweenness": round(btwn, 6),
+                "polarization": pol.get("polarization", None),
+                "bill_number": pol.get("bill_number", B.nodes[vid].get("bill_number", "")),
+                "short_title": pol.get("short_title", B.nodes[vid].get("short_title", "")),
+                "pct_r_yea": pol.get("pct_r_yea", None),
+                "pct_d_yea": pol.get("pct_d_yea", None),
+                "beta_mean": bp_dict.get(vid, None),
+                "degree": B.degree(vid),
+            }
+        )
 
     df = pl.DataFrame(rows)
     if df.height > 0:
@@ -693,11 +697,13 @@ def detect_bill_communities(
         mapping = {node_names[i]: part.membership[i] for i in range(len(node_names))}
         partitions[res] = mapping
 
-        sweep_rows.append({
-            "resolution": res,
-            "n_communities": len(set(part.membership)),
-            "modularity": round(part.modularity, 4),
-        })
+        sweep_rows.append(
+            {
+                "resolution": res,
+                "n_communities": len(set(part.membership)),
+                "modularity": round(part.modularity, 4),
+            }
+        )
 
     sweep_df = pl.DataFrame(sweep_rows)
     return partitions, sweep_df
@@ -756,21 +762,29 @@ def analyze_bill_community_profiles(
         mean_d = float(np.mean(pct_d_vals))
         mean_pol = float(np.mean([abs(r - d) for r, d in zip(pct_r_vals, pct_d_vals)]))
 
-        rows.append({
-            "community": cid,
-            "n_bills": len(bills_in_comm),
-            "mean_pct_r_yea": round(mean_r, 4),
-            "mean_pct_d_yea": round(mean_d, 4),
-            "mean_polarization": round(mean_pol, 4),
-        })
+        rows.append(
+            {
+                "community": cid,
+                "n_bills": len(bills_in_comm),
+                "mean_pct_r_yea": round(mean_r, 4),
+                "mean_pct_d_yea": round(mean_d, 4),
+                "mean_polarization": round(mean_pol, 4),
+            }
+        )
 
-    return pl.DataFrame(rows) if rows else pl.DataFrame({
-        "community": [],
-        "n_bills": [],
-        "mean_pct_r_yea": [],
-        "mean_pct_d_yea": [],
-        "mean_polarization": [],
-    })
+    return (
+        pl.DataFrame(rows)
+        if rows
+        else pl.DataFrame(
+            {
+                "community": [],
+                "n_bills": [],
+                "mean_pct_r_yea": [],
+                "mean_pct_d_yea": [],
+                "mean_polarization": [],
+            }
+        )
+    )
 
 
 # ── Phase 7: BiCM Backbone Extraction ──────────────────────────────────────
@@ -881,10 +895,18 @@ def compute_backbone_centrality(G: nx.Graph) -> pl.DataFrame:
         xi_mean, degree, betweenness, eigenvector, pagerank.
     """
     if G.number_of_nodes() == 0:
-        return pl.DataFrame({
-            "legislator_slug": [], "full_name": [], "party": [], "xi_mean": [],
-            "degree": [], "betweenness": [], "eigenvector": [], "pagerank": [],
-        })
+        return pl.DataFrame(
+            {
+                "legislator_slug": [],
+                "full_name": [],
+                "party": [],
+                "xi_mean": [],
+                "degree": [],
+                "betweenness": [],
+                "eigenvector": [],
+                "pagerank": [],
+            }
+        )
 
     degree = dict(G.degree())
     betweenness = nx.betweenness_centrality(G)
@@ -899,16 +921,18 @@ def compute_backbone_centrality(G: nx.Graph) -> pl.DataFrame:
     rows = []
     for node in G.nodes():
         data = G.nodes[node]
-        rows.append({
-            "legislator_slug": node,
-            "full_name": data.get("full_name", node),
-            "party": data.get("party", ""),
-            "xi_mean": data.get("xi_mean", 0.0),
-            "degree": degree[node],
-            "betweenness": round(betweenness[node], 6),
-            "eigenvector": round(eigenvector[node], 6),
-            "pagerank": round(pagerank[node], 6),
-        })
+        rows.append(
+            {
+                "legislator_slug": node,
+                "full_name": data.get("full_name", node),
+                "party": data.get("party", ""),
+                "xi_mean": data.get("xi_mean", 0.0),
+                "degree": degree[node],
+                "betweenness": round(betweenness[node], 6),
+                "eigenvector": round(eigenvector[node], 6),
+                "pagerank": round(pagerank[node], 6),
+            }
+        )
 
     return pl.DataFrame(rows).sort("betweenness", descending=True)
 
@@ -1058,12 +1082,14 @@ def compare_backbones(
             name_u = bicm_backbone.nodes[u].get("full_name", u)
             name_v = bicm_backbone.nodes[v].get("full_name", v)
             if party_u != party_v and party_u and party_v:
-                hidden.append({
-                    "legislator_1": name_u,
-                    "party_1": party_u,
-                    "legislator_2": name_v,
-                    "party_2": party_v,
-                })
+                hidden.append(
+                    {
+                        "legislator_1": name_u,
+                        "party_1": party_u,
+                        "legislator_2": name_v,
+                        "party_2": party_v,
+                    }
+                )
 
     # Community comparison if both have edges
     comm_comparison: dict = {"nmi": None, "ari": None}
@@ -1082,9 +1108,7 @@ def compare_backbones(
             comm_comparison["nmi"] = round(
                 normalized_mutual_info_score(bicm_labels, kappa_labels), 4
             )
-            comm_comparison["ari"] = round(
-                adjusted_rand_score(bicm_labels, kappa_labels), 4
-            )
+            comm_comparison["ari"] = round(adjusted_rand_score(bicm_labels, kappa_labels), 4)
         except Exception:
             pass
 
@@ -1301,9 +1325,7 @@ def plot_backbone_comparison(
             continue
 
         pos = nx.spring_layout(G, seed=RANDOM_SEED, k=1.5 / max(1, np.sqrt(G.number_of_nodes())))
-        colors = [
-            PARTY_COLORS.get(G.nodes[n].get("party", ""), "#999999") for n in G.nodes()
-        ]
+        colors = [PARTY_COLORS.get(G.nodes[n].get("party", ""), "#999999") for n in G.nodes()]
 
         nx.draw_networkx_edges(G, pos, alpha=0.15, width=0.5, ax=ax)
         nx.draw_networkx_nodes(G, pos, node_color=colors, node_size=30, alpha=0.8, ax=ax)
@@ -1356,12 +1378,21 @@ def plot_bipartite_layout(
 
     # Draw legislator nodes colored by party
     leg_colors = [PARTY_COLORS.get(sub.nodes[n].get("party", ""), "#999999") for n in legislators]
-    nx.draw_networkx_nodes(sub, pos, nodelist=legislators, node_color=leg_colors,
-                           node_size=20, alpha=0.8, ax=ax)
+    nx.draw_networkx_nodes(
+        sub, pos, nodelist=legislators, node_color=leg_colors, node_size=20, alpha=0.8, ax=ax
+    )
 
     # Draw bill nodes
-    nx.draw_networkx_nodes(sub, pos, nodelist=bills, node_color="#FFD700",
-                           node_size=60, node_shape="s", alpha=0.9, ax=ax)
+    nx.draw_networkx_nodes(
+        sub,
+        pos,
+        nodelist=bills,
+        node_color="#FFD700",
+        node_size=60,
+        node_shape="s",
+        alpha=0.9,
+        ax=ax,
+    )
 
     # Label bills
     bill_labels = {}
@@ -1533,10 +1564,9 @@ def main() -> None:
                 chamber_results["best_bill_resolution"] = best_res
 
                 # Save assignments
-                comm_df = pl.DataFrame([
-                    {"vote_id": vid, "community": cid}
-                    for vid, cid in best_partition.items()
-                ])
+                comm_df = pl.DataFrame(
+                    [{"vote_id": vid, "community": cid} for vid, cid in best_partition.items()]
+                )
                 comm_df.write_parquet(ctx.data_dir / f"bill_communities_{ch_lower}.parquet")
 
                 # Community profiles
@@ -1573,10 +1603,7 @@ def main() -> None:
                 chamber_results["backbone_centrality"] = backbone_cent
 
                 # Save backbone edges
-                edge_rows = [
-                    {"legislator_1": u, "legislator_2": v}
-                    for u, v in backbone_G.edges()
-                ]
+                edge_rows = [{"legislator_1": u, "legislator_2": v} for u, v in backbone_G.edges()]
                 if edge_rows:
                     pl.DataFrame(edge_rows).write_parquet(
                         ctx.data_dir / f"backbone_edges_{ch_lower}.parquet"
@@ -1616,12 +1643,8 @@ def main() -> None:
                     print(f"  Kappa-only:      {comparison['kappa_only']}")
                     print(f"  Hidden alliances: {len(comparison['hidden_alliances'])}")
                     if comparison["community_comparison"]["nmi"] is not None:
-                        print(
-                            f"  Community NMI:   {comparison['community_comparison']['nmi']}"
-                        )
-                        print(
-                            f"  Community ARI:   {comparison['community_comparison']['ari']}"
-                        )
+                        print(f"  Community NMI:   {comparison['community_comparison']['nmi']}")
+                        print(f"  Community ARI:   {comparison['community_comparison']['ari']}")
                 except Exception as e:
                     print(f"  Phase 6 comparison failed: {e}")
 

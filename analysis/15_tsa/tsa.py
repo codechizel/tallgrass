@@ -678,8 +678,7 @@ def build_rice_timeseries(
     """
     prefix = "sen_" if chamber == "Senate" else "rep_"
     chamber_votes = votes.filter(
-        pl.col("legislator_slug").str.starts_with(prefix)
-        & pl.col("vote").is_in(["Yea", "Nay"])
+        pl.col("legislator_slug").str.starts_with(prefix) & pl.col("vote").is_in(["Yea", "Nay"])
     )
 
     # Attach party
@@ -897,14 +896,14 @@ def cross_reference_veto_overrides(
             from datetime import date
 
             cp_date = date.fromisoformat(cp_date_str[:10])
-        except (ValueError, TypeError):
+        except (ValueError, TypeError):  # fmt: skip
             continue
 
         for ov_row in overrides.iter_rows(named=True):
             ov_date_str = str(ov_row.get(date_col, ""))[:10]
             try:
                 ov_date = date.fromisoformat(ov_date_str)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError):  # fmt: skip
                 continue
 
             days = abs((cp_date - ov_date).days)
@@ -950,7 +949,7 @@ def check_tsa_r_packages() -> bool:
             timeout=30,
         )
         return "TRUE" in result.stdout
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except subprocess.TimeoutExpired, FileNotFoundError:
         return False
 
 
@@ -1678,9 +1677,7 @@ def main() -> None:
                                         ctx.data_dir
                                         / f"bai_perron_{party.lower()}_{chamber.lower()}.parquet"
                                     )
-                                    plot_bai_perron_ci(
-                                        bp_df, weekly, party, chamber, ctx.plots_dir
-                                    )
+                                    plot_bai_perron_ci(bp_df, weekly, party, chamber, ctx.plots_dir)
                                     n_bp = bp_df.height
                                     print(f"  {party} Bai-Perron: {n_bp} breaks with 95% CIs")
                                     cp_results[f"{party}_bai_perron"] = {
@@ -1692,9 +1689,7 @@ def main() -> None:
                                     pelt_dates = cp_results.get(party, {}).get("cp_dates", [])
                                     if pelt_dates:
                                         merged = merge_bai_perron_with_pelt(pelt_dates, bp_df)
-                                        n_confirmed = merged.filter(
-                                            pl.col("bp_confirmed")
-                                        ).height
+                                        n_confirmed = merged.filter(pl.col("bp_confirmed")).height
                                         print(
                                             f"  {party} PELT/BP merge: "
                                             f"{n_confirmed}/{len(pelt_dates)} confirmed"

@@ -80,15 +80,17 @@ def _add_data_summary(
     rows = []
     for chamber in chambers:
         s = results[chamber]["summary"]
-        rows.append({
-            "Chamber": chamber,
-            "Legislators": s["n_legislators"],
-            "Bills": s["n_bills"],
-            "Yea Edges": s["n_edges"],
-            "Density": s["density"],
-            "Avg Legislator Degree": s["avg_legislator_degree"],
-            "Avg Bill Degree": s["avg_bill_degree"],
-        })
+        rows.append(
+            {
+                "Chamber": chamber,
+                "Legislators": s["n_legislators"],
+                "Bills": s["n_bills"],
+                "Yea Edges": s["n_edges"],
+                "Density": s["density"],
+                "Avg Legislator Degree": s["avg_legislator_degree"],
+                "Avg Bill Degree": s["avg_bill_degree"],
+            }
+        )
 
     df = pl.DataFrame(rows)
     html = make_gt(
@@ -143,11 +145,13 @@ def _add_bipartite_summary(
         title=f"{chamber} Bipartite Graph",
         subtitle="Graph structure statistics",
     )
-    report.add(TableSection(
-        id=f"bipartite-summary-{chamber.lower()}",
-        title=f"{chamber} — Bipartite Graph Summary",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"bipartite-summary-{chamber.lower()}",
+            title=f"{chamber} — Bipartite Graph Summary",
+            html=html,
+        )
+    )
 
 
 def _add_degree_dist_figure(
@@ -158,15 +162,17 @@ def _add_degree_dist_figure(
     """Figure: Legislator and bill degree distributions."""
     path = plots_dir / f"degree_dist_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"degree-dist-{chamber.lower()}",
-            title=f"{chamber} — Degree Distributions",
-            path=path,
-            caption=(
-                "Left: how many bills each legislator voted Yea on. "
-                "Right: how many Yea votes each bill received."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"degree-dist-{chamber.lower()}",
+                title=f"{chamber} — Degree Distributions",
+                path=path,
+                caption=(
+                    "Left: how many bills each legislator voted Yea on. "
+                    "Right: how many Yea votes each bill received."
+                ),
+            )
+        )
 
 
 def _add_polarization_table(
@@ -180,8 +186,15 @@ def _add_polarization_table(
         return
 
     # Select display columns
-    display_cols = ["vote_id", "bill_number", "polarization", "pct_r_yea", "pct_d_yea",
-                    "n_r", "n_d"]
+    display_cols = [
+        "vote_id",
+        "bill_number",
+        "polarization",
+        "pct_r_yea",
+        "pct_d_yea",
+        "n_r",
+        "n_d",
+    ]
     if "short_title" in pol.columns:
         display_cols.insert(2, "short_title")
     if "beta_mean" in pol.columns:
@@ -211,12 +224,14 @@ def _add_polarization_table(
             "beta_mean": ".3f",
         },
     )
-    report.add(TableSection(
-        id=f"polarization-{chamber.lower()}",
-        title=f"{chamber} — Bill Polarization (All Bills)",
-        html=html,
-        caption="Never truncated — shows all bills with ≥10 Yea+Nay votes.",
-    ))
+    report.add(
+        TableSection(
+            id=f"polarization-{chamber.lower()}",
+            title=f"{chamber} — Bill Polarization (All Bills)",
+            html=html,
+            caption="Never truncated — shows all bills with ≥10 Yea+Nay votes.",
+        )
+    )
 
 
 def _add_polarization_figure(
@@ -227,15 +242,17 @@ def _add_polarization_figure(
     """Figure: Bill polarization distribution histogram."""
     path = plots_dir / f"polarization_hist_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"polarization-hist-{chamber.lower()}",
-            title=f"{chamber} — Polarization Distribution",
-            path=path,
-            caption=(
-                "0 = both parties vote identically, 1 = perfect party-line vote. "
-                "Bills above 0.8 are highly partisan."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"polarization-hist-{chamber.lower()}",
+                title=f"{chamber} — Polarization Distribution",
+                path=path,
+                caption=(
+                    "0 = both parties vote identically, 1 = perfect party-line vote. "
+                    "Bills above 0.8 are highly partisan."
+                ),
+            )
+        )
 
 
 def _add_bridge_bills_table(
@@ -248,8 +265,16 @@ def _add_bridge_bills_table(
     if bridge is None or bridge.height == 0:
         return
 
-    display_cols = ["vote_id", "bill_number", "betweenness", "polarization",
-                    "pct_r_yea", "pct_d_yea", "degree", "beta_mean"]
+    display_cols = [
+        "vote_id",
+        "bill_number",
+        "betweenness",
+        "polarization",
+        "pct_r_yea",
+        "pct_d_yea",
+        "degree",
+        "beta_mean",
+    ]
     if "short_title" in bridge.columns:
         display_cols.insert(2, "short_title")
     existing = [c for c in display_cols if c in bridge.columns]
@@ -282,11 +307,13 @@ def _add_bridge_bills_table(
             "Low polarization + high betweenness = genuine bridge."
         ),
     )
-    report.add(TableSection(
-        id=f"bridge-bills-{chamber.lower()}",
-        title=f"{chamber} — Bridge Bills (Top {df.height})",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"bridge-bills-{chamber.lower()}",
+            title=f"{chamber} — Bridge Bills (Top {df.height})",
+            html=html,
+        )
+    )
 
 
 def _add_bridge_vs_beta_figure(
@@ -297,16 +324,18 @@ def _add_bridge_vs_beta_figure(
     """Figure: Bridge betweenness vs IRT discrimination scatter."""
     path = plots_dir / f"bridge_vs_beta_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"bridge-beta-{chamber.lower()}",
-            title=f"{chamber} — Bridge Betweenness vs IRT Discrimination",
-            path=path,
-            caption=(
-                "Bridge bills should cluster in the upper-left: high betweenness "
-                "(connecting blocs) + low |β| (not discriminating along the "
-                "ideological dimension)."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"bridge-beta-{chamber.lower()}",
+                title=f"{chamber} — Bridge Betweenness vs IRT Discrimination",
+                path=path,
+                caption=(
+                    "Bridge bills should cluster in the upper-left: high betweenness "
+                    "(connecting blocs) + low |β| (not discriminating along the "
+                    "ideological dimension)."
+                ),
+            )
+        )
 
 
 def _add_bill_communities(
@@ -340,11 +369,13 @@ def _add_bill_communities(
         },
         source_note="Communities group bills by coalition support, not by topic.",
     )
-    report.add(TableSection(
-        id=f"bill-communities-{chamber.lower()}",
-        title=f"{chamber} — Bill Community Profiles",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"bill-communities-{chamber.lower()}",
+            title=f"{chamber} — Bill Community Profiles",
+            html=html,
+        )
+    )
 
 
 def _add_bill_community_sweep(
@@ -368,11 +399,13 @@ def _add_bill_community_sweep(
         },
         number_formats={"modularity": ".4f"},
     )
-    report.add(TableSection(
-        id=f"bill-sweep-{chamber.lower()}",
-        title=f"{chamber} — Bill Community Resolution Sweep",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"bill-sweep-{chamber.lower()}",
+            title=f"{chamber} — Bill Community Resolution Sweep",
+            html=html,
+        )
+    )
 
 
 def _add_bill_cluster_heatmap_figure(
@@ -383,15 +416,17 @@ def _add_bill_cluster_heatmap_figure(
     """Figure: Party support heatmap per bill community."""
     path = plots_dir / f"bill_cluster_heatmap_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"bill-heatmap-{chamber.lower()}",
-            title=f"{chamber} — Bill Community Party Support",
-            path=path,
-            caption=(
-                "Each row is a bill community. Colors show mean %Yea by party. "
-                "Divergent rows indicate communities with different partisan support."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"bill-heatmap-{chamber.lower()}",
+                title=f"{chamber} — Bill Community Party Support",
+                path=path,
+                caption=(
+                    "Each row is a bill community. Colors show mean %Yea by party. "
+                    "Divergent rows indicate communities with different partisan support."
+                ),
+            )
+        )
 
 
 def _add_backbone_summary(
@@ -428,11 +463,13 @@ def _add_backbone_summary(
         title=f"{chamber} BiCM Backbone",
         subtitle="Statistically validated co-voting edges (p < 0.01)",
     )
-    report.add(TableSection(
-        id=f"backbone-summary-{chamber.lower()}",
-        title=f"{chamber} — BiCM Backbone Summary",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"backbone-summary-{chamber.lower()}",
+            title=f"{chamber} — BiCM Backbone Summary",
+            html=html,
+        )
+    )
 
 
 def _add_backbone_layout_figure(
@@ -443,15 +480,17 @@ def _add_backbone_layout_figure(
     """Figure: BiCM backbone network layout."""
     path = plots_dir / f"backbone_layout_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"backbone-layout-{chamber.lower()}",
-            title=f"{chamber} — BiCM Backbone Layout",
-            path=path,
-            caption=(
-                "Spring layout of the BiCM-validated legislator network. "
-                "Only statistically significant co-voting edges are shown."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"backbone-layout-{chamber.lower()}",
+                title=f"{chamber} — BiCM Backbone Layout",
+                path=path,
+                caption=(
+                    "Spring layout of the BiCM-validated legislator network. "
+                    "Only statistically significant co-voting edges are shown."
+                ),
+            )
+        )
 
 
 def _add_backbone_comparison(
@@ -485,21 +524,25 @@ def _add_backbone_comparison(
         title=f"{chamber} Backbone Comparison",
         subtitle="BiCM backbone vs Phase 6 Kappa + disparity filter backbone",
     )
-    report.add(TableSection(
-        id=f"backbone-comparison-{chamber.lower()}",
-        title=f"{chamber} — Backbone Comparison (BiCM vs Phase 6)",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"backbone-comparison-{chamber.lower()}",
+            title=f"{chamber} — Backbone Comparison (BiCM vs Phase 6)",
+            html=html,
+        )
+    )
 
     # Add comparison figure
     path = plots_dir / f"backbone_comparison_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"backbone-comparison-fig-{chamber.lower()}",
-            title=f"{chamber} — Backbone Comparison Layout",
-            path=path,
-            caption="Side-by-side: BiCM backbone (left) vs Kappa + disparity backbone (right).",
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"backbone-comparison-fig-{chamber.lower()}",
+                title=f"{chamber} — Backbone Comparison Layout",
+                path=path,
+                caption="Side-by-side: BiCM backbone (left) vs Kappa + disparity backbone (right).",
+            )
+        )
 
 
 def _add_hidden_alliances(
@@ -514,12 +557,14 @@ def _add_hidden_alliances(
 
     hidden = comp.get("hidden_alliances", [])
     if not hidden:
-        report.add(TextSection(
-            id=f"hidden-alliances-{chamber.lower()}",
-            title=f"{chamber} — Hidden Alliances",
-            html=f"<p>No cross-party edges found in BiCM backbone that are absent from "
-                 f"the Phase 6 Kappa backbone for {chamber}.</p>",
-        ))
+        report.add(
+            TextSection(
+                id=f"hidden-alliances-{chamber.lower()}",
+                title=f"{chamber} — Hidden Alliances",
+                html=f"<p>No cross-party edges found in BiCM backbone that are absent from "
+                f"the Phase 6 Kappa backbone for {chamber}.</p>",
+            )
+        )
         return
 
     df = pl.DataFrame(hidden)
@@ -537,11 +582,13 @@ def _add_hidden_alliances(
             "party_2": "Party 2",
         },
     )
-    report.add(TableSection(
-        id=f"hidden-alliances-{chamber.lower()}",
-        title=f"{chamber} — Hidden Alliances",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"hidden-alliances-{chamber.lower()}",
+            title=f"{chamber} — Hidden Alliances",
+            html=html,
+        )
+    )
 
 
 def _add_backbone_communities(
@@ -582,11 +629,13 @@ def _add_backbone_communities(
         title=f"{chamber} Backbone Communities vs Party",
         subtitle=f"NMI={vs_party['nmi']:.4f}, ARI={vs_party['ari']:.4f}",
     )
-    report.add(TableSection(
-        id=f"backbone-communities-{chamber.lower()}",
-        title=f"{chamber} — Backbone Communities vs Party",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id=f"backbone-communities-{chamber.lower()}",
+            title=f"{chamber} — Backbone Communities vs Party",
+            html=html,
+        )
+    )
 
 
 def _add_bipartite_layout_figure(
@@ -597,15 +646,17 @@ def _add_bipartite_layout_figure(
     """Figure: Bipartite layout showing bridge bills and their voters."""
     path = plots_dir / f"bipartite_layout_{chamber.lower()}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            id=f"bipartite-layout-{chamber.lower()}",
-            title=f"{chamber} — Bridge Bill Bipartite Layout",
-            path=path,
-            caption=(
-                "Two-column layout: legislators (left, colored by party) connected "
-                "to top bridge bills (right, gold squares) via Yea votes."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                id=f"bipartite-layout-{chamber.lower()}",
+                title=f"{chamber} — Bridge Bill Bipartite Layout",
+                path=path,
+                caption=(
+                    "Two-column layout: legislators (left, colored by party) connected "
+                    "to top bridge bills (right, gold squares) via Yea votes."
+                ),
+            )
+        )
 
 
 def _add_cross_method_summary(
@@ -620,14 +671,16 @@ def _add_cross_method_summary(
         comm = comp.get("community_comparison", {})
         vs_party = results[chamber].get("backbone_vs_party", {})
 
-        rows.append({
-            "Chamber": chamber,
-            "BiCM vs Party NMI": vs_party.get("nmi"),
-            "BiCM vs Party ARI": vs_party.get("ari"),
-            "BiCM vs Kappa NMI": comm.get("nmi"),
-            "BiCM vs Kappa ARI": comm.get("ari"),
-            "Edge Jaccard": comp.get("edge_jaccard"),
-        })
+        rows.append(
+            {
+                "Chamber": chamber,
+                "BiCM vs Party NMI": vs_party.get("nmi"),
+                "BiCM vs Party ARI": vs_party.get("ari"),
+                "BiCM vs Kappa NMI": comm.get("nmi"),
+                "BiCM vs Kappa ARI": comm.get("ari"),
+                "Edge Jaccard": comp.get("edge_jaccard"),
+            }
+        )
 
     df = pl.DataFrame(rows)
     html = make_gt(
@@ -642,11 +695,13 @@ def _add_cross_method_summary(
             "Edge Jaccard": ".4f",
         },
     )
-    report.add(TableSection(
-        id="cross-method-summary",
-        title="Cross-Method Community Agreement",
-        html=html,
-    ))
+    report.add(
+        TableSection(
+            id="cross-method-summary",
+            title="Cross-Method Community Agreement",
+            html=html,
+        )
+    )
 
 
 def _add_downstream_findings(
@@ -689,11 +744,13 @@ def _add_downstream_findings(
     parts.append("</ul>")
     html = "".join(parts)
 
-    report.add(TextSection(
-        id="downstream-findings",
-        title="Downstream Findings",
-        html=html,
-    ))
+    report.add(
+        TextSection(
+            id="downstream-findings",
+            title="Downstream Findings",
+            html=html,
+        )
+    )
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

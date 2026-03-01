@@ -2212,12 +2212,17 @@ def run_sensitivity_clustering(
         print(f"    ARI(k={default_k} vs k={alt_k}): {ari:.4f}")
 
     # Re-run hierarchical at alternative k values
-    distance_arr, _ = _kappa_to_distance(kappa_matrix)
+    distance_arr, kappa_slugs = _kappa_to_distance(kappa_matrix)
     condensed = squareform(distance_arr, checks=False)
     Z = linkage(condensed, method=LINKAGE_METHOD)
 
+    # Align hierarchical labels to IRT slug order (kappa matrix may have different ordering)
+    irt_slugs = ideal_points["legislator_slug"].to_list()
+
     for alt_k in [2, 3, 4]:
-        hier_labels = cut_tree(Z, n_clusters=alt_k).flatten()
+        hier_labels_raw = cut_tree(Z, n_clusters=alt_k).flatten()
+        slug_to_hier = dict(zip(kappa_slugs, hier_labels_raw.tolist()))
+        hier_labels = np.array([slug_to_hier.get(s, -1) for s in irt_slugs])
         n = min(len(default_labels), len(hier_labels))
         ari = float(adjusted_rand_score(default_labels[:n], hier_labels[:n]))
         findings[f"kmeans_k{default_k}_vs_hier_k{alt_k}"] = {

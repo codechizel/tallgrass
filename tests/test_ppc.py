@@ -224,9 +224,7 @@ class TestLogSigmoid:
 class TestLogLikelihood1D:
     """Tests for 1D IRT log-likelihood computation."""
 
-    def test_shape(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_shape(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         """Output shape should be (n_chains, n_draws, n_obs)."""
         ds = compute_log_likelihood_1d(synthetic_idata_1d, synthetic_data)
         assert ds["y"].shape == (2, 50, synthetic_data["n_obs"])
@@ -305,9 +303,7 @@ class TestLogLikelihood1D:
 class TestLogLikelihood2D:
     """Tests for 2D IRT log-likelihood computation."""
 
-    def test_shape(
-        self, synthetic_idata_2d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_shape(self, synthetic_idata_2d: az.InferenceData, synthetic_data: dict) -> None:
         """Output shape should be (n_chains, n_draws, n_obs)."""
         ds = compute_log_likelihood_2d(synthetic_idata_2d, synthetic_data)
         assert ds["y"].shape == (2, 50, synthetic_data["n_obs"])
@@ -372,23 +368,17 @@ class TestLogLikelihood2D:
 class TestLogLikelihoodHierarchical:
     """Tests for hierarchical IRT log-likelihood (delegates to 1D)."""
 
-    def test_matches_1d(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_matches_1d(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         """Hierarchical uses xi (not xi_offset), so should match 1D computation."""
         ds_1d = compute_log_likelihood_1d(synthetic_idata_1d, synthetic_data)
         ds_hier = compute_log_likelihood_hierarchical(synthetic_idata_1d, synthetic_data)
         np.testing.assert_array_equal(ds_1d["y"].values, ds_hier["y"].values)
 
-    def test_shape(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_shape(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         ds = compute_log_likelihood_hierarchical(synthetic_idata_1d, synthetic_data)
         assert ds["y"].shape == (2, 50, synthetic_data["n_obs"])
 
-    def test_finite(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_finite(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         ds = compute_log_likelihood_hierarchical(synthetic_idata_1d, synthetic_data)
         assert np.all(np.isfinite(ds["y"].values))
 
@@ -399,9 +389,7 @@ class TestLogLikelihoodHierarchical:
 class TestAddLogLikelihood:
     """Tests for adding log_likelihood group to InferenceData."""
 
-    def test_group_added(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_group_added(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         ds = compute_log_likelihood_1d(synthetic_idata_1d, synthetic_data)
         idata_new = add_log_likelihood_to_idata(synthetic_idata_1d, ds)
         assert hasattr(idata_new, "log_likelihood")
@@ -436,10 +424,20 @@ class TestPPCBattery:
     ) -> None:
         result = run_ppc_battery(synthetic_idata_1d, synthetic_data, n_reps=50)
         expected_keys = {
-            "observed_yea_rate", "replicated_yea_rate_mean", "replicated_yea_rate_sd",
-            "bayesian_p_yea_rate", "mean_accuracy", "accuracy_sd",
-            "mean_gmp", "gmp_sd", "apre", "baseline_accuracy",
-            "n_reps", "n_obs", "replicated_yea_rates", "replicated_accuracies",
+            "observed_yea_rate",
+            "replicated_yea_rate_mean",
+            "replicated_yea_rate_sd",
+            "bayesian_p_yea_rate",
+            "mean_accuracy",
+            "accuracy_sd",
+            "mean_gmp",
+            "gmp_sd",
+            "apre",
+            "baseline_accuracy",
+            "n_reps",
+            "n_obs",
+            "replicated_yea_rates",
+            "replicated_accuracies",
         }
         assert expected_keys.issubset(set(result.keys()))
 
@@ -462,15 +460,11 @@ class TestPPCBattery:
         result = run_ppc_battery(synthetic_idata_1d, synthetic_data, n_reps=50)
         assert 0.0 <= result["mean_accuracy"] <= 1.0
 
-    def test_gmp_in_range(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_gmp_in_range(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         result = run_ppc_battery(synthetic_idata_1d, synthetic_data, n_reps=50)
         assert 0.0 <= result["mean_gmp"] <= 1.0
 
-    def test_apre_finite(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_apre_finite(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         result = run_ppc_battery(synthetic_idata_1d, synthetic_data, n_reps=50)
         assert np.isfinite(result["apre"])
 
@@ -481,9 +475,7 @@ class TestPPCBattery:
         r2 = run_ppc_battery(synthetic_idata_1d, synthetic_data, n_reps=50)
         np.testing.assert_array_equal(r1["replicated_yea_rates"], r2["replicated_yea_rates"])
 
-    def test_2d_model(
-        self, synthetic_idata_2d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_2d_model(self, synthetic_idata_2d: az.InferenceData, synthetic_data: dict) -> None:
         result = run_ppc_battery(synthetic_idata_2d, synthetic_data, n_reps=50, model_type="2d")
         assert 0.0 <= result["mean_accuracy"] <= 1.0
 
@@ -587,16 +579,12 @@ class TestVoteMargins:
 class TestYensQ3:
     """Tests for Q3 local dependence computation."""
 
-    def test_q3_shape(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_q3_shape(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         result = compute_yens_q3(synthetic_idata_1d, synthetic_data, n_draws_sample=10)
         n_votes = synthetic_data["n_votes"]
         assert result["q3_matrix"].shape == (n_votes, n_votes)
 
-    def test_q3_symmetric(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_q3_symmetric(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         result = compute_yens_q3(synthetic_idata_1d, synthetic_data, n_draws_sample=10)
         np.testing.assert_allclose(result["q3_matrix"], result["q3_matrix"].T, atol=1e-10)
 
@@ -627,9 +615,7 @@ class TestYensQ3:
 class TestLOO:
     """Tests for LOO-CV computation."""
 
-    def test_loo_smoke(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_loo_smoke(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         """LOO should run without error on idata with log_likelihood."""
         ds = compute_log_likelihood_1d(synthetic_idata_1d, synthetic_data)
         idata_ll = add_log_likelihood_to_idata(synthetic_idata_1d, ds)
@@ -669,9 +655,7 @@ class TestParetoK:
         summary = summarize_pareto_k(loo_result)
         assert all(k in summary for k in ("good", "ok", "bad", "very_bad", "total"))
 
-    def test_counts_sum(
-        self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict
-    ) -> None:
+    def test_counts_sum(self, synthetic_idata_1d: az.InferenceData, synthetic_data: dict) -> None:
         ds = compute_log_likelihood_1d(synthetic_idata_1d, synthetic_data)
         idata_ll = add_log_likelihood_to_idata(synthetic_idata_1d, ds)
         loo_result = compute_loo(idata_ll)

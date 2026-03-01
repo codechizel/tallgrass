@@ -1312,9 +1312,7 @@ def main() -> None:
             chamber_results["composition"] = composition
 
             # Class membership list (for report)
-            xi_map = dict(
-                zip(irt_ip["legislator_slug"].to_list(), irt_ip["xi_mean"].to_list())
-            )
+            xi_map = dict(zip(irt_ip["legislator_slug"].to_list(), irt_ip["xi_mean"].to_list()))
             name_map = dict(
                 zip(
                     legislators["legislator_slug"].to_list(),
@@ -1323,13 +1321,15 @@ def main() -> None:
             )
             membership_rows: list[dict] = []
             for i, slug in enumerate(slugs):
-                membership_rows.append({
-                    "Name": name_map.get(slug, slug),
-                    "Party": party_map.get(slug, "Unknown"),
-                    "Class": int(labels[i]) + 1,
-                    "IRT xi": xi_map.get(slug),
-                    "Max P": float(probabilities[i].max()),
-                })
+                membership_rows.append(
+                    {
+                        "Name": name_map.get(slug, slug),
+                        "Party": party_map.get(slug, "Unknown"),
+                        "Class": int(labels[i]) + 1,
+                        "IRT xi": xi_map.get(slug),
+                        "Max P": float(probabilities[i].max()),
+                    }
+                )
             chamber_results["membership"] = sorted(
                 membership_rows, key=lambda r: (r["Class"], r.get("IRT xi") or 0)
             )

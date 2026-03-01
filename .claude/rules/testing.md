@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1630)
+just test                    # run all tests (~1696)
 just test-scraper            # scraper tests only (-m scraper, ~264)
 just test-fast               # skip slow tests (-m "not slow", ~1445)
 just check                   # full check (lint + typecheck + tests)
@@ -73,6 +73,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_ppc.py` — log-likelihood (1D/2D/hierarchical), PPC battery, item/person fit, Q3 local dependence, LOO-CV, Pareto k, data alignment (~60 tests)
 - `tests/test_wnominate.py` — vote matrix conversion, polarity selection, result parsing, sign alignment, three-way correlations, comparison table, eigenvalues (~25 tests)
 - `tests/test_lca.py` — vote matrix construction, class enumeration, BIC selection, Salsa effect detection, IRT cross-validation, ARI comparison, within-party LCA, discriminating bills, constants consistency (~37 tests)
+- `tests/test_irt_2d.py` — sign-flip logic, PCA correlation, convergence constants (~16 tests)
 
 ## Integration & Structure Test Files
 

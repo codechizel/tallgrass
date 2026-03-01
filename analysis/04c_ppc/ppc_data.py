@@ -208,13 +208,19 @@ def run_ppc_battery(
 
         if model_type == "2d":
             eta = _compute_eta_2d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
         else:
             eta = _compute_eta_1d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
 
         p = 1.0 / (1.0 + np.exp(-np.clip(eta, -500, 500)))
@@ -315,13 +321,19 @@ def compute_item_ppc(
 
         if model_type == "2d":
             eta = _compute_eta_2d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
         else:
             eta = _compute_eta_1d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
 
         p = 1.0 / (1.0 + np.exp(-np.clip(eta, -500, 500)))
@@ -403,13 +415,19 @@ def compute_person_ppc(
 
         if model_type == "2d":
             eta = _compute_eta_2d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
         else:
             eta = _compute_eta_1d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
 
         p = 1.0 / (1.0 + np.exp(-np.clip(eta, -500, 500)))
@@ -487,13 +505,19 @@ def compute_vote_margin_ppc(
 
         if model_type == "2d":
             eta = _compute_eta_2d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
         else:
             eta = _compute_eta_1d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
 
         p = 1.0 / (1.0 + np.exp(-np.clip(eta, -500, 500)))
@@ -563,13 +587,19 @@ def compute_yens_q3(
 
         if model_type == "2d":
             eta = _compute_eta_2d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
         else:
             eta = _compute_eta_1d(
-                xi_post[c, d], alpha_post[c, d], beta_post[c, d],
-                leg_idx, vote_idx,
+                xi_post[c, d],
+                alpha_post[c, d],
+                beta_post[c, d],
+                leg_idx,
+                vote_idx,
             )
 
         p = 1.0 / (1.0 + np.exp(-np.clip(eta, -500, 500)))

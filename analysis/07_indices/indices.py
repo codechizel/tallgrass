@@ -541,12 +541,8 @@ def compute_carey_unity(
 
     # Count party members in this chamber (total possible voters)
     chamber_legs = legislators.filter(pl.col("slug").str.starts_with(chamber_prefix))
-    party_sizes = dict(
-        zip(
-            chamber_legs.group_by("party").agg(pl.len().alias("n"))["party"].to_list(),
-            chamber_legs.group_by("party").agg(pl.len().alias("n"))["n"].to_list(),
-        )
-    )
+    party_agg = chamber_legs.group_by("party").agg(pl.len().alias("n"))
+    party_sizes = dict(zip(party_agg["party"].to_list(), party_agg["n"].to_list()))
 
     # Count Yea/Nay per vote per party (same as party_majority_positions)
     vote_party = votes.join(

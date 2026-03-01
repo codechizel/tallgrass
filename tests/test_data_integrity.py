@@ -12,13 +12,18 @@ import pytest
 
 from tallgrass.session import KSSession
 
-pytestmark = [pytest.mark.integration, pytest.mark.slow]
-
-# ── Constants ────────────────────────────────────────────────────────────────
-
 _SESSION = KSSession.from_year(2025)
 DATA_DIR = _SESSION.data_dir
 _PREFIX = _SESSION.output_name
+_DATA_EXISTS = (DATA_DIR / f"{_PREFIX}_votes.csv").exists()
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.slow,
+    pytest.mark.skipif(not _DATA_EXISTS, reason=f"No data at {DATA_DIR}"),
+]
+
+# ── Constants ────────────────────────────────────────────────────────────────
 HOUSE_SEATS = 125
 SENATE_SEATS = 40
 VALID_VOTE_CATEGORIES = {"Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting"}

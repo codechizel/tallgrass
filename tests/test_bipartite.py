@@ -85,13 +85,15 @@ def ideal_points() -> pl.DataFrame:
     slugs = [f"rep_r{i}_1" for i in range(1, 9)] + [f"rep_d{i}_1" for i in range(1, 5)]
     xis = list(np.linspace(2.0, 0.5, 8)) + list(np.linspace(-0.5, -2.0, 4))
     parties = ["Republican"] * 8 + ["Democrat"] * 4
-    return pl.DataFrame({
-        "legislator_slug": slugs,
-        "xi_mean": xis,
-        "xi_sd": [0.1] * 12,
-        "party": parties,
-        "full_name": [f"Legislator {s}" for s in slugs],
-    })
+    return pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "xi_mean": xis,
+            "xi_sd": [0.1] * 12,
+            "party": parties,
+            "full_name": [f"Legislator {s}" for s in slugs],
+        }
+    )
 
 
 @pytest.fixture
@@ -104,23 +106,27 @@ def bill_params() -> pl.DataFrame:
         + [0.5, 0.6]  # Bridge: moderate
         + [-1.8, -2.0, -1.9]  # Reverse: high (negative)
     )
-    return pl.DataFrame({
-        "vote_id": vote_ids,
-        "beta_mean": betas,
-        "alpha_mean": [0.0] * 15,
-        "bill_number": [f"HB {i}" for i in range(1, 16)],
-    })
+    return pl.DataFrame(
+        {
+            "vote_id": vote_ids,
+            "beta_mean": betas,
+            "alpha_mean": [0.0] * 15,
+            "bill_number": [f"HB {i}" for i in range(1, 16)],
+        }
+    )
 
 
 @pytest.fixture
 def rollcalls() -> pl.DataFrame:
     """Rollcall metadata matching the 15-bill fixture."""
-    return pl.DataFrame({
-        "vote_id": [f"v{i}" for i in range(1, 16)],
-        "bill_number": [f"HB {i}" for i in range(1, 16)],
-        "short_title": [f"Test Bill {i}" for i in range(1, 16)],
-        "motion": ["Final Action"] * 15,
-    })
+    return pl.DataFrame(
+        {
+            "vote_id": [f"v{i}" for i in range(1, 16)],
+            "bill_number": [f"HB {i}" for i in range(1, 16)],
+            "short_title": [f"Test Bill {i}" for i in range(1, 16)],
+            "motion": ["Final Action"] * 15,
+        }
+    )
 
 
 @pytest.fixture
@@ -192,9 +198,14 @@ class TestBipartiteSummary:
     def test_summary_keys(self, bipartite_graph: nx.Graph) -> None:
         summary = compute_bipartite_summary(bipartite_graph)
         expected_keys = {
-            "n_legislators", "n_bills", "n_edges", "density",
-            "avg_legislator_degree", "avg_bill_degree",
-            "max_legislator_degree", "max_bill_degree",
+            "n_legislators",
+            "n_bills",
+            "n_edges",
+            "density",
+            "avg_legislator_degree",
+            "avg_bill_degree",
+            "max_legislator_degree",
+            "max_bill_degree",
         }
         assert set(summary.keys()) == expected_keys
 
@@ -242,13 +253,20 @@ class TestBillPolarization:
         pol = compute_bill_polarization(vote_matrix_pl, ideal_points, min_voters=100)
         assert pol.height == 0
 
-    def test_columns(
-        self, vote_matrix_pl: pl.DataFrame, ideal_points: pl.DataFrame
-    ) -> None:
+    def test_columns(self, vote_matrix_pl: pl.DataFrame, ideal_points: pl.DataFrame) -> None:
         """Result should have expected columns."""
         pol = compute_bill_polarization(vote_matrix_pl, ideal_points)
-        expected = {"vote_id", "polarization", "pct_r_yea", "pct_d_yea", "n_r", "n_d",
-                    "bill_number", "short_title", "beta_mean"}
+        expected = {
+            "vote_id",
+            "polarization",
+            "pct_r_yea",
+            "pct_d_yea",
+            "n_r",
+            "n_d",
+            "bill_number",
+            "short_title",
+            "beta_mean",
+        }
         assert expected <= set(pol.columns)
 
 
@@ -421,8 +439,16 @@ class TestBackboneCentrality:
         validated, _, slugs = extract_bicm_backbone(vote_matrix_pl)
         G = build_backbone_graph(validated, slugs, ideal_points)
         cent = compute_backbone_centrality(G)
-        expected = {"legislator_slug", "full_name", "party", "xi_mean",
-                    "degree", "betweenness", "eigenvector", "pagerank"}
+        expected = {
+            "legislator_slug",
+            "full_name",
+            "party",
+            "xi_mean",
+            "degree",
+            "betweenness",
+            "eigenvector",
+            "pagerank",
+        }
         assert expected <= set(cent.columns)
 
     def test_empty_graph(self) -> None:
@@ -462,8 +488,16 @@ class TestBackboneComparison:
         G = nx.Graph()
         G.add_node("a", party="R", full_name="Test", xi_mean=0.0)
         result = compare_backbones(G, G)
-        expected = {"edge_jaccard", "shared_edges", "bicm_only", "kappa_only",
-                    "bicm_total", "kappa_total", "hidden_alliances", "community_comparison"}
+        expected = {
+            "edge_jaccard",
+            "shared_edges",
+            "bicm_only",
+            "kappa_only",
+            "bicm_total",
+            "kappa_total",
+            "hidden_alliances",
+            "community_comparison",
+        }
         assert expected <= set(result.keys())
 
 

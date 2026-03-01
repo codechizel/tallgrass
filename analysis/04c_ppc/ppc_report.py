@@ -66,10 +66,11 @@ def build_ppc_report(
 
 
 def _add_how_to_read(report: ReportBuilder) -> None:
-    report.add(TextSection(
-        id="how-to-read",
-        title="How to Read This Report",
-        html="""
+    report.add(
+        TextSection(
+            id="how-to-read",
+            title="How to Read This Report",
+            html="""
 <div style="background: #f0f7ff; padding: 1em; border-radius: 6px; margin-bottom: 1em;">
 <p><strong>This report checks whether our statistical models reproduce the voting
 patterns they were trained on.</strong></p>
@@ -96,7 +97,8 @@ models by out-of-sample predictive accuracy. A model with higher ELPD predicts
 better on unseen data.</p>
 </div>
 """,
-    ))
+        )
+    )
 
 
 def _add_executive_summary(
@@ -118,8 +120,7 @@ def _add_executive_summary(
                 "GMP": ppc["mean_gmp"],
                 "APRE": ppc["apre"],
                 "Items Misfit": (
-                    f"{model_data['item_fit']['n_misfitting']}"
-                    f"/{model_data['item_fit']['n_votes']}"
+                    f"{model_data['item_fit']['n_misfitting']}/{model_data['item_fit']['n_votes']}"
                 ),
                 "Persons Misfit": (
                     f"{model_data['person_fit']['n_misfitting']}"
@@ -171,13 +172,15 @@ def _add_calibration_plot(
     ch = chamber.lower()
     path = plots_dir / f"calibration_{ch}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            f"calibration-{ch}",
-            f"{chamber} — Yea Rate Calibration",
-            path,
-            caption="Histograms show the distribution of replicated Yea rates (500 draws). "
-                    "Red line = observed rate. p-value shown in title.",
-        ))
+        report.add(
+            FigureSection.from_file(
+                f"calibration-{ch}",
+                f"{chamber} — Yea Rate Calibration",
+                path,
+                caption="Histograms show the distribution of replicated Yea rates (500 draws). "
+                "Red line = observed rate. p-value shown in title.",
+            )
+        )
 
 
 def _add_item_fit(
@@ -192,24 +195,28 @@ def _add_item_fit(
     # Plot
     path = plots_dir / f"item_fit_{ch}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            f"item-fit-{ch}",
-            f"{chamber} — Item Endorsement Rates",
-            path,
-            caption="Each point is one roll call. Diagonal = perfect prediction. "
-                    "Red X marks misfitting items (observed outside 95% replicated interval).",
-        ))
+        report.add(
+            FigureSection.from_file(
+                f"item-fit-{ch}",
+                f"{chamber} — Item Endorsement Rates",
+                path,
+                caption="Each point is one roll call. Diagonal = perfect prediction. "
+                "Red X marks misfitting items (observed outside 95% replicated interval).",
+            )
+        )
 
     # Summary table
     rows = []
     for model_name, model_data in ch_data["models"].items():
         item = model_data["item_fit"]
-        rows.append({
-            "Model": model_name,
-            "N Votes": item["n_votes"],
-            "Misfitting": item["n_misfitting"],
-            "Misfit %": item["misfit_pct"],
-        })
+        rows.append(
+            {
+                "Model": model_name,
+                "N Votes": item["n_votes"],
+                "Misfitting": item["n_misfitting"],
+                "Misfit %": item["misfit_pct"],
+            }
+        )
     if rows:
         df = pl.DataFrame(rows)
         html = make_gt(
@@ -218,9 +225,11 @@ def _add_item_fit(
             number_formats={"Misfit %": ".1f"},
             source_note="Misfitting: observed endorsement rate outside 95% replicated interval.",
         )
-        report.add(TableSection(
-            id=f"item-fit-table-{ch}", title=f"{chamber} — Item Fit Summary", html=html
-        ))
+        report.add(
+            TableSection(
+                id=f"item-fit-table-{ch}", title=f"{chamber} — Item Fit Summary", html=html
+            )
+        )
 
 
 def _add_person_fit(
@@ -234,26 +243,30 @@ def _add_person_fit(
 
     path = plots_dir / f"person_fit_{ch}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            f"person-fit-{ch}",
-            f"{chamber} — Person Total Scores",
-            path,
-            caption=(
-                "Each point is one legislator. Diagonal = perfect prediction. "
-                "Red X marks misfitting legislators "
-                "(observed outside 95% replicated interval)."
-            ),
-        ))
+        report.add(
+            FigureSection.from_file(
+                f"person-fit-{ch}",
+                f"{chamber} — Person Total Scores",
+                path,
+                caption=(
+                    "Each point is one legislator. Diagonal = perfect prediction. "
+                    "Red X marks misfitting legislators "
+                    "(observed outside 95% replicated interval)."
+                ),
+            )
+        )
 
     rows = []
     for model_name, model_data in ch_data["models"].items():
         person = model_data["person_fit"]
-        rows.append({
-            "Model": model_name,
-            "N Legislators": person["n_legislators"],
-            "Misfitting": person["n_misfitting"],
-            "Misfit %": person["misfit_pct"],
-        })
+        rows.append(
+            {
+                "Model": model_name,
+                "N Legislators": person["n_legislators"],
+                "Misfitting": person["n_misfitting"],
+                "Misfit %": person["misfit_pct"],
+            }
+        )
     if rows:
         df = pl.DataFrame(rows)
         html = make_gt(
@@ -262,9 +275,11 @@ def _add_person_fit(
             number_formats={"Misfit %": ".1f"},
             source_note="Misfitting: observed Yea count outside 95% replicated interval.",
         )
-        report.add(TableSection(
-            id=f"person-fit-table-{ch}", title=f"{chamber} — Person Fit Summary", html=html
-        ))
+        report.add(
+            TableSection(
+                id=f"person-fit-table-{ch}", title=f"{chamber} — Person Fit Summary", html=html
+            )
+        )
 
 
 def _add_margins(
@@ -275,12 +290,14 @@ def _add_margins(
     ch = chamber.lower()
     path = plots_dir / f"margins_{ch}.png"
     if path.exists():
-        report.add(FigureSection.from_file(
-            f"margins-{ch}",
-            f"{chamber} — Vote Margin Distributions",
-            path,
-            caption="Gray = observed margins. Colored = replicated mean margins per model.",
-        ))
+        report.add(
+            FigureSection.from_file(
+                f"margins-{ch}",
+                f"{chamber} — Vote Margin Distributions",
+                path,
+                caption="Gray = observed margins. Colored = replicated mean margins per model.",
+            )
+        )
 
 
 def _add_q3_summary(
@@ -295,14 +312,16 @@ def _add_q3_summary(
 
     rows = []
     for model_name, q3 in q3_results.items():
-        rows.append({
-            "Model": model_name,
-            "Item Pairs": q3["n_pairs"],
-            "Violations (|Q3|>0.2)": q3["n_violations"],
-            "Violation Rate": q3["violation_rate"],
-            "Max |Q3|": q3["max_abs_q3"],
-            "Mean |Q3|": q3["mean_abs_q3"],
-        })
+        rows.append(
+            {
+                "Model": model_name,
+                "Item Pairs": q3["n_pairs"],
+                "Violations (|Q3|>0.2)": q3["n_violations"],
+                "Violation Rate": q3["violation_rate"],
+                "Max |Q3|": q3["max_abs_q3"],
+                "Mean |Q3|": q3["mean_abs_q3"],
+            }
+        )
 
     df = pl.DataFrame(rows)
     html = make_gt(
@@ -315,7 +334,7 @@ def _add_q3_summary(
             "Mean |Q3|": ".3f",
         },
         source_note="Q3 > 0.2 indicates local dependence not explained by the latent trait. "
-                    "If 1D shows violations that 2D resolves, the second dimension is justified.",
+        "If 1D shows violations that 2D resolves, the second dimension is justified.",
     )
     report.add(TableSection(id=f"q3-{ch}", title=f"{chamber} — Q3 Local Dependence", html=html))
 
@@ -329,9 +348,7 @@ def _add_loo_comparison(
     # Comparison tables
     for ch_name, ch_data in sorted(all_results.items()):
         ch = ch_name.lower()
-        models_with_loo = {
-            name: data for name, data in ch_data["models"].items() if "loo" in data
-        }
+        models_with_loo = {name: data for name, data in ch_data["models"].items() if "loo" in data}
         if not models_with_loo:
             continue
 
@@ -339,16 +356,18 @@ def _add_loo_comparison(
         for model_name, model_data in models_with_loo.items():
             loo = model_data["loo"]
             pk = loo["pareto_k"]
-            rows.append({
-                "Model": model_name,
-                "ELPD": loo["elpd_loo"],
-                "SE": loo["se"],
-                "p_loo": loo["p_loo"],
-                "k Good": pk["good"],
-                "k OK": pk["ok"],
-                "k Bad": pk["bad"],
-                "k Very Bad": pk["very_bad"],
-            })
+            rows.append(
+                {
+                    "Model": model_name,
+                    "ELPD": loo["elpd_loo"],
+                    "SE": loo["se"],
+                    "p_loo": loo["p_loo"],
+                    "k Good": pk["good"],
+                    "k OK": pk["ok"],
+                    "k Bad": pk["bad"],
+                    "k Very Bad": pk["very_bad"],
+                }
+            )
 
         df = pl.DataFrame(rows)
         html = make_gt(
@@ -363,20 +382,22 @@ def _add_loo_comparison(
                 "bad (0.7-1.0), very bad (>1.0)."
             ),
         )
-        report.add(TableSection(
-            id=f"loo-table-{ch}", title=f"{ch_name} — LOO-CV Comparison", html=html
-        ))
+        report.add(
+            TableSection(id=f"loo-table-{ch}", title=f"{ch_name} — LOO-CV Comparison", html=html)
+        )
 
         # Comparison plot
         path = plots_dir / f"loo_comparison_{ch}.png"
         if path.exists():
-            report.add(FigureSection.from_file(
-                f"loo-plot-{ch}",
-                f"{ch_name} — LOO-CV Forest Plot",
-                path,
-                caption="ELPD differences with standard errors. "
-                        "Higher ELPD = better out-of-sample prediction.",
-            ))
+            report.add(
+                FigureSection.from_file(
+                    f"loo-plot-{ch}",
+                    f"{ch_name} — LOO-CV Forest Plot",
+                    path,
+                    caption="ELPD differences with standard errors. "
+                    "Higher ELPD = better out-of-sample prediction.",
+                )
+            )
 
 
 def _add_pareto_k(
@@ -388,14 +409,16 @@ def _add_pareto_k(
         ch = ch_name.lower()
         path = plots_dir / f"pareto_k_{ch}.png"
         if path.exists():
-            report.add(FigureSection.from_file(
-                f"pareto-k-{ch}",
-                f"{ch_name} — Pareto k Diagnostics",
-                path,
-                caption="Each point is one observation. Colors: green (<0.5 good), "
-                        "yellow (0.5-0.7 ok), orange (0.7-1.0 bad), red (>1.0 very bad). "
-                        "Observations with k > 0.7 have unreliable LOO estimates.",
-            ))
+            report.add(
+                FigureSection.from_file(
+                    f"pareto-k-{ch}",
+                    f"{ch_name} — Pareto k Diagnostics",
+                    path,
+                    caption="Each point is one observation. Colors: green (<0.5 good), "
+                    "yellow (0.5-0.7 ok), orange (0.7-1.0 bad), red (>1.0 very bad). "
+                    "Observations with k > 0.7 have unreliable LOO estimates.",
+                )
+            )
 
 
 def _add_model_ranking(
@@ -433,14 +456,12 @@ def _add_model_ranking(
                     reverse=True,
                 )
                 parts.append(
-                    "<p><strong>Ranked by ELPD "
-                    "(out-of-sample prediction):</strong></p><ol>"
+                    "<p><strong>Ranked by ELPD (out-of-sample prediction):</strong></p><ol>"
                 )
                 for name, data in loo_ranked:
                     loo = data["loo"]
                     parts.append(
-                        f"<li>{name}: ELPD = {loo['elpd_loo']:.1f} "
-                        f"(SE = {loo['se']:.1f})</li>"
+                        f"<li>{name}: ELPD = {loo['elpd_loo']:.1f} (SE = {loo['se']:.1f})</li>"
                     )
                 parts.append("</ol>")
 
@@ -479,18 +500,21 @@ def _add_model_ranking(
                         )
 
     parts.append("</div>")
-    report.add(TextSection(
-        id="model-ranking",
-        title="Model Ranking and Interpretation",
-        html="\n".join(parts),
-    ))
+    report.add(
+        TextSection(
+            id="model-ranking",
+            title="Model Ranking and Interpretation",
+            html="\n".join(parts),
+        )
+    )
 
 
 def _add_methodology(report: ReportBuilder) -> None:
-    report.add(TextSection(
-        id="methodology",
-        title="Methodology",
-        html="""
+    report.add(
+        TextSection(
+            id="methodology",
+            title="Methodology",
+            html="""
 <h3>Posterior Predictive Checks</h3>
 <p>For each model, 500 posterior draws are sampled. At each draw, a replicated
 dataset is generated from the Bernoulli likelihood using the drawn parameters.
@@ -530,4 +554,5 @@ Computing</em>, 27(5), 1413-1432.</li>
 local item dependence. <em>Journal of Educational Measurement</em>, 30(3), 187-213.</li>
 </ul>
 """,
-    ))
+        )
+    )

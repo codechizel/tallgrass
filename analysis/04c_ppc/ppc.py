@@ -193,9 +193,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--skip-loo", action="store_true", help="Skip LOO-CV computation")
     parser.add_argument("--skip-q3", action="store_true", help="Skip Q3 local dependence")
-    parser.add_argument(
-        "--n-reps", type=int, default=DEFAULT_N_REPS, help="PPC replications"
-    )
+    parser.add_argument("--n-reps", type=int, default=DEFAULT_N_REPS, help="PPC replications")
     return parser.parse_args()
 
 
@@ -273,8 +271,14 @@ def plot_item_fit(
         # Highlight misfitting
         misfit_idx = item["misfitting_items"]
         if len(misfit_idx) > 0:
-            ax.scatter(obs[misfit_idx], pred_mean[misfit_idx], color="red", s=20, marker="x",
-                       label=f"{len(misfit_idx)} misfitting")
+            ax.scatter(
+                obs[misfit_idx],
+                pred_mean[misfit_idx],
+                color="red",
+                s=20,
+                marker="x",
+                label=f"{len(misfit_idx)} misfitting",
+            )
             ax.legend(fontsize=8)
 
         ax.set_title(f"{model_name}")
@@ -308,8 +312,14 @@ def plot_person_fit(
 
         misfit_idx = person["misfitting_persons"]
         if len(misfit_idx) > 0:
-            ax.scatter(obs[misfit_idx], pred_mean[misfit_idx], color="red", s=25, marker="x",
-                       label=f"{len(misfit_idx)} misfitting")
+            ax.scatter(
+                obs[misfit_idx],
+                pred_mean[misfit_idx],
+                color="red",
+                s=25,
+                marker="x",
+                label=f"{len(misfit_idx)} misfitting",
+            )
             ax.legend(fontsize=8)
 
         ax.set_title(f"{model_name}")
@@ -338,8 +348,12 @@ def plot_vote_margins(
         ax.hist(obs, bins=25, alpha=0.6, color="gray", edgecolor="white", label="Observed")
         rep_mean = rep.mean(axis=0)
         ax.hist(
-            rep_mean, bins=25, alpha=0.4, color=color,
-            edgecolor="white", label="Replicated mean",
+            rep_mean,
+            bins=25,
+            alpha=0.4,
+            color=color,
+            edgecolor="white",
+            label="Replicated mean",
         )
         ax.set_title(model_name)
         ax.set_xlabel("Vote Margin")
@@ -369,9 +383,13 @@ def plot_pareto_k(
 
         # Color by category
         colors = np.where(
-            k_vals < 0.5, threshold_colors[0],
-            np.where(k_vals < 0.7, threshold_colors[1],
-                     np.where(k_vals < 1.0, threshold_colors[2], threshold_colors[3]))
+            k_vals < 0.5,
+            threshold_colors[0],
+            np.where(
+                k_vals < 0.7,
+                threshold_colors[1],
+                np.where(k_vals < 1.0, threshold_colors[2], threshold_colors[3]),
+            ),
         )
         ax.scatter(x, k_vals, c=colors, s=3, alpha=0.5)
 
@@ -459,8 +477,10 @@ def process_chamber(
         ppc_results[model_name] = ppc
 
         print(f"    Observed Yea rate: {ppc['observed_yea_rate']:.3f}")
-        print(f"    Replicated Yea rate: {ppc['replicated_yea_rate_mean']:.3f} "
-              f"+/- {ppc['replicated_yea_rate_sd']:.3f}")
+        print(
+            f"    Replicated Yea rate: {ppc['replicated_yea_rate_mean']:.3f} "
+            f"+/- {ppc['replicated_yea_rate_sd']:.3f}"
+        )
         print(f"    Bayesian p-value: {ppc['bayesian_p_yea_rate']:.3f}")
         print(f"    Accuracy: {ppc['mean_accuracy']:.3f}")
         print(f"    GMP: {ppc['mean_gmp']:.3f}")
@@ -470,15 +490,19 @@ def process_chamber(
         print("    Running item-level checks...")
         item = compute_item_ppc(idata, data, n_reps=n_reps, model_type=model_type)
         item_results[model_name] = item
-        print(f"    Misfitting items: {item['n_misfitting']}/{item['n_votes']} "
-              f"({100 * item['n_misfitting'] / max(item['n_votes'], 1):.1f}%)")
+        print(
+            f"    Misfitting items: {item['n_misfitting']}/{item['n_votes']} "
+            f"({100 * item['n_misfitting'] / max(item['n_votes'], 1):.1f}%)"
+        )
 
         # Person-level PPC
         print("    Running person-level checks...")
         person = compute_person_ppc(idata, data, n_reps=n_reps, model_type=model_type)
         person_results[model_name] = person
-        print(f"    Misfitting persons: {person['n_misfitting']}/{person['n_legislators']} "
-              f"({100 * person['n_misfitting'] / max(person['n_legislators'], 1):.1f}%)")
+        print(
+            f"    Misfitting persons: {person['n_misfitting']}/{person['n_legislators']} "
+            f"({100 * person['n_misfitting'] / max(person['n_legislators'], 1):.1f}%)"
+        )
 
         # Vote margins
         print("    Running vote margin checks...")
@@ -492,8 +516,10 @@ def process_chamber(
                 idata, data, n_draws_sample=DEFAULT_Q3_DRAWS, model_type=model_type
             )
             q3_results[model_name] = q3
-            print(f"    Q3 violations (|Q3|>0.2): {q3['n_violations']}/{q3['n_pairs']} "
-                  f"({100 * q3['violation_rate']:.1f}%)")
+            print(
+                f"    Q3 violations (|Q3|>0.2): {q3['n_violations']}/{q3['n_pairs']} "
+                f"({100 * q3['violation_rate']:.1f}%)"
+            )
             print(f"    Max |Q3|: {q3['max_abs_q3']:.3f}, Mean |Q3|: {q3['mean_abs_q3']:.3f}")
 
         # Log-likelihood for LOO
@@ -512,8 +538,11 @@ def process_chamber(
         # Accumulate per-model results
         chamber_results[model_name] = {
             "model_type": model_type,
-            "ppc": {k: v for k, v in ppc.items()
-                    if k not in ("replicated_yea_rates", "replicated_accuracies")},
+            "ppc": {
+                k: v
+                for k, v in ppc.items()
+                if k not in ("replicated_yea_rates", "replicated_accuracies")
+            },
             "item_fit": {
                 "n_misfitting": item["n_misfitting"],
                 "n_votes": item["n_votes"],
@@ -558,10 +587,14 @@ def process_chamber(
                 "p_loo": float(loo_result.p_loo),
                 "pareto_k": pareto_summary,
             }
-            print(f"  {name}: ELPD = {loo_result.elpd_loo:.1f} (SE = {loo_result.se:.1f}), "
-                  f"p_loo = {loo_result.p_loo:.1f}")
-            print(f"    Pareto k: {pareto_summary['good']} good, {pareto_summary['ok']} ok, "
-                  f"{pareto_summary['bad']} bad, {pareto_summary['very_bad']} very bad")
+            print(
+                f"  {name}: ELPD = {loo_result.elpd_loo:.1f} (SE = {loo_result.se:.1f}), "
+                f"p_loo = {loo_result.p_loo:.1f}"
+            )
+            print(
+                f"    Pareto k: {pareto_summary['good']} good, {pareto_summary['ok']} ok, "
+                f"{pareto_summary['bad']} bad, {pareto_summary['very_bad']} very bad"
+            )
             loo_data[name] = {
                 "elpd_loo": float(loo_result.elpd_loo),
                 "se": float(loo_result.se),
@@ -649,19 +682,27 @@ def main() -> None:
         results_root = ks.results_dir
 
         eda_dir = resolve_upstream_dir(
-            "01_eda", results_root, args.run_id,
+            "01_eda",
+            results_root,
+            args.run_id,
             override=Path(args.eda_dir) if args.eda_dir else None,
         )
         irt_dir = resolve_upstream_dir(
-            "04_irt", results_root, args.run_id,
+            "04_irt",
+            results_root,
+            args.run_id,
             override=Path(args.irt_dir) if args.irt_dir else None,
         )
         irt_2d_dir = resolve_upstream_dir(
-            "04b_irt_2d", results_root, args.run_id,
+            "04b_irt_2d",
+            results_root,
+            args.run_id,
             override=Path(args.irt_2d_dir) if args.irt_2d_dir else None,
         )
         hier_dir = resolve_upstream_dir(
-            "10_hierarchical", results_root, args.run_id,
+            "10_hierarchical",
+            results_root,
+            args.run_id,
             override=Path(args.hierarchical_dir) if args.hierarchical_dir else None,
         )
 
@@ -675,8 +716,9 @@ def main() -> None:
         house_matrix = pl.read_parquet(eda_dir / "data" / "vote_matrix_house_filtered.parquet")
         senate_matrix = pl.read_parquet(eda_dir / "data" / "vote_matrix_senate_filtered.parquet")
         print(f"  House matrix: {house_matrix.height} legislators x {house_matrix.width - 1} votes")
-        print(f"  Senate matrix: {senate_matrix.height} legislators "
-              f"x {senate_matrix.width - 1} votes")
+        print(
+            f"  Senate matrix: {senate_matrix.height} legislators x {senate_matrix.width - 1} votes"
+        )
 
         # ── Process each chamber ──
         all_results: dict[str, dict] = {}
@@ -698,14 +740,14 @@ def main() -> None:
                 available["2D IRT"] = (idata_2d, "2d")
 
             # Hierarchical IRT
-            idata_hier = _load_idata_safe(
-                hier_dir / "data" / f"idata_{ch}.nc", "Hierarchical"
-            )
+            idata_hier = _load_idata_safe(hier_dir / "data" / f"idata_{ch}.nc", "Hierarchical")
             if idata_hier is not None:
                 available["Hierarchical"] = (idata_hier, "hierarchical")
 
             result = process_chamber(
-                chamber, matrix, available,
+                chamber,
+                matrix,
+                available,
                 n_reps=args.n_reps,
                 skip_loo=args.skip_loo,
                 skip_q3=args.skip_q3,

@@ -463,11 +463,20 @@ def apply_dim1_sign_check(ideal_2d: pl.DataFrame) -> pl.DataFrame:
     r_dim1 = ideal_2d.filter(pl.col("party") == "Republican")["xi_dim1_mean"].mean()
     if r_dim1 is not None and r_dim1 < 0:
         print("  WARNING: Republican Dim 1 mean is negative — flipping Dim 1 sign")
-        ideal_2d = ideal_2d.with_columns(
-            (-pl.col("xi_dim1_mean")).alias("xi_dim1_mean"),
-            (-pl.col("xi_dim1_hdi_3%")).alias("xi_dim1_hdi_97%_new"),
-            (-pl.col("xi_dim1_hdi_97%")).alias("xi_dim1_hdi_3%_new"),
-        ).rename({"xi_dim1_hdi_97%_new": "xi_dim1_hdi_97%", "xi_dim1_hdi_3%_new": "xi_dim1_hdi_3%"})
+        ideal_2d = (
+            ideal_2d.with_columns(
+                (-pl.col("xi_dim1_mean")).alias("xi_dim1_mean"),
+                (-pl.col("xi_dim1_hdi_3%")).alias("xi_dim1_hdi_97%_new"),
+                (-pl.col("xi_dim1_hdi_97%")).alias("xi_dim1_hdi_3%_new"),
+            )
+            .drop("xi_dim1_hdi_3%", "xi_dim1_hdi_97%")
+            .rename(
+                {
+                    "xi_dim1_hdi_97%_new": "xi_dim1_hdi_97%",
+                    "xi_dim1_hdi_3%_new": "xi_dim1_hdi_3%",
+                }
+            )
+        )
     else:
         print(f"  Republican Dim 1 mean: {r_dim1:+.3f} (positive — no flip needed)")
     return ideal_2d

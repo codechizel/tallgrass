@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-01 (84th biennium pipeline stress test — 8 fixes, LCA membership tables)
+**Last updated:** 2026-03-01 (open-source readiness — LICENSE, README, 9 bug fixes, 16 new tests, CI expansion)
 
 ---
 
@@ -55,6 +55,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 5b | Latent Class Analysis | 2026-02-28 | Bernoulli mixture (LCA) on binary vote matrix via StepMix. BIC model selection (K=1..8), Salsa effect detection (profile correlations), IRT cross-validation, Phase 5 ARI comparison, within-party LCA. Correct generative model for binary data. Deep dive: `docs/latent-class-deep-dive.md`, design: `analysis/design/lca.md`. |
 | 6b | Bipartite Bill-Legislator Network | 2026-02-28 | Two-mode network (legislators × bills). Bill polarization, bridge bills, bill communities (Leiden on Newman projection), BiCM backbone extraction (statistical validation via maximum-entropy null model), Phase 6 comparison. Deep dive: `docs/bipartite-network-deep-dive.md`, design: `analysis/design/bipartite.md`, ADR-0065. |
 | — | 84th Biennium Pipeline Stress Test | 2026-03-01 | Full 17-phase pipeline + PPC + External Validation + DIME on 2011-12 data. 8 bug fixes (column naming, IRT sensitivity sign flip, arviz/matplotlib deprecations, DIME party type). LCA class membership tables added. ADR-0066. |
+| — | Open-Source Readiness | 2026-03-01 | MIT LICENSE, README, CONTRIBUTING, pyproject metadata, CI expansion (lint+typecheck+test). 9 bug fixes (except syntax, Jinja2 autoescape, sign-flip DuplicateError, circular import, PID race). Phase 04b tests (16 new). 1696 total tests. ADR-0067. |
 
 ---
 
@@ -118,7 +119,7 @@ All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that Ru
 
 ### ~~Test Suite Expansion~~ — Done
 
-1533 tests across scraper and analysis modules. All passing. Three gaps closed:
+1696 tests across scraper and analysis modules. All passing. Three gaps closed:
 - **Integration tests**: `test_integration_pipeline.py` — synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution (26 tests)
 - **HTML report structural tests**: `test_report_structure.py` — TOC anchors, section ordering, numbering, container types, empty report, CSS embedding, make_gt integration (22 tests)
 - **Pytest markers**: `@pytest.mark.scraper` (264 tests), `@pytest.mark.integration` (29 tests), `@pytest.mark.slow` (24 tests). Registered in `pyproject.toml`. Recipes: `just test-scraper`, `just test-fast`

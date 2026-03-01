@@ -991,7 +991,7 @@ def load_biennium_data(
     try:
         pca_dir = resolve_upstream_dir("02_pca", results_root, run_id)
         pca_house, pca_senate = load_pca_scores(pca_dir)
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         pca_house, pca_senate = None, None
 
     # Load legislator metadata
@@ -1288,7 +1288,7 @@ def main() -> None:
                                 .alias("name_norm")
                             )
                         all_static_irt[t] = static_df
-                except (FileNotFoundError, OSError):
+                except FileNotFoundError, OSError:
                     pass
 
             correlation_df = correlate_with_static(trajectories, all_static_irt)
