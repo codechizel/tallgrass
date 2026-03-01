@@ -75,9 +75,7 @@ class TestGetSuccess:
 
     def test_binary_success(self, scraper: KSVoteScraper):
         odt_bytes = b"PK\x03\x04" + b"\x00" * 100  # ZIP magic bytes
-        scraper.http.get = MagicMock(
-            return_value=_mock_response(content=odt_bytes, text="")
-        )
+        scraper.http.get = MagicMock(return_value=_mock_response(content=odt_bytes, text=""))
 
         result = scraper._get("https://example.com/odt_view/je_123/", binary=True)
 
@@ -124,9 +122,7 @@ class TestGetSuccess:
 
     def test_binary_fetch_writes_bin_cache(self, scraper: KSVoteScraper):
         content = b"PK\x03\x04binary"
-        scraper.http.get = MagicMock(
-            return_value=_mock_response(content=content, text="")
-        )
+        scraper.http.get = MagicMock(return_value=_mock_response(content=content, text=""))
 
         scraper._get("https://example.com/odt", binary=True)
 
@@ -182,9 +178,7 @@ class TestGetErrorClassification:
         assert result.error_type == "timeout"
 
     def test_connection_error(self, scraper: KSVoteScraper):
-        scraper.http.get = MagicMock(
-            side_effect=requests.ConnectionError("connection refused")
-        )
+        scraper.http.get = MagicMock(side_effect=requests.ConnectionError("connection refused"))
 
         result = scraper._get("https://example.com/down")
 
@@ -192,9 +186,7 @@ class TestGetErrorClassification:
         assert result.error_type == "connection"
 
     def test_generic_request_exception(self, scraper: KSVoteScraper):
-        scraper.http.get = MagicMock(
-            side_effect=requests.RequestException("unknown error")
-        )
+        scraper.http.get = MagicMock(side_effect=requests.RequestException("unknown error"))
 
         result = scraper._get("https://example.com/unknown")
 
@@ -246,9 +238,7 @@ class TestGetErrorPageDetection:
     def test_binary_html_error_page(self, scraper: KSVoteScraper):
         """Bug #9: KS Legislature returns HTML error pages for binary ODT URLs."""
         error_html = b"<html><body>Page not available</body></html>"
-        scraper.http.get = MagicMock(
-            return_value=_mock_response(content=error_html, text="")
-        )
+        scraper.http.get = MagicMock(return_value=_mock_response(content=error_html, text=""))
 
         result = scraper._get("https://example.com/odt", binary=True)
 
@@ -303,9 +293,7 @@ class TestGetRetries:
         assert scraper.http.get.call_count == MAX_RETRIES
 
     def test_connection_error_retries(self, scraper: KSVoteScraper):
-        scraper.http.get = MagicMock(
-            side_effect=requests.ConnectionError("refused")
-        )
+        scraper.http.get = MagicMock(side_effect=requests.ConnectionError("refused"))
 
         scraper._get("https://example.com/down")
 
@@ -388,9 +376,7 @@ class TestFetchMany:
         original_delay = scraper.delay
 
         def fail_then_explode(url, binary=False):
-            return FetchResult(
-                url=url, html=None, error_type="transient", error_message="fail"
-            )
+            return FetchResult(url=url, html=None, error_type="transient", error_message="fail")
 
         scraper._get = fail_then_explode
 
@@ -462,9 +448,7 @@ class TestFilterBillsWithVotes:
              "SHORTTITLE": "Daylight saving", "ORIGINAL_SPONSOR": ["Senator Titus"]},
             {"BILLNO": "SB 2", "HISTORY": [{"status": "Introduced"}]}
         ]"""
-        scraper._get = MagicMock(
-            return_value=FetchResult(url="api", html=api_json)
-        )
+        scraper._get = MagicMock(return_value=FetchResult(url="api", html=api_json))
 
         bill_urls = ["/li/b2025_26/measures/sb1/", "/li/b2025_26/measures/sb2/"]
         filtered, metadata = scraper._filter_bills_with_votes(bill_urls)
@@ -479,9 +463,7 @@ class TestFilterBillsWithVotes:
             {"BILLNO": "HB 2001", "HISTORY": [{"status": "Yea: 100 Nay: 25"}],
              "SHORTTITLE": "Tax reform", "ORIGINAL_SPONSOR": ["Rep Smith"]}
         ]}"""
-        scraper._get = MagicMock(
-            return_value=FetchResult(url="api", html=api_json)
-        )
+        scraper._get = MagicMock(return_value=FetchResult(url="api", html=api_json))
 
         bill_urls = ["/li/b2025_26/measures/hb2001/"]
         filtered, metadata = scraper._filter_bills_with_votes(bill_urls)
@@ -503,9 +485,7 @@ class TestFilterBillsWithVotes:
         assert metadata == {}
 
     def test_invalid_json_falls_back(self, scraper: KSVoteScraper):
-        scraper._get = MagicMock(
-            return_value=FetchResult(url="api", html="not json at all")
-        )
+        scraper._get = MagicMock(return_value=FetchResult(url="api", html="not json at all"))
 
         bill_urls = ["/li/b2025_26/measures/sb1/"]
         filtered, metadata = scraper._filter_bills_with_votes(bill_urls)
@@ -526,9 +506,7 @@ class TestFilterBillsWithVotes:
 
     def test_no_bills_with_votes_falls_back(self, scraper: KSVoteScraper):
         api_json = '[{"BILLNO": "SB 1", "HISTORY": [{"status": "Introduced"}]}]'
-        scraper._get = MagicMock(
-            return_value=FetchResult(url="api", html=api_json)
-        )
+        scraper._get = MagicMock(return_value=FetchResult(url="api", html=api_json))
 
         bill_urls = ["/li/b2025_26/measures/sb1/"]
         filtered, metadata = scraper._filter_bills_with_votes(bill_urls)
@@ -539,13 +517,9 @@ class TestFilterBillsWithVotes:
         """Multiple sponsors are joined with '; '."""
         api_json = """[{"BILLNO": "SB 1", "HISTORY": [{"status": "Yea: 33"}],
             "SHORTTITLE": "Test", "ORIGINAL_SPONSOR": ["Senator A", "Senator B"]}]"""
-        scraper._get = MagicMock(
-            return_value=FetchResult(url="api", html=api_json)
-        )
+        scraper._get = MagicMock(return_value=FetchResult(url="api", html=api_json))
 
-        _, metadata = scraper._filter_bills_with_votes(
-            ["/li/b2025_26/measures/sb1/"]
-        )
+        _, metadata = scraper._filter_bills_with_votes(["/li/b2025_26/measures/sb1/"])
 
         assert metadata["sb1"]["sponsor"] == "Senator A; Senator B"
 

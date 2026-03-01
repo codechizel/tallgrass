@@ -109,8 +109,7 @@ class PlatformCheck:
             )
         if self.openblas_threads == 0 or self.openblas_threads > 6:
             warnings.append(
-                f"OPENBLAS_NUM_THREADS={self.openblas_threads} (expected <=6). "
-                f"See ADR-0022."
+                f"OPENBLAS_NUM_THREADS={self.openblas_threads} (expected <=6). See ADR-0022."
             )
         if self.active_mcmc_processes > 0:
             warnings.append(
@@ -120,8 +119,7 @@ class PlatformCheck:
             )
         if n_chains > 6:
             warnings.append(
-                f"n_chains={n_chains} exceeds P-core count (6). "
-                f"Chains will spill to E-cores."
+                f"n_chains={n_chains} exceeds P-core count (6). Chains will spill to E-cores."
             )
         return warnings
 
@@ -191,8 +189,7 @@ def create_monitoring_callback(
         # Layer 1: Process title (every draw, nanosecond cost)
         if setproctitle is not None:
             setproctitle(
-                f"tallgrass:{experiment_name}:{chamber}:{phase} "
-                f"draw={draw.draw_idx}/{total}"
+                f"tallgrass:{experiment_name}:{chamber}:{phase} draw={draw.draw_idx}/{total}"
             )
 
         # Layer 2: Status file (every 50 draws)
@@ -304,7 +301,7 @@ class ExperimentLifecycle:
         if self._original_sigterm is not None:
             try:
                 signal.signal(signal.SIGTERM, self._original_sigterm)
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 pass
 
         # Restore process title

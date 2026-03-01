@@ -1586,19 +1586,27 @@ def main() -> None:
 
     results_root = ks.results_dir
     irt_dir = resolve_upstream_dir(
-        "04_irt", results_root, args.run_id,
+        "04_irt",
+        results_root,
+        args.run_id,
         Path(args.irt_dir) if args.irt_dir else None,
     )
     clustering_dir = resolve_upstream_dir(
-        "05_clustering", results_root, args.run_id,
+        "05_clustering",
+        results_root,
+        args.run_id,
         Path(args.clustering_dir) if args.clustering_dir else None,
     )
     network_dir = resolve_upstream_dir(
-        "06_network", results_root, args.run_id,
+        "06_network",
+        results_root,
+        args.run_id,
         Path(args.network_dir) if args.network_dir else None,
     )
     pca_dir = resolve_upstream_dir(
-        "02_pca", results_root, args.run_id,
+        "02_pca",
+        results_root,
+        args.run_id,
         Path(args.pca_dir) if args.pca_dir else None,
     )
 

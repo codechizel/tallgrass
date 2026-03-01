@@ -2258,15 +2258,21 @@ def main() -> None:
     results_root = ks.results_dir
 
     eda_dir = resolve_upstream_dir(
-        "01_eda", results_root, args.run_id,
+        "01_eda",
+        results_root,
+        args.run_id,
         Path(args.eda_dir) if args.eda_dir else None,
     )
     irt_dir = resolve_upstream_dir(
-        "04_irt", results_root, args.run_id,
+        "04_irt",
+        results_root,
+        args.run_id,
         Path(args.irt_dir) if args.irt_dir else None,
     )
     pca_dir = resolve_upstream_dir(
-        "02_pca", results_root, args.run_id,
+        "02_pca",
+        results_root,
+        args.run_id,
         Path(args.pca_dir) if args.pca_dir else None,
     )
 

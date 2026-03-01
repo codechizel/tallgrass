@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1172)
+just test                    # run all tests (~1273)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -36,7 +36,7 @@ uv run pytest tests/ -v      # pytest directly
 
 ## Analysis Test Files
 
-- `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, lifecycle, generate_run_id, resolve_upstream_dir, run-directory mode (~67 tests)
+- `tests/test_run_context.py` — TeeStream, session normalization, strip_leadership_suffix, lifecycle, generate_run_id, resolve_upstream_dir, run-directory mode, auto-run-id (~74 tests)
 - `tests/test_eda.py` — vote matrix, filtering, agreement, Rice, party-line, integrity, new diagnostics (~28 tests)
 - `tests/test_report.py` — section rendering, format parsing, ReportBuilder, make_gt, elapsed (~38 tests)
 - `tests/test_irt.py` — IRT data prep, anchor selection, sensitivity, forest, paradox detection, convergence diagnostics, posterior extraction, equating (~73 tests)

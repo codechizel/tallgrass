@@ -56,9 +56,7 @@ class BetaPriorSpec:
                 # identical to LogNormal but avoids PyMC's internal log transform,
                 # which creates catastrophic curvature near beta=0.
                 # See docs/joint-model-deep-dive.md for the diagnosis.
-                log_beta = pm.Normal(
-                    "log_beta", shape=n_votes, dims=dims, **self.params
-                )
+                log_beta = pm.Normal("log_beta", shape=n_votes, dims=dims, **self.params)
                 return pm.Deterministic("beta", pt.exp(log_beta), dims=dims)
             case "halfnormal":
                 return pm.HalfNormal("beta", shape=n_votes, dims=dims, **self.params)

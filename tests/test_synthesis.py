@@ -42,25 +42,29 @@ def _minimal_irt(chamber: str, n_rep: int = 8, n_dem: int = 3) -> pl.DataFrame:
     """Minimal IRT ideal points for join testing."""
     rows = []
     for i in range(n_rep):
-        rows.append({
-            "legislator_slug": f"rep_{chr(97 + i)}",
-            "full_name": f"Rep {chr(65 + i)}",
-            "party": "Republican",
-            "district": str(i + 1),
-            "chamber": chamber,
-            "xi_mean": 1.0 + i * 0.3,
-            "xi_sd": 0.1,
-        })
+        rows.append(
+            {
+                "legislator_slug": f"rep_{chr(97 + i)}",
+                "full_name": f"Rep {chr(65 + i)}",
+                "party": "Republican",
+                "district": str(i + 1),
+                "chamber": chamber,
+                "xi_mean": 1.0 + i * 0.3,
+                "xi_sd": 0.1,
+            }
+        )
     for i in range(n_dem):
-        rows.append({
-            "legislator_slug": f"dem_{chr(120 + i)}",
-            "full_name": f"Dem {chr(88 + i)}",
-            "party": "Democrat",
-            "district": str(20 + i),
-            "chamber": chamber,
-            "xi_mean": -1.0 - i * 0.3,
-            "xi_sd": 0.1,
-        })
+        rows.append(
+            {
+                "legislator_slug": f"dem_{chr(120 + i)}",
+                "full_name": f"Dem {chr(88 + i)}",
+                "party": "Democrat",
+                "district": str(20 + i),
+                "chamber": chamber,
+                "xi_mean": -1.0 - i * 0.3,
+                "xi_sd": 0.1,
+            }
+        )
     return pl.DataFrame(rows)
 
 
@@ -69,42 +73,60 @@ def _minimal_upstream(chamber: str = "house") -> dict:
     irt = _minimal_irt(chamber)
     slugs = irt["legislator_slug"].to_list()
 
-    maverick = pl.DataFrame({
-        "legislator_slug": slugs,
-        "unity_score": [0.95 - i * 0.03 for i in range(len(slugs))],
-        "maverick_rate": [0.02 + i * 0.01 for i in range(len(slugs))],
-        "weighted_maverick": [0.01 + i * 0.015 for i in range(len(slugs))],
-        "n_defections": list(range(len(slugs))),
-        "loyalty_zscore": [0.5 - i * 0.1 for i in range(len(slugs))],
-    })
+    maverick = pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "unity_score": [0.95 - i * 0.03 for i in range(len(slugs))],
+            "maverick_rate": [0.02 + i * 0.01 for i in range(len(slugs))],
+            "weighted_maverick": [0.01 + i * 0.015 for i in range(len(slugs))],
+            "n_defections": list(range(len(slugs))),
+            "loyalty_zscore": [0.5 - i * 0.1 for i in range(len(slugs))],
+        }
+    )
 
-    centrality = pl.DataFrame({
-        "legislator_slug": slugs,
-        "betweenness": [0.01 * (i + 1) for i in range(len(slugs))],
-        "eigenvector": [0.1 * (i + 1) for i in range(len(slugs))],
-        "pagerank": [0.05 * (i + 1) for i in range(len(slugs))],
-    })
+    centrality = pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "betweenness": [0.01 * (i + 1) for i in range(len(slugs))],
+            "eigenvector": [0.1 * (i + 1) for i in range(len(slugs))],
+            "pagerank": [0.05 * (i + 1) for i in range(len(slugs))],
+        }
+    )
 
-    pca = pl.DataFrame({
-        "legislator_slug": slugs,
-        "PC1": [float(i) for i in range(len(slugs))],
-        "PC2": [float(i) * 0.5 for i in range(len(slugs))],
-    })
+    pca = pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "PC1": [float(i) for i in range(len(slugs))],
+            "PC2": [float(i) * 0.5 for i in range(len(slugs))],
+        }
+    )
 
-    loyalty = pl.DataFrame({
-        "legislator_slug": slugs,
-        "loyalty_rate": [0.90 - i * 0.04 for i in range(len(slugs))],
-    })
+    loyalty = pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "loyalty_rate": [0.90 - i * 0.04 for i in range(len(slugs))],
+        }
+    )
 
     return {
         "manifests": {},
-        "house": {} if chamber != "house" else {
-            "irt": irt, "maverick": maverick, "centrality": centrality,
-            "pca": pca, "loyalty": loyalty,
+        "house": {}
+        if chamber != "house"
+        else {
+            "irt": irt,
+            "maverick": maverick,
+            "centrality": centrality,
+            "pca": pca,
+            "loyalty": loyalty,
         },
-        "senate": {} if chamber != "senate" else {
-            "irt": irt, "maverick": maverick, "centrality": centrality,
-            "pca": pca, "loyalty": loyalty,
+        "senate": {}
+        if chamber != "senate"
+        else {
+            "irt": irt,
+            "maverick": maverick,
+            "centrality": centrality,
+            "pca": pca,
+            "loyalty": loyalty,
         },
         "plots": {},
     }
@@ -113,50 +135,149 @@ def _minimal_upstream(chamber: str = "house") -> dict:
 def _leg_df_full(overrides: list[dict] | None = None) -> pl.DataFrame:
     """Full-featured synthetic legislator DataFrame for detect_all tests."""
     base = [
-        {"legislator_slug": "rep_a", "full_name": "Alice A", "party": "Republican",
-         "district": "1", "chamber": "house", "unity_score": 0.95,
-         "weighted_maverick": 0.03, "xi_mean": 1.5, "xi_sd": 0.1,
-         "loyalty_rate": 0.90, "betweenness": 0.01},
-        {"legislator_slug": "rep_b", "full_name": "Bob B", "party": "Republican",
-         "district": "2", "chamber": "house", "unity_score": 0.70,
-         "weighted_maverick": 0.20, "xi_mean": 0.3, "xi_sd": 0.1,
-         "loyalty_rate": 0.75, "betweenness": 0.15},
-        {"legislator_slug": "rep_c", "full_name": "Carol C", "party": "Republican",
-         "district": "3", "chamber": "house", "unity_score": 0.98,
-         "weighted_maverick": 0.01, "xi_mean": 2.0, "xi_sd": 0.1,
-         "loyalty_rate": 0.95, "betweenness": 0.005},
-        {"legislator_slug": "rep_d", "full_name": "Dave D", "party": "Republican",
-         "district": "4", "chamber": "house", "unity_score": 0.92,
-         "weighted_maverick": 0.05, "xi_mean": 1.0, "xi_sd": 0.1,
-         "loyalty_rate": 0.88, "betweenness": 0.02},
-        {"legislator_slug": "rep_e", "full_name": "Eve E", "party": "Republican",
-         "district": "5", "chamber": "house", "unity_score": 0.60,
-         "weighted_maverick": 0.30, "xi_mean": 3.5, "xi_sd": 0.1,
-         "loyalty_rate": 0.40, "betweenness": 0.03},
-        {"legislator_slug": "rep_f", "full_name": "Frank F", "party": "Republican",
-         "district": "6", "chamber": "house", "unity_score": 0.88,
-         "weighted_maverick": 0.08, "xi_mean": 1.2, "xi_sd": 0.1,
-         "loyalty_rate": 0.85, "betweenness": 0.01},
-        {"legislator_slug": "rep_g", "full_name": "Grace G", "party": "Republican",
-         "district": "7", "chamber": "house", "unity_score": 0.93,
-         "weighted_maverick": 0.04, "xi_mean": 1.8, "xi_sd": 0.1,
-         "loyalty_rate": 0.92, "betweenness": 0.008},
-        {"legislator_slug": "rep_h", "full_name": "Hank H", "party": "Republican",
-         "district": "8", "chamber": "house", "unity_score": 0.85,
-         "weighted_maverick": 0.10, "xi_mean": 0.8, "xi_sd": 0.1,
-         "loyalty_rate": 0.80, "betweenness": 0.05},
-        {"legislator_slug": "dem_x", "full_name": "Xena X", "party": "Democrat",
-         "district": "20", "chamber": "house", "unity_score": 0.90,
-         "weighted_maverick": 0.07, "xi_mean": -1.5, "xi_sd": 0.1,
-         "loyalty_rate": 0.88, "betweenness": 0.02},
-        {"legislator_slug": "dem_y", "full_name": "Yuri Y", "party": "Democrat",
-         "district": "21", "chamber": "house", "unity_score": 0.85,
-         "weighted_maverick": 0.10, "xi_mean": -0.5, "xi_sd": 0.1,
-         "loyalty_rate": 0.80, "betweenness": 0.10},
-        {"legislator_slug": "dem_z", "full_name": "Zara Z", "party": "Democrat",
-         "district": "22", "chamber": "house", "unity_score": 0.95,
-         "weighted_maverick": 0.03, "xi_mean": -2.0, "xi_sd": 0.1,
-         "loyalty_rate": 0.93, "betweenness": 0.005},
+        {
+            "legislator_slug": "rep_a",
+            "full_name": "Alice A",
+            "party": "Republican",
+            "district": "1",
+            "chamber": "house",
+            "unity_score": 0.95,
+            "weighted_maverick": 0.03,
+            "xi_mean": 1.5,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.90,
+            "betweenness": 0.01,
+        },
+        {
+            "legislator_slug": "rep_b",
+            "full_name": "Bob B",
+            "party": "Republican",
+            "district": "2",
+            "chamber": "house",
+            "unity_score": 0.70,
+            "weighted_maverick": 0.20,
+            "xi_mean": 0.3,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.75,
+            "betweenness": 0.15,
+        },
+        {
+            "legislator_slug": "rep_c",
+            "full_name": "Carol C",
+            "party": "Republican",
+            "district": "3",
+            "chamber": "house",
+            "unity_score": 0.98,
+            "weighted_maverick": 0.01,
+            "xi_mean": 2.0,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.95,
+            "betweenness": 0.005,
+        },
+        {
+            "legislator_slug": "rep_d",
+            "full_name": "Dave D",
+            "party": "Republican",
+            "district": "4",
+            "chamber": "house",
+            "unity_score": 0.92,
+            "weighted_maverick": 0.05,
+            "xi_mean": 1.0,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.88,
+            "betweenness": 0.02,
+        },
+        {
+            "legislator_slug": "rep_e",
+            "full_name": "Eve E",
+            "party": "Republican",
+            "district": "5",
+            "chamber": "house",
+            "unity_score": 0.60,
+            "weighted_maverick": 0.30,
+            "xi_mean": 3.5,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.40,
+            "betweenness": 0.03,
+        },
+        {
+            "legislator_slug": "rep_f",
+            "full_name": "Frank F",
+            "party": "Republican",
+            "district": "6",
+            "chamber": "house",
+            "unity_score": 0.88,
+            "weighted_maverick": 0.08,
+            "xi_mean": 1.2,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.85,
+            "betweenness": 0.01,
+        },
+        {
+            "legislator_slug": "rep_g",
+            "full_name": "Grace G",
+            "party": "Republican",
+            "district": "7",
+            "chamber": "house",
+            "unity_score": 0.93,
+            "weighted_maverick": 0.04,
+            "xi_mean": 1.8,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.92,
+            "betweenness": 0.008,
+        },
+        {
+            "legislator_slug": "rep_h",
+            "full_name": "Hank H",
+            "party": "Republican",
+            "district": "8",
+            "chamber": "house",
+            "unity_score": 0.85,
+            "weighted_maverick": 0.10,
+            "xi_mean": 0.8,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.80,
+            "betweenness": 0.05,
+        },
+        {
+            "legislator_slug": "dem_x",
+            "full_name": "Xena X",
+            "party": "Democrat",
+            "district": "20",
+            "chamber": "house",
+            "unity_score": 0.90,
+            "weighted_maverick": 0.07,
+            "xi_mean": -1.5,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.88,
+            "betweenness": 0.02,
+        },
+        {
+            "legislator_slug": "dem_y",
+            "full_name": "Yuri Y",
+            "party": "Democrat",
+            "district": "21",
+            "chamber": "house",
+            "unity_score": 0.85,
+            "weighted_maverick": 0.10,
+            "xi_mean": -0.5,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.80,
+            "betweenness": 0.10,
+        },
+        {
+            "legislator_slug": "dem_z",
+            "full_name": "Zara Z",
+            "party": "Democrat",
+            "district": "22",
+            "chamber": "house",
+            "unity_score": 0.95,
+            "weighted_maverick": 0.03,
+            "xi_mean": -2.0,
+            "xi_sd": 0.1,
+            "loyalty_rate": 0.93,
+            "betweenness": 0.005,
+        },
     ]
 
     if overrides:
@@ -183,8 +304,16 @@ class TestUpstreamPhases:
 
     def test_includes_all_expected(self):
         expected = {
-            "01_eda", "02_pca", "04_irt", "05_clustering", "06_network",
-            "08_prediction", "07_indices", "03_umap", "09_beta_binomial", "10_hierarchical",
+            "01_eda",
+            "02_pca",
+            "04_irt",
+            "05_clustering",
+            "06_network",
+            "08_prediction",
+            "07_indices",
+            "03_umap",
+            "09_beta_binomial",
+            "10_hierarchical",
         }
         assert set(UPSTREAM_PHASES) == expected
 
@@ -256,11 +385,13 @@ class TestLoadAllUpstream:
         pred_dir = tmp_path / "08_prediction" / "latest" / "data"
         pred_dir.mkdir(parents=True)
         (tmp_path / "08_prediction" / "latest" / "filtering_manifest.json").write_text("{}")
-        hr = pl.DataFrame({
-            "model": ["XGBoost", "Logistic"],
-            "auc": [0.95, 0.88],
-            "accuracy": [0.90, 0.85],
-        })
+        hr = pl.DataFrame(
+            {
+                "model": ["XGBoost", "Logistic"],
+                "auc": [0.95, 0.88],
+                "accuracy": [0.90, 0.85],
+            }
+        )
         hr.write_parquet(pred_dir / "holdout_results_house.parquet")
         result = load_all_upstream(tmp_path)
         assert "holdout_results" in result["house"]
@@ -348,12 +479,14 @@ class TestBuildLegislatorDf:
         """Hierarchical IRT columns get hier_ prefix to avoid collisions."""
         upstream = _minimal_upstream("house")
         slugs = upstream["house"]["irt"]["legislator_slug"].to_list()
-        hier = pl.DataFrame({
-            "legislator_slug": slugs,
-            "xi_mean": [0.5 + i * 0.1 for i in range(len(slugs))],
-            "xi_sd": [0.08] * len(slugs),
-            "shrinkage_pct": [5.0 + i for i in range(len(slugs))],
-        })
+        hier = pl.DataFrame(
+            {
+                "legislator_slug": slugs,
+                "xi_mean": [0.5 + i * 0.1 for i in range(len(slugs))],
+                "xi_sd": [0.08] * len(slugs),
+                "shrinkage_pct": [5.0 + i for i in range(len(slugs))],
+            }
+        )
         upstream["house"]["hierarchical"] = hier
         df = build_legislator_df(upstream, "house")
         assert "hier_xi_mean" in df.columns
@@ -370,10 +503,12 @@ class TestExtractBestAuc:
     def test_extracts_from_house(self):
         upstream = {
             "house": {
-                "holdout_results": pl.DataFrame({
-                    "model": ["XGBoost", "Logistic"],
-                    "auc": [0.95, 0.88],
-                })
+                "holdout_results": pl.DataFrame(
+                    {
+                        "model": ["XGBoost", "Logistic"],
+                        "auc": [0.95, 0.88],
+                    }
+                )
             },
             "senate": {},
         }
@@ -383,10 +518,12 @@ class TestExtractBestAuc:
         upstream = {
             "house": {},
             "senate": {
-                "holdout_results": pl.DataFrame({
-                    "model": ["XGBoost"],
-                    "auc": [0.92],
-                })
+                "holdout_results": pl.DataFrame(
+                    {
+                        "model": ["XGBoost"],
+                        "auc": [0.92],
+                    }
+                )
             },
         }
         assert _extract_best_auc(upstream) == 0.92
@@ -394,16 +531,20 @@ class TestExtractBestAuc:
     def test_picks_best_across_chambers(self):
         upstream = {
             "house": {
-                "holdout_results": pl.DataFrame({
-                    "model": ["XGBoost"],
-                    "auc": [0.90],
-                })
+                "holdout_results": pl.DataFrame(
+                    {
+                        "model": ["XGBoost"],
+                        "auc": [0.90],
+                    }
+                )
             },
             "senate": {
-                "holdout_results": pl.DataFrame({
-                    "model": ["XGBoost"],
-                    "auc": [0.97],
-                })
+                "holdout_results": pl.DataFrame(
+                    {
+                        "model": ["XGBoost"],
+                        "auc": [0.97],
+                    }
+                )
             },
         }
         assert _extract_best_auc(upstream) == 0.97
@@ -415,10 +556,12 @@ class TestExtractBestAuc:
     def test_returns_none_without_xgboost_row(self):
         upstream = {
             "house": {
-                "holdout_results": pl.DataFrame({
-                    "model": ["Logistic"],
-                    "auc": [0.88],
-                })
+                "holdout_results": pl.DataFrame(
+                    {
+                        "model": ["Logistic"],
+                        "auc": [0.88],
+                    }
+                )
             },
             "senate": {},
         }
@@ -427,10 +570,12 @@ class TestExtractBestAuc:
     def test_returns_none_without_auc_column(self):
         upstream = {
             "house": {
-                "holdout_results": pl.DataFrame({
-                    "model": ["XGBoost"],
-                    "accuracy": [0.90],
-                })
+                "holdout_results": pl.DataFrame(
+                    {
+                        "model": ["XGBoost"],
+                        "accuracy": [0.90],
+                    }
+                )
             },
             "senate": {},
         }
@@ -466,10 +611,12 @@ class TestMinorityParties:
         assert "Republican" not in result
 
     def test_returns_empty_for_single_party(self):
-        df = pl.DataFrame({
-            "party": ["Republican"] * 5,
-            "legislator_slug": [f"rep_{i}" for i in range(5)],
-        })
+        df = pl.DataFrame(
+            {
+                "party": ["Republican"] * 5,
+                "legislator_slug": [f"rep_{i}" for i in range(5)],
+            }
+        )
         result = _minority_parties(df)
         assert result == []
 
@@ -500,14 +647,16 @@ class TestBridgeBuilderFallback:
 
     def test_fallback_to_highest_betweenness(self):
         """With very polarized parties, no one is within 1 SD of midpoint."""
-        df = pl.DataFrame({
-            "legislator_slug": ["rep_a", "rep_b", "dem_a", "dem_b"],
-            "full_name": ["RA", "RB", "DA", "DB"],
-            "party": ["Republican", "Republican", "Democrat", "Democrat"],
-            "district": ["1", "2", "3", "4"],
-            "xi_mean": [10.0, 12.0, -10.0, -12.0],
-            "betweenness": [0.01, 0.50, 0.30, 0.02],
-        })
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_a", "rep_b", "dem_a", "dem_b"],
+                "full_name": ["RA", "RB", "DA", "DB"],
+                "party": ["Republican", "Republican", "Democrat", "Democrat"],
+                "district": ["1", "2", "3", "4"],
+                "xi_mean": [10.0, 12.0, -10.0, -12.0],
+                "betweenness": [0.01, 0.50, 0.30, 0.02],
+            }
+        )
         result = detect_bridge_builder(df, "house")
         assert result is not None
         # Midpoint = 0.0, SD of xi_mean is ~10+, so all are far from midpoint
@@ -531,33 +680,83 @@ class TestMetricParadoxDemocratMajority:
         """
         rows = [
             # dem_a: moderate xi but very low loyalty → high xi_pct, low loyalty_pct
-            {"legislator_slug": "dem_a", "full_name": "Dem A", "party": "Democrat",
-             "district": "1", "xi_mean": -0.5, "loyalty_rate": 0.30},
-            {"legislator_slug": "dem_b", "full_name": "Dem B", "party": "Democrat",
-             "district": "2", "xi_mean": -1.0, "loyalty_rate": 0.70},
-            {"legislator_slug": "dem_c", "full_name": "Dem C", "party": "Democrat",
-             "district": "3", "xi_mean": -1.2, "loyalty_rate": 0.75},
-            {"legislator_slug": "dem_d", "full_name": "Dem D", "party": "Democrat",
-             "district": "4", "xi_mean": -1.5, "loyalty_rate": 0.80},
-            {"legislator_slug": "dem_e", "full_name": "Dem E", "party": "Democrat",
-             "district": "5", "xi_mean": -1.8, "loyalty_rate": 0.85},
-            {"legislator_slug": "dem_f", "full_name": "Dem F", "party": "Democrat",
-             "district": "6", "xi_mean": -2.0, "loyalty_rate": 0.88},
-            {"legislator_slug": "dem_g", "full_name": "Dem G", "party": "Democrat",
-             "district": "7", "xi_mean": -2.5, "loyalty_rate": 0.92},
-            {"legislator_slug": "dem_h", "full_name": "Dem H", "party": "Democrat",
-             "district": "8", "xi_mean": -3.1, "loyalty_rate": 0.98},
+            {
+                "legislator_slug": "dem_a",
+                "full_name": "Dem A",
+                "party": "Democrat",
+                "district": "1",
+                "xi_mean": -0.5,
+                "loyalty_rate": 0.30,
+            },
+            {
+                "legislator_slug": "dem_b",
+                "full_name": "Dem B",
+                "party": "Democrat",
+                "district": "2",
+                "xi_mean": -1.0,
+                "loyalty_rate": 0.70,
+            },
+            {
+                "legislator_slug": "dem_c",
+                "full_name": "Dem C",
+                "party": "Democrat",
+                "district": "3",
+                "xi_mean": -1.2,
+                "loyalty_rate": 0.75,
+            },
+            {
+                "legislator_slug": "dem_d",
+                "full_name": "Dem D",
+                "party": "Democrat",
+                "district": "4",
+                "xi_mean": -1.5,
+                "loyalty_rate": 0.80,
+            },
+            {
+                "legislator_slug": "dem_e",
+                "full_name": "Dem E",
+                "party": "Democrat",
+                "district": "5",
+                "xi_mean": -1.8,
+                "loyalty_rate": 0.85,
+            },
+            {
+                "legislator_slug": "dem_f",
+                "full_name": "Dem F",
+                "party": "Democrat",
+                "district": "6",
+                "xi_mean": -2.0,
+                "loyalty_rate": 0.88,
+            },
+            {
+                "legislator_slug": "dem_g",
+                "full_name": "Dem G",
+                "party": "Democrat",
+                "district": "7",
+                "xi_mean": -2.5,
+                "loyalty_rate": 0.92,
+            },
+            {
+                "legislator_slug": "dem_h",
+                "full_name": "Dem H",
+                "party": "Democrat",
+                "district": "8",
+                "xi_mean": -3.1,
+                "loyalty_rate": 0.98,
+            },
         ]
         # 3 Republicans (minority)
         for i in range(3):
-            rows.append({
-                "legislator_slug": f"rep_{chr(120 + i)}",
-                "full_name": f"Rep {chr(88 + i)}",
-                "party": "Republican",
-                "district": str(20 + i),
-                "xi_mean": 1.0 + i * 0.3,
-                "loyalty_rate": 0.85,
-            })
+            rows.append(
+                {
+                    "legislator_slug": f"rep_{chr(120 + i)}",
+                    "full_name": f"Rep {chr(88 + i)}",
+                    "party": "Republican",
+                    "district": str(20 + i),
+                    "xi_mean": 1.0 + i * 0.3,
+                    "loyalty_rate": 0.85,
+                }
+            )
 
         df = pl.DataFrame(rows)
         result = detect_metric_paradox(df, "house")
@@ -645,15 +844,17 @@ class TestDetectAll:
 
     def test_empty_chamber(self):
         """Chamber with minimal data that can't produce detections."""
-        empty = pl.DataFrame({
-            "legislator_slug": ["a"],
-            "full_name": ["A"],
-            "party": ["Republican"],
-            "district": ["1"],
-            "chamber": ["house"],
-            "xi_mean": [1.0],
-            "xi_sd": [0.1],
-        })
+        empty = pl.DataFrame(
+            {
+                "legislator_slug": ["a"],
+                "full_name": ["A"],
+                "party": ["Republican"],
+                "district": ["1"],
+                "chamber": ["house"],
+                "xi_mean": [1.0],
+                "xi_sd": [0.1],
+            }
+        )
         leg_dfs = {"house": empty}
         result = detect_all(leg_dfs)
         # Should not crash, just have empty results

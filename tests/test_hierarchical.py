@@ -409,9 +409,7 @@ class TestBuildJointGraph:
         import pymc as pm
 
         house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
-        senate_data = prepare_hierarchical_data(
-            senate_matrix, senate_legislators, "Senate"
-        )
+        senate_data = prepare_hierarchical_data(senate_matrix, senate_legislators, "Senate")
         model, combined_data = build_joint_graph(house_data, senate_data)
         assert isinstance(model, pm.Model)
         assert isinstance(combined_data, dict)
@@ -434,9 +432,7 @@ class TestBuildJointGraph:
     ) -> None:
         """build_joint_graph model should have legislator, vote, group, chamber coords."""
         house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
-        senate_data = prepare_hierarchical_data(
-            senate_matrix, senate_legislators, "Senate"
-        )
+        senate_data = prepare_hierarchical_data(senate_matrix, senate_legislators, "Senate")
         model, combined_data = build_joint_graph(house_data, senate_data)
         assert "legislator" in model.coords
         assert "vote" in model.coords
@@ -456,13 +452,12 @@ class TestBuildJointGraph:
     ) -> None:
         """combined_data should have correct legislator counts."""
         house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
-        senate_data = prepare_hierarchical_data(
-            senate_matrix, senate_legislators, "Senate"
-        )
+        senate_data = prepare_hierarchical_data(senate_matrix, senate_legislators, "Senate")
         _, combined_data = build_joint_graph(house_data, senate_data)
         assert combined_data["n_house"] == house_data["n_legislators"]
         assert combined_data["n_senate"] == senate_data["n_legislators"]
-        assert combined_data["n_legislators"] == house_data["n_legislators"] + senate_data["n_legislators"]
+        expected = house_data["n_legislators"] + senate_data["n_legislators"]
+        assert combined_data["n_legislators"] == expected
 
 
 # ── TestExtractHierarchicalResults ───────────────────────────────────────────

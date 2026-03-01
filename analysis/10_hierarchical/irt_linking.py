@@ -148,9 +148,7 @@ def _stocking_lord_loss(
     loss = 0.0
     for theta, w in zip(theta_grid, weights):
         tcc_ref = sum(icc_2pl(theta, a_ref[j], b_ref[j]) for j in range(len(a_ref)))
-        tcc_trans = sum(
-            icc_2pl(theta, a_trans[j], b_trans[j]) for j in range(len(a_trans))
-        )
+        tcc_trans = sum(icc_2pl(theta, a_trans[j], b_trans[j]) for j in range(len(a_trans)))
         loss += w * (tcc_ref - tcc_trans) ** 2
 
     return loss
@@ -299,9 +297,7 @@ def link_chambers(
         xi_senate_linked = A * xi_senate_raw + B
 
         xi_house_sd = house_idata.posterior["xi"].std(dim=("chain", "draw")).values
-        xi_senate_sd = np.abs(A) * senate_idata.posterior["xi"].std(
-            dim=("chain", "draw")
-        ).values
+        xi_senate_sd = np.abs(A) * senate_idata.posterior["xi"].std(dim=("chain", "draw")).values
     else:
         A, B = link_fn(a_senate, b_senate, a_house, b_house)
         # House -> Senate scale
@@ -311,9 +307,7 @@ def link_chambers(
         xi_senate_linked = xi_senate
 
         xi_senate_sd = senate_idata.posterior["xi"].std(dim=("chain", "draw")).values
-        xi_house_sd = np.abs(A) * house_idata.posterior["xi"].std(
-            dim=("chain", "draw")
-        ).values
+        xi_house_sd = np.abs(A) * house_idata.posterior["xi"].std(dim=("chain", "draw")).values
         xi_house = xi_house_linked
 
     return {

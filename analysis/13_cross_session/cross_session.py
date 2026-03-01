@@ -758,9 +758,7 @@ def main() -> None:
     ks_b = KSSession.from_session_string(args.session_b)
     session_a_label = ks_a.output_name
     session_b_label = ks_b.output_name
-    comparison_label = (
-        f"{ks_a.legislature_number}-vs-{ks_b.legislature_number}"
-    )
+    comparison_label = f"{ks_a.legislature_number}-vs-{ks_b.legislature_number}"
 
     chambers = ["house", "senate"] if args.chambers == "both" else [args.chambers]
 

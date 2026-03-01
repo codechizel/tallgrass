@@ -1,20 +1,25 @@
 """Reusable run context for structured analysis output.
 
 Every analysis script (EDA, PCA, IRT, etc.) uses RunContext to get:
-  - Structured output directories: results/<session>/<analysis>/<YYMMDD>.n/plots/ + data/
+  - Structured output directories under a run ID
   - Automatic console log capture (run_log.txt)
   - Run metadata (run_info.json): git hash, timestamp, parameters
   - A `latest` symlink pointing to the most recent run
-  - A convenience report symlink in the session root (e.g. 01_eda_report.html → 01_eda/latest/...)
+  - A convenience report symlink in the session root (e.g. 01_eda_report.html → latest/01_eda/...)
 
-Run-directory mode (pipeline runs):
-  When run_id is set, all phases write into a single grouped directory:
+Run-directory mode (all biennium sessions):
+  All phases write into a grouped directory keyed by run_id:
     results/<session>/<run_id>/<analysis>/plots/ + data/
   A session-level `latest` symlink points to the run directory.
   Report convenience symlinks chain through latest/<phase>/.
 
-Legacy mode (individual phase runs):
-  When run_id is None, each phase writes to its own date directory:
+  When run from a pipeline, all phases share the same run_id.
+  When run individually, a run_id is auto-generated so the directory
+  structure is always consistent.
+
+Flat mode (cross-session and special sessions):
+  When run_id is None and the session is not a biennium (e.g. "cross-session",
+  "2024s"), each phase writes to its own date directory:
     results/<session>/<analysis>/<date>/plots/ + data/
   A phase-level `latest` symlink points to the date directory.
 
@@ -154,7 +159,9 @@ def _next_run_label(analysis_dir: Path, today: str) -> str:
     Checks for existing directories (not symlinks) under *analysis_dir*.
     """
     n = 1
-    while (analysis_dir / f"{today}.{n}").exists() and not (analysis_dir / f"{today}.{n}").is_symlink():
+    while (analysis_dir / f"{today}.{n}").exists() and not (
+        analysis_dir / f"{today}.{n}"
+    ).is_symlink():
         n += 1
     return f"{today}.{n}"
 
@@ -187,7 +194,9 @@ def generate_run_id(session: str, results_root: Path | None = None) -> str:
 
     # Find next available increment
     n = 1
-    while (results_root / f"{base}.{n}").exists() and not (results_root / f"{base}.{n}").is_symlink():
+    while (results_root / f"{base}.{n}").exists() and not (
+        results_root / f"{base}.{n}"
+    ).is_symlink():
         n += 1
     return f"{base}.{n}"
 
@@ -203,8 +212,12 @@ def resolve_upstream_dir(
     Precedence:
       1. Explicit CLI override (e.g. --eda-dir /some/path)
       2. Run-directory path: results_root/{run_id}/{phase}
-      3. Legacy phase path: results_root/{phase}/latest
-      4. New-layout fallback: results_root/latest/{phase}
+      3. Flat phase path: results_root/{phase}/latest (cross-session/special)
+      4. Fallback: results_root/latest/{phase}
+
+    For standalone biennium runs, run_id is auto-generated so precedence 2
+    won't find upstream data from a different run.  Precedence 4 resolves
+    through the session-level `latest` symlink to the most recent pipeline run.
 
     The caller should verify the returned path exists before reading from it.
     """
@@ -245,7 +258,6 @@ class RunContext:
         self.session = _normalize_session(session)
         self.analysis_name = analysis_name
         self.params = params or {}
-        self.run_id = run_id
 
         from tallgrass.session import STATE_DIR
 
@@ -253,13 +265,22 @@ class RunContext:
         today = datetime.now(_CT).strftime("%y%m%d")
         self._session_root = root / self.session
 
+        # Auto-generate run_id for biennium sessions (contain "_" after normalization,
+        # e.g. "91st_2025-2026") so standalone phase runs use the same directory
+        # structure as pipeline runs.  Non-biennium sessions (cross-session, special
+        # sessions like "2024s") keep the flat date-label layout.
+        if run_id is None and "_" in self.session:
+            run_id = generate_run_id(session, results_root=self._session_root)
+
+        self.run_id = run_id
+
         if run_id is not None:
             # Run-directory mode: results/{session}/{run_id}/{analysis}/
             self._analysis_dir = self._session_root / run_id / analysis_name
             self.run_dir = self._analysis_dir
             self._run_label = run_id
         else:
-            # Legacy mode: results/{session}/{analysis}/{date}/
+            # Flat mode: results/{session}/{analysis}/{date}/
             self._analysis_dir = self._session_root / analysis_name
             run_label = _next_run_label(self._analysis_dir, today)
             self.run_dir = self._analysis_dir / run_label
@@ -377,20 +398,16 @@ class RunContext:
                     if report_link.is_symlink() or report_link.exists():
                         report_link.unlink()
                     report_link.symlink_to(
-                        Path("latest")
-                        / self.analysis_name
-                        / f"{self.analysis_name}_report.html"
+                        Path("latest") / self.analysis_name / f"{self.analysis_name}_report.html"
                     )
                 else:
-                    # Legacy mode: symlink through phase-level latest
+                    # Flat mode: symlink through phase-level latest
                     session_root = self._analysis_dir.parent
                     report_link = session_root / f"{self.analysis_name}_report.html"
                     if report_link.is_symlink() or report_link.exists():
                         report_link.unlink()
                     report_link.symlink_to(
-                        Path(self.analysis_name)
-                        / "latest"
-                        / f"{self.analysis_name}_report.html"
+                        Path(self.analysis_name) / "latest" / f"{self.analysis_name}_report.html"
                     )
 
         # Update latest symlink
@@ -403,7 +420,7 @@ class RunContext:
                     latest.unlink()
                 latest.symlink_to(self.run_id)
             else:
-                # Legacy mode: phase-level `latest` → date label
+                # Flat mode: phase-level `latest` → date label
                 latest = self._analysis_dir / "latest"
                 if latest.is_symlink() or latest.exists():
                     latest.unlink()

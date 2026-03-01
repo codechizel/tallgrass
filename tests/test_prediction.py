@@ -527,9 +527,16 @@ class TestSurprisingBills:
 
         # Whether empty or not, should always have the expected columns
         expected_cols = {
-            "vote_id", "bill_number", "passed_binary",
-            "y_prob", "predicted", "confidence_error",
-            "motion", "vote_type", "yea_count", "nay_count",
+            "vote_id",
+            "bill_number",
+            "passed_binary",
+            "y_prob",
+            "predicted",
+            "confidence_error",
+            "motion",
+            "vote_type",
+            "yea_count",
+            "nay_count",
         }
         assert expected_cols.issubset(set(surprising.columns))
 
@@ -545,19 +552,23 @@ class TestSurprisingBills:
             def predict(self, X):
                 return (X[:, 0] > 0).astype(int)
 
-        features_df = pl.DataFrame({
-            "vote_id": ["v1", "v2", "v3"],
-            "bill_number": ["HB1", "HB2", "HB3"],
-            "passed_binary": [1, 1, 0],
-            "feat1": [1.0, 1.0, -1.0],
-        })
-        rollcalls = pl.DataFrame({
-            "vote_id": ["v1", "v2", "v3"],
-            "motion": ["m1", "m2", "m3"],
-            "vote_type": ["Final Action", "Final Action", "Final Action"],
-            "yea_count": [80, 90, 10],
-            "nay_count": [20, 10, 90],
-        })
+        features_df = pl.DataFrame(
+            {
+                "vote_id": ["v1", "v2", "v3"],
+                "bill_number": ["HB1", "HB2", "HB3"],
+                "passed_binary": [1, 1, 0],
+                "feat1": [1.0, 1.0, -1.0],
+            }
+        )
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["v1", "v2", "v3"],
+                "motion": ["m1", "m2", "m3"],
+                "vote_type": ["Final Action", "Final Action", "Final Action"],
+                "yea_count": [80, 90, 10],
+                "nay_count": [20, 10, 90],
+            }
+        )
 
         result = find_surprising_bills(FakeModel(), features_df, ["feat1"], rollcalls)
         assert result.height == 0
@@ -663,17 +674,13 @@ class TestBuildBillFeaturesWithTopics:
         result_none = build_bill_features(
             synthetic_rollcalls, synthetic_bill_params, "House", topic_features=None
         )
-        result_default = build_bill_features(
-            synthetic_rollcalls, synthetic_bill_params, "House"
-        )
+        result_default = build_bill_features(synthetic_rollcalls, synthetic_bill_params, "House")
         assert result_none.columns == result_default.columns
         assert result_none.height == result_default.height
 
     def test_feature_count_increases(self, synthetic_rollcalls, synthetic_bill_params):
         """Adding topics should increase the feature column count."""
-        result_no_topics = build_bill_features(
-            synthetic_rollcalls, synthetic_bill_params, "House"
-        )
+        result_no_topics = build_bill_features(synthetic_rollcalls, synthetic_bill_params, "House")
         chamber_rc = synthetic_rollcalls.filter(pl.col("chamber") == "House")
         topic_df, _ = fit_topic_features(chamber_rc["short_title"])
         topic_df = topic_df.with_columns(chamber_rc["vote_id"])
@@ -1118,22 +1125,28 @@ class TestSurprisingVotesEmptySchema:
             def predict(self, X):
                 return (X[:, 0] > 0).astype(int)
 
-        features_df = pl.DataFrame({
-            "vote_id": ["v1", "v2"],
-            "legislator_slug": ["rep_a_1", "rep_b_1"],
-            "vote_binary": [1, 0],
-            "feat1": [1.0, -1.0],
-        })
-        rollcalls = pl.DataFrame({
-            "vote_id": ["v1", "v2"],
-            "bill_number": ["HB1", "HB2"],
-            "motion": ["Final Action", "Final Action"],
-        })
-        ideal_points = pl.DataFrame({
-            "legislator_slug": ["rep_a_1", "rep_b_1"],
-            "full_name": ["Alice", "Bob"],
-            "party": ["Republican", "Democrat"],
-        })
+        features_df = pl.DataFrame(
+            {
+                "vote_id": ["v1", "v2"],
+                "legislator_slug": ["rep_a_1", "rep_b_1"],
+                "vote_binary": [1, 0],
+                "feat1": [1.0, -1.0],
+            }
+        )
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["v1", "v2"],
+                "bill_number": ["HB1", "HB2"],
+                "motion": ["Final Action", "Final Action"],
+            }
+        )
+        ideal_points = pl.DataFrame(
+            {
+                "legislator_slug": ["rep_a_1", "rep_b_1"],
+                "full_name": ["Alice", "Bob"],
+                "party": ["Republican", "Democrat"],
+            }
+        )
 
         result = find_surprising_votes(
             PerfectModel(), features_df, ["feat1"], rollcalls, ideal_points

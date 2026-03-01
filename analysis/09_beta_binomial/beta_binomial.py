@@ -600,7 +600,9 @@ def main() -> None:
     results_root = ks.results_dir
 
     indices_dir = resolve_upstream_dir(
-        "07_indices", results_root, args.run_id,
+        "07_indices",
+        results_root,
+        args.run_id,
         Path(args.indices_dir) if args.indices_dir else None,
     )
 

@@ -1030,7 +1030,9 @@ def main() -> None:
     results_root = ks.results_dir
 
     eda_dir = resolve_upstream_dir(
-        "01_eda", results_root, args.run_id,
+        "01_eda",
+        results_root,
+        args.run_id,
         Path(args.eda_dir) if args.eda_dir else None,
     )
 

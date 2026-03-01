@@ -83,6 +83,7 @@ What are the trade-offs?
 | [0053](0053-nutpie-all-models.md) | nutpie Rust NUTS for all MCMC models (flat IRT + joint hierarchical) | Accepted | 2026-02-28 |
 | [0054](0054-2d-irt-pipeline-integration.md) | 2D IRT pipeline integration (experimental phase 04b, both chambers, relaxed thresholds) | Accepted | 2026-02-28 |
 | [0055](0055-reparameterized-beta-and-irt-linking.md) | Reparameterized LogNormal beta and IRT scale linking (Stocking-Lord, sign-aware anchors) | Accepted | 2026-02-28 |
+| [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions (eliminate legacy mode orphan directories) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

@@ -403,9 +403,7 @@ class TestRunContext:
 
     def test_run_info_includes_run_label(self, tmp_path):
         """run_info.json records the run_label for traceability."""
-        ctx1 = RunContext(
-            session="2024s", analysis_name="test", results_root=tmp_path
-        )
+        ctx1 = RunContext(session="2024s", analysis_name="test", results_root=tmp_path)
         ctx1.setup()
         ctx1.finalize()
 
@@ -610,11 +608,11 @@ class TestRunContextRunIdMode:
         assert not latest.exists()
 
 
-class TestRunContextLegacyMode:
-    """RunContext without run_id preserves existing behavior."""
+class TestRunContextFlatMode:
+    """RunContext flat mode for non-biennium sessions (special, cross-session)."""
 
-    def test_legacy_dir_structure(self, tmp_path):
-        """Without run_id, path is results/{session}/{analysis}/{date}/."""
+    def test_flat_dir_structure(self, tmp_path):
+        """Non-biennium session uses flat path: results/{session}/{analysis}/{date}/."""
         ctx = RunContext(
             session="2024s",
             analysis_name="test",
@@ -626,8 +624,8 @@ class TestRunContextLegacyMode:
         assert ctx.run_dir.parent.name == "test"
         assert ctx.run_dir.parent.parent.name == "2024s"
 
-    def test_legacy_phase_level_symlink(self, tmp_path):
-        """Without run_id, latest symlink is at the phase level."""
+    def test_flat_phase_level_symlink(self, tmp_path):
+        """Non-biennium session has latest symlink at the phase level."""
         ctx = RunContext(
             session="2024s",
             analysis_name="test",
@@ -642,7 +640,7 @@ class TestRunContextLegacyMode:
         assert not session_latest.exists()
 
     def test_run_info_run_id_null(self, tmp_path):
-        """run_info.json has run_id: null in legacy mode."""
+        """run_info.json has run_id: null in flat mode."""
         ctx = RunContext(
             session="2024s",
             analysis_name="test",
@@ -652,3 +650,68 @@ class TestRunContextLegacyMode:
         ctx.finalize()
         info = json.loads((ctx.run_dir / "run_info.json").read_text())
         assert info["run_id"] is None
+
+
+class TestRunContextAutoRunId:
+    """Biennium sessions auto-generate a run_id when none is provided."""
+
+    def test_auto_generates_run_id(self, tmp_path):
+        """Biennium session without explicit run_id gets one auto-generated."""
+        ctx = RunContext(
+            session="2025-26",
+            analysis_name="01_eda",
+            results_root=tmp_path,
+        )
+        assert ctx.run_id is not None
+        assert ctx.run_id.startswith("91-")
+
+    def test_auto_run_id_creates_run_dir_structure(self, tmp_path):
+        """Auto-generated run_id produces results/{session}/{run_id}/{analysis}/."""
+        ctx = RunContext(
+            session="2025-26",
+            analysis_name="01_eda",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        # run_dir should be under {session}/{run_id}/{analysis}
+        assert ctx.run_dir.name == "01_eda"
+        assert ctx.run_dir.parent.parent.name == "91st_2025-2026"
+
+    def test_auto_run_id_session_level_latest(self, tmp_path):
+        """Auto-generated run_id creates a session-level latest symlink."""
+        ctx = RunContext(
+            session="2025-26",
+            analysis_name="01_eda",
+            results_root=tmp_path,
+        )
+        ctx.setup()
+        ctx.finalize()
+        latest = tmp_path / "91st_2025-2026" / "latest"
+        assert latest.is_symlink()
+        assert str(latest.readlink()) == ctx.run_id
+
+    def test_auto_run_id_increments(self, tmp_path):
+        """Successive auto-generated run_ids increment the counter."""
+        ctx1 = RunContext(
+            session="2025-26",
+            analysis_name="01_eda",
+            results_root=tmp_path,
+        )
+        ctx1.setup()
+        ctx1.finalize()
+        rid1 = ctx1.run_id
+
+        ctx2 = RunContext(
+            session="2025-26",
+            analysis_name="02_pca",
+            results_root=tmp_path,
+        )
+        ctx2.setup()
+        ctx2.finalize()
+        rid2 = ctx2.run_id
+
+        # Both should be for the same day but different increments
+        assert rid1 != rid2
+        assert rid1.endswith(".1")
+        assert rid2.endswith(".2")

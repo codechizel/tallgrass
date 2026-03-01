@@ -1028,7 +1028,9 @@ def main() -> None:
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
     results_root = ks.results_dir
     pca_dir = resolve_upstream_dir(
-        "02_pca", results_root, args.run_id,
+        "02_pca",
+        results_root,
+        args.run_id,
         Path(args.pca_dir) if args.pca_dir else None,
     )
 

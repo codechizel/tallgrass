@@ -218,10 +218,20 @@ class TestSaveCsvs:
         """Boolean and None passed values written correctly."""
         rc_true = _make_rollcall("rc1")
         rc_none = RollCall(
-            session="s", bill_number="SB 2", bill_title="t", vote_id="rc2",
-            vote_url="u", vote_datetime="dt", vote_date="d", chamber="Senate",
-            motion="m", vote_type="vt", result="unknown", short_title="st",
-            sponsor="sp", passed=None,
+            session="s",
+            bill_number="SB 2",
+            bill_title="t",
+            vote_id="rc2",
+            vote_url="u",
+            vote_datetime="dt",
+            vote_date="d",
+            chamber="Senate",
+            motion="m",
+            vote_type="vt",
+            result="unknown",
+            short_title="st",
+            sponsor="sp",
+            passed=None,
         )
         save_csvs(
             output_dir=tmp_path,

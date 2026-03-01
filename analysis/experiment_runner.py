@@ -55,9 +55,7 @@ except ModuleNotFoundError:
 
 try:
     from analysis.hierarchical import (
-        build_joint_graph,
         build_joint_model,
-        build_per_chamber_graph,
         build_per_chamber_model,
         check_hierarchical_convergence,
         compute_flat_hier_correlation,
@@ -75,9 +73,7 @@ try:
     )
 except ModuleNotFoundError:
     from hierarchical import (  # type: ignore[no-redef]
-        build_joint_graph,
         build_joint_model,
-        build_per_chamber_graph,
         build_per_chamber_model,
         check_hierarchical_convergence,
         compute_flat_hier_correlation,

@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1260 tests)
+just test                                    # → uv run pytest tests/ -v (~1273 tests)
 just test-scraper                            # → pytest on scraper test files only
 just monitor                                 # → check running experiment status
 just pipeline 2025-26                        # → full analysis pipeline (all phases grouped)
@@ -126,17 +126,15 @@ External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downl
 
 ## Results Directory
 
-Two output modes (ADR-0052):
+Output layout (ADR-0052):
 
-**Run-directory mode** (`just pipeline` or `--run-id`): all phases grouped under one run ID.
-`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91-260228.1/01_eda/`). Run ID format: `{bb}-{YYMMDD}.{n}` where n starts at 1 (e.g. `91-260228.1`, second run same day: `91-260228.2`).
+**Run-directory mode** (all biennium sessions): all phases grouped under a run ID.
+`results/kansas/{session}/{run_id}/{NN_phase}/` with a session-level `latest` symlink (e.g. `results/kansas/91st_2025-2026/91-260228.1/01_eda/`). Run ID format: `{bb}-{YYMMDD}.{n}` where n starts at 1 (e.g. `91-260228.1`, second run same day: `91-260228.2`). When running a single phase without `--run-id`, a run_id is auto-generated so the directory structure is always consistent.
 
-**Legacy mode** (individual phase runs, no `--run-id`): each phase writes to its own date directory.
-`results/kansas/{session}/{NN_phase}/{YYMMDD}.{n}/` with a phase-level `latest` symlink. Numbering starts at `.1`.
+**Flat mode** (cross-session and special sessions): each analysis writes to its own date directory.
+`results/kansas/cross-session/{aa}-vs-{bb}/{YYMMDD}.{n}/` where `aa`/`bb` are legislature numbers. Flat structure (no phase subdirectory). Example: `results/kansas/cross-session/90-vs-91/260226.1/`.
 
-**Cross-session:** `results/kansas/cross-session/{aa}-vs-{bb}/{YYMMDD}.{n}/` where `aa`/`bb` are legislature numbers. Flat structure (no phase subdirectory). Example: `results/kansas/cross-session/90-vs-91/260226.1/`.
-
-Both modes use `RunContext` for structured output, elapsed timing, HTML reports, and auto-primers. `resolve_upstream_dir()` handles 4-level path resolution (CLI override → run_id → phase/latest → latest/phase) so phases find their upstream data in either layout.
+Both modes use `RunContext` for structured output, elapsed timing, HTML reports, and auto-primers. `resolve_upstream_dir()` handles 4-level path resolution (CLI override → run_id → flat/latest → latest/phase) so phases find their upstream data in either layout.
 
 Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each contains `experiment.md` (structured record from TEMPLATE.md), `run_experiment.py`, and `run_NN_description/` output directories.
 
@@ -148,7 +146,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (55 decisions)
+- ADRs: `docs/adr/README.md` (56 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -207,7 +205,7 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Testing
 
 ```bash
-just test                    # 1260 tests
+just test                    # 1273 tests
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 ```

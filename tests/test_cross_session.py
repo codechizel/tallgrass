@@ -534,8 +534,14 @@ class TestComputeMetricStability:
         result = compute_metric_stability(df_a, df_b, matched, ["nonexistent"])
         assert result.height == 0
         assert set(result.columns) == {
-            "metric", "pearson_r", "spearman_rho", "n_legislators",
-            "psi", "psi_interpretation", "icc", "icc_interpretation",
+            "metric",
+            "pearson_r",
+            "spearman_rho",
+            "n_legislators",
+            "psi",
+            "psi_interpretation",
+            "icc",
+            "icc_interpretation",
             "stability_interpretation",
         }
 
@@ -607,9 +613,7 @@ class TestAlignFeatureColumns:
     Run: uv run pytest tests/test_cross_session.py::TestAlignFeatureColumns -v
     """
 
-    def _make_vote_features(
-        self, n: int, extra_cols: list[str] | None = None
-    ) -> pl.DataFrame:
+    def _make_vote_features(self, n: int, extra_cols: list[str] | None = None) -> pl.DataFrame:
         """Build a minimal vote features DataFrame."""
         data: dict = {
             "legislator_slug": [f"rep_{i}" for i in range(n)],
@@ -780,7 +784,8 @@ class TestCompareFeatureImportance:
         swapping which session is "A" changes the feature selection and
         therefore the tau.
 
-        Run: uv run pytest tests/test_cross_session.py::TestCompareFeatureImportance::test_asymmetry_swapping_sessions -v
+        Run: uv run pytest tests/test_cross_session.py \
+             ::TestCompareFeatureImportance::test_asymmetry_swapping_sessions -v
         """
         n_features = 10
         # Session A: first 5 features important, last 5 negligible
@@ -1091,9 +1096,7 @@ class TestPlotSmoke:
         """Prediction AUC bar chart should produce a PNG."""
         from analysis.cross_session import plot_prediction_comparison
 
-        plot_prediction_comparison(
-            0.98, 0.97, 0.90, 0.88, "House", tmp_path, "2023-24", "2025-26"
-        )
+        plot_prediction_comparison(0.98, 0.97, 0.90, 0.88, "House", tmp_path, "2023-24", "2025-26")
         assert (tmp_path / "prediction_comparison_house.png").exists()
 
     def test_plot_feature_importance_comparison(self, tmp_path: Path) -> None:
@@ -1406,12 +1409,8 @@ class TestStabilityInterpretation:
         """compute_metric_stability output should include stability_interpretation."""
         _, _, matched = _make_large_matched(25)
         vals = [float(i) / 25 for i in range(25)]
-        df_a = pl.DataFrame(
-            {"legislator_slug": matched["slug_a"].to_list(), "unity_score": vals}
-        )
-        df_b = pl.DataFrame(
-            {"legislator_slug": matched["slug_b"].to_list(), "unity_score": vals}
-        )
+        df_a = pl.DataFrame({"legislator_slug": matched["slug_a"].to_list(), "unity_score": vals})
+        df_b = pl.DataFrame({"legislator_slug": matched["slug_b"].to_list(), "unity_score": vals})
         result = compute_metric_stability(df_a, df_b, matched, ["unity_score"])
         assert "stability_interpretation" in result.columns
         assert "psi" in result.columns
@@ -1424,8 +1423,14 @@ class TestStabilityInterpretation:
 
         df = _empty_stability_df()
         expected_cols = {
-            "metric", "pearson_r", "spearman_rho", "n_legislators",
-            "psi", "psi_interpretation", "icc", "icc_interpretation",
+            "metric",
+            "pearson_r",
+            "spearman_rho",
+            "n_legislators",
+            "psi",
+            "psi_interpretation",
+            "icc",
+            "icc_interpretation",
             "stability_interpretation",
         }
         assert set(df.columns) == expected_cols

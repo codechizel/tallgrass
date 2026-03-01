@@ -182,11 +182,23 @@ class TestComputeBayesianLoyalty:
         result = compute_bayesian_loyalty(df, "House")
 
         expected_cols = {
-            "legislator_slug", "party", "full_name", "district",
-            "raw_loyalty", "posterior_mean", "posterior_median",
-            "ci_lower", "ci_upper", "ci_width", "shrinkage",
-            "votes_with_party", "n_party_votes",
-            "alpha_prior", "beta_prior", "prior_mean", "prior_kappa",
+            "legislator_slug",
+            "party",
+            "full_name",
+            "district",
+            "raw_loyalty",
+            "posterior_mean",
+            "posterior_median",
+            "ci_lower",
+            "ci_upper",
+            "ci_width",
+            "shrinkage",
+            "votes_with_party",
+            "n_party_votes",
+            "alpha_prior",
+            "beta_prior",
+            "prior_mean",
+            "prior_kappa",
         }
         assert set(result.columns) == expected_cols
 
@@ -261,8 +273,7 @@ class TestComputeBayesianLoyalty:
             lo = min(raw, prior)
             hi = max(raw, prior)
             assert lo - 0.001 <= post <= hi + 0.001, (
-                f"Posterior {post:.4f} outside [{lo:.4f}, {hi:.4f}] for "
-                f"{row['legislator_slug']}"
+                f"Posterior {post:.4f} outside [{lo:.4f}, {hi:.4f}] for {row['legislator_slug']}"
             )
 
     def test_excludes_below_min_votes(self) -> None:
@@ -447,9 +458,7 @@ class TestShrinkageProperties:
         result = compute_bayesian_loyalty(df, "House")
 
         for row in result.iter_rows(named=True):
-            assert 0 <= row["shrinkage"] <= 1, (
-                f"Shrinkage {row['shrinkage']:.3f} outside [0, 1]"
-            )
+            assert 0 <= row["shrinkage"] <= 1, f"Shrinkage {row['shrinkage']:.3f} outside [0, 1]"
 
 
 # ── TestEdgeCases ────────────────────────────────────────────────────────────

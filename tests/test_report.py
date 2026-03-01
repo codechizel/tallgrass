@@ -61,9 +61,7 @@ class TestTableSection:
         assert "</div>" in html
 
     def test_render_with_caption(self):
-        section = TableSection(
-            id="t1", title="Title", html="<table></table>", caption="Note"
-        )
+        section = TableSection(id="t1", title="Title", html="<table></table>", caption="Note")
         html = section.render()
         assert '<p class="caption">Note</p>' in html
 
@@ -92,9 +90,7 @@ class TestFigureSection:
         assert 'alt="Plot"' in html
 
     def test_render_with_caption(self):
-        section = FigureSection(
-            id="f1", title="Plot", image_data="AAAA", caption="Figure 1"
-        )
+        section = FigureSection(id="f1", title="Plot", image_data="AAAA", caption="Figure 1")
         html = section.render()
         assert '<p class="caption">Figure 1</p>' in html
 
@@ -139,9 +135,7 @@ class TestTextSection:
         assert "<p>Hello</p>" in html
 
     def test_render_with_caption(self):
-        section = TextSection(
-            id="x1", title="Note", html="<p>Hello</p>", caption="Note 1"
-        )
+        section = TextSection(id="x1", title="Note", html="<p>Hello</p>", caption="Note 1")
         html = section.render()
         assert '<p class="caption">Note 1</p>' in html
 

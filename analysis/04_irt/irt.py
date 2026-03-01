@@ -1180,8 +1180,7 @@ def build_and_sample(
     """
     if target_accept != TARGET_ACCEPT:
         print(
-            f"  Note: target_accept={target_accept} ignored "
-            "(nutpie uses adaptive dual averaging)"
+            f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"
         )
 
     model = build_irt_graph(data, anchors)
@@ -1192,9 +1191,7 @@ def build_and_sample(
     if xi_initvals is not None:
         # PCA init for xi_free; jitter all OTHER RVs.
         compile_kwargs["initial_points"] = {"xi_free": xi_initvals}
-        compile_kwargs["jitter_rvs"] = {
-            rv for rv in model.free_RVs if rv.name != "xi_free"
-        }
+        compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name != "xi_free"}
         print(f"  PCA-informed initvals: {len(xi_initvals)} free parameters")
         jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
         print(f"  jitter_rvs: {jittered} (xi_free excluded)")
@@ -2520,11 +2517,15 @@ def main() -> None:
     results_root = ks.results_dir
 
     eda_dir = resolve_upstream_dir(
-        "01_eda", results_root, args.run_id,
+        "01_eda",
+        results_root,
+        args.run_id,
         Path(args.eda_dir) if args.eda_dir else None,
     )
     pca_dir = resolve_upstream_dir(
-        "02_pca", results_root, args.run_id,
+        "02_pca",
+        results_root,
+        args.run_id,
         Path(args.pca_dir) if args.pca_dir else None,
     )
 

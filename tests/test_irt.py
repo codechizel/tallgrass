@@ -887,12 +887,12 @@ class TestDetectForestHighlights:
         """10 legislators with varying xi_mean and xi_sd."""
         return pl.DataFrame(
             {
-                "legislator_slug": [f"rep_{chr(97+i)}_{chr(97+i)}_1" for i in range(10)],
+                "legislator_slug": [f"rep_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(10)],
                 "xi_mean": [3.0, 2.0, 1.5, 1.0, 0.5, 0.1, -0.5, -1.0, -1.5, -2.5],
                 "xi_sd": [0.15, 0.12, 0.10, 0.10, 0.10, 0.10, 0.10, 0.12, 0.10, 0.50],
                 "xi_hdi_2.5": [2.7, 1.8, 1.3, 0.8, 0.3, -0.1, -0.7, -1.2, -1.7, -3.5],
                 "xi_hdi_97.5": [3.3, 2.2, 1.7, 1.2, 0.7, 0.3, -0.3, -0.8, -1.3, -1.5],
-                "full_name": [f"{chr(65+i)} {chr(65+i)}" for i in range(10)],
+                "full_name": [f"{chr(65 + i)} {chr(65 + i)}" for i in range(10)],
                 "party": ["Republican"] * 6 + ["Democrat"] * 4,
                 "district": list(range(1, 11)),
                 "chamber": ["House"] * 10,
@@ -963,8 +963,12 @@ class TestFindParadoxLegislator:
         return pl.DataFrame(
             {
                 "legislator_slug": [
-                    "rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_d_d_1",
-                    "rep_e_e_1", "rep_f_f_1",
+                    "rep_a_a_1",
+                    "rep_b_b_1",
+                    "rep_c_c_1",
+                    "rep_d_d_1",
+                    "rep_e_e_1",
+                    "rep_f_f_1",
                 ],
                 "xi_mean": [3.0, 2.0, 1.5, 1.0, -1.0, -2.0],
                 "xi_sd": [0.1] * 6,
@@ -996,8 +1000,12 @@ class TestFindParadoxLegislator:
         Other Rs vote consistently Yea on all bills.
         """
         slugs = [
-            "rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_d_d_1",
-            "rep_e_e_1", "rep_f_f_1",
+            "rep_a_a_1",
+            "rep_b_b_1",
+            "rep_c_c_1",
+            "rep_d_d_1",
+            "rep_e_e_1",
+            "rep_f_f_1",
         ]
         vote_ids = [f"v{i}" for i in range(1, 9)]
 
@@ -1006,12 +1014,12 @@ class TestFindParadoxLegislator:
         # rep_a: high-disc=[1,1,1,1], low-disc=[0,0,0,1]
         # others: all 1s (Yea) on everything
         votes = {
-            "rep_a_a_1":  [1, 1, 1, 1, 0, 0, 0, 1],
-            "rep_b_b_1":  [1, 1, 1, 1, 1, 1, 1, 1],
-            "rep_c_c_1":  [1, 1, 1, 1, 1, 1, 1, 1],
-            "rep_d_d_1":  [1, 1, 1, 1, 1, 1, 1, 1],
-            "rep_e_e_1":  [0, 0, 0, 0, 1, 1, 1, 0],
-            "rep_f_f_1":  [0, 0, 0, 0, 1, 1, 1, 0],
+            "rep_a_a_1": [1, 1, 1, 1, 0, 0, 0, 1],
+            "rep_b_b_1": [1, 1, 1, 1, 1, 1, 1, 1],
+            "rep_c_c_1": [1, 1, 1, 1, 1, 1, 1, 1],
+            "rep_d_d_1": [1, 1, 1, 1, 1, 1, 1, 1],
+            "rep_e_e_1": [0, 0, 0, 0, 1, 1, 1, 0],
+            "rep_f_f_1": [0, 0, 0, 0, 1, 1, 1, 0],
         }
 
         leg_idx_list = []
@@ -1042,7 +1050,9 @@ class TestFindParadoxLegislator:
     ) -> None:
         """Should return dict with correct slug when high/low-disc Yea rate gap > threshold."""
         result = find_paradox_legislator(
-            paradox_ideal_points, paradox_bill_params, paradox_data_with_gap,
+            paradox_ideal_points,
+            paradox_bill_params,
+            paradox_data_with_gap,
         )
         assert result is not None
         assert result["slug"] == "rep_a_a_1"
@@ -1114,14 +1124,23 @@ class TestFindParadoxLegislator:
     ) -> None:
         """Returned dict should have all expected keys."""
         result = find_paradox_legislator(
-            paradox_ideal_points, paradox_bill_params, paradox_data_with_gap,
+            paradox_ideal_points,
+            paradox_bill_params,
+            paradox_data_with_gap,
         )
         assert result is not None
         expected_keys = {
-            "slug", "full_name", "party", "xi_mean",
-            "high_disc_yea_rate", "low_disc_yea_rate",
-            "party_high_disc_yea_rate", "party_low_disc_yea_rate",
-            "n_high_disc", "n_low_disc", "gap",
+            "slug",
+            "full_name",
+            "party",
+            "xi_mean",
+            "high_disc_yea_rate",
+            "low_disc_yea_rate",
+            "party_high_disc_yea_rate",
+            "party_low_disc_yea_rate",
+            "n_high_disc",
+            "n_low_disc",
+            "gap",
         }
         assert set(result.keys()) == expected_keys
 
@@ -1297,7 +1316,7 @@ class TestExtractIdealPoints:
             {
                 "name": ["A", "B", "C", "D", "E", "F"],
                 "full_name": ["A A", "B B", "C C", "D D", "E E", "F F"],
-                "slug": [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)],
+                "slug": [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)],
                 "chamber": ["Senate"] * 6,
                 "party": ["Republican"] * 3 + ["Democrat"] * 3,
                 "district": list(range(1, 7)),
@@ -1308,7 +1327,7 @@ class TestExtractIdealPoints:
     def test_output_schema(self, extraction_legislators: pl.DataFrame) -> None:
         """Output should have all required columns."""
         idata = _make_irt_idata()
-        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)]
         data = {"leg_slugs": slugs}
         df = extract_ideal_points(idata, data, extraction_legislators)
         required = {"legislator_slug", "xi_mean", "xi_sd", "xi_hdi_2.5", "xi_hdi_97.5"}
@@ -1317,7 +1336,7 @@ class TestExtractIdealPoints:
     def test_correct_legislator_count(self, extraction_legislators: pl.DataFrame) -> None:
         """Should return one row per legislator."""
         idata = _make_irt_idata()
-        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)]
         data = {"leg_slugs": slugs}
         df = extract_ideal_points(idata, data, extraction_legislators)
         assert df.height == 6
@@ -1325,7 +1344,7 @@ class TestExtractIdealPoints:
     def test_sorted_descending(self, extraction_legislators: pl.DataFrame) -> None:
         """Output should be sorted by xi_mean descending."""
         idata = _make_irt_idata()
-        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)]
         data = {"leg_slugs": slugs}
         df = extract_ideal_points(idata, data, extraction_legislators)
         means = df["xi_mean"].to_list()
@@ -1334,7 +1353,7 @@ class TestExtractIdealPoints:
     def test_hdi_contains_mean(self, extraction_legislators: pl.DataFrame) -> None:
         """HDI bounds should contain the posterior mean."""
         idata = _make_irt_idata()
-        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)]
         data = {"leg_slugs": slugs}
         df = extract_ideal_points(idata, data, extraction_legislators)
         for row in df.iter_rows(named=True):
@@ -1343,7 +1362,7 @@ class TestExtractIdealPoints:
     def test_positive_sd(self, extraction_legislators: pl.DataFrame) -> None:
         """Standard deviations should be positive."""
         idata = _make_irt_idata()
-        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)]
         data = {"leg_slugs": slugs}
         df = extract_ideal_points(idata, data, extraction_legislators)
         assert (df["xi_sd"] > 0).all()
@@ -1351,7 +1370,7 @@ class TestExtractIdealPoints:
     def test_metadata_joined(self, extraction_legislators: pl.DataFrame) -> None:
         """Legislator metadata (party, name) should be joined."""
         idata = _make_irt_idata()
-        slugs = [f"sen_{chr(97+i)}_{chr(97+i)}_1" for i in range(6)]
+        slugs = [f"sen_{chr(97 + i)}_{chr(97 + i)}_1" for i in range(6)]
         data = {"leg_slugs": slugs}
         df = extract_ideal_points(idata, data, extraction_legislators)
         assert "full_name" in df.columns
@@ -1370,7 +1389,7 @@ class TestExtractBillParameters:
     def test_output_schema(self, rollcalls: pl.DataFrame) -> None:
         """Output should have all required columns."""
         idata = _make_irt_idata()
-        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        data = {"vote_ids": [f"v{i + 1}" for i in range(5)]}
         df = extract_bill_parameters(idata, data, rollcalls)
         required = {"vote_id", "alpha_mean", "alpha_sd", "beta_mean", "beta_sd"}
         assert required.issubset(set(df.columns))
@@ -1378,14 +1397,14 @@ class TestExtractBillParameters:
     def test_correct_vote_count(self, rollcalls: pl.DataFrame) -> None:
         """Should return one row per vote."""
         idata = _make_irt_idata()
-        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        data = {"vote_ids": [f"v{i + 1}" for i in range(5)]}
         df = extract_bill_parameters(idata, data, rollcalls)
         assert df.height == 5
 
     def test_positive_sd(self, rollcalls: pl.DataFrame) -> None:
         """Standard deviations should be positive."""
         idata = _make_irt_idata()
-        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        data = {"vote_ids": [f"v{i + 1}" for i in range(5)]}
         df = extract_bill_parameters(idata, data, rollcalls)
         assert (df["alpha_sd"] > 0).all()
         assert (df["beta_sd"] > 0).all()
@@ -1393,7 +1412,7 @@ class TestExtractBillParameters:
     def test_negative_beta_allowed(self, rollcalls: pl.DataFrame) -> None:
         """With unconstrained beta, some bills should have negative discrimination."""
         idata = _make_irt_idata()
-        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        data = {"vote_ids": [f"v{i + 1}" for i in range(5)]}
         df = extract_bill_parameters(idata, data, rollcalls)
         # Our fixture has mix of positive and negative betas
         has_negative = (df["beta_mean"] < 0).any()
@@ -1404,7 +1423,7 @@ class TestExtractBillParameters:
     def test_sorted_by_beta_descending(self, rollcalls: pl.DataFrame) -> None:
         """Output should be sorted by beta_mean descending."""
         idata = _make_irt_idata()
-        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        data = {"vote_ids": [f"v{i + 1}" for i in range(5)]}
         df = extract_bill_parameters(idata, data, rollcalls)
         betas = df["beta_mean"].to_list()
         assert betas == sorted(betas, reverse=True)
@@ -1412,7 +1431,7 @@ class TestExtractBillParameters:
     def test_rollcall_metadata_joined(self, rollcalls: pl.DataFrame) -> None:
         """Roll call metadata should be joined when available."""
         idata = _make_irt_idata()
-        data = {"vote_ids": [f"v{i+1}" for i in range(5)]}
+        data = {"vote_ids": [f"v{i + 1}" for i in range(5)]}
         df = extract_bill_parameters(idata, data, rollcalls)
         assert "bill_number" in df.columns
 
@@ -1487,13 +1506,25 @@ class TestEquateChambers:
         legislators = pl.DataFrame(
             {
                 "slug": [
-                    "rep_a_a_1", "rep_b_b_1", "rep_c_c_1", "rep_x_x_1",
-                    "sen_d_d_1", "sen_e_e_1", "sen_x_x_1",
+                    "rep_a_a_1",
+                    "rep_b_b_1",
+                    "rep_c_c_1",
+                    "rep_x_x_1",
+                    "sen_d_d_1",
+                    "sen_e_e_1",
+                    "sen_x_x_1",
                 ],
                 "full_name": ["A A", "B B", "C C", "X X", "D D", "E E", "X X"],
                 "chamber": ["House"] * 4 + ["Senate"] * 3,
-                "party": ["Republican", "Republican", "Democrat", "Republican",
-                          "Republican", "Democrat", "Republican"],
+                "party": [
+                    "Republican",
+                    "Republican",
+                    "Democrat",
+                    "Republican",
+                    "Republican",
+                    "Democrat",
+                    "Republican",
+                ],
                 "district": list(range(1, 8)),
             }
         )
@@ -1543,9 +1574,7 @@ class TestEquateChambers:
         equated = result["equated_ideal_points"]
         house_orig = equating_data["per_chamber_results"]["House"]["ideal_points"]
         for row in house_orig.iter_rows(named=True):
-            equated_row = equated.filter(
-                pl.col("legislator_slug") == row["legislator_slug"]
-            )
+            equated_row = equated.filter(pl.col("legislator_slug") == row["legislator_slug"])
             assert equated_row["xi_mean"][0] == pytest.approx(row["xi_mean"], abs=1e-6)
 
     def test_correlations_computed(self, equating_data: dict) -> None:

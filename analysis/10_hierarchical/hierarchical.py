@@ -449,8 +449,7 @@ def build_per_chamber_model(
         print("  Note: callback ignored (nutpie does not support PyMC callbacks)")
     if target_accept != HIER_TARGET_ACCEPT:
         print(
-            f"  Note: target_accept={target_accept} ignored "
-            "(nutpie uses adaptive dual averaging)"
+            f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"
         )
 
     model = build_per_chamber_graph(data, beta_prior)
@@ -462,9 +461,7 @@ def build_per_chamber_model(
         # Critical: jitter_rvs=set() would cause HalfNormal sigma_within to
         # initialize at its support point (~0), producing log(0)=-inf.
         compile_kwargs["initial_points"] = {"xi_offset": xi_offset_initvals}
-        compile_kwargs["jitter_rvs"] = {
-            rv for rv in model.free_RVs if rv.name != "xi_offset"
-        }
+        compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name != "xi_offset"}
         print(
             f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
             f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
@@ -805,14 +802,16 @@ def build_joint_model(
         print("  Note: callback ignored (nutpie does not support PyMC callbacks)")
     if target_accept != HIER_TARGET_ACCEPT:
         print(
-            f"  Note: target_accept={target_accept} ignored "
-            "(nutpie uses adaptive dual averaging)"
+            f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"
         )
     if cores is not None:
         print(f"  Note: cores={cores} ignored (nutpie manages its own threads)")
 
     model, combined_data = build_joint_graph(
-        house_data, senate_data, rollcalls=rollcalls, beta_prior=beta_prior,
+        house_data,
+        senate_data,
+        rollcalls=rollcalls,
+        beta_prior=beta_prior,
         alpha_sigma=alpha_sigma,
     )
 
@@ -823,9 +822,7 @@ def build_joint_model(
         # Critical: jitter_rvs=set() would cause HalfNormal sigma_within to
         # initialize at its support point (~0), producing log(0)=-inf.
         compile_kwargs["initial_points"] = {"xi_offset": xi_offset_initvals}
-        compile_kwargs["jitter_rvs"] = {
-            rv for rv in model.free_RVs if rv.name != "xi_offset"
-        }
+        compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name != "xi_offset"}
         print(
             f"  PCA-informed initvals: {len(xi_offset_initvals)} params, "
             f"range [{xi_offset_initvals.min():.2f}, {xi_offset_initvals.max():.2f}]"
@@ -1620,15 +1617,21 @@ def main() -> None:
 
     data_dir = Path(args.data_dir) if args.data_dir else ks.data_dir
     eda_dir = resolve_upstream_dir(
-        "01_eda", results_root, args.run_id,
+        "01_eda",
+        results_root,
+        args.run_id,
         Path(args.eda_dir) if args.eda_dir else None,
     )
     pca_dir = resolve_upstream_dir(
-        "02_pca", results_root, args.run_id,
+        "02_pca",
+        results_root,
+        args.run_id,
         Path(args.pca_dir) if args.pca_dir else None,
     )
     irt_dir = resolve_upstream_dir(
-        "04_irt", results_root, args.run_id,
+        "04_irt",
+        results_root,
+        args.run_id,
         Path(args.irt_dir) if args.irt_dir else None,
     )
 
@@ -1912,24 +1915,26 @@ def main() -> None:
 
                 linked_rows = []
                 for i, slug in enumerate(house_slugs):
-                    linked_rows.append({
-                        "legislator_slug": slug,
-                        "chamber": "House",
-                        "xi_linked": float(sl["xi_house_linked"][i]),
-                        "xi_sd": float(sl["xi_house_sd"][i]),
-                    })
+                    linked_rows.append(
+                        {
+                            "legislator_slug": slug,
+                            "chamber": "House",
+                            "xi_linked": float(sl["xi_house_linked"][i]),
+                            "xi_sd": float(sl["xi_house_sd"][i]),
+                        }
+                    )
                 for i, slug in enumerate(senate_slugs):
-                    linked_rows.append({
-                        "legislator_slug": slug,
-                        "chamber": "Senate",
-                        "xi_linked": float(sl["xi_senate_linked"][i]),
-                        "xi_sd": float(sl["xi_senate_sd"][i]),
-                    })
+                    linked_rows.append(
+                        {
+                            "legislator_slug": slug,
+                            "chamber": "Senate",
+                            "xi_linked": float(sl["xi_senate_linked"][i]),
+                            "xi_sd": float(sl["xi_senate_sd"][i]),
+                        }
+                    )
 
                 linked_df = pl.DataFrame(linked_rows).sort("xi_linked", descending=True)
-                linked_df.write_parquet(
-                    ctx.data_dir / "hierarchical_ideal_points_linked.parquet"
-                )
+                linked_df.write_parquet(ctx.data_dir / "hierarchical_ideal_points_linked.parquet")
                 print("\n  Saved: hierarchical_ideal_points_linked.parquet")
                 print(f"  {linked_df.height} legislators on common scale")
 
@@ -1941,15 +1946,13 @@ def main() -> None:
                         ("Senate", senate_slugs, sl["xi_senate_linked"]),
                     ]:
                         slug_to_linked = dict(zip(slugs, xi_linked))
-                        joint_slugs = joint_ip.filter(
-                            pl.col("legislator_slug").is_in(slugs)
-                        )["legislator_slug"].to_list()
-                        joint_xi = joint_ip.filter(
-                            pl.col("legislator_slug").is_in(slugs)
-                        )["xi_mean"].to_numpy()
-                        linked_xi_matched = np.array(
-                            [slug_to_linked[s] for s in joint_slugs]
-                        )
+                        joint_slugs = joint_ip.filter(pl.col("legislator_slug").is_in(slugs))[
+                            "legislator_slug"
+                        ].to_list()
+                        joint_xi = joint_ip.filter(pl.col("legislator_slug").is_in(slugs))[
+                            "xi_mean"
+                        ].to_numpy()
+                        linked_xi_matched = np.array([slug_to_linked[s] for s in joint_slugs])
                         r = float(np.corrcoef(joint_xi, linked_xi_matched)[0, 1])
                         print(f"  {chamber} S-L linked vs joint: r = {r:.4f}")
 

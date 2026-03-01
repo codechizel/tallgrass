@@ -7,7 +7,6 @@ structural correctness. They catch scraping bugs, not analysis logic.
 Run: uv run pytest tests/test_data_integrity.py -v
 """
 
-
 import polars as pl
 import pytest
 

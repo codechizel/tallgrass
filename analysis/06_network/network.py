@@ -2428,15 +2428,21 @@ def main() -> None:
     results_root = ks.results_dir
 
     eda_dir = resolve_upstream_dir(
-        "01_eda", results_root, args.run_id,
+        "01_eda",
+        results_root,
+        args.run_id,
         Path(args.eda_dir) if args.eda_dir else None,
     )
     irt_dir = resolve_upstream_dir(
-        "04_irt", results_root, args.run_id,
+        "04_irt",
+        results_root,
+        args.run_id,
         Path(args.irt_dir) if args.irt_dir else None,
     )
     clustering_dir = resolve_upstream_dir(
-        "05_clustering", results_root, args.run_id,
+        "05_clustering",
+        results_root,
+        args.run_id,
         Path(args.clustering_dir) if args.clustering_dir else None,
     )
 

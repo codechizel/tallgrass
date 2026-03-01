@@ -721,9 +721,7 @@ def main() -> None:
         bill_params: dict[str, pl.DataFrame] = {}
         irt_phase_dir = resolve_upstream_dir("04_irt", results_base, args.run_id)
         for chamber in ("house", "senate"):
-            bp = _read_parquet_safe(
-                irt_phase_dir / "data" / f"bill_params_{chamber}.parquet"
-            )
+            bp = _read_parquet_safe(irt_phase_dir / "data" / f"bill_params_{chamber}.parquet")
             if bp is not None:
                 bill_params[chamber] = bp
 
