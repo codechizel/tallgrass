@@ -41,6 +41,7 @@ dev = [
     "nutpie>=0.16",
     "ruptures>=1.1",
     "stepmix>=2.2.1",
+    "bicm>=3.1",
 ]
 
 [build-system]
@@ -101,6 +102,7 @@ replace-imports-with-any = [
     "nutpie.**",
     "ruptures.**",
     "stepmix.**",
+    "bicm.**",
 ]
 # analysis/ scripts use bare imports (not a package) — allow them.
 # Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to
@@ -190,6 +192,9 @@ allowed-unresolved-imports = [
     "analysis.external_validation_dime_data",
     "analysis.tsa",
     "analysis.tsa_report",
+    "bipartite_report",
+    "analysis.bipartite",
+    "analysis.bipartite_report",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

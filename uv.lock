@@ -121,6 +121,21 @@ wheels = [
 ]
 
 [[package]]
+name = "bicm"
+version = "3.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/58/21/fcfcbe659f8e5046d55cc75ec593af7b0f56cc6a3baf106166a01a068b16/bicm-3.4.0.tar.gz", hash = "sha256:507126af17f521e3daaee1943156997240d7787c56ee10284384093d8eb4c13d", size = 32695, upload-time = "2025-05-23T06:34:38.517Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/e9/a4f591c6b27abe32eafd81dffc81ad0f7676c604cab50c8fadba3725d243/bicm-3.4.0-py3-none-any.whl", hash = "sha256:9ddb0b682efbdd47980ce406e9f93b18eef3684d3b806577fde116a07561bc06", size = 32756, upload-time = "2025-05-23T06:34:35.883Z" },
+]
+
+[[package]]
 name = "cachetools"
 version = "7.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1604,6 +1619,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "arviz" },
+    { name = "bicm" },
     { name = "css-inline" },
     { name = "great-tables" },
     { name = "igraph" },
@@ -1642,6 +1658,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "arviz", specifier = ">=0.18" },
+    { name = "bicm", specifier = ">=3.1" },
     { name = "css-inline", specifier = ">=0.20.0" },
     { name = "great-tables", specifier = ">=0.15" },
     { name = "igraph", specifier = ">=0.11" },

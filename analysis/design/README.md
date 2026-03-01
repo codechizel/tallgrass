@@ -16,6 +16,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 4. Clustering | [clustering.md](clustering.md) | Three methods for robustness, party loyalty metric, Ward on Kappa, 3 dendrogram alternatives |
 | 4b. LCA | [lca.md](lca.md) | Bernoulli mixture on binary votes, BIC model selection, Salsa effect detection, StepMix FIML |
 | 5. Network | [network.md](network.md) | Kappa threshold, Leiden community detection, centrality measures, NaN = no edge |
+| 5b. Bipartite Network | [bipartite.md](bipartite.md) | BiCM backbone, Newman projection, bill polarization, bridge bills, Leiden bill communities |
 | 6. Prediction | [prediction.md](prediction.md) | XGBoost primary, skip cluster/community labels, IRT features dominate, NLP topic features (NMF on short_title), 82% base rate |
 | 7. Indices | [indices.md](indices.md) | CQ-standard party votes, Rice on all votes, Carey UNITY, weighted maverick by chamber margin |
 | 8. Synthesis | [synthesis.md](synthesis.md) | Data-driven detection thresholds, graceful degradation, template narratives |

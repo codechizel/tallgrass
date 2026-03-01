@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1630 tests)
+just test                                    # → uv run pytest tests/ -v (~1680 tests)
 just test-scraper                            # → pytest -m scraper (~264 tests)
 just test-fast                               # → pytest -m "not slow" (skip integration)
 just monitor                                 # → check running experiment status
@@ -33,11 +33,11 @@ uv run tallgrass 2024 --special        # special session (direct)
 
 Analysis recipes (all pass `*args` through to the underlying script):
 
-`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just ppc`, `just clustering`, `just lca`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just wnominate`.
+`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just ppc`, `just clustering`, `just lca`, `just network`, `just bipartite`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just wnominate`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
-`just pipeline 2025-26` runs all 16 phases in order under a single run ID (ADR-0052). Each phase gets `--run-id` automatically. Phase 04b (2D IRT) is experimental with relaxed convergence thresholds.
+`just pipeline 2025-26` runs all 17 phases in order under a single run ID (ADR-0052). Each phase gets `--run-id` automatically. Phase 04b (2D IRT) is experimental with relaxed convergence thresholds.
 
 ## Build Philosophy
 
@@ -142,7 +142,7 @@ Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each co
 
 ## Analysis Pipeline
 
-Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058). Phase `14b_external_validation_dime` validates IRT against DIME/CFscores (campaign-finance ideology, 84th-89th bienniums — ADR-0062). Phase `04c_ppc` is a standalone PPC + LOO-CV model comparison phase — loads InferenceData from all three IRT phases, runs posterior predictive checks, Yen's Q3, and PSIS-LOO (ADR-0063). Phase `17_wnominate` is a standalone validation phase comparing IRT to W-NOMINATE + Optimal Classification via R subprocess (ADR-0059). Phase `05b_lca` is Latent Class Analysis (Bernoulli mixture on binary vote matrix via StepMix, BIC model selection, Salsa effect detection).
+Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058). Phase `14b_external_validation_dime` validates IRT against DIME/CFscores (campaign-finance ideology, 84th-89th bienniums — ADR-0062). Phase `04c_ppc` is a standalone PPC + LOO-CV model comparison phase — loads InferenceData from all three IRT phases, runs posterior predictive checks, Yen's Q3, and PSIS-LOO (ADR-0063). Phase `17_wnominate` is a standalone validation phase comparing IRT to W-NOMINATE + Optimal Classification via R subprocess (ADR-0059). Phase `05b_lca` is Latent Class Analysis (Bernoulli mixture on binary vote matrix via StepMix, BIC model selection, Salsa effect detection). Phase `06b_network_bipartite` is bipartite bill-legislator network analysis (bill polarization, bridge bills, BiCM backbone extraction, bill communities — ADR-0065).
 
 See `.claude/rules/analysis-framework.md` for the full pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
@@ -181,6 +181,8 @@ Key references:
 - PPC + LOO-CV: design: `analysis/design/ppc.md` (manual log-likelihood, Q3 local dependence, PSIS-LOO model comparison, ADR-0063)
 - LCA deep dive: `docs/latent-class-deep-dive.md` (literature survey, StepMix evaluation, Salsa effect, Lubke & Neale impossibility)
 - LCA design: `analysis/design/lca.md` (Bernoulli mixture, BIC selection, FIML missing data, Salsa threshold)
+- Bipartite network deep dive: `docs/bipartite-network-deep-dive.md` (literature survey, BiCM, bill-centric metrics, Kansas-specific considerations)
+- Bipartite design: `analysis/design/bipartite.md` (BiCM backbone, Newman projection, bill communities, Phase 6 comparison)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (bb25, topic modeling, retrieval, open questions)
 - Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)
@@ -216,7 +218,7 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Testing
 
 ```bash
-just test                    # 1533 tests
+just test                    # 1680 tests
 just test-scraper            # scraper tests only (-m scraper)
 just test-fast               # skip slow/integration tests (-m "not slow")
 just check                   # full check (lint + typecheck + tests)

@@ -83,6 +83,10 @@ lca *args:
 network *args:
     uv run python analysis/06_network/network.py {{args}}
 
+# Run bipartite bill-legislator network analysis
+bipartite *args:
+    uv run python analysis/06b_network_bipartite/bipartite.py {{args}}
+
 # Run prediction analysis
 prediction *args:
     uv run python analysis/08_prediction/prediction.py {{args}}
@@ -152,6 +156,7 @@ pipeline session="2025-26" *args:
     just clustering --session {{session}} --run-id "$RUN_ID" {{args}}
     just lca      --session {{session}} --run-id "$RUN_ID" {{args}}
     just network  --session {{session}} --run-id "$RUN_ID" {{args}}
+    just bipartite --session {{session}} --run-id "$RUN_ID" {{args}}
     just indices  --session {{session}} --run-id "$RUN_ID" {{args}}
     just prediction --session {{session}} --run-id "$RUN_ID" {{args}}
     just betabinom --session {{session}} --run-id "$RUN_ID" {{args}}

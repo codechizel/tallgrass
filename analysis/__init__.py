@@ -11,6 +11,7 @@ Pipeline phases (in order):
   05_clustering    — Voting bloc detection
   05b_lca          — Latent Class Analysis (Bernoulli mixture)
   06_network       — Legislator network analysis
+  06b_network_bipartite — Bipartite bill-legislator network
   07_indices       — Classical political science indices
   08_prediction    — Vote prediction (XGBoost)
   09_beta_binomial — Bayesian party loyalty
@@ -55,6 +56,8 @@ _MODULE_MAP: dict[str, str] = {
     "lca_report": "05b_lca",
     "network": "06_network",
     "network_report": "06_network",
+    "bipartite": "06b_network_bipartite",
+    "bipartite_report": "06b_network_bipartite",
     "indices": "07_indices",
     "indices_report": "07_indices",
     "prediction": "08_prediction",

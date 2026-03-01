@@ -62,6 +62,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_cross_session.py` — matching, IRT alignment, shift, stability, PSI, ICC, fuzzy matching, prediction transfer, detection, plot smoke tests, report (~95 tests)
 - `tests/test_clustering.py` — party loyalty, cross-method ARI, within-party, kappa distance, hierarchical, spectral, HDBSCAN, characterization (~70 tests)
 - `tests/test_network.py` — network construction, centrality, Leiden/CPM community detection, bridges, threshold sweep, polarization, disparity filter backbone, extreme edge weights (~53 tests)
+- `tests/test_bipartite.py` — bipartite graph construction, bill polarization, bipartite betweenness, bill projection, bill communities, BiCM backbone extraction, backbone comparison, constants (~50 tests)
 - `tests/test_indices.py` — Rice formula, party votes, ENP, unity/maverick, co-defection, Carey UNITY, fractured votes (~37 tests)
 - `tests/test_synthesis.py` — synthesis data loading, build_legislator_df joins, _extract_best_auc, detect_all integration, minority mavericks, Democrat-majority paradox (~47 tests)
 - `tests/test_synthesis_detect.py` — maverick, bridge-builder, metric paradox detection, annotation slugs, threshold constants, percentile modes (~33 tests)

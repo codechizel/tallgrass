@@ -53,6 +53,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 17 | W-NOMINATE + OC Validation | 2026-02-28 | Field-standard legislative scaling comparison. W-NOMINATE (Poole & Rosenthal) + Optimal Classification (Poole 2000) via R subprocess. 3×3 correlation matrix (IRT/WNOM/OC), per-chamber scatter plots, 2D W-NOMINATE space, eigenvalue scree, fit statistics. Validation-only (does not feed downstream). Deep dive: `docs/w-nominate-deep-dive.md`, design: `analysis/design/wnominate.md`, ADR-0059. |
 | 4c | PPC + LOO-CV Model Comparison | 2026-02-28 | PPC battery (Yea rate, accuracy, GMP, APRE) + item/person fit + Yen's Q3 local dependence + LOO-CV model comparison across flat 1D, 2D IRT, and hierarchical IRT. Manual numpy log-likelihood (no PyMC rebuild). Graceful degradation for missing models. 60 tests. Design: `analysis/design/ppc.md`, ADR-0063. |
 | 5b | Latent Class Analysis | 2026-02-28 | Bernoulli mixture (LCA) on binary vote matrix via StepMix. BIC model selection (K=1..8), Salsa effect detection (profile correlations), IRT cross-validation, Phase 5 ARI comparison, within-party LCA. Correct generative model for binary data. Deep dive: `docs/latent-class-deep-dive.md`, design: `analysis/design/lca.md`. |
+| 6b | Bipartite Bill-Legislator Network | 2026-02-28 | Two-mode network (legislators × bills). Bill polarization, bridge bills, bill communities (Leiden on Newman projection), BiCM backbone extraction (statistical validation via maximum-entropy null model), Phase 6 comparison. Deep dive: `docs/bipartite-network-deep-dive.md`, design: `analysis/design/bipartite.md`, ADR-0065. |
 
 ---
 
@@ -78,9 +79,9 @@ Completed 2026-02-28. Bundled with W-NOMINATE in Phase 17. See Completed Phases 
 
 Completed 2026-02-28. Bernoulli mixture model (LCA) on binary vote matrix using StepMix. BIC model selection, Salsa effect detection, IRT cross-validation, Phase 5 ARI comparison, within-party LCA. Confirms null result: correct generative model for binary votes. Deep dive: `docs/latent-class-deep-dive.md`, design: `analysis/design/lca.md`.
 
-### 6. Bipartite Bill-Legislator Network → Phase 6b
+### ~~6. Bipartite Bill-Legislator Network~~ → Done (Phase 6b)
 
-**Priority:** Low — two-mode network connecting legislators to bills. Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. The Kappa-based co-voting network already captures the same structure more efficiently. Genuinely redundant. Recommend leaving this one alone.
+Completed 2026-02-28. Bipartite bill-legislator network preserving two-mode structure for bill-centric analysis. Bill polarization scores, bridge bills (bipartite betweenness), Newman-weighted bill projection with Leiden community detection, BiCM backbone extraction (maximum-entropy null model with analytical p-values). Phase 6 comparison: edge Jaccard, community NMI/ARI, hidden alliances. 50 new tests. Deep dive: `docs/bipartite-network-deep-dive.md`, design: `analysis/design/bipartite.md`, ADR-0065.
 
 ### ~~7. TSA Hardening (Phase 15 Gaps)~~ — Done
 
