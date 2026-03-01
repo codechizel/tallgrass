@@ -33,6 +33,7 @@ def build_lca_report(
         _add_bic_elbow_figure(report, plots_dir, chamber)
         _add_optimal_k_summary(report, results[chamber], chamber)
         _add_composition_table(report, results[chamber], chamber)
+        _add_class_membership_table(report, results[chamber], chamber)
         _add_profile_heatmap_figure(report, plots_dir, chamber)
         _add_membership_figure(report, plots_dir, chamber)
         _add_irt_crossval(report, results[chamber], chamber)
@@ -201,6 +202,50 @@ def _add_composition_table(
         TableSection(
             id=f"composition-{chamber.lower()}",
             title=f"{chamber} Class Composition",
+            html=html,
+        )
+    )
+
+
+def _add_class_membership_table(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: Every legislator's class assignment, party, and IRT ideal point."""
+    membership = result.get("membership", [])
+    if not membership:
+        return
+
+    rows = []
+    for m in membership:
+        row = {
+            "Name": m["Name"],
+            "Party": m["Party"],
+            "Class": m["Class"],
+            "Max P": round(m["Max P"], 3),
+        }
+        if m.get("IRT xi") is not None:
+            row["IRT xi"] = round(m["IRT xi"], 3)
+        else:
+            row["IRT xi"] = None
+        rows.append(row)
+
+    df = pl.DataFrame(rows)
+    optimal_k = result.get("optimal_k", 2)
+    html = make_gt(
+        df,
+        title=f"{chamber} — Class Membership ({len(rows)} legislators)",
+        subtitle=(
+            f"All legislators assigned to K={optimal_k} latent classes, "
+            "sorted by class then IRT ideal point. Max P = classification certainty."
+        ),
+        number_formats={"IRT xi": ".3f", "Max P": ".3f"},
+    )
+    report.add(
+        TableSection(
+            id=f"membership-{chamber.lower()}",
+            title=f"{chamber} Class Membership",
             html=html,
         )
     )

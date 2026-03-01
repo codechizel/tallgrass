@@ -324,7 +324,7 @@ def load_metadata(data_dir: Path) -> pl.DataFrame:
     """Load legislator CSV for party/name metadata."""
     prefix = data_dir.name
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
-    legislators = legislators.with_columns(
+    legislators = legislators.rename({"slug": "legislator_slug"}).with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
         .alias("full_name"),
@@ -960,7 +960,7 @@ def plot_irt_boxplot(
         class_data.append(xi_vals)
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    bp = ax.boxplot(class_data, labels=[f"Class {c + 1}" for c in range(k)], patch_artist=True)
+    bp = ax.boxplot(class_data, tick_labels=[f"Class {c + 1}" for c in range(k)], patch_artist=True)
 
     colors = plt.get_cmap(CLASS_CMAP)(np.linspace(0, 1, k))
     for patch, color in zip(bp["boxes"], colors):
@@ -1310,6 +1310,29 @@ def main() -> None:
                     comp[party] = parties.count(party)
                 composition.append(comp)
             chamber_results["composition"] = composition
+
+            # Class membership list (for report)
+            xi_map = dict(
+                zip(irt_ip["legislator_slug"].to_list(), irt_ip["xi_mean"].to_list())
+            )
+            name_map = dict(
+                zip(
+                    legislators["legislator_slug"].to_list(),
+                    legislators["full_name"].to_list(),
+                )
+            )
+            membership_rows: list[dict] = []
+            for i, slug in enumerate(slugs):
+                membership_rows.append({
+                    "Name": name_map.get(slug, slug),
+                    "Party": party_map.get(slug, "Unknown"),
+                    "Class": int(labels[i]) + 1,
+                    "IRT xi": xi_map.get(slug),
+                    "Max P": float(probabilities[i].max()),
+                })
+            chamber_results["membership"] = sorted(
+                membership_rows, key=lambda r: (r["Class"], r.get("IRT xi") or 0)
+            )
 
             results[chamber] = chamber_results
 

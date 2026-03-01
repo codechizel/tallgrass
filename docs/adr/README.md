@@ -83,6 +83,7 @@ What are the trade-offs?
 | [0034](0034-synthesis-deep-dive-improvements.md) | Synthesis deep dive improvements |
 | [0064](0064-lca-latent-class-analysis.md) | Latent Class Analysis (Phase 5b) |
 | [0065](0065-bipartite-network-phase.md) | Bipartite Bill-Legislator Network (Phase 6b) |
+| [0066](0066-84th-pipeline-stress-test-fixes.md) | 84th pipeline stress test fixes (8 bugs, 1 enhancement) |
 
 ### Time Series
 
@@ -195,6 +196,7 @@ What are the trade-offs?
 | [0063](0063-ppc-loo-standalone-phase.md) | Standalone PPC + LOO-CV phase (Phase 4c) | Accepted | 2026-02-28 |
 | [0064](0064-lca-latent-class-analysis.md) | Latent Class Analysis (Phase 5b) | Accepted | 2026-02-28 |
 | [0065](0065-bipartite-network-phase.md) | Bipartite Bill-Legislator Network (Phase 6b) | Accepted | 2026-02-28 |
+| [0066](0066-84th-pipeline-stress-test-fixes.md) | 84th pipeline stress test fixes (8 bugs, 1 enhancement) | Accepted | 2026-03-01 |
 
 ## Creating a New ADR
 

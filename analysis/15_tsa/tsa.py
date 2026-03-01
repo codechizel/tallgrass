@@ -168,6 +168,8 @@ def load_data(
     votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
     rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    if "slug" in legislators.columns:
+        legislators = legislators.rename({"slug": "legislator_slug"})
 
     # Fill Independent party
     if "party" in legislators.columns:
@@ -208,9 +210,9 @@ def build_vote_matrix(
     chamber_votes = votes.filter(pl.col("legislator_slug").str.starts_with(prefix))
 
     # Filter to Yea/Nay only for binary encoding
-    chamber_votes = chamber_votes.filter(pl.col("vote_category").is_in(["Yea", "Nay"]))
+    chamber_votes = chamber_votes.filter(pl.col("vote").is_in(["Yea", "Nay"]))
     chamber_votes = chamber_votes.with_columns(
-        pl.when(pl.col("vote_category") == "Yea").then(1.0).otherwise(0.0).alias("vote_binary")
+        pl.when(pl.col("vote") == "Yea").then(1.0).otherwise(0.0).alias("vote_binary")
     )
 
     # Get chronological ordering from rollcalls
@@ -677,7 +679,7 @@ def build_rice_timeseries(
     prefix = "sen_" if chamber == "Senate" else "rep_"
     chamber_votes = votes.filter(
         pl.col("legislator_slug").str.starts_with(prefix)
-        & pl.col("vote_category").is_in(["Yea", "Nay"])
+        & pl.col("vote").is_in(["Yea", "Nay"])
     )
 
     # Attach party
@@ -694,9 +696,9 @@ def build_rice_timeseries(
 
     # Count Yea/Nay per vote per party
     party_counts = (
-        chamber_votes.group_by("vote_id", "party", "vote_category")
+        chamber_votes.group_by("vote_id", "party", "vote")
         .agg(pl.len().alias("n"))
-        .pivot(on="vote_category", index=["vote_id", "party"], values="n")
+        .pivot(on="vote", index=["vote_id", "party"], values="n")
         .fill_null(0)
     )
 
@@ -895,14 +897,14 @@ def cross_reference_veto_overrides(
             from datetime import date
 
             cp_date = date.fromisoformat(cp_date_str[:10])
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             continue
 
         for ov_row in overrides.iter_rows(named=True):
             ov_date_str = str(ov_row.get(date_col, ""))[:10]
             try:
                 ov_date = date.fromisoformat(ov_date_str)
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 continue
 
             days = abs((cp_date - ov_date).days)

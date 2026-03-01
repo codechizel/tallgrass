@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-02-28 (reprioritized roadmap; R now allowed for field-standard methods)
+**Last updated:** 2026-03-01 (84th biennium pipeline stress test — 8 fixes, LCA membership tables)
 
 ---
 
@@ -54,6 +54,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 4c | PPC + LOO-CV Model Comparison | 2026-02-28 | PPC battery (Yea rate, accuracy, GMP, APRE) + item/person fit + Yen's Q3 local dependence + LOO-CV model comparison across flat 1D, 2D IRT, and hierarchical IRT. Manual numpy log-likelihood (no PyMC rebuild). Graceful degradation for missing models. 60 tests. Design: `analysis/design/ppc.md`, ADR-0063. |
 | 5b | Latent Class Analysis | 2026-02-28 | Bernoulli mixture (LCA) on binary vote matrix via StepMix. BIC model selection (K=1..8), Salsa effect detection (profile correlations), IRT cross-validation, Phase 5 ARI comparison, within-party LCA. Correct generative model for binary data. Deep dive: `docs/latent-class-deep-dive.md`, design: `analysis/design/lca.md`. |
 | 6b | Bipartite Bill-Legislator Network | 2026-02-28 | Two-mode network (legislators × bills). Bill polarization, bridge bills, bill communities (Leiden on Newman projection), BiCM backbone extraction (statistical validation via maximum-entropy null model), Phase 6 comparison. Deep dive: `docs/bipartite-network-deep-dive.md`, design: `analysis/design/bipartite.md`, ADR-0065. |
+| — | 84th Biennium Pipeline Stress Test | 2026-03-01 | Full 17-phase pipeline + PPC + External Validation + DIME on 2011-12 data. 8 bug fixes (column naming, IRT sensitivity sign flip, arviz/matplotlib deprecations, DIME party type). LCA class membership tables added. ADR-0066. |
 
 ---
 
@@ -174,7 +175,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 18 | Hierarchical Clustering | CLU | Completed (Clustering) |
 | 19 | K-Means / GMM Clustering | CLU | Completed (Clustering) |
 | 20 | Co-Voting Network | NET | Completed (Network) |
-| 21 | Bipartite Bill-Legislator Network | NET | Deferred (redundant) |
+| 21 | Bipartite Bill-Legislator Network | NET | Completed (Phase 6b) |
 | 22 | Centrality Measures | NET | Completed (Network) |
 | 23 | Community Detection | NET | Completed (Network) |
 | 24 | Vote Prediction | PRD | Completed (Prediction) |

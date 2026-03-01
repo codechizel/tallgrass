@@ -112,6 +112,7 @@ These are real bugs that were found and fixed. Do NOT regress on them:
 - `passed`: passed/adopted/prevailed/concurred -> True; failed/rejected/sustained -> False; else null
 - Vote categories: Yea, Nay, Present and Passing, Absent and Not Voting, Not Voting (exactly 5)
 - Legislator slugs: `sen_` = Senate, `rep_` = House
+- Column naming: scraper CSVs use `slug` and `vote`; analysis phases rename to `legislator_slug` and expect `vote` (not `vote_category`). Each phase handles the rename at load time (ADR-0066).
 - Independent party handling: scraper outputs empty string; all analysis fills to "Independent" at load time (ADR-0021)
 
 ## Output
@@ -142,13 +143,13 @@ Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each co
 
 ## Analysis Pipeline
 
-Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058). Phase `14b_external_validation_dime` validates IRT against DIME/CFscores (campaign-finance ideology, 84th-89th bienniums — ADR-0062). Phase `04c_ppc` is a standalone PPC + LOO-CV model comparison phase — loads InferenceData from all three IRT phases, runs posterior predictive checks, Yen's Q3, and PSIS-LOO (ADR-0063). Phase `17_wnominate` is a standalone validation phase comparing IRT to W-NOMINATE + Optimal Classification via R subprocess (ADR-0059). Phase `05b_lca` is Latent Class Analysis (Bernoulli mixture on binary vote matrix via StepMix, BIC model selection, Salsa effect detection). Phase `06b_network_bipartite` is bipartite bill-legislator network analysis (bill polarization, bridge bills, BiCM backbone extraction, bill communities — ADR-0065).
+Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058). Phase `14b_external_validation_dime` validates IRT against DIME/CFscores (campaign-finance ideology, 84th-89th bienniums — ADR-0062). Phase `04c_ppc` is a standalone PPC + LOO-CV model comparison phase — loads InferenceData from all three IRT phases, runs posterior predictive checks, Yen's Q3, and PSIS-LOO (ADR-0063). Phase `17_wnominate` is a standalone validation phase comparing IRT to W-NOMINATE + Optimal Classification via R subprocess (ADR-0059). Phase `05b_lca` is Latent Class Analysis (Bernoulli mixture on binary vote matrix via StepMix, BIC model selection, Salsa effect detection, class membership tables with IRT ideal points). Phase `06b_network_bipartite` is bipartite bill-legislator network analysis (bill polarization, bridge bills, BiCM backbone extraction, bill communities — ADR-0065).
 
 See `.claude/rules/analysis-framework.md` for the full pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (64 decisions)
+- ADRs: `docs/adr/README.md` (66 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")

@@ -5,10 +5,9 @@ result parsing, elbow detection, and PELT/BP merge logic live here so they
 can be tested with synthetic data.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import polars as pl
-
 
 # ── Signal Preparation ──────────────────────────────────────────────────────
 

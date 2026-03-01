@@ -136,6 +136,7 @@ def parse_dime_kansas(path: str) -> pl.DataFrame:
         infer_schema_length=10000,
         null_values=["", "NA"],
         truncate_ragged_lines=True,
+        schema_overrides={"party": pl.Utf8, "party.orig": pl.Utf8},
     )
 
     # Normalize column names: dots to underscores for Polars ergonomics

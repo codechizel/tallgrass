@@ -2,6 +2,7 @@
 
 try:
     from importlib.metadata import version as _pkg_version
+
     _VERSION = _pkg_version("tallgrass")
 except Exception:
     _VERSION = "dev"

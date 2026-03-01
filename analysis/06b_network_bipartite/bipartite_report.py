@@ -53,7 +53,7 @@ def build_bipartite_report(
         _add_backbone_layout_figure(report, plots_dir, chamber)
 
         if not skip_phase6:
-            _add_backbone_comparison(report, results[chamber], chamber)
+            _add_backbone_comparison(report, results[chamber], chamber, plots_dir)
             _add_hidden_alliances(report, results[chamber], chamber)
 
         _add_backbone_communities(report, results[chamber], chamber)
@@ -113,7 +113,8 @@ connect otherwise separate partisan blocs.</li>
 <li><strong>Bill Communities:</strong> Bills grouped by which legislators vote Yea together
 (Leiden on Newman-weighted projection). <em>Not</em> grouped by topic.</li>
 <li><strong>BiCM Backbone:</strong> Statistically validated legislator co-voting edges.
-Maximum-entropy null model preserves degree sequences; only edges with p &lt; 0.01 are retained.</li>
+Maximum-entropy null model preserves degree sequences;
+only edges with p &lt; 0.01 are retained.</li>
 </ul>
 </div>"""
     report.add(TextSection(id="how-to-read", title="How to Read This Report", html=html))
@@ -457,6 +458,7 @@ def _add_backbone_comparison(
     report: ReportBuilder,
     chamber_results: dict,
     chamber: str,
+    plots_dir: Path,
 ) -> None:
     """Table: BiCM backbone vs Phase 6 Kappa backbone."""
     comp = chamber_results.get("backbone_comparison")

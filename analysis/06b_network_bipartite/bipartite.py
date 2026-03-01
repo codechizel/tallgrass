@@ -30,7 +30,6 @@ Outputs (in results/<session>/<run_id>/06b_network_bipartite/):
 import argparse
 import json
 import sys
-import warnings
 from pathlib import Path
 
 import matplotlib
@@ -1069,7 +1068,8 @@ def compare_backbones(
     # Community comparison if both have edges
     comm_comparison: dict = {"nmi": None, "ari": None}
     shared_nodes = set(bicm_backbone.nodes()) & set(kappa_backbone.nodes())
-    if len(shared_nodes) > 2 and bicm_backbone.number_of_edges() > 0 and kappa_backbone.number_of_edges() > 0:
+    has_edges = bicm_backbone.number_of_edges() > 0 and kappa_backbone.number_of_edges() > 0
+    if len(shared_nodes) > 2 and has_edges:
         # Leiden on both
         try:
             bicm_part, _ = detect_backbone_communities(bicm_backbone)
@@ -1301,11 +1301,14 @@ def plot_backbone_comparison(
             continue
 
         pos = nx.spring_layout(G, seed=RANDOM_SEED, k=1.5 / max(1, np.sqrt(G.number_of_nodes())))
-        colors = [PARTY_COLORS.get(G.nodes[n].get("party", ""), "#999999") for n in G.nodes()]
+        colors = [
+            PARTY_COLORS.get(G.nodes[n].get("party", ""), "#999999") for n in G.nodes()
+        ]
 
         nx.draw_networkx_edges(G, pos, alpha=0.15, width=0.5, ax=ax)
         nx.draw_networkx_nodes(G, pos, node_color=colors, node_size=30, alpha=0.8, ax=ax)
-        ax.set_title(f"{chamber}: {title}\n({G.number_of_nodes()} nodes, {G.number_of_edges()} edges)")
+        n_nodes, n_edges = G.number_of_nodes(), G.number_of_edges()
+        ax.set_title(f"{chamber}: {title}\n({n_nodes} nodes, {n_edges} edges)")
         ax.axis("off")
 
     legend_elements = [Patch(facecolor=c, label=p) for p, c in PARTY_COLORS.items()]
@@ -1653,7 +1656,9 @@ def main() -> None:
                 "n_edges": summary["n_edges"],
                 "n_polarized_bills": polarization.height,
                 "n_bridge_bills": bridge_bills.height,
-                "backbone_edges": chamber_results.get("backbone_graph", nx.Graph()).number_of_edges(),
+                "backbone_edges": chamber_results.get(
+                    "backbone_graph", nx.Graph()
+                ).number_of_edges(),
             }
 
             results[chamber] = chamber_results
@@ -1669,7 +1674,7 @@ def main() -> None:
             skip_phase6=args.skip_phase6_comparison or network_dir is None,
         )
 
-        print(f"\nBipartite network analysis complete.")
+        print("\nBipartite network analysis complete.")
         print(f"Output: {ctx.run_dir}")
 
 

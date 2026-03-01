@@ -15,7 +15,7 @@ import pytest
 
 pytestmark = pytest.mark.scraper
 
-from tallgrass.odt_parser import (
+from tallgrass.odt_parser import (  # noqa: E402
     OdtMetadata,
     _classify_motion,
     _derive_passed,

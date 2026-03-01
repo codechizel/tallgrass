@@ -2030,7 +2030,7 @@ def plot_convergence_summary(
     indices = np.linspace(0, len(slugs) - 1, n, dtype=int)
     selected_slugs = [slugs[i] for i in indices]
 
-    n_chains = idata.posterior.dims.get("chain", 1)
+    n_chains = idata.posterior.sizes.get("chain", 1)
     if n_chains < 2:
         return  # Need multiple chains to show agreement
 
@@ -2434,7 +2434,14 @@ def run_sensitivity(
 
         default_arr = merged["xi_mean"].to_numpy()
         sens_arr = merged["xi_mean_sens"].to_numpy()
-        correlation = float(np.corrcoef(default_arr, sens_arr)[0, 1])
+        raw_correlation = float(np.corrcoef(default_arr, sens_arr)[0, 1])
+
+        # Sign convention may flip between independent IRT runs (different anchor
+        # selection on different vote subsets). Use |r| for robustness check.
+        if raw_correlation < 0:
+            sens_arr = -sens_arr
+            print("    Sign convention flipped — aligning sensitivity scores")
+        correlation = abs(raw_correlation)
 
         print(f"    Shared legislators: {merged.height}")
         print(f"    Pearson r: {correlation:.4f}")
@@ -2454,6 +2461,7 @@ def run_sensitivity(
             "sensitivity_n_votes": n_votes,
             "shared_legislators": merged.height,
             "pearson_r": correlation,
+            "raw_pearson_r": raw_correlation,
             "sensitivity_sampling_time": sens_time,
         }
 
