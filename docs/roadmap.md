@@ -82,6 +82,20 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 
 **Priority:** Low — two-mode network connecting legislators to bills. Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. The Kappa-based co-voting network already captures the same structure more efficiently. Genuinely redundant.
 
+### 8. TSA Hardening (Phase 15 Gaps)
+
+**Priority:** Low-Medium — seven improvements identified in the TSA deep dive (`docs/tsa-deep-dive.md`). All are refinements to a working phase, not missing functionality.
+
+| Gap | Effort | Impact |
+|-----|--------|--------|
+| **Desposato small-group correction** | ~20 lines | Eliminates systematic Rice inflation for Senate Democrats (~8 members vs ~32 Republicans). The bias is ~0.03–0.08 depending on true cohesion. Standard correction in the literature (Desposato 2005, *BJPS*). |
+| **CROPS penalty selection** | Low | Replaces ad-hoc 6-penalty grid with exact solution path across a continuous penalty range. `ruptures` doesn't expose CROPS natively, but a finer grid (25–50 penalties via `np.linspace`) is trivially better than the current `[3, 5, 10, 15, 25, 50]`. |
+| **Short-session validation** | Trivial | Add `warnings.warn()` when a chamber has too few roll calls for any PCA window, early/late comparison, or PELT detection. Currently fails silently with empty DataFrames and blank plots. |
+| **Imputation sensitivity check** | Low | Run rolling PCA twice (column-mean imputation vs. listwise deletion), report correlation. Validates that the imputation method doesn't materially affect drift results. |
+| **Variance-change detection test** | Trivial | Add a test that verifies the RBF kernel detects changes in variance (not just mean). Current tests only use step functions. This is the specific advantage of RBF over L1/L2. |
+| **Finer penalty grid** | Trivial | Replace 6-point grid with 25–50 points. Computational cost is negligible (PELT is O(n), n ≈ 30–50 weekly observations). Produces a smoother sensitivity plot. |
+| **Bai-Perron confidence intervals** | Medium | Formal confidence intervals on changepoint locations via R's `strucchange` or `mbreaks` (called via `rpy2`). The econometric gold standard. Would complement PELT's point estimates. Depends on R interop being established (W-NOMINATE would set this up). |
+
 ---
 
 ## Completed (Formerly Deferred)
@@ -167,10 +181,11 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | **Planned** — item #1 above |
 | 30 | DIME/CFscores External Validation | VAL | **Planned** — item #3 above |
 | 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — item #4 above |
+| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **Planned** — item #8 above |
 
-**Score: 24 completed, 7 rejected, 4 planned, 1 partial = 36 total**
+**Score: 24 completed, 7 rejected, 5 planned, 1 partial = 37 total**
 
-Note: Methods 29-36 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R).
+Note: Methods 29-37 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R; TSA Hardening from deep dive).
 
 ---
 
