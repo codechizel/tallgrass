@@ -32,7 +32,7 @@ uv run tallgrass 2024 --special        # special session (direct)
 
 Analysis recipes (all pass `*args` through to the underlying script):
 
-`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`.
+`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dynamic-irt`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
@@ -140,13 +140,13 @@ Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each co
 
 ## Analysis Pipeline
 
-Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054).
+Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058).
 
 See `.claude/rules/analysis-framework.md` for the full pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (57 decisions)
+- ADRs: `docs/adr/README.md` (58 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -172,6 +172,7 @@ Key references:
 - Scraper deep dive: `docs/scraper-deep-dive.md` (ecosystem comparison, code audit, data quality review, test gap analysis)
 - 2D IRT deep dive: `docs/2d-irt-deep-dive.md` (ecosystem survey, PLT identification, Tyson paradox resolution, pipeline phase 04b)
 - TSA deep dive: `docs/tsa-deep-dive.md` (literature survey, ecosystem comparison, code audit, 7 recommendations)
+- Dynamic ideal points: `docs/dynamic-ideal-points-deep-dive.md` (ecosystem survey, Martin-Quinn model, state-space IRT, decomposition)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (bb25, topic modeling, retrieval, open questions)
 - Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)

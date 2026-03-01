@@ -49,6 +49,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | 4-Chain Hierarchical IRT Experiment | 2026-02-26 | 4 chains resolve both ESS warnings (xi: 397→564, mu_party: 356→512) at +4% wall time. Discovered jitter mode-splitting: `jitter+adapt_diag` causes R-hat ~1.53 with 4 chains; fix is `adapt_diag` with PCA init. Run 3 unnecessary. Article: `docs/hierarchical-4-chain-experiment.md`. |
 | 4b | 2D Bayesian IRT (Pipeline, Experimental) | 2026-02-26 (experiment), 2026-02-28 (pipeline) | M2PL model with PLT identification to resolve Tyson paradox. Pipeline phase 04b: both chambers, nutpie sampling, RunContext/HTML report, relaxed convergence thresholds. Deep dive: `docs/2d-irt-deep-dive.md`, design: `analysis/design/irt_2d.md`, ADR-0046, ADR-0054. |
 | 15 | Time Series Analysis | 2026-02-28 | Rolling-window PCA ideological drift + PELT changepoint detection on weekly Rice. Per-chamber analysis, penalty sensitivity, veto override cross-reference. Uses `ruptures` library. Deep dive: `docs/tsa-deep-dive.md`, design: `analysis/design/tsa.md`, ADR-0057. |
+| 16 | Dynamic Ideal Points (Martin-Quinn) | 2026-02-28 | State-space IRT across 8 bienniums (84th-91st). Non-centered random walk with per-party evolution SD. PyMC + nutpie. Conversion vs. replacement polarization decomposition. Bridge coverage analysis. 58 tests. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`, design: `analysis/design/dynamic_irt.md`, ADR-0058. |
 
 ---
 
@@ -159,8 +160,8 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 09 | PCA | DIM | Completed (PCA) |
 | 10 | MCA / Correspondence Analysis | DIM | Completed (MCA, Phase 2c) |
 | 11 | UMAP / t-SNE | DIM | Completed (UMAP, Phase 2b) |
-| 12 | W-NOMINATE | DIM | **Planned** — item #2 above |
-| 13 | Optimal Classification | DIM | **Planned** — item #5 above |
+| 12 | W-NOMINATE | DIM | **Planned** — item #1 above |
+| 13 | Optimal Classification | DIM | **Planned** — item #4 above |
 | 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
 | 16 | Hierarchical Bayesian Model | BAY | Completed (Hierarchical IRT, Phase 8) |
@@ -175,13 +176,13 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 25 | SHAP Analysis | PRD | Completed (Prediction) |
 | 26 | Ideological Drift | TSA | Completed (TSA, Phase 15) |
 | 27 | Changepoint Detection | TSA | Completed (TSA, Phase 15) |
-| 28 | Latent Class Mixture Models | CLU | **Planned** — item #6 above |
-| 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | **Planned** — item #1 above |
-| 30 | DIME/CFscores External Validation | VAL | **Planned** — item #3 above |
-| 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — item #4 above |
-| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **Planned** — item #8 above |
+| 28 | Latent Class Mixture Models | CLU | **Planned** — item #5 above |
+| 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | Completed (Dynamic IRT, Phase 16) |
+| 30 | DIME/CFscores External Validation | VAL | **Planned** — item #2 above |
+| 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — item #3 above |
+| 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **Planned** — item #7 above |
 
-**Score: 24 completed, 7 rejected, 5 planned, 1 partial = 37 total**
+**Score: 25 completed, 7 rejected, 4 planned, 1 partial = 37 total**
 
 Note: Methods 29-37 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R; TSA Hardening from deep dive).
 

@@ -56,6 +56,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_synthesis_detect.py` — maverick, bridge-builder, metric paradox detection, annotation slugs, threshold constants, percentile modes (~33 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
 - `tests/test_tsa.py` — rolling PCA drift, sign alignment, party trajectories, early-vs-late, Rice timeseries, weekly aggregation, PELT changepoints, joint detection, penalty sensitivity, vote matrix, veto cross-reference (~51 tests)
+- `tests/test_dynamic_irt.py` — global roster, name dedup, cross-biennium stacking, bridge coverage, model structure, polarization decomposition, top movers, static correlation, report smoke tests (~50 tests)
 
 ## Manual Verification
 

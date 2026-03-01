@@ -35,6 +35,7 @@ Here's the full pipeline at a glance:
 13. **Profiles** — Deep-dive into the most interesting legislators.
 14. **Cross-Session Validation** — Check whether our findings hold up over time.
 15. **Time Series Analysis** — Track how legislators and parties change *during* a session.
+16. **Dynamic Ideal Points** — Track how legislators move across *multiple* sessions (years, not weeks).
 
 Let's walk through each one.
 
@@ -439,6 +440,29 @@ A session-level average can hide important dynamics. A legislator who votes mode
 
 ---
 
+## Step 16: Dynamic Ideal Points — The Long Arc
+
+### What it is
+
+Step 15 looked at change *within* a two-year session. This step looks at change *across* sessions — tracking every legislator who served in any of the eight bienniums from 2011 to 2026 on a single, coherent ideological scale.
+
+Rather than estimating each session's ideology scores separately and then trying to align them after the fact (which is what Steps 5 and 14 do), dynamic ideal points estimate everything at once. The model treats each legislator's ideology as a random walk: their position this session is their position last session plus some noise. Bridge legislators — those who served in consecutive sessions — are the glue that keeps the scale comparable across time.
+
+This is the Martin-Quinn model, originally developed for tracking Supreme Court justices. We're applying it to a state legislature, which (to our knowledge) hasn't been done before.
+
+### What we learn
+
+- **Who moved the most.** Not just who changed party or lost an election, but which sitting legislators genuinely shifted their voting patterns over their careers.
+- **Conversion vs. replacement.** When a party becomes more extreme, is it because individual members moved to the poles (conversion) or because moderate members were replaced by more extreme newcomers (replacement)? This decomposition is the key output that static analysis cannot provide.
+- **Evolution speed by party.** The model estimates a separate "evolution rate" (tau) for each party. A higher tau means that party's members are changing positions faster between sessions.
+- **Trajectory uncertainty.** For each legislator at each time point, we get not just a best estimate but a full posterior distribution — so we can say whether an apparent shift is statistically meaningful or just noise.
+
+### Why this matters
+
+The standard criticism of roll-call analysis is that it provides snapshots, not stories. A legislator's ideal point in 2023-24 tells you where they stood in that session, but not whether they got there by staying put or by moving from somewhere else. Dynamic ideal points turn snapshots into trajectories, answering the question every political observer actually cares about: who changed?
+
+---
+
 ## Wrapping Up: What the Numbers Can and Can't Tell You
 
 ### What they can tell you
@@ -468,3 +492,4 @@ These limitations aren't failures — they're the honest boundaries of what quan
 - **[MCA Deep Dive](mca-deep-dive.md)** — Theory survey, Python ecosystem evaluation, and integration design for Multiple Correspondence Analysis.
 - **[IRT Deep Dive](irt-deep-dive.md)** — Field survey of IRT implementations, code audit against best practices, and test gap analysis.
 - **[IRT Field Survey](irt-field-survey.md)** — The IRT identification problem, how the field solves it, our unconstrained β contribution, and why Python has no production IRT package for legislative analysis.
+- **[Dynamic Ideal Points Deep Dive](dynamic-ideal-points-deep-dive.md)** — Ecosystem survey of dynamic IRT methods, Martin-Quinn model theory, state-space parameterization, and Kansas-specific considerations.

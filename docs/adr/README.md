@@ -87,6 +87,7 @@ What are the trade-offs?
 | ADR | Title |
 |-----|-------|
 | [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints) |
+| [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn) |
 
 ### Validation
 
@@ -179,6 +180,7 @@ What are the trade-offs?
 | [0055](0055-reparameterized-beta-and-irt-linking.md) | Reparameterized LogNormal beta and IRT scale linking (Stocking-Lord, sign-aware anchors) | Accepted | 2026-02-28 |
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions (eliminate legacy mode orphan directories) | Accepted | 2026-02-28 |
 | [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints, language policy update) | Accepted | 2026-02-28 |
+| [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn, polarization decomposition) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

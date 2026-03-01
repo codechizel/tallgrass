@@ -115,6 +115,10 @@ external-validation *args:
 tsa *args:
     uv run python analysis/15_tsa/tsa.py {{args}}
 
+# Run dynamic ideal point estimation (state-space IRT)
+dynamic-irt *args:
+    uv run python analysis/16_dynamic_irt/dynamic_irt.py {{args}}
+
 # Run full analysis pipeline for a session (all phases grouped under one run ID)
 pipeline session="2025-26" *args:
     #!/usr/bin/env bash

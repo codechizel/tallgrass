@@ -36,6 +36,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 - `analysis/12_profiles/profiles_data.py` — Profile targets, scorecards, bill-type breakdown, defections
 - `analysis/13_cross_session/cross_session_data.py` — Legislator matching, IRT alignment, shift metrics, prediction transfer
 - `analysis/14_external_validation/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
+- `analysis/16_dynamic_irt/dynamic_irt_data.py` — Global roster, cross-biennium vote stacking, bridge coverage, emIRT interface
 
 ## Design Documents
 
@@ -52,7 +53,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `cross_session.md` — Affine IRT alignment, name matching, prediction transfer
 - `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
 - `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation. Deep dive: `docs/tsa-deep-dive.md`
-- `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage
+- `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`
 
 ## Key Data Structures
 

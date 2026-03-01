@@ -18,6 +18,7 @@ Pipeline phases (in order):
   13_cross_session — Cross-biennium validation
   14_external_validation — Shor-McCarty comparison
   15_tsa              — Time series analysis (drift + changepoints)
+  16_dynamic_irt      — Dynamic ideal points (state-space IRT)
 
 Shared infrastructure at root: run_context.py, report.py
 
@@ -74,6 +75,9 @@ _MODULE_MAP: dict[str, str] = {
     "external_validation_data": "14_external_validation",
     "tsa": "15_tsa",
     "tsa_report": "15_tsa",
+    "dynamic_irt": "16_dynamic_irt",
+    "dynamic_irt_data": "16_dynamic_irt",
+    "dynamic_irt_report": "16_dynamic_irt",
     "irt_beta_experiment": "experimental",
 }
 

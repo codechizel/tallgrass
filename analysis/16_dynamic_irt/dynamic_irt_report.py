@@ -1,0 +1,588 @@
+"""Dynamic IRT HTML report builder.
+
+Builds ~14 sections (tables, figures, and text) for the dynamic ideal point
+estimation report.  Each section is a small function that slices/aggregates
+polars DataFrames and calls make_gt() or FigureSection.from_file().
+
+Usage (called from dynamic_irt.py):
+    from analysis.dynamic_irt_report import build_dynamic_irt_report
+    build_dynamic_irt_report(ctx.report, results=..., plots_dir=...)
+"""
+
+from pathlib import Path
+
+try:
+    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
+
+try:
+    from analysis.dynamic_irt_data import MIN_BRIDGE_OVERLAP
+except ModuleNotFoundError:
+    from dynamic_irt_data import MIN_BRIDGE_OVERLAP  # type: ignore[no-redef]
+
+
+def build_dynamic_irt_report(
+    report: ReportBuilder,
+    *,
+    results: dict,
+    plots_dir: Path,
+    biennium_labels: list[str],
+) -> None:
+    """Build the full dynamic IRT HTML report by adding sections."""
+    chambers = results.get("chambers", [])
+    _add_overview(report, results, biennium_labels)
+
+    for chamber in sorted(chambers):
+        if chamber not in results:
+            continue
+        cr = results[chamber]
+
+        _add_bridge_coverage(report, cr, plots_dir, chamber)
+        _add_global_roster(report, cr, chamber)
+        _add_polarization_trend(report, plots_dir, chamber)
+        _add_trajectories(report, plots_dir, chamber)
+        _add_tau_posterior(report, cr, plots_dir, chamber)
+        _add_top_movers_table(report, cr, chamber)
+        _add_top_movers_bar(report, plots_dir, chamber)
+        _add_conversion_replacement_table(report, cr, chamber)
+        _add_conversion_replacement_plot(report, plots_dir, chamber)
+        _add_static_correlation(report, cr, plots_dir, chamber)
+
+        if cr.get("emirt_results") is not None:
+            _add_emirt_comparison(report, cr, chamber)
+
+        _add_convergence(report, cr, chamber)
+
+    _add_methodology(report)
+
+
+# ── Individual Sections ──────────────────────────────────────────────────────
+
+
+def _add_overview(
+    report: ReportBuilder,
+    results: dict,
+    biennium_labels: list[str],
+) -> None:
+    """Overview section with key statistics."""
+    chambers = results.get("chambers", [])
+    lines = [
+        "<h3>Dynamic Ideal Point Estimation</h3>",
+        f"<p><strong>Bienniums:</strong> {', '.join(biennium_labels)} "
+        f"({len(biennium_labels)} sessions)</p>",
+        "<table style='border-collapse: collapse; margin: 1em 0;'>",
+        "<tr><th style='padding: 4px 12px; text-align: left;'>Chamber</th>"
+        "<th style='padding: 4px 12px;'>Legislators</th>"
+        "<th style='padding: 4px 12px;'>Bills</th>"
+        "<th style='padding: 4px 12px;'>Observations</th>"
+        "<th style='padding: 4px 12px;'>Sampling Time</th></tr>",
+    ]
+
+    for chamber in sorted(chambers):
+        if chamber not in results:
+            continue
+        cr = results[chamber]
+        s = cr["stacked"]
+        t = cr["sampling_time"]
+        lines.append(
+            f"<tr><td style='padding: 4px 12px;'>{chamber.capitalize()}</td>"
+            f"<td style='padding: 4px 12px; text-align: right;'>{s['n_legislators']}</td>"
+            f"<td style='padding: 4px 12px; text-align: right;'>{s['n_bills']:,}</td>"
+            f"<td style='padding: 4px 12px; text-align: right;'>{s['n_obs']:,}</td>"
+            f"<td style='padding: 4px 12px; text-align: right;'>{t:.0f}s</td></tr>"
+        )
+
+    lines.append("</table>")
+
+    # Tau estimates
+    for chamber in sorted(chambers):
+        if chamber not in results:
+            continue
+        cr = results[chamber]
+        tau = cr.get("tau")
+        if tau is not None and tau.height > 0:
+            cap = chamber.capitalize()
+            lines.append(f"<p><strong>{cap} Evolution Variance (tau):</strong></p>")
+            lines.append("<ul>")
+            for row in tau.iter_rows(named=True):
+                lines.append(
+                    f"<li>{row['party']}: tau = {row['tau_mean']:.4f} "
+                    f"[{row['tau_hdi_2.5']:.4f}, {row['tau_hdi_97.5']:.4f}]</li>"
+                )
+            lines.append("</ul>")
+
+    report.add(TextSection(id="overview", title="Overview", html="\n".join(lines)))
+
+
+def _add_bridge_coverage(
+    report: ReportBuilder,
+    cr: dict,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Bridge coverage heatmap and adjacent bridge table."""
+    chamber_cap = chamber.capitalize()
+
+    # Heatmap
+    heatmap_path = plots_dir / f"bridge_coverage_{chamber}.png"
+    if heatmap_path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"bridge-heatmap-{chamber}",
+                f"{chamber_cap} — Bridge Coverage Heatmap",
+                heatmap_path,
+                caption=(
+                    "Number of legislators serving in both bienniums. The Markov chain "
+                    "of bridges requires sufficient overlap between consecutive periods."
+                ),
+            )
+        )
+
+    # Adjacent bridges table
+    bridge_adj = cr.get("bridge_adj")
+    if bridge_adj is not None and bridge_adj.height > 0:
+        display = bridge_adj.select(
+            "pair", "shared_count", "total_a", "total_b", "overlap_pct", "sufficient"
+        )
+        report.add(
+            TableSection(
+                id=f"bridge-adjacent-{chamber}",
+                title=f"{chamber_cap} — Adjacent Bridge Coverage",
+                html=make_gt(
+                    display,
+                    title=f"{chamber_cap} Bridge Coverage",
+                    subtitle=f"Minimum shared legislators for valid bridge: {MIN_BRIDGE_OVERLAP}",
+                    column_labels={
+                        "pair": "Transition",
+                        "shared_count": "Shared",
+                        "total_a": "Period A",
+                        "total_b": "Period B",
+                        "overlap_pct": "Overlap %",
+                        "sufficient": "Sufficient",
+                    },
+                    number_formats={"overlap_pct": ".1f"},
+                ),
+            )
+        )
+
+
+def _add_global_roster(
+    report: ReportBuilder,
+    cr: dict,
+    chamber: str,
+) -> None:
+    """Global roster table sorted by periods served."""
+    chamber_cap = chamber.capitalize()
+    roster = cr.get("roster")
+    if roster is None or roster.height == 0:
+        return
+
+    display = roster.select(
+        "full_name", "parties", "first_period", "last_period", "n_periods"
+    ).sort("n_periods", descending=True)
+
+    report.add(
+        TableSection(
+            id=f"roster-{chamber}",
+            title=f"{chamber_cap} — Global Legislator Roster",
+            html=make_gt(
+                display,
+                title=f"{chamber_cap} Legislators Across Bienniums",
+                subtitle=f"{roster.height} unique legislators",
+                column_labels={
+                    "full_name": "Name",
+                    "parties": "Party",
+                    "first_period": "First",
+                    "last_period": "Last",
+                    "n_periods": "Bienniums",
+                },
+            ),
+            caption="Sorted by number of bienniums served.",
+        )
+    )
+
+
+def _add_polarization_trend(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Polarization trend figure."""
+    chamber_cap = chamber.capitalize()
+    path = plots_dir / f"polarization_trend_{chamber}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"polarization-{chamber}",
+                f"{chamber_cap} — Polarization Trend",
+                path,
+                caption=(
+                    "Party mean ideal points across bienniums with 95% bands. "
+                    "Increasing distance between party means indicates growing polarization."
+                ),
+            )
+        )
+
+
+def _add_trajectories(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Individual trajectories spaghetti plot."""
+    chamber_cap = chamber.capitalize()
+    path = plots_dir / f"trajectories_{chamber}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"trajectories-{chamber}",
+                f"{chamber_cap} — Individual Ideal Point Trajectories",
+                path,
+                caption=(
+                    "Spaghetti plot of individual trajectories. Top movers by total "
+                    "ideological shift are highlighted with labels."
+                ),
+            )
+        )
+
+
+def _add_tau_posterior(
+    report: ReportBuilder,
+    cr: dict,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Evolution variance tau posterior."""
+    chamber_cap = chamber.capitalize()
+
+    # Table
+    tau = cr.get("tau")
+    if tau is not None and tau.height > 0:
+        report.add(
+            TableSection(
+                id=f"tau-table-{chamber}",
+                title=f"{chamber_cap} — Evolution Variance (tau) Posterior",
+                html=make_gt(
+                    tau,
+                    title=f"{chamber_cap} tau Posterior",
+                    column_labels={
+                        "party": "Party",
+                        "tau_mean": "Mean",
+                        "tau_sd": "SD",
+                        "tau_hdi_2.5": "HDI 2.5%",
+                        "tau_hdi_97.5": "HDI 97.5%",
+                    },
+                    number_formats={
+                        "tau_mean": ".4f",
+                        "tau_sd": ".4f",
+                        "tau_hdi_2.5": ".4f",
+                        "tau_hdi_97.5": ".4f",
+                    },
+                ),
+            )
+        )
+
+    # Figure
+    path = plots_dir / f"tau_posterior_{chamber}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"tau-kde-{chamber}",
+                f"{chamber_cap} — tau Posterior Distribution",
+                path,
+                caption="Larger tau indicates more ideological movement between bienniums.",
+            )
+        )
+
+
+def _add_top_movers_table(
+    report: ReportBuilder,
+    cr: dict,
+    chamber: str,
+) -> None:
+    """Top movers table."""
+    chamber_cap = chamber.capitalize()
+    top_movers = cr.get("top_movers")
+    if top_movers is None or top_movers.height == 0:
+        return
+
+    display = top_movers.select(
+        "full_name",
+        "party",
+        "n_periods",
+        "first_period",
+        "last_period",
+        "total_movement",
+        "net_movement",
+        "direction",
+    )
+
+    report.add(
+        TableSection(
+            id=f"movers-table-{chamber}",
+            title=f"{chamber_cap} — Top {display.height} Movers",
+            html=make_gt(
+                display,
+                title=f"{chamber_cap} Top Movers by Total Ideological Shift",
+                column_labels={
+                    "full_name": "Name",
+                    "party": "Party",
+                    "n_periods": "Bienniums",
+                    "first_period": "First",
+                    "last_period": "Last",
+                    "total_movement": "Total",
+                    "net_movement": "Net",
+                    "direction": "Direction",
+                },
+                number_formats={
+                    "total_movement": ".3f",
+                    "net_movement": ".3f",
+                },
+            ),
+        )
+    )
+
+
+def _add_top_movers_bar(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Top movers bar chart."""
+    chamber_cap = chamber.capitalize()
+    path = plots_dir / f"top_movers_bar_{chamber}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"movers-bar-{chamber}",
+                f"{chamber_cap} — Top Movers Net Shift",
+                path,
+                caption="Red = rightward shift, blue = leftward shift.",
+            )
+        )
+
+
+def _add_conversion_replacement_table(
+    report: ReportBuilder,
+    cr: dict,
+    chamber: str,
+) -> None:
+    """Conversion vs replacement decomposition table."""
+    chamber_cap = chamber.capitalize()
+    decomposition = cr.get("decomposition")
+    if decomposition is None or decomposition.height == 0:
+        return
+
+    report.add(
+        TableSection(
+            id=f"decomp-table-{chamber}",
+            title=f"{chamber_cap} — Conversion vs. Replacement",
+            html=make_gt(
+                decomposition,
+                title=f"{chamber_cap} Polarization Decomposition",
+                subtitle="Total shift = conversion (returning members' movement) + replacement "
+                "(new vs departing)",
+                column_labels={
+                    "pair": "Transition",
+                    "party": "Party",
+                    "total_shift": "Total",
+                    "conversion": "Conversion",
+                    "replacement": "Replacement",
+                    "n_returning": "Returning",
+                    "n_departing": "Departing",
+                    "n_new": "New",
+                },
+                number_formats={
+                    "total_shift": ".4f",
+                    "conversion": ".4f",
+                    "replacement": ".4f",
+                },
+            ),
+        )
+    )
+
+
+def _add_conversion_replacement_plot(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Conversion vs replacement stacked bar chart."""
+    chamber_cap = chamber.capitalize()
+    path = plots_dir / f"conversion_replacement_{chamber}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"decomp-plot-{chamber}",
+                f"{chamber_cap} — Conversion vs. Replacement",
+                path,
+                caption=(
+                    "Stacked bars: conversion = shift in returning members' positions, "
+                    "replacement = effect of turnover (new members replacing departing)."
+                ),
+            )
+        )
+
+
+def _add_static_correlation(
+    report: ReportBuilder,
+    cr: dict,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Static IRT correlation table and figure."""
+    chamber_cap = chamber.capitalize()
+    correlation = cr.get("correlation")
+    if correlation is None or correlation.height == 0:
+        return
+
+    report.add(
+        TableSection(
+            id=f"static-corr-{chamber}",
+            title=f"{chamber_cap} — Dynamic vs. Static IRT Correlation",
+            html=make_gt(
+                correlation,
+                title=f"{chamber_cap} Correlation with Per-Biennium Static IRT",
+                column_labels={
+                    "biennium": "Biennium",
+                    "n_matched": "N Matched",
+                    "pearson_r": "Pearson r",
+                    "spearman_rho": "Spearman ρ",
+                },
+                number_formats={
+                    "pearson_r": ".3f",
+                    "spearman_rho": ".3f",
+                },
+            ),
+        )
+    )
+
+    path = plots_dir / f"static_correlation_{chamber}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"static-corr-fig-{chamber}",
+                f"{chamber_cap} — Static IRT Correlation",
+                path,
+                caption="Per-biennium correlation between dynamic and static IRT ideal points.",
+            )
+        )
+
+
+def _add_emirt_comparison(
+    report: ReportBuilder,
+    cr: dict,
+    chamber: str,
+) -> None:
+    """emIRT vs PyMC comparison (conditional section)."""
+    chamber_cap = chamber.capitalize()
+    emirt = cr.get("emirt_results")
+    if emirt is None or emirt.height == 0:
+        return
+
+    report.add(
+        TextSection(
+            id=f"emirt-{chamber}",
+            title=f"{chamber_cap} — emIRT Comparison",
+            html=(
+                f"<p>emIRT::dynIRT results available for {chamber_cap}. "
+                "See scatter plot in output directory for visual comparison "
+                "with PyMC estimates.</p>"
+            ),
+        )
+    )
+
+
+def _add_convergence(
+    report: ReportBuilder,
+    cr: dict,
+    chamber: str,
+) -> None:
+    """Convergence diagnostics summary."""
+    chamber_cap = chamber.capitalize()
+    conv = cr.get("convergence")
+    if conv is None:
+        return
+
+    passed_str = "PASSED" if conv["passed"] else "FAILED"
+    color = "green" if conv["passed"] else "red"
+
+    lines = [
+        f"<h3 style='color: {color};'>Convergence: {passed_str}</h3>",
+        "<table style='border-collapse: collapse; margin: 1em 0;'>",
+        f"<tr><td style='padding: 4px 12px;'>R-hat max</td>"
+        f"<td style='padding: 4px 12px; text-align: right;'>{conv['rhat_max']:.4f}</td>"
+        f"<td style='padding: 4px 12px;'>(threshold: {conv['rhat_threshold']})</td></tr>",
+        f"<tr><td style='padding: 4px 12px;'>ESS bulk min</td>"
+        f"<td style='padding: 4px 12px; text-align: right;'>{conv['ess_bulk_min']:.0f}</td>"
+        f"<td style='padding: 4px 12px;'>(threshold: {conv['ess_threshold']})</td></tr>",
+        f"<tr><td style='padding: 4px 12px;'>ESS tail min</td>"
+        f"<td style='padding: 4px 12px; text-align: right;'>{conv['ess_tail_min']:.0f}</td>"
+        f"<td style='padding: 4px 12px;'></td></tr>",
+        f"<tr><td style='padding: 4px 12px;'>Divergences</td>"
+        f"<td style='padding: 4px 12px; text-align: right;'>{conv['n_divergences']}</td>"
+        f"<td style='padding: 4px 12px;'>(max: {MAX_DIVERGENCES})</td></tr>",
+        f"<tr><td style='padding: 4px 12px;'>Total params</td>"
+        f"<td style='padding: 4px 12px; text-align: right;'>{conv['n_params']:,}</td>"
+        f"<td style='padding: 4px 12px;'></td></tr>",
+        "</table>",
+    ]
+
+    report.add(
+        TextSection(
+            id=f"convergence-{chamber}",
+            title=f"{chamber_cap} — Convergence Summary",
+            html="\n".join(lines),
+        )
+    )
+
+
+def _add_methodology(report: ReportBuilder) -> None:
+    """Methodology section describing the model."""
+    html = """
+    <h3>Model Specification</h3>
+    <p>Martin-Quinn style state-space 2PL IRT with non-centered random walk:</p>
+    <pre>
+tau ~ HalfNormal(0.5, dims="party")          # per-party evolution SD
+xi_init ~ Normal(0, 1, dims="legislator")    # initial ideal points
+xi_innovations ~ Normal(0, 1)                # non-centered innovations
+xi[0] = xi_init
+xi[t] = xi[t-1] + tau[party] * innovation    # random walk
+alpha ~ Normal(0, 5, dims="bill")            # bill difficulty
+beta ~ HalfNormal(2.5, dims="bill")          # bill discrimination (positive)
+obs ~ Bernoulli(logit(beta * xi - alpha))
+    </pre>
+
+    <h3>Identification</h3>
+    <p>Positive beta (HalfNormal prior) provides sign identification without anchor
+    constraints. Cross-period scale linking is achieved through bridge legislators
+    (those serving multiple bienniums), which anchor the random walk across time.</p>
+
+    <h3>Decomposition</h3>
+    <p>For each adjacent biennium pair, per party:</p>
+    <ul>
+        <li><strong>Total shift</strong> = change in party mean ideal point</li>
+        <li><strong>Conversion</strong> = movement of returning members</li>
+        <li><strong>Replacement</strong> = effect of new members replacing departing ones</li>
+        <li>Total ≈ conversion + replacement</li>
+    </ul>
+
+    <h3>Sampler</h3>
+    <p>nutpie (Rust NUTS sampler) with PCA-informed initialization for xi_init.
+    Non-centered parameterization prevents funnel geometry in the random walk.</p>
+    """
+    report.add(TextSection(id="methodology", title="Methodology", html=html))
+
+
+# Import MAX_DIVERGENCES from the main module for the convergence section
+try:
+    from analysis.dynamic_irt import MAX_DIVERGENCES
+except (ModuleNotFoundError, ImportError):
+    MAX_DIVERGENCES = 50  # type: ignore[assignment]
