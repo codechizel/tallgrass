@@ -50,7 +50,7 @@ Updated the project's technology preference from "Python-only, no rpy2" to "Pyth
 - Temporal dynamics are now visible — the pipeline can detect legislators who changed position and moments of cohesion breakdown.
 - Veto override cross-referencing provides automatic contextual annotation for detected changepoints.
 - Rolling PCA's speed (seconds, not hours) makes it practical for iterative exploration and sensitivity analysis.
-- 51 tests cover all core functions with synthetic data.
+- 64 tests cover all core functions with synthetic data.
 
 **Negative:**
 - PCA captures only the dominant dimension; issue-space changes across windows can shift what PC1 means. Sign convention (Republicans = positive) is enforced per window to maintain consistency.
@@ -58,10 +58,10 @@ Updated the project's technology preference from "Python-only, no rpy2" to "Pyth
 - Weekly aggregation smooths over within-week variation. Alternative windows (3-day, 10-day) could be explored.
 
 **Files created:**
-- `analysis/15_tsa/tsa.py` — Main script (~1200 lines)
+- `analysis/15_tsa/tsa.py` — Main script (~1464 lines)
 - `analysis/15_tsa/tsa_report.py` — HTML report builder
 - `analysis/design/tsa.md` — Design document
-- `tests/test_tsa.py` — 51 tests
+- `tests/test_tsa.py` — 64 tests
 
 **Files modified:**
 - `pyproject.toml` — Added `ruptures>=1.1`, ty config for unresolved imports

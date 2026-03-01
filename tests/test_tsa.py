@@ -21,8 +21,10 @@ from analysis.tsa import (
     build_rice_timeseries,
     build_vote_matrix,
     compute_early_vs_late,
+    compute_imputation_sensitivity,
     compute_party_trajectories,
     cross_reference_veto_overrides,
+    desposato_corrected_rice,
     detect_changepoints_joint,
     detect_changepoints_pelt,
     find_top_movers,
@@ -692,7 +694,7 @@ class TestBuildRiceTimeseries:
     """Tests for build_rice_timeseries()."""
 
     def test_rice_formula(self):
-        """Rice = |Yea - Nay| / (Yea + Nay)."""
+        """Rice = |Yea - Nay| / (Yea + Nay) (raw, without Desposato correction)."""
         votes = pl.DataFrame(
             {
                 "legislator_slug": ["rep_r001", "rep_r002", "rep_r003", "rep_r004"],
@@ -716,13 +718,15 @@ class TestBuildRiceTimeseries:
             }
         )
 
-        result = build_rice_timeseries(votes, rollcalls, legislators, "House")
+        result = build_rice_timeseries(
+            votes, rollcalls, legislators, "House", correct_size_bias=False
+        )
         rice = result.filter(pl.col("party") == "Republican")["rice"][0]
         # 3 Yea, 1 Nay: |3-1|/(3+1) = 0.5
         assert rice == pytest.approx(0.5)
 
     def test_unanimous_rice_one(self):
-        """Unanimous vote has Rice = 1.0."""
+        """Unanimous vote has Rice = 1.0 (raw, without Desposato correction)."""
         votes = pl.DataFrame(
             {
                 "legislator_slug": [f"rep_r{i:03d}" for i in range(5)],
@@ -745,12 +749,14 @@ class TestBuildRiceTimeseries:
             }
         )
 
-        result = build_rice_timeseries(votes, rollcalls, legislators, "House")
+        result = build_rice_timeseries(
+            votes, rollcalls, legislators, "House", correct_size_bias=False
+        )
         rice = result.filter(pl.col("party") == "Republican")["rice"][0]
         assert rice == pytest.approx(1.0)
 
     def test_perfect_split_rice_zero(self):
-        """50-50 split has Rice = 0.0."""
+        """50-50 split has Rice = 0.0 (raw, without Desposato correction)."""
         votes = pl.DataFrame(
             {
                 "legislator_slug": [f"rep_r{i:03d}" for i in range(4)],
@@ -773,9 +779,54 @@ class TestBuildRiceTimeseries:
             }
         )
 
-        result = build_rice_timeseries(votes, rollcalls, legislators, "House")
+        result = build_rice_timeseries(
+            votes, rollcalls, legislators, "House", correct_size_bias=False
+        )
         rice = result.filter(pl.col("party") == "Republican")["rice"][0]
         assert rice == pytest.approx(0.0)
+
+    def test_desposato_correction_reduces_small_group(self):
+        """Desposato correction reduces Rice for small groups more than large."""
+        # Small group: 5 members, 4 Yea / 1 Nay → raw Rice = 0.6
+        # Large group: 50 members, 40 Yea / 10 Nay → raw Rice = 0.6
+        # Correction should be larger for small group
+        small_correction = desposato_corrected_rice(4, 1, group_size=5)
+        large_correction = desposato_corrected_rice(40, 10, group_size=50)
+        assert small_correction < large_correction
+
+    def test_desposato_default_has_correction(self):
+        """Default build_rice_timeseries() applies Desposato correction."""
+        votes = pl.DataFrame(
+            {
+                "legislator_slug": [f"rep_r{i:03d}" for i in range(4)],
+                "vote_id": ["v1"] * 4,
+                "vote_category": ["Yea", "Yea", "Yea", "Nay"],
+                "party": ["Republican"] * 4,
+            }
+        )
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["v1"],
+                "vote_date": ["2025-01-15"],
+                "vote_datetime": ["2025-01-15T12:00:00"],
+            }
+        )
+        legislators = pl.DataFrame(
+            {
+                "legislator_slug": [f"rep_r{i:03d}" for i in range(4)],
+                "party": ["Republican"] * 4,
+                "full_name": ["A", "B", "C", "D"],
+            }
+        )
+        # Default has correction on
+        result_corrected = build_rice_timeseries(votes, rollcalls, legislators, "House")
+        result_raw = build_rice_timeseries(
+            votes, rollcalls, legislators, "House", correct_size_bias=False
+        )
+        rice_corrected = result_corrected.filter(pl.col("party") == "Republican")["rice"][0]
+        rice_raw = result_raw.filter(pl.col("party") == "Republican")["rice"][0]
+        # Corrected should be <= raw
+        assert rice_corrected <= rice_raw
 
     def test_chronological_ordering(self):
         """Output is sorted chronologically."""
@@ -1113,3 +1164,156 @@ class TestCrossReferenceVetoOverrides:
         )
         result = cross_reference_veto_overrides([], rollcalls)
         assert result.height == 0
+
+
+# ── TestDesposatoCorrectedRice ──────────────────────────────────────────────
+
+
+class TestDesposatoCorrectedRice:
+    """Tests for desposato_corrected_rice()."""
+
+    def test_perfect_cohesion(self):
+        """Perfect cohesion (all Yea) still has high corrected Rice."""
+        result = desposato_corrected_rice(50, 0, group_size=50)
+        # Raw = 1.0, expected random Rice for 50 is ~0.11 → corrected ≈ 0.89
+        assert result > 0.85
+
+    def test_random_voting_near_zero(self):
+        """Near 50-50 split in a small group → corrected Rice near zero."""
+        # 3 Yea, 2 Nay in group of 5 → raw Rice = 0.2
+        # Expected Rice under random for 5 members is ~0.36
+        # So corrected = max(0, 0.2 - 0.36) = 0.0
+        result = desposato_corrected_rice(3, 2, group_size=5)
+        assert result == pytest.approx(0.0)
+
+    def test_small_larger_correction(self):
+        """Smaller groups get larger corrections."""
+        # Same raw Rice proportion
+        small = desposato_corrected_rice(4, 1, group_size=5)
+        large = desposato_corrected_rice(40, 10, group_size=50)
+        assert small < large
+
+    def test_zero_votes(self):
+        """Zero total votes returns 0.0."""
+        result = desposato_corrected_rice(0, 0, group_size=10)
+        assert result == 0.0
+
+    def test_deterministic_seed(self):
+        """Results are deterministic (same seed)."""
+        r1 = desposato_corrected_rice(30, 10, group_size=40)
+        r2 = desposato_corrected_rice(30, 10, group_size=40)
+        assert r1 == r2
+
+    def test_floor_at_zero(self):
+        """Correction never produces negative Rice."""
+        # Very small group with near-random split
+        result = desposato_corrected_rice(3, 2, group_size=5)
+        assert result >= 0.0
+
+
+# ── TestShortSessionWarnings ────────────────────────────────────────────────
+
+
+class TestShortSessionWarnings:
+    """Tests for short-session validation warnings."""
+
+    def test_rolling_pca_warns_short(self):
+        """rolling_window_pca warns when n_votes < window_size."""
+        n_legs, n_votes = 30, 20
+        rng = np.random.default_rng(42)
+        matrix = rng.binomial(1, 0.5, (n_legs, n_votes)).astype(float)
+        slugs = [f"rep_r{i:03d}" for i in range(n_legs)]
+        vote_ids = [f"v{i}" for i in range(n_votes)]
+        datetimes = ["2025-01-01"] * n_votes
+
+        with pytest.warns(UserWarning, match="Too few roll calls"):
+            rolling_window_pca(
+                matrix,
+                slugs,
+                vote_ids,
+                datetimes,
+                window_size=WINDOW_SIZE,
+                step_size=15,
+            )
+
+    def test_early_vs_late_warns_short(self):
+        """compute_early_vs_late warns when n_votes < 2 * MIN_WINDOW_VOTES."""
+        n_legs = 30
+        n_votes = 8  # < 2 * MIN_WINDOW_VOTES (20)
+        rng = np.random.default_rng(42)
+        matrix = rng.binomial(1, 0.5, (n_legs, n_votes)).astype(float)
+        slugs = [f"rep_r{i:03d}" for i in range(n_legs)]
+        vote_ids = [f"v{i}" for i in range(n_votes)]
+        meta = _make_legislators(n_rep=30, n_dem=0)
+
+        with pytest.warns(UserWarning, match="Too few roll calls"):
+            compute_early_vs_late(matrix, slugs, vote_ids, meta)
+
+
+# ── TestImputationSensitivity ───────────────────────────────────────────────
+
+
+class TestImputationSensitivity:
+    """Tests for compute_imputation_sensitivity()."""
+
+    def test_returns_correlation(self):
+        """Returns a valid correlation with sufficient data."""
+        n_rep, n_dem = 40, 20
+        n_votes = 100
+        rng = np.random.default_rng(42)
+        matrix = np.zeros((n_rep + n_dem, n_votes))
+        matrix[:n_rep, :] = rng.binomial(1, 0.9, (n_rep, n_votes)).astype(float)
+        matrix[n_rep:, :] = rng.binomial(1, 0.1, (n_dem, n_votes)).astype(float)
+        # Sprinkle NaN in only 10 legislators (leaving 50 complete for listwise)
+        for i in range(10):
+            col = rng.integers(0, n_votes)
+            matrix[i, col] = np.nan
+
+        slugs = [f"rep_r{i:03d}" for i in range(n_rep)] + [f"rep_d{i:03d}" for i in range(n_dem)]
+        vote_ids = [f"v{i}" for i in range(n_votes)]
+        meta = _make_legislators(n_rep=n_rep, n_dem=n_dem)
+
+        result = compute_imputation_sensitivity(matrix, slugs, vote_ids, meta)
+        assert result is not None
+        assert -1.0 <= result <= 1.0
+        # With sparse NaN, both methods should agree well
+        assert result > 0.8
+
+    def test_returns_none_all_nan_column(self):
+        """Returns None if too many NaN prevent listwise deletion."""
+        n_legs, n_votes = 30, 100
+        rng = np.random.default_rng(42)
+        matrix = rng.binomial(1, 0.5, (n_legs, n_votes)).astype(float)
+        # Make every legislator have at least one NaN
+        for i in range(n_legs):
+            matrix[i, rng.integers(0, n_votes)] = np.nan
+        slugs = [f"rep_r{i:03d}" for i in range(n_legs)]
+        vote_ids = [f"v{i}" for i in range(n_votes)]
+        meta = _make_legislators(n_rep=30, n_dem=0)
+
+        result = compute_imputation_sensitivity(matrix, slugs, vote_ids, meta)
+        # With every legislator having NaN, listwise drops below MIN_WINDOW_LEGISLATORS
+        assert result is None
+
+
+# ── TestVarianceChangeDetection ─────────────────────────────────────────────
+
+
+class TestVarianceChangeDetection:
+    """Tests validating RBF kernel detects variance changes."""
+
+    def test_detects_variance_change(self):
+        """RBF kernel detects a change in variance with constant mean."""
+        rng = np.random.default_rng(42)
+        # Same mean (0.7), but variance jumps at t=30
+        signal = np.concatenate(
+            [
+                rng.normal(0.7, 0.02, 30),  # Low variance
+                rng.normal(0.7, 0.15, 30),  # High variance
+            ]
+        )
+        cps = detect_changepoints_pelt(signal, penalty=3.0, min_size=3)
+        interior_cps = [c for c in cps if c < len(signal)]
+        # Should detect at least one changepoint near the variance shift
+        assert len(interior_cps) >= 1
+        assert any(20 <= c <= 40 for c in interior_cps)

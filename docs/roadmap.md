@@ -81,17 +81,17 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 
 ### 7. TSA Hardening (Phase 15 Gaps)
 
-**Priority:** Low-Medium — seven improvements identified in the TSA deep dive (`docs/tsa-deep-dive.md`). All are refinements to a working phase, not missing functionality.
+**Priority:** Low-Medium — seven improvements identified in the TSA deep dive. **Five resolved** (2026-02-28), two remain.
 
-| Gap | Effort | Impact |
-|-----|--------|--------|
-| **Desposato small-group correction** | ~20 lines | Eliminates systematic Rice inflation for Senate Democrats (~8 members vs ~32 Republicans). The bias is ~0.03–0.08 depending on true cohesion. Standard correction in the literature (Desposato 2005, *BJPS*). |
-| **CROPS penalty selection** | Low | Replaces ad-hoc 6-penalty grid with exact solution path across a continuous penalty range. `ruptures` doesn't expose CROPS natively, but a finer grid (25–50 penalties via `np.linspace`) is trivially better than the current `[3, 5, 10, 15, 25, 50]`. |
-| **Short-session validation** | Trivial | Add `warnings.warn()` when a chamber has too few roll calls for any PCA window, early/late comparison, or PELT detection. Currently fails silently with empty DataFrames and blank plots. |
-| **Imputation sensitivity check** | Low | Run rolling PCA twice (column-mean imputation vs. listwise deletion), report correlation. Validates that the imputation method doesn't materially affect drift results. |
-| **Variance-change detection test** | Trivial | Add a test that verifies the RBF kernel detects changes in variance (not just mean). Current tests only use step functions. This is the specific advantage of RBF over L1/L2. |
-| **Finer penalty grid** | Trivial | Replace 6-point grid with 25–50 points. Computational cost is negligible (PELT is O(n), n ≈ 30–50 weekly observations). Produces a smoother sensitivity plot. |
-| **Bai-Perron confidence intervals** | Medium | Formal confidence intervals on changepoint locations via R's `strucchange` or `mbreaks` (called via `rpy2`). The econometric gold standard. Would complement PELT's point estimates. Depends on R interop being established (W-NOMINATE would set this up). |
+| Gap | Status | Notes |
+|-----|--------|-------|
+| **Desposato small-group correction** | **Done** | `desposato_corrected_rice()` + `correct_size_bias=True` default. 6 new tests. |
+| **Finer penalty grid** | **Done** | `np.linspace(1, 50, 25)` replaces 6-point grid. |
+| **Short-session validation** | **Done** | `warnings.warn()` in 3 locations. 2 new tests. |
+| **Imputation sensitivity check** | **Done** | `compute_imputation_sensitivity()` integrated into `main()`. 2 new tests. |
+| **Variance-change detection test** | **Done** | `TestVarianceChangeDetection::test_detects_variance_change`. |
+| **CROPS penalty selection** | Open | Approximated by 25-point grid. True CROPS needs `ruptures` extension. |
+| **Bai-Perron confidence intervals** | Deferred | Blocked on rpy2 infrastructure (W-NOMINATE). |
 
 Full analysis with literature references, ecosystem comparison, and code audit: [`docs/tsa-deep-dive.md`](tsa-deep-dive.md). Design doc: [`analysis/design/tsa.md`](../analysis/design/tsa.md). ADR-0057.
 

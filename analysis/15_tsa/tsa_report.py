@@ -63,7 +63,7 @@ def build_tsa_report(
 
         _add_veto_crossref_table(report, results)
 
-    _add_analysis_parameters(report, penalty)
+    _add_analysis_parameters(report, penalty, results=results)
 
     print(f"  Report: {len(report._sections)} sections added")
 
@@ -467,45 +467,63 @@ def _add_veto_crossref_table(
     )
 
 
-def _add_analysis_parameters(report: ReportBuilder, penalty: float) -> None:
+def _add_analysis_parameters(
+    report: ReportBuilder,
+    penalty: float,
+    results: dict[str, dict] | None = None,
+) -> None:
     """Table: All constants and settings used in this run."""
-    df = pl.DataFrame(
-        {
-            "Parameter": [
-                "Window Size",
-                "Step Size",
-                "Min Window Votes",
-                "Min Window Legislators",
-                "PELT Penalty",
-                "PELT Min Size",
-                "Weekly Aggregation",
-                "Top Movers N",
-                "Min Total Votes",
-            ],
-            "Value": [
-                f"{WINDOW_SIZE} roll calls",
-                f"{STEP_SIZE} roll calls (75% overlap)",
-                str(MIN_WINDOW_VOTES),
-                str(MIN_WINDOW_LEGISLATORS),
-                str(penalty),
-                str(PELT_MIN_SIZE),
-                f"{WEEKLY_AGG_DAYS} days",
-                str(TOP_MOVERS_N),
-                str(MIN_TOTAL_VOTES),
-            ],
-            "Description": [
-                "Number of consecutive roll calls per PCA window",
-                "Offset between consecutive windows",
-                "Minimum votes per legislator to include in a window",
-                "Minimum cross-section size for a valid window",
-                "PELT penalty: higher = fewer changepoints",
-                "Minimum segment size between changepoints",
-                "Rice Index aggregation window",
-                "Number of biggest drifters highlighted",
-                "Session-wide minimum votes for inclusion",
-            ],
-        }
-    )
+    params = [
+        "Window Size",
+        "Step Size",
+        "Min Window Votes",
+        "Min Window Legislators",
+        "PELT Penalty",
+        "PELT Min Size",
+        "Weekly Aggregation",
+        "Top Movers N",
+        "Min Total Votes",
+        "Desposato Correction",
+    ]
+    values = [
+        f"{WINDOW_SIZE} roll calls",
+        f"{STEP_SIZE} roll calls (75% overlap)",
+        str(MIN_WINDOW_VOTES),
+        str(MIN_WINDOW_LEGISLATORS),
+        str(penalty),
+        str(PELT_MIN_SIZE),
+        f"{WEEKLY_AGG_DAYS} days",
+        str(TOP_MOVERS_N),
+        str(MIN_TOTAL_VOTES),
+        "Enabled (Desposato 2005)",
+    ]
+    descs = [
+        "Number of consecutive roll calls per PCA window",
+        "Offset between consecutive windows",
+        "Minimum votes per legislator to include in a window",
+        "Minimum cross-section size for a valid window",
+        "PELT penalty: higher = fewer changepoints",
+        "Minimum segment size between changepoints",
+        "Rice Index aggregation window",
+        "Number of biggest drifters highlighted",
+        "Session-wide minimum votes for inclusion",
+        "Small-group Rice bias correction via Monte Carlo simulation",
+    ]
+
+    # Add imputation sensitivity if available
+    if results:
+        imp_corrs = []
+        for result in results.values():
+            ic = result.get("imputation_correlation")
+            if ic is not None:
+                imp_corrs.append(ic)
+        if imp_corrs:
+            mean_corr = sum(imp_corrs) / len(imp_corrs)
+            params.append("Imputation Sensitivity")
+            values.append(f"r = {mean_corr:.3f}")
+            descs.append("Correlation between column-mean and listwise deletion drift scores")
+
+    df = pl.DataFrame({"Parameter": params, "Value": values, "Description": descs})
     html = make_gt(
         df,
         title="Analysis Parameters",

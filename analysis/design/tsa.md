@@ -26,7 +26,7 @@
 | `PELT_PENALTY_DEFAULT` | 10.0 | Moderate penalty. Sensitivity analysis explores [3, 50]. |
 | `PELT_MIN_SIZE` | 5 | Minimum 5 weeks per segment. Prevents overfitting to noise. |
 | `WEEKLY_AGG_DAYS` | 7 | Standard calendar week. |
-| `SENSITIVITY_PENALTIES` | [3,5,10,15,25,50] | Spans under-penalized to over-penalized. Elbow plot identifies robust changepoints. |
+| `SENSITIVITY_PENALTIES` | `np.linspace(1, 50, 25)` | 25 evenly-spaced penalties from 1 to 50. Smoother elbow plot than previous 6-point grid. |
 | `TOP_MOVERS_N` | 10 | Top 10 drifters highlighted per chamber. |
 | `MIN_TOTAL_VOTES` | 20 | Session-wide minimum for inclusion (matches EDA convention). |
 | `PARTY_COLORS` | R=#E81B23, D=#0015BC | Consistent with all prior phases. |
@@ -70,6 +70,16 @@ Daily Rice would produce ~2 observations per day (one per vote), which is noisy 
 ### Sign Convention
 
 PC1 signs are aligned per window so that the Republican mean is positive. This matches the convention established in Phase 2 (PCA) and Phase 4 (IRT). Without per-window alignment, PCA sign indeterminacy would cause artificial "drift" artifacts.
+
+### Desposato Small-Group Rice Correction
+
+Rice Index is systematically inflated for small groups: a caucus of 8 members voting randomly will show higher apparent Rice than a caucus of 32 voting randomly (Desposato 2005, *BJPS*). This matters for Kansas: Senate Democrats have ~8 members vs ~32 Republicans.
+
+`desposato_corrected_rice()` uses Monte Carlo simulation (10K draws, seed=42) to compute expected Rice under random (coin-flip) voting for the given group size, then subtracts it from raw Rice (floored at 0.0). Applied by default via `correct_size_bias=True` on `build_rice_timeseries()`. Raw formula validation tests pass `correct_size_bias=False`.
+
+### Imputation Sensitivity
+
+`compute_imputation_sensitivity()` validates the column-mean imputation used in rolling PCA by running `compute_early_vs_late()` twice — once with column-mean imputation (default) and once with listwise deletion (complete cases only). The Pearson correlation between drift scores validates that the imputation method doesn't materially affect results. Result is stored in the filtering manifest and displayed in the HTML report.
 
 ### Self-Contained Rice Computation
 

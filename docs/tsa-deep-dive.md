@@ -13,7 +13,7 @@ Phase 15 (TSA) adds temporal analysis to the Tallgrass pipeline via two compleme
 - Our choice of **ruptures + PELT with RBF kernel** is the canonical Python choice for offline changepoint detection. No alternative library offers a compelling reason to switch.
 - **Rolling PCA** is a pragmatic choice over dynamic IRT (Martin-Quinn), trading statistical rigor for speed (seconds vs. hours). The correlation between PC1 and IRT ideal points (r > 0.95 in our data) validates this trade-off for within-session drift detection.
 - The **Rice Index** is the correct cohesion metric for Kansas data (two-option voting, no strategic abstention culture). Carey's UNITY and Hix's Agreement Index solve problems we don't have.
-- Our implementation is clean and well-tested (51 tests), but has **seven areas for improvement**: CROPS penalty selection, Desposato small-group correction, explicit short-session validation, Bai-Perron confidence intervals, imputation validation, warning on silent failures, and Polars `is_in` deprecation handling.
+- Our implementation is clean and well-tested (64 tests), with **five of seven improvements now resolved**: Desposato small-group correction, explicit short-session validation, finer penalty grid, imputation sensitivity check, and variance-change detection test. Two remain: CROPS exact penalty selection (approximated by 25-point `np.linspace` grid) and Bai-Perron confidence intervals (deferred to rpy2 infrastructure).
 - The R ecosystem remains dominant for dynamic ideal points (`idealstan`, `emIRT`, `MCMCpack`). If dynamic ideal points become a priority, `idealstan` (Stan-based, supports random walk/AR(1)/GP priors) is the strongest single tool. A PyMC native implementation using `GaussianRandomWalk` priors is also viable given our existing infrastructure.
 
 ---
@@ -233,10 +233,10 @@ Phase 15 follows the established pattern from Phase 7 (Indices): `parse_args()` 
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `analysis/15_tsa/tsa.py` | ~1,320 | Main script: data loading, 12 core functions, 8 plotting functions, main() |
-| `analysis/15_tsa/tsa_report.py` | ~520 | HTML report builder: 12 section builders |
-| `analysis/design/tsa.md` | ~87 | Design document |
-| `tests/test_tsa.py` | ~1,115 | 51 tests across 12 test classes |
+| `analysis/15_tsa/tsa.py` | ~1,464 | Main script: data loading, 14 core functions, 8 plotting functions, main() |
+| `analysis/15_tsa/tsa_report.py` | ~538 | HTML report builder: 12 section builders |
+| `analysis/design/tsa.md` | ~100 | Design document |
+| `tests/test_tsa.py` | ~1,319 | 64 tests across 16 test classes |
 
 ### 5.2 Constants
 
@@ -291,20 +291,20 @@ All decisions documented in `analysis/design/tsa.md` are correctly implemented:
 1. **Fast**: Under 1 minute for a full biennium (both chambers, all plots, full report).
 2. **Two complementary analyses**: Drift (individual-level) and cohesion breaks (party-level) answer different questions.
 3. **Robust to missing data**: Column-mean imputation + per-window filtering handles irregular participation gracefully.
-4. **Penalty sensitivity**: The sweep across [3, 5, 10, 15, 25, 50] provides indirect robustness assessment.
+4. **Penalty sensitivity**: The sweep across 25 evenly-spaced penalties (np.linspace(1, 50, 25)) provides indirect robustness assessment.
 5. **Clean separation of concerns**: Rice, PCA, and PELT are independent subsystems.
 6. **Veto override cross-referencing**: Automatic contextual annotation of detected changepoints.
-7. **Good test coverage**: 51 tests covering all core computation functions.
+7. **Good test coverage**: 64 tests covering all core computation functions, including Desposato correction, imputation sensitivity, short-session warnings, and variance-change detection.
 8. **Self-documenting report**: The HTML report includes "How to Read" sections and interpretation guidance for non-technical audiences.
 
 ### 5.6 Weaknesses
 
-1. **Silent failure on short sessions**: If a chamber has fewer than 150 roll calls (not enough for even one PCA window), `rolling_window_pca()` returns an empty DataFrame with no error or warning. Downstream code produces blank plots silently.
+1. ~~**Silent failure on short sessions**~~: **RESOLVED.** `warnings.warn()` now fires in `rolling_window_pca()` (n_votes < window_size), `compute_early_vs_late()` (n_votes < 2 * MIN_WINDOW_VOTES), and `main()` (too few weekly obs for changepoints).
 2. **No formal uncertainty**: Rolling PCA produces point estimates only. PELT returns point estimates of changepoint locations with no confidence intervals. The penalty sensitivity sweep is an indirect proxy.
-3. **Mean imputation bias**: Column-mean imputation for absent votes biases toward the center of each roll call. This is not validated against listwise deletion or multiple imputation.
-4. **Desposato bias unaddressed**: Rice Index comparisons between Kansas Senate Republicans (~32 members) and Democrats (~8 members) are biased by group size. The smaller group has artificially inflated Rice.
-5. **Discrete penalty search**: `SENSITIVITY_PENALTIES = [3, 5, 10, 15, 25, 50]` is a crude grid search. CROPS (Haynes, Eckley & Fearnhead 2017) finds all optimal segmentations across a *continuous* range exactly and efficiently.
-6. **No Bai-Perron inference**: PELT identifies changepoint locations but provides no confidence intervals. Bai-Perron tests (available in R's `strucchange` and `mbreaks`) provide formal hypothesis tests and dating intervals.
+3. ~~**Mean imputation bias**~~: **RESOLVED.** `compute_imputation_sensitivity()` runs both column-mean and listwise deletion, reports correlation. Integrated into `main()` and filtering manifest.
+4. ~~**Desposato bias unaddressed**~~: **RESOLVED.** `desposato_corrected_rice()` implements Monte Carlo correction (Desposato 2005). Applied by default via `correct_size_bias=True` in `build_rice_timeseries()`. 6 new tests.
+5. ~~**Discrete penalty search**~~: **RESOLVED.** Replaced 6-point grid with `np.linspace(1, 50, 25)` (25 evenly-spaced penalties). Smoother elbow plots at negligible computational cost.
+6. **No Bai-Perron inference**: PELT identifies changepoint locations but provides no confidence intervals. Bai-Perron tests (available in R's `strucchange` and `mbreaks`) provide formal hypothesis tests and dating intervals. **Deferred** to rpy2 infrastructure (W-NOMINATE).
 7. **Polars deprecation**: `is_in` with a Series of the same dtype triggers a deprecation warning in Polars ≥0.20. One instance was fixed (`build_vote_matrix`, line 183); patterns elsewhere in the codebase may recur.
 
 ---
@@ -321,56 +321,35 @@ CROPS (Changepoints for a Range of Penalties) efficiently computes all optimal s
 
 In Python with ruptures, CROPS can be approximated by sweeping a finer penalty grid (e.g., `np.linspace(1, 100, 200)`), but this is computationally wasteful. A true CROPS implementation would be a contribution to the ruptures ecosystem. For now, a finer grid (20–30 penalties instead of 6) would improve our sensitivity analysis at negligible computational cost.
 
-### Recommendation 2: Desposato Small-Group Correction
+### Recommendation 2: Desposato Small-Group Correction — RESOLVED
 
-**Priority**: Medium
-**Effort**: Low
-**Impact**: Eliminates systematic bias in Senate Rice comparisons
+**Status**: Implemented (2026-02-28)
 
-Implement Desposato's (2005) correction for Rice comparisons where party sizes differ substantially. The nonparametric approach: subsample from the larger party to match the smaller party's size, compute Rice on the subsample, repeat many times, take the mean. This eliminates the artificial inflation of small-party Rice.
+`desposato_corrected_rice()` uses Monte Carlo simulation (10K draws, seed=42) to compute expected Rice under random voting for the group size, then subtracts it from raw Rice (floored at 0). Applied by default via `correct_size_bias=True` parameter on `build_rice_timeseries()`. Existing tests updated to pass `correct_size_bias=False` for raw-formula validation. 6 new tests cover perfect cohesion, random→0, small>large correction, zero votes, deterministic seed, and floor at 0.
 
-For Kansas Senate: Republican caucus (~32) vs. Democrat caucus (~8). Without correction, Democrat Rice is inflated by ~0.03–0.08 (depending on true cohesion level) purely due to group size. This biases both level comparisons and changepoint detection.
+### Recommendation 3: Explicit Short-Session Validation — RESOLVED
 
-Implementation: ~20 lines. Add a `desposato_corrected_rice()` function and an optional `correct_size_bias=True` parameter to `build_rice_timeseries()`.
+**Status**: Implemented (2026-02-28)
 
-### Recommendation 3: Explicit Short-Session Validation
+`warnings.warn()` added in three locations: `rolling_window_pca()` when n_votes < window_size, `compute_early_vs_late()` when n_votes < 2 * MIN_WINDOW_VOTES, and `main()` when a party has too few weekly observations for changepoint detection. Two new tests verify with `pytest.warns()`.
 
-**Priority**: High
-**Effort**: Trivial
-**Impact**: Prevents silent failures
+### Recommendation 4: Imputation Sensitivity Check — RESOLVED
 
-Add explicit checks and warnings when:
-- A chamber has fewer than `WINDOW_SIZE` roll calls (cannot compute any PCA windows)
-- A chamber has fewer than `2 * WINDOW_SIZE` roll calls (cannot compute early-vs-late comparison)
-- Weekly Rice aggregation produces fewer than `2 * PELT_MIN_SIZE` weeks (cannot detect any changepoints)
+**Status**: Implemented (2026-02-28)
 
-Currently, these conditions produce empty DataFrames silently. A `warnings.warn()` or print statement would alert the user.
+`compute_imputation_sensitivity()` runs `compute_early_vs_late()` twice (column-mean vs listwise deletion), correlates drift scores. Integrated into `main()` automatically — no flag needed. Result stored in `chamber_results["imputation_correlation"]` and written to the filtering manifest. Displayed in the HTML report's analysis parameters table. Two new tests.
 
-### Recommendation 4: Imputation Sensitivity Check
+### Recommendation 5: Finer Penalty Grid — RESOLVED
 
-**Priority**: Low
-**Effort**: Low
-**Impact**: Validates a methodological assumption
+**Status**: Implemented (2026-02-28)
 
-Add a sensitivity analysis comparing column-mean imputation (current) with listwise deletion (drop legislators with any missing votes in the window). If results are substantively similar, the imputation choice is validated. If they diverge, the imputation method matters and should be documented as a caveat.
+Replaced `SENSITIVITY_PENALTIES = [3, 5, 10, 15, 25, 50]` with `np.linspace(1, 50, 25).tolist()` — 25 evenly-spaced penalties from 1 to 50. Produces smoother elbow plots at negligible computational cost. True CROPS would require extending `ruptures`; the finer grid is sufficient for our data scale.
 
-This could be implemented as a flag (`--imputation-check`) that runs rolling PCA twice and reports the correlation between the two sets of PC1 scores.
+### Recommendation 6: Variance-Change Detection Test — RESOLVED
 
-### Recommendation 5: CROPS or Finer Penalty Grid
+**Status**: Implemented (2026-02-28)
 
-**Priority**: Low
-**Effort**: Trivial
-**Impact**: Better robustness characterization
-
-Replace `SENSITIVITY_PENALTIES = [3, 5, 10, 15, 25, 50]` with a finer grid: `np.arange(1, 51, 2)` (25 penalties) or `np.linspace(1, 100, 50)`. The computational cost is negligible (PELT is O(n) per penalty, and n ≈ 30–50 weekly observations). This would produce a smoother elbow plot and better identify "robust" penalty regions.
-
-### Recommendation 6: Variance-Change Detection Test
-
-**Priority**: Low
-**Effort**: Low
-**Impact**: Validates RBF kernel choice
-
-Add a test that verifies the RBF kernel detects changes in *variance* (not just mean) of a synthetic signal. The current test suite tests step functions (mean changes) but not signals with constant mean and changing variance. This is the specific advantage of RBF over L1/L2 cost functions, and it should be tested.
+`TestVarianceChangeDetection::test_detects_variance_change` verifies RBF kernel detects a variance change with constant mean (Normal(0.7, 0.02) → Normal(0.7, 0.15)). Validates the specific advantage of RBF over L1/L2 cost functions.
 
 ### Recommendation 7: Consider Bai-Perron for Formal Inference
 

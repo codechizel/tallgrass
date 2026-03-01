@@ -19,6 +19,7 @@ Outputs (in results/<session>/<run_id>/15_tsa/):
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import matplotlib
@@ -107,7 +108,7 @@ MIN_WINDOW_LEGISLATORS = 20
 PELT_PENALTY_DEFAULT = 10.0
 PELT_MIN_SIZE = 5
 WEEKLY_AGG_DAYS = 7
-SENSITIVITY_PENALTIES = [3, 5, 10, 15, 25, 50]
+SENSITIVITY_PENALTIES: list[float] = np.linspace(1, 50, 25).tolist()
 TOP_MOVERS_N = 10
 MIN_TOTAL_VOTES = 20
 
@@ -239,6 +240,14 @@ def rolling_window_pca(
     window_midpoint, window_idx, pc1_score.
     """
     n_legs, n_votes = matrix.shape
+
+    if n_votes < window_size:
+        warnings.warn(
+            f"Too few roll calls ({n_votes}) for rolling PCA window size ({window_size}). "
+            f"Drift detection requires at least {window_size} roll calls.",
+            stacklevel=2,
+        )
+
     rows: list[dict] = []
     window_idx = 0
 
@@ -416,6 +425,14 @@ def compute_early_vs_late(
     Returns DataFrame with: slug, full_name, party, early_pc1, late_pc1, drift.
     """
     n_votes = matrix.shape[1]
+
+    if n_votes < 2 * MIN_WINDOW_VOTES:
+        warnings.warn(
+            f"Too few roll calls ({n_votes}) for early/late comparison. "
+            f"Need at least {2 * MIN_WINDOW_VOTES} for meaningful split.",
+            stacklevel=2,
+        )
+
     mid = n_votes // 2
 
     results = []
@@ -513,7 +530,98 @@ def find_top_movers(drift_df: pl.DataFrame, n: int = TOP_MOVERS_N) -> pl.DataFra
     )
 
 
+def compute_imputation_sensitivity(
+    matrix: np.ndarray,
+    slugs: list[str],
+    vote_ids: list[str],
+    legislator_meta: pl.DataFrame,
+) -> float | None:
+    """Compare drift scores under column-mean vs listwise deletion imputation.
+
+    Runs compute_early_vs_late() twice — once with the standard column-mean
+    imputation (the default) and once with listwise deletion (rows with any NaN
+    removed) — then correlates the resulting drift scores.
+
+    Returns:
+        Pearson correlation between drift scores under both methods, or None
+        if insufficient data under either method.
+    """
+    # Column-mean is the default — just call as normal
+    drift_mean = compute_early_vs_late(matrix, slugs, vote_ids, legislator_meta)
+    if drift_mean.height < 3:
+        return None
+
+    # Listwise deletion: remove legislators with any NaN
+    complete_mask = ~np.any(np.isnan(matrix), axis=1)
+    if np.sum(complete_mask) < MIN_WINDOW_LEGISLATORS:
+        return None
+
+    listwise_matrix = matrix[complete_mask]
+    listwise_slugs = [s for s, v in zip(slugs, complete_mask) if v]
+
+    drift_listwise = compute_early_vs_late(
+        listwise_matrix, listwise_slugs, vote_ids, legislator_meta
+    )
+    if drift_listwise.height < 3:
+        return None
+
+    # Join on slug and correlate
+    merged = drift_mean.select(pl.col("slug"), pl.col("drift").alias("drift_mean")).join(
+        drift_listwise.select(pl.col("slug"), pl.col("drift").alias("drift_listwise")),
+        on="slug",
+        how="inner",
+    )
+
+    if merged.height < 3:
+        return None
+
+    corr = np.corrcoef(
+        merged["drift_mean"].to_numpy(),
+        merged["drift_listwise"].to_numpy(),
+    )[0, 1]
+
+    return float(corr) if np.isfinite(corr) else None
+
+
 # ── Changepoint Analysis ────────────────────────────────────────────────────
+
+
+def desposato_corrected_rice(
+    yea: int,
+    nay: int,
+    group_size: int,
+    n_simulations: int = 10_000,
+) -> float:
+    """Compute Desposato-corrected Rice Index (Desposato 2005, BJPS).
+
+    Subtracts the expected Rice under random voting for a group of this size,
+    floored at 0.0. This removes the small-group inflation bias where smaller
+    caucuses show higher Rice purely due to sampling variance.
+
+    Args:
+        yea: Number of Yea votes within the party group.
+        nay: Number of Nay votes within the party group.
+        group_size: Total party group size in the chamber (for simulation).
+        n_simulations: Number of Monte Carlo draws (deterministic seed).
+
+    Returns:
+        Corrected Rice, floored at 0.0.
+    """
+    total = yea + nay
+    if total == 0:
+        return 0.0
+
+    raw_rice = abs(yea - nay) / total
+
+    # Simulate expected Rice under random (coin-flip) voting
+    rng = np.random.default_rng(42)
+    sim_yea = rng.binomial(group_size, 0.5, size=n_simulations)
+    sim_nay = group_size - sim_yea
+    sim_total = sim_yea + sim_nay  # always = group_size
+    sim_rice = np.abs(sim_yea - sim_nay) / sim_total
+    expected_rice = float(np.mean(sim_rice))
+
+    return max(0.0, raw_rice - expected_rice)
 
 
 def build_rice_timeseries(
@@ -521,8 +629,13 @@ def build_rice_timeseries(
     rollcalls: pl.DataFrame,
     legislators: pl.DataFrame,
     chamber: str,
+    correct_size_bias: bool = True,
 ) -> pl.DataFrame:
     """Compute per-vote Rice Index for each party.
+
+    Args:
+        correct_size_bias: If True, apply Desposato (2005) small-group correction
+            to remove systematic Rice inflation for smaller caucuses.
 
     Returns DataFrame with: vote_id, vote_date, vote_datetime, party, rice,
     yea_count, nay_count, ordered chronologically.
@@ -537,6 +650,13 @@ def build_rice_timeseries(
     if "party" not in chamber_votes.columns:
         party_lookup = legislators.select("legislator_slug", "party")
         chamber_votes = chamber_votes.join(party_lookup, on="legislator_slug", how="left")
+
+    # Compute party group sizes for Desposato correction
+    party_group_sizes: dict[str, int] = {}
+    if correct_size_bias:
+        chamber_legs = legislators.filter(pl.col("legislator_slug").str.starts_with(prefix))
+        for party in ["Republican", "Democrat"]:
+            party_group_sizes[party] = chamber_legs.filter(pl.col("party") == party).height
 
     # Count Yea/Nay per vote per party
     party_counts = (
@@ -554,13 +674,26 @@ def build_rice_timeseries(
 
     party_counts = party_counts.rename({"Yea": "yea_count", "Nay": "nay_count"})
 
-    # Compute Rice
+    # Compute Rice (raw formula first)
     party_counts = party_counts.with_columns(
         (
             (pl.col("yea_count") - pl.col("nay_count")).abs().cast(pl.Float64)
             / (pl.col("yea_count") + pl.col("nay_count")).cast(pl.Float64)
         ).alias("rice")
     )
+
+    # Apply Desposato correction if requested
+    if correct_size_bias and party_group_sizes:
+        corrected_rows = []
+        for row in party_counts.iter_rows(named=True):
+            party = row["party"]
+            group_size = party_group_sizes.get(party, 0)
+            if group_size > 0:
+                row["rice"] = desposato_corrected_rice(
+                    row["yea_count"], row["nay_count"], group_size
+                )
+            corrected_rows.append(row)
+        party_counts = pl.DataFrame(corrected_rows)
 
     # Join with rollcalls for dates
     date_cols = ["vote_id"]
@@ -1182,6 +1315,12 @@ def main() -> None:
                     plot_top_movers(rolling_df, top_movers_df, leg_meta, chamber, ctx.plots_dir)
                     plot_early_vs_late(drift_df, chamber, ctx.plots_dir)
 
+                    # Imputation sensitivity
+                    imp_corr = compute_imputation_sensitivity(matrix, slugs, vote_ids, leg_meta)
+                    if imp_corr is not None:
+                        print(f"  Imputation sensitivity: r={imp_corr:.3f}")
+                    chamber_results["imputation_correlation"] = imp_corr
+
                     chamber_results["rolling_df"] = rolling_df
                     chamber_results["party_trajectories"] = party_traj
                     chamber_results["drift_df"] = drift_df
@@ -1210,7 +1349,12 @@ def main() -> None:
                     for party in ["Republican", "Democrat"]:
                         pdata = weekly.filter(pl.col("party") == party).sort("week_start")
                         if pdata.height < 2 * PELT_MIN_SIZE:
-                            print(f"  {party}: too few weekly obs for CPs")
+                            warnings.warn(
+                                f"{party}: too few weekly observations "
+                                f"({pdata.height}) for changepoint detection "
+                                f"(need {2 * PELT_MIN_SIZE})",
+                                stacklevel=1,
+                            )
                             continue
 
                         signal = pdata["mean_rice"].to_numpy()
@@ -1294,6 +1438,7 @@ def main() -> None:
                     "n_legislators": r.get("n_legislators", 0),
                     "n_rollcalls": r.get("n_rollcalls", 0),
                     "n_windows": r.get("n_windows", 0),
+                    "imputation_correlation": r.get("imputation_correlation"),
                 }
                 for ch, r in results.items()
             },
