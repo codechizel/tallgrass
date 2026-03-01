@@ -550,6 +550,29 @@ XGBoost adds almost nothing over logistic regression on xi x beta. The IRT ideal
 - **Explanation:** IRT ideal points dominate prediction (confirmed by SHAP), and ideal points are highly stable (r=0.940-0.975 cross-session). A model trained on one session's ideological landscape transfers almost perfectly because the underlying partisan structure of Kansas voting is durable.
 - **Downstream:** The within-session AUC=0.98 is not overfitting — it reflects genuine predictability of Kansas legislative voting, confirmed by out-of-sample cross-session validation.
 
+## Bug Fixes Affecting Historical Results (2026-03-01)
+
+### Carey Unity `group_by` Race Condition (Phase 07, All Sessions)
+
+- **Phase:** Indices
+- **Observation:** `compute_carey_unity()` in `indices.py:544-549` called `group_by("party")` twice independently and zipped the results. Polars `group_by` has non-deterministic row ordering, so ~50% of the time the party member counts swapped (R↔D). This produced negative `n_absent` values (physically impossible) and `carey_unity > 1.0` in `carey_unity_{chamber}.parquet`.
+- **Fix:** Single `group_by` call stored in a variable before zipping. All pipeline results from before 2026-03-01 may have incorrect Carey Unity values.
+- **Downstream:** Re-run affected sessions to regenerate `carey_unity_{chamber}.parquet`. The bug does not affect Rice index, party votes, or any other indices.
+
+### Clustering Sensitivity ARI Row-Ordering Mismatch (Phase 05, All Sessions)
+
+- **Phase:** Clustering
+- **Observation:** `run_sensitivity_clustering()` in `clustering.py:2214-2228` compared k-means labels (IRT-ordered) against hierarchical `cut_tree` labels (kappa-matrix-ordered / alphabetical). Different row orderings produced meaningless ARI values (~0 for Senate, small positive for House). The correct alignment already existed in Phase 6's cross-method comparison (lines 2524-2528) but was not used in the sensitivity function.
+- **Fix:** Added slug-based alignment (`slug_to_hier` mapping) to align hierarchical labels to IRT slug order before computing ARI. All `kmeans_k*_vs_hier_k*` ARI values in `filtering_manifest.json` sensitivity sections from before 2026-03-01 are invalid.
+- **Downstream:** Re-run affected sessions. The bug does not affect primary clustering assignments, cross-method comparison (Phase 6), or any other phase outputs.
+
+### External Validation Bethell Name Mismatch (Phase 14, 84th Only)
+
+- **Phase:** External Validation (Shor-McCarty)
+- **Observation:** `_phase2_last_name_match()` in `external_validation_data.py:294-331` matched `rep_bethell_lorene_1` (Lorene Bethell, District 113, Republican) to SM's "Bob Bethell" based solely on last name. These are different people. The code notes "district tiebreaker not implemented — ambiguity is rare in KS data."
+- **Impact:** Low — 1 incorrect match in 112 House legislators. The correlation (r=0.975) is minimally affected.
+- **Downstream:** Implement district-based disambiguation when multiple candidates share a last name. See roadmap backlog item #1.
+
 ## Template
 
 ```

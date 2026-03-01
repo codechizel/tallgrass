@@ -288,9 +288,21 @@ The 84th Legislature captured several politicians at inflection points, and the 
 
 10. **Senate betweenness centrality is uniformly 0.0** for all but one legislator — extreme polarization means no bridge nodes exist, not a network construction error.
 
+### Code Bugs Found in 84th Audit (2026-03-01)
+
+11. **Carey Unity `group_by` race condition (Phase 07).** Two independent `group_by("party")` calls with non-deterministic ordering caused ~50% chance of swapping R/D member counts, producing negative `n_absent` and `carey_unity > 1.0`. Fixed: single `group_by` call.
+
+12. **Clustering sensitivity ARI row-ordering mismatch (Phase 05).** Sensitivity analysis compared IRT-ordered k-means labels against kappa-ordered hierarchical labels, producing meaningless ARI values (~0). Fixed: slug-based alignment before computing ARI.
+
+13. **Bethell name mismatch (Phase 14).** `rep_bethell_lorene_1` (Lorene Bethell) incorrectly matched to SM's "Bob Bethell" via last-name-only Phase 2 matching. District tiebreaker not yet implemented.
+
+14. **Null `hier_shrinkage_pct` (Phase 11).** 28 House and 3 Senate legislators (beyond the 2 expected anchors) have null shrinkage percentages. The `SHRINKAGE_MIN_DISTANCE` threshold (0.5) filters out legislators whose flat and hierarchical positions are too close for meaningful shrinkage calculation. Needs cross-biennium comparison to determine if the 84th's 26% null rate is normal.
+
+A pipeline re-run is needed to incorporate fixes #11 and #12, plus the IRT sensitivity sign-flip fix (already in code but results predate it).
+
 ### Cross-Phase Consistency
 
-No coding or statistical errors were detected. Every analytical method converges on the same conclusion independently: PCA, IRT, clustering (5 methods), network community detection, classical indices, and Bayesian models all identify the same moderate Republican bloc, the same mavericks, and the same factional structure. The cross-method agreement is itself strong evidence that the pipeline is working correctly — if any single method had a bug, it would diverge from the others.
+Despite the bugs above (which affect secondary diagnostic metrics, not primary results), every analytical method converges on the same conclusion independently: PCA, IRT, clustering (5 methods), network community detection, classical indices, and Bayesian models all identify the same moderate Republican bloc, the same mavericks, and the same factional structure. The cross-method agreement is itself strong evidence that the pipeline is working correctly — if any single method had a bug, it would diverge from the others.
 
 ---
 
@@ -304,7 +316,7 @@ If anything, the 84th Legislature serves as the best stress test for the pipelin
 
 ---
 
-*Generated from Tallgrass pipeline run `84-260228.1` (2026-02-28). Data source: Kansas Legislature (kslegislature.gov), 84th Legislature, 2011-2012 regular session.*
+*Generated from Tallgrass pipeline run `84-260228.5` (2026-02-28), audited 2026-03-01. Data source: Kansas Legislature (kslegislature.gov), 84th Legislature, 2011-2012 regular session.*
 
 *For methodology details, see `docs/analysis-primer.md`. For the full pipeline architecture, see `CLAUDE.md`.*
 

@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-01 (open-source readiness — LICENSE, README, 9 bug fixes, 16 new tests, CI expansion)
+**Last updated:** 2026-03-01 (84th audit — 2 bug fixes, 3 backlog items added)
 
 ---
 
@@ -108,6 +108,22 @@ R enrichment is optional — `--skip-r` for Python-only mode. 21 new tests (85 t
 ### ~~Joint Cross-Chamber IRT~~
 
 **Completed (2026-02-24), fixed (2026-02-26).** The hierarchical joint cross-chamber model now runs with bill-matching (ADR-0043): shared `alpha`/`beta` parameters for 71 matched bills (91st) provide natural cross-chamber identification. Bill-matching reduced joint model runtime from 93 min to 31 min by shrinking the problem size (420 unified votes vs 491). Group-size-adaptive priors mitigate small-group convergence failures. Senate convergence now passes all checks. See ADR-0043 and `docs/joint-hierarchical-irt-diagnosis.md`.
+
+---
+
+## Next Up (Backlog)
+
+### 1. External Validation Name Matcher: District Tiebreaker
+
+Phase 14 (Shor-McCarty) uses last-name-only matching in `_phase2_last_name_match()` (`external_validation_data.py:294-331`). This produces an incorrect match for the 84th: `rep_bethell_lorene_1` (Lorene Bethell, District 113) is matched to SM's "Bob Bethell" — a different person. The code has a comment: "district tiebreaker not implemented — ambiguity is rare in KS data." Low impact (1/112 matches) but a genuine data quality bug. Fix: implement district-based disambiguation when multiple candidates share a last name and chamber.
+
+### 2. Null `hier_shrinkage_pct` in Synthesis (84th)
+
+In the 84th pipeline run, 28 House legislators (beyond the 2 expected IRT anchors) and 3 Senate legislators have null `hier_shrinkage_pct` in `legislator_df_{chamber}.parquet`. This is 26% of House and 14% of Senate. The calculation in `hierarchical.py:1123-1137` sets shrinkage to null when `abs(flat - party_mean) < SHRINKAGE_MIN_DISTANCE` (0.5) to avoid division-by-near-zero producing misleading percentages. Needs investigation: is 26% null rate normal for the 84th given its compressed ideological range, or is the threshold too aggressive? Compare null rates across all 8 bienniums.
+
+### 3. 84th Biennium Pipeline Re-run
+
+The current 84th results (`84-260228.5`) predate three code fixes: (1) Carey Unity `group_by` race condition (non-deterministic party member count swap), (2) clustering sensitivity ARI row-ordering mismatch (meaningless ARI values), (3) IRT sensitivity sign-flip handling (already fixed in code, results show stale negative correlations with `raw_pearson_r: null`). A fresh pipeline re-run (`just pipeline 2011-12`) would validate all fixes and produce clean results.
 
 ---
 
