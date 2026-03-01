@@ -17,6 +17,7 @@ Pipeline phases (in order):
   12_profiles      — Legislator deep dives
   13_cross_session — Cross-biennium validation
   14_external_validation — Shor-McCarty comparison
+  15_tsa              — Time series analysis (drift + changepoints)
 
 Shared infrastructure at root: run_context.py, report.py
 
@@ -71,6 +72,8 @@ _MODULE_MAP: dict[str, str] = {
     "external_validation": "14_external_validation",
     "external_validation_report": "14_external_validation",
     "external_validation_data": "14_external_validation",
+    "tsa": "15_tsa",
+    "tsa_report": "15_tsa",
     "irt_beta_experiment": "experimental",
 }
 

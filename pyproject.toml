@@ -39,6 +39,7 @@ dev = [
     "prince>=0.13",
     "setproctitle>=1.3",
     "nutpie>=0.16",
+    "ruptures>=1.1",
 ]
 
 [build-system]
@@ -92,6 +93,7 @@ replace-imports-with-any = [
     "bs4.**",
     "prince.**",
     "nutpie.**",
+    "ruptures.**",
 ]
 # analysis/ scripts use bare imports (not a package) — allow them.
 # Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to
@@ -124,8 +126,11 @@ allowed-unresolved-imports = [
     "cross_session_report",
     "external_validation_data",
     "external_validation_report",
+    "tsa_report",
     "mca_report",
     "model_spec",
+    "irt_linking",
+    "irt_2d_report",
     "experiment_monitor",
     "experiment_runner",
     # Qualified analysis.* imports (resolved by PEP 302 meta-path finder at runtime)
@@ -139,6 +144,9 @@ allowed-unresolved-imports = [
     "analysis.umap_report",
     "analysis.irt",
     "analysis.irt_report",
+    "analysis.irt_2d",
+    "analysis.irt_2d_report",
+    "analysis.irt_linking",
     "analysis.clustering",
     "analysis.clustering_report",
     "analysis.network_report",
@@ -160,6 +168,8 @@ allowed-unresolved-imports = [
     "analysis.cross_session_report",
     "analysis.external_validation_report",
     "analysis.external_validation_data",
+    "analysis.tsa",
+    "analysis.tsa_report",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

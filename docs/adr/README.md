@@ -82,6 +82,12 @@ What are the trade-offs?
 | [0031](0031-prediction-deep-dive-improvements.md) | Prediction deep dive improvements |
 | [0034](0034-synthesis-deep-dive-improvements.md) | Synthesis deep dive improvements |
 
+### Time Series
+
+| ADR | Title |
+|-----|-------|
+| [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints) |
+
 ### Validation
 
 | ADR | Title |
@@ -172,6 +178,7 @@ What are the trade-offs?
 | [0054](0054-2d-irt-pipeline-integration.md) | 2D IRT pipeline integration (experimental phase 04b, both chambers, relaxed thresholds) | Accepted | 2026-02-28 |
 | [0055](0055-reparameterized-beta-and-irt-linking.md) | Reparameterized LogNormal beta and IRT scale linking (Stocking-Lord, sign-aware anchors) | Accepted | 2026-02-28 |
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions (eliminate legacy mode orphan directories) | Accepted | 2026-02-28 |
+| [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints, language policy update) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 

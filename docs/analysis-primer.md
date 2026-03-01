@@ -34,6 +34,7 @@ Here's the full pipeline at a glance:
 12. **Synthesis** — Combine everything into a narrative.
 13. **Profiles** — Deep-dive into the most interesting legislators.
 14. **Cross-Session Validation** — Check whether our findings hold up over time.
+15. **Time Series Analysis** — Track how legislators and parties change *during* a session.
 
 Let's walk through each one.
 
@@ -406,6 +407,35 @@ Everything above analyzes a single two-year legislative session. But we can also
 ### Why this matters
 
 Any analysis can look impressive on the data it was built from. The real test is whether it generalizes. Cross-session validation is our way of checking that the patterns we found are features of Kansas politics, not artifacts of our methods.
+
+---
+
+## Step 15: Time Series Analysis — Tracking Change During a Session
+
+### What it is
+
+Everything up to this point treats the legislative session as a single snapshot — we look at the full two years of votes and produce one score per legislator. But a lot can happen during a session. Legislators may shift their positions, parties may become more or less unified, and major events (like veto overrides or leadership changes) can shake up the usual patterns.
+
+Time series analysis asks: **did anything change over time?**
+
+### How it works
+
+We use two complementary approaches:
+
+**Ideological drift** — Instead of computing one PCA score per legislator for the whole session, we slide a window across the votes in chronological order. Imagine looking at only the first 75 roll calls, computing everyone's position, then sliding the window forward by 15 votes and computing again. This produces a trajectory for each legislator showing how their voting position evolved. We can then see whether parties drifted apart (increasing polarization) or converged (bipartisan periods), and which individual legislators changed the most.
+
+**Changepoint detection** — For each party, we compute a standard measure of unity (the Rice Index) for every vote, aggregate it weekly, and then look for abrupt shifts in the pattern. The algorithm (PELT) searches for moments where the statistical properties of party cohesion suddenly changed — either the level shifted, the variability changed, or both. These "changepoints" often correspond to real legislative events: veto override fights, end-of-session deal-making, or leadership shake-ups.
+
+### What we look for
+
+- **Party-level trends**: Are the parties moving apart or converging over the course of the session?
+- **Individual movers**: Which legislators changed their voting position the most between the first and second half of the session?
+- **Structural breaks**: Were there specific moments when party unity suddenly changed? Do those moments coincide with known events like veto overrides?
+- **Robustness**: Are the detected changepoints stable, or do they disappear with slightly different analysis settings?
+
+### Why this matters
+
+A session-level average can hide important dynamics. A legislator who votes moderately in the first half and conservatively in the second half looks centrist on average — but the trajectory tells a very different story. Similarly, a party that shows 80% unity overall might have had a period of near-total unity broken by a few weeks of chaos. Time series analysis reveals these patterns that static summaries miss.
 
 ---
 

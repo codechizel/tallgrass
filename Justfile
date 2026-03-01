@@ -111,6 +111,10 @@ profiles *args:
 external-validation *args:
     uv run python analysis/14_external_validation/external_validation.py {{args}}
 
+# Run time series analysis (drift + changepoints)
+tsa *args:
+    uv run python analysis/15_tsa/tsa.py {{args}}
+
 # Run full analysis pipeline for a session (all phases grouped under one run ID)
 pipeline session="2025-26" *args:
     #!/usr/bin/env bash
@@ -133,6 +137,7 @@ pipeline session="2025-26" *args:
     just hierarchical --session {{session}} --run-id "$RUN_ID" {{args}}
     just synthesis --session {{session}} --run-id "$RUN_ID" {{args}}
     just profiles --session {{session}} --run-id "$RUN_ID" {{args}}
+    just tsa       --session {{session}} --run-id "$RUN_ID" {{args}}
     echo ""
     echo "Pipeline complete: $RUN_ID"
 

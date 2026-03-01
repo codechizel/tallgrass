@@ -7,14 +7,14 @@ paths:
 
 ## Pipeline
 
-EDA -> PCA -> MCA -> IRT -> 2D IRT (experimental) -> UMAP -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles
+EDA -> PCA -> MCA -> IRT -> 2D IRT (experimental) -> UMAP -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles -> TSA
 
 Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only).
 
 ## Technology Preferences
 
 - **Polars over pandas** for all data manipulation (pandas only when downstream library requires it)
-- **Python over R** — no rpy2 or Rscript. Use PCA/Bayesian IRT instead of W-NOMINATE/OC.
+- **Python-first, best tool wins** — prefer Python; open to any open-source language (R, Rust, etc.) when it produces better results. Already using Rust (nutpie) for MCMC sampling.
 - Tables: great_tables with polars DataFrames (no pandas conversion). Plots: base64-embedded PNGs. See ADR-0004.
 
 ## Directory Structure
@@ -51,6 +51,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `synthesis.md` — Data-driven detection thresholds, graceful degradation
 - `cross_session.md` — Affine IRT alignment, name matching, prediction transfer
 - `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
+- `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation
 
 ## Key Data Structures
 
@@ -74,4 +75,4 @@ Scraper outputs empty string for non-R/D. Every analysis phase fills to "Indepen
 
 ## Analytics Method Docs
 
-`Analytic_Methods/` has 28 documents (one per method). Naming: `NN_CAT_method_name.md`. Categories: DATA, EDA, IDX, DIM, BAY, CLU, NET, PRD, TSA.
+`Analytic_Methods/` has 29 documents (one per method). Naming: `NN_CAT_method_name.md`. Categories: DATA, EDA, IDX, DIM, BAY, CLU, NET, PRD, TSA.

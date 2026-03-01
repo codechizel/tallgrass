@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1273 tests)
+just test                                    # → uv run pytest tests/ -v (~1324 tests)
 just test-scraper                            # → pytest on scraper test files only
 just monitor                                 # → check running experiment status
 just pipeline 2025-26                        # → full analysis pipeline (all phases grouped)
@@ -32,11 +32,11 @@ uv run tallgrass 2024 --special        # special session (direct)
 
 Analysis recipes (all pass `*args` through to the underlying script):
 
-`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just cross-session`, `just external-validation`.
+`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
-`just pipeline 2025-26` runs all 14 phases in order under a single run ID (ADR-0052). Each phase gets `--run-id` automatically. Phase 04b (2D IRT) is experimental with relaxed convergence thresholds.
+`just pipeline 2025-26` runs all 15 phases in order under a single run ID (ADR-0052). Each phase gets `--run-id` automatically. Phase 04b (2D IRT) is experimental with relaxed convergence thresholds.
 
 ## Build Philosophy
 
@@ -146,7 +146,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (56 decisions)
+- ADRs: `docs/adr/README.md` (57 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")

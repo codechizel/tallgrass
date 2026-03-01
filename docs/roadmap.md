@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-02-28 (after 2D IRT pipeline integration as phase 04b)
+**Last updated:** 2026-02-28 (reprioritized roadmap; R now allowed for field-standard methods)
 
 ---
 
@@ -48,59 +48,60 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | PCA-Informed Init for Hierarchical IRT | 2026-02-26 | Experiment proved PCA init fixes House R-hat (1.0102→1.0026) with r=0.999996 agreement. Implemented as default in `build_per_chamber_model()`. Per-chain ESS reporting added. ADR-0044. Article: `docs/hierarchical-pca-init-experiment.md`. |
 | — | 4-Chain Hierarchical IRT Experiment | 2026-02-26 | 4 chains resolve both ESS warnings (xi: 397→564, mu_party: 356→512) at +4% wall time. Discovered jitter mode-splitting: `jitter+adapt_diag` causes R-hat ~1.53 with 4 chains; fix is `adapt_diag` with PCA init. Run 3 unnecessary. Article: `docs/hierarchical-4-chain-experiment.md`. |
 | 4b | 2D Bayesian IRT (Pipeline, Experimental) | 2026-02-26 (experiment), 2026-02-28 (pipeline) | M2PL model with PLT identification to resolve Tyson paradox. Pipeline phase 04b: both chambers, nutpie sampling, RunContext/HTML report, relaxed convergence thresholds. Deep dive: `docs/2d-irt-deep-dive.md`, design: `analysis/design/irt_2d.md`, ADR-0046, ADR-0054. |
+| 15 | Time Series Analysis | 2026-02-28 | Rolling-window PCA ideological drift + PELT changepoint detection on weekly Rice. Per-chamber analysis, penalty sensitivity, veto override cross-reference. Uses `ruptures` library. Design: `analysis/design/tsa.md`. |
 
 ---
 
-## Next Up
+## Next Up (Prioritized)
 
-### 1. Time Series Analysis
+### 1. Dynamic Ideal Points (Martin-Quinn)
 
-**Priority:** Medium — adds temporal depth to static snapshots. Now that cross-session validation confirms IRT ideal points are stable across bienniums, temporal analysis can build on that foundation.
+**Priority:** High — 8 bienniums of data (84th-91st) make this immediately powerful. State-space model tracks legislator positions across bienniums, answering "who moved, and when?" Within-biennium drift already rejected (2-year window too short); the value is in the cross-biennium trajectory. Cross-session validation is complete, so this is unblocked.
 
-Two methods documented but not yet implemented:
+### 2. W-NOMINATE (Phase 16)
 
-- **Ideological drift** (`Analytic_Methods/26_TSA_ideological_drift.md`): Rolling IRT or rolling party unity within a session. Did anyone change position mid-session? Track 15-vote rolling windows.
-- **Changepoint detection** (`Analytic_Methods/27_TSA_changepoint_detection.md`): Structural breaks in voting patterns. When did the session's character shift? (e.g., pre- vs post-veto override period)
+**Priority:** High — field-standard legislative scaling method. Every published paper on Congress uses it. Having a W-NOMINATE comparison lets us say "our Bayesian IRT correlates at r=X with W-NOMINATE" — a sentence political scientists trust immediately. R is now allowed for field-standard methods where no Python equivalent exists. Uses `rpy2` to call `wnominate` from Python.
 
-Requires the `ruptures` library (not yet in `pyproject.toml`). Now that cross-session data is available, both methods become immediately actionable.
+### 3. DIME/CFscores External Validation (Second Source)
+
+**Priority:** Medium — campaign-finance-based ideology from Bonica's DIME project ([data.stanford.edu/dime](https://data.stanford.edu/dime)). Completely independent data source — captures who *donors* think you are, not how you vote. Within-party correlation with Shor-McCarty is only 0.65-0.67, so intra-Republican resolution may be limited. Value is in triangulation: "does the money agree with the votes?" See `docs/method-evaluation.md`.
+
+### 4. Standalone Posterior Predictive Checks
+
+**Priority:** Medium — cross-model PPC comparison (flat IRT vs hierarchical vs 2D IRT). Already partially integrated into the IRT phase. Now that all three IRT variants are implemented, a unified comparison has real value for model selection.
+
+### 5. Optimal Classification
+
+**Priority:** Low — nonparametric legislative scaling. Diminishing returns if W-NOMINATE is already done. R-only (`oc` package). Would provide a third scaling comparison point but unlikely to reveal findings beyond W-NOMINATE + IRT.
+
+### 6. Latent Class Mixture Models
+
+**Priority:** Low — probabilistic alternative to k-means for discrete faction discovery. Documented in `Analytic_Methods/28_CLU_latent_class_mixture_models.md`. Clustering already showed within-party variation is continuous, not factional. Would formalize that null result but unlikely to discover anything new.
+
+### 7. Bipartite Bill-Legislator Network
+
+**Priority:** Low — two-mode network connecting legislators to bills. Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. The Kappa-based co-voting network already captures the same structure more efficiently. Genuinely redundant.
 
 ---
 
-## Deferred / Low Priority
+## Completed (Formerly Deferred)
 
 ### ~~Joint Cross-Chamber IRT~~
 
-~~A full joint MCMC model was attempted and failed.~~ **Completed (2026-02-24), fixed (2026-02-26).** The hierarchical joint cross-chamber model now runs with bill-matching (ADR-0043): shared `alpha`/`beta` parameters for 71 matched bills (91st) provide natural cross-chamber identification. Bill-matching reduced joint model runtime from 93 min to 31 min by shrinking the problem size (420 unified votes vs 491). Group-size-adaptive priors mitigate small-group convergence failures. Senate convergence now passes all checks. See ADR-0043 and `docs/joint-hierarchical-irt-diagnosis.md`.
+**Completed (2026-02-24), fixed (2026-02-26).** The hierarchical joint cross-chamber model now runs with bill-matching (ADR-0043): shared `alpha`/`beta` parameters for 71 matched bills (91st) provide natural cross-chamber identification. Bill-matching reduced joint model runtime from 93 min to 31 min by shrinking the problem size (420 unified votes vs 491). Group-size-adaptive priors mitigate small-group convergence failures. Senate convergence now passes all checks. See ADR-0043 and `docs/joint-hierarchical-irt-diagnosis.md`.
 
-### DIME/CFscores External Validation (Second Source)
+---
 
-Campaign-finance-based ideology from Bonica's DIME project ([data.stanford.edu/dime](https://data.stanford.edu/dime)) provides a completely independent data source — it captures who donors think you are, not how you vote. However, within-party correlation with Shor-McCarty is only 0.65-0.67. For our Kansas analysis where intra-Republican variation is the primary interest, CFscores may lack resolution. Pursue after Shor-McCarty validation succeeds. See `docs/method-evaluation.md`.
-
-### Latent Class Mixture Models
-
-Documented in `Analytic_Methods/28_CLU_latent_class_mixture_models.md`. Probabilistic alternative to k-means for discrete faction discovery. Low priority because clustering already showed within-party variation is continuous, not factional — there aren't discrete factions to discover.
-
-### Dynamic Ideal Points (Martin-Quinn)
-
-Track legislator positions over time within a session using a state-space model. Deferred until cross-session data is available, where it becomes much more powerful (track a legislator across bienniums).
-
-### Bipartite Bill-Legislator Network
-
-Documented in `Analytic_Methods/21_NET_bipartite_bill_legislator.md`. Two-mode network connecting legislators to bills they voted on. Intentionally deferred — the Kappa-based co-voting network already captures the same information more efficiently.
-
-### Posterior Predictive Checks (Standalone)
-
-Documented in `Analytic_Methods/17_BAY_posterior_predictive_checks.md`. Already partially integrated into the IRT phase (PPC plots in the IRT report). A standalone, cross-model PPC comparison could be useful once the hierarchical model and 2D IRT are implemented.
+## Other Backlog
 
 ### Per-Phase Results Primers
 
-Each results directory should have a `README.md` explaining the analysis for non-code readers. Low priority — the HTML reports serve this role for now, and the project-level primer (`docs/analysis-primer.md`) provides the general-audience overview. Standalone per-phase primers would still be useful for the `results/` directory.
+Each results directory should have a `README.md` explaining the analysis for non-code readers. Low priority — the HTML reports serve this role for now, and the project-level primer (`docs/analysis-primer.md`) provides the general-audience overview.
 
 ### Test Suite Expansion
 
-1172 tests exist across scraper (~219) and analysis (~953, including 94 cross-session) modules. All passing. Coverage could be expanded:
+~1260 tests across scraper and analysis modules. All passing. Coverage could be expanded:
 - Integration tests that run a mini end-to-end pipeline on fixture data
-- Cross-session tests (once 2023-24 is scraped) to verify scripts handle multiple sessions
 - Snapshot tests for HTML report output stability
 
 ---
@@ -109,8 +110,6 @@ Each results directory should have a `README.md` explaining the analysis for non
 
 | Method | Why |
 |--------|-----|
-| W-NOMINATE (`Analytic_Methods/12_DIM_w_nominate.md`) | R-only; project policy is Python-only (no rpy2) |
-| Optimal Classification (`Analytic_Methods/13_DIM_optimal_classification.md`) | R-only; same as above |
 | emIRT (fast EM ideal points) | R-only; PyMC gives full posteriors; speed not a bottleneck for single-state |
 | Vote-type-stratified IRT (IssueIRT) | Data doesn't support it: overrides are party-line (98%/1%), other types too few (N < 56) |
 | Strategic absence modeling (idealstan) | 2.6% absence rate, 22 "Present and Passing" instances — negligible impact |
@@ -148,8 +147,8 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 09 | PCA | DIM | Completed (PCA) |
 | 10 | MCA / Correspondence Analysis | DIM | Completed (MCA, Phase 2c) |
 | 11 | UMAP / t-SNE | DIM | Completed (UMAP, Phase 2b) |
-| 12 | W-NOMINATE | DIM | Rejected (R-only) |
-| 13 | Optimal Classification | DIM | Rejected (R-only) |
+| 12 | W-NOMINATE | DIM | **Planned** — item #2 above |
+| 13 | Optimal Classification | DIM | **Planned** — item #5 above |
 | 14 | Beta-Binomial Party Loyalty | BAY | Completed (Beta-Binomial, Phase 7b) |
 | 15 | Bayesian IRT (1D) | BAY | Completed (IRT) |
 | 16 | Hierarchical Bayesian Model | BAY | Completed (Hierarchical IRT, Phase 8) |
@@ -162,18 +161,23 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 23 | Community Detection | NET | Completed (Network) |
 | 24 | Vote Prediction | PRD | Completed (Prediction) |
 | 25 | SHAP Analysis | PRD | Completed (Prediction) |
-| 26 | Ideological Drift | TSA | **Planned** — item #5 above |
-| 27 | Changepoint Detection | TSA | **Planned** — item #5 above |
-| 28 | Latent Class Mixture Models | CLU | Deferred (no discrete factions found) |
+| 26 | Ideological Drift | TSA | Completed (TSA, Phase 15) |
+| 27 | Changepoint Detection | TSA | Completed (TSA, Phase 15) |
+| 28 | Latent Class Mixture Models | CLU | **Planned** — item #6 above |
+| 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | **Planned** — item #1 above |
+| 30 | DIME/CFscores External Validation | VAL | **Planned** — item #3 above |
+| 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — item #4 above |
 
-**Score: 22 completed, 2 rejected, 2 planned, 2 deferred, 1 partial = 29 total**
+**Score: 24 completed, 7 rejected, 4 planned, 1 partial = 36 total**
+
+Note: Methods 29-36 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R).
 
 ---
 
 ## Key Architectural Decisions Still Standing
 
 - **Polars over pandas** everywhere
-- **Python over R** — no rpy2, no W-NOMINATE
+- **Python-first, R where necessary** — R allowed via rpy2 for field-standard methods with no Python equivalent (W-NOMINATE, Optimal Classification)
 - **Ruff + ty + uv** — all-Astral toolchain (lint, type check, package management)
 - **IRT ideal points are the primary feature** — prediction confirmed this; everything else is marginal
 - **Chambers analyzed separately** unless explicitly doing cross-chamber comparison

@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1273)
+just test                    # run all tests (~1324)
 just test-scraper            # scraper tests only
 just check                   # full check (lint + typecheck + tests)
 uv run pytest tests/ -v      # pytest directly
@@ -55,6 +55,7 @@ uv run pytest tests/ -v      # pytest directly
 - `tests/test_synthesis.py` — synthesis data loading, build_legislator_df joins, _extract_best_auc, detect_all integration, minority mavericks, Democrat-majority paradox (~47 tests)
 - `tests/test_synthesis_detect.py` — maverick, bridge-builder, metric paradox detection, annotation slugs, threshold constants, percentile modes (~33 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
+- `tests/test_tsa.py` — rolling PCA drift, sign alignment, party trajectories, early-vs-late, Rice timeseries, weekly aggregation, PELT changepoints, joint detection, penalty sensitivity, vote matrix, veto cross-reference (~51 tests)
 
 ## Manual Verification
 
