@@ -131,6 +131,8 @@ allowed-unresolved-imports = [
     "cross_session_report",
     "external_validation_data",
     "external_validation_report",
+    "external_validation_dime_data",
+    "external_validation_dime_report",
     "tsa_report",
     "mca_report",
     "model_spec",
@@ -173,6 +175,9 @@ allowed-unresolved-imports = [
     "analysis.cross_session_report",
     "analysis.external_validation_report",
     "analysis.external_validation_data",
+    "analysis.external_validation_dime",
+    "analysis.external_validation_dime_report",
+    "analysis.external_validation_dime_data",
     "analysis.tsa",
     "analysis.tsa_report",
 ]

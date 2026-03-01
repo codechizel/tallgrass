@@ -17,6 +17,7 @@ Pipeline phases (in order):
   12_profiles      — Legislator deep dives
   13_cross_session — Cross-biennium validation
   14_external_validation — Shor-McCarty comparison
+  14b_external_validation_dime — DIME/CFscore comparison
   15_tsa              — Time series analysis (drift + changepoints)
   16_dynamic_irt      — Dynamic ideal points (state-space IRT)
   17_wnominate        — W-NOMINATE + Optimal Classification validation
@@ -74,6 +75,9 @@ _MODULE_MAP: dict[str, str] = {
     "external_validation": "14_external_validation",
     "external_validation_report": "14_external_validation",
     "external_validation_data": "14_external_validation",
+    "external_validation_dime": "14b_external_validation_dime",
+    "external_validation_dime_report": "14b_external_validation_dime",
+    "external_validation_dime_data": "14b_external_validation_dime",
     "tsa": "15_tsa",
     "tsa_report": "15_tsa",
     "tsa_r_data": "15_tsa",

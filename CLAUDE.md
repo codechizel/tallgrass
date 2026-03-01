@@ -22,7 +22,7 @@ just lint-check                              # → ruff check + ruff format --ch
 just typecheck                               # → ty check src/ + ty check analysis/
 just sessions                                # → uv run tallgrass --list-sessions
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~1490 tests)
+just test                                    # → uv run pytest tests/ -v (~1533 tests)
 just test-scraper                            # → pytest -m scraper (~264 tests)
 just test-fast                               # → pytest -m "not slow" (skip integration)
 just monitor                                 # → check running experiment status
@@ -33,7 +33,7 @@ uv run tallgrass 2024 --special        # special session (direct)
 
 Analysis recipes (all pass `*args` through to the underlying script):
 
-`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dynamic-irt`, `just wnominate`.
+`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just wnominate`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
@@ -124,6 +124,7 @@ Three CSVs in `data/kansas/{legislature}_{start}-{end}/`:
 Directory naming: `(start_year - 1879) // 2 + 18` -> legislature number. Special sessions: `{year}s`.
 Cache: `data/kansas/{name}/.cache/`. Failed fetches -> `failure_manifest.json` + `missing_votes.md`.
 External data: `data/external/shor_mccarty.tab` (Shor-McCarty scores, auto-downloaded from Harvard Dataverse).
+External data: `data/external/dime_recipients_1979_2024.csv` (DIME CFscores, manually placed, ODC-BY license).
 
 ## Results Directory
 
@@ -141,16 +142,17 @@ Experiments in `results/experimental_lab/YYYY-MM-DD_short-description/`. Each co
 
 ## Analysis Pipeline
 
-Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058). Phase `17_wnominate` is a standalone validation phase comparing IRT to W-NOMINATE + Optimal Classification via R subprocess (ADR-0059).
+Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices/`, etc.). A PEP 302 meta-path finder in `analysis/__init__.py` redirects `from analysis.eda import X` to `analysis/01_eda/eda.py` — zero import changes needed (ADR-0030). Shared infrastructure (`run_context.py`, `report.py`) stays at the root. Phase `04b_irt_2d` is experimental (2D Bayesian IRT with PLT identification, relaxed thresholds — ADR-0054). Phase `16_dynamic_irt` is a cross-session phase (Martin-Quinn state-space IRT, runs standalone like Phase 13 — ADR-0058). Phase `14b_external_validation_dime` validates IRT against DIME/CFscores (campaign-finance ideology, 84th-89th bienniums — ADR-0062). Phase `17_wnominate` is a standalone validation phase comparing IRT to W-NOMINATE + Optimal Classification via R subprocess (ADR-0059).
 
 See `.claude/rules/analysis-framework.md` for the full pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (61 decisions)
+- ADRs: `docs/adr/README.md` (62 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
+- DIME/CFscores: `docs/dime-cfscore-deep-dive.md` (campaign-finance ideology, V4.0 codebook/validation, 6-biennium coverage)
 - Hierarchical deep dive: `docs/hierarchical-shrinkage-deep-dive.md` (over-shrinkage analysis with literature)
 - PCA deep dive: `docs/pca-deep-dive.md` (literature review, code audit, implementation recommendations)
 - MCA deep dive: `docs/mca-deep-dive.md` (theory survey, ecosystem evaluation, integration design)
@@ -210,7 +212,7 @@ All hierarchical experiments (whether using `ExperimentRunner` or standalone scr
 ## Testing
 
 ```bash
-just test                    # 1490 tests
+just test                    # 1533 tests
 just test-scraper            # scraper tests only (-m scraper)
 just test-fast               # skip slow/integration tests (-m "not slow")
 just check                   # full check (lint + typecheck + tests)

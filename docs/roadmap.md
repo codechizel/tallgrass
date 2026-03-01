@@ -62,9 +62,7 @@ Completed 2026-02-28. See Completed Phases table above.
 
 ### 2. DIME/CFscores External Validation → Phase 14b
 
-**Priority:** Medium — campaign-finance-based ideology from Bonica's DIME project ([data.stanford.edu/dime](https://data.stanford.edu/dime)). Completely independent data source — captures who *donors* think you are, not how you vote. Within-party correlation with Shor-McCarty is only 0.65-0.67, so intra-Republican resolution may be limited. Value is in triangulation: "does the money agree with the votes?" See `docs/method-evaluation.md`.
-
-Natural "b" phase of Phase 14 (External Validation / Shor-McCarty). Reuses existing infrastructure: external data download, legislator name matching, correlation analysis, scatter plots. Highest-value remaining item — the only one that brings genuinely new information (campaign finance vs. votes) rather than reshuffling existing data.
+Completed 2026-02-28. Campaign-finance-based ideology from Bonica's DIME project (V4.0, ODC-BY). Validates 84th-89th bienniums (6 bienniums, one beyond Shor-McCarty). Reuses Phase 14 infrastructure (correlations, outliers, name normalization). See `docs/dime-cfscore-deep-dive.md`, ADR-0062.
 
 ### 3. Standalone Posterior Predictive Checks → Phase 4c
 
@@ -120,7 +118,7 @@ All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that Ru
 
 ### ~~Test Suite Expansion~~ — Done
 
-1490 tests across scraper and analysis modules. All passing. Three gaps closed:
+1533 tests across scraper and analysis modules. All passing. Three gaps closed:
 - **Integration tests**: `test_integration_pipeline.py` — synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution (26 tests)
 - **HTML report structural tests**: `test_report_structure.py` — TOC anchors, section ordering, numbering, container types, empty report, CSS embedding, make_gt integration (22 tests)
 - **Pytest markers**: `@pytest.mark.scraper` (264 tests), `@pytest.mark.integration` (29 tests), `@pytest.mark.slow` (24 tests). Registered in `pyproject.toml`. Recipes: `just test-scraper`, `just test-fast`
@@ -186,11 +184,11 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 27 | Changepoint Detection | TSA | Completed (TSA, Phase 15) |
 | 28 | Latent Class Mixture Models | CLU | **Planned** — Phase 5b |
 | 29 | Dynamic Ideal Points (Martin-Quinn) | TSA | Completed (Dynamic IRT, Phase 16) |
-| 30 | DIME/CFscores External Validation | VAL | **Planned** — Phase 14b |
+| 30 | DIME/CFscores External Validation | VAL | **Completed** — Phase 14b (ADR-0062) |
 | 31 | Standalone Posterior Predictive Checks | BAY | **Planned** — Phase 4c |
 | 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | **In Progress** — item #7 above |
 
-**Score: 27 completed, 7 rejected, 2 planned, 1 partial = 37 total**
+**Score: 28 completed, 7 rejected, 1 planned, 1 partial = 37 total**
 
 Note: Methods 29-37 are newly added items (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, Bipartite Network retained from prior list; W-NOMINATE and Optimal Classification unblocked by allowing R; TSA Hardening from deep dive).
 

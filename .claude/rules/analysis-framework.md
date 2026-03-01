@@ -9,7 +9,7 @@ paths:
 
 EDA -> PCA -> MCA -> IRT -> 2D IRT (experimental) -> UMAP -> Clustering -> Network -> Prediction -> Indices -> Beta-Binomial -> Hierarchical IRT -> Synthesis -> Profiles -> TSA
 
-Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only). Dynamic IRT (Phase 16) is a cross-session phase using Martin-Quinn state-space IRT across all 8 bienniums (ADR-0058). W-NOMINATE + OC (Phase 17) is a standalone validation phase comparing IRT to field-standard legislative scaling methods via R subprocess (ADR-0059).
+Phase 04b (2D IRT) is experimental with relaxed convergence thresholds (ADR-0054). Cross-session validation compares across bienniums (separate from the per-session pipeline). External validation compares IRT ideal points against Shor-McCarty scores (84th-88th bienniums only). Phase 14b (DIME/CFscores) validates against campaign-finance ideology (84th-89th bienniums, ADR-0062). Dynamic IRT (Phase 16) is a cross-session phase using Martin-Quinn state-space IRT across all 8 bienniums (ADR-0058). W-NOMINATE + OC (Phase 17) is a standalone validation phase comparing IRT to field-standard legislative scaling methods via R subprocess (ADR-0059).
 
 ## Technology Preferences
 
@@ -36,6 +36,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 - `analysis/12_profiles/profiles_data.py` — Profile targets, scorecards, bill-type breakdown, defections
 - `analysis/13_cross_session/cross_session_data.py` — Legislator matching, IRT alignment, shift metrics, prediction transfer
 - `analysis/14_external_validation/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
+- `analysis/14b_external_validation_dime/external_validation_dime_data.py` — DIME parsing, name normalization, biennium filtering, CFscore matching
 - `analysis/16_dynamic_irt/dynamic_irt_data.py` — Global roster, cross-biennium vote stacking, bridge coverage, emIRT interface
 
 ## Design Documents
@@ -52,6 +53,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `synthesis.md` — Data-driven detection thresholds, graceful degradation
 - `cross_session.md` — Affine IRT alignment, name matching, prediction transfer
 - `external_validation.md` — SM name matching, correlation methodology, career-fixed vs session-specific
+- `external_validation_dime.md` — DIME/CFscore matching, min-givers filter, incumbent-only, cycle-to-biennium mapping
 - `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation, CROPS penalty selection + Bai-Perron CIs (R enrichment). Deep dive: `docs/tsa-deep-dive.md`
 - `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage. Deep dive: `docs/dynamic-ideal-points-deep-dive.md`
 - `wnominate.md` — Field-standard comparison (W-NOMINATE, Optimal Classification), R subprocess, validation-only design. Deep dive: `docs/w-nominate-deep-dive.md`

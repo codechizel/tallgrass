@@ -111,6 +111,10 @@ profiles *args:
 external-validation *args:
     uv run python analysis/14_external_validation/external_validation.py {{args}}
 
+# Run external validation against DIME/CFscores
+dime *args:
+    uv run python analysis/14b_external_validation_dime/external_validation_dime.py {{args}}
+
 # Run time series analysis (drift + changepoints)
 tsa *args:
     uv run python analysis/15_tsa/tsa.py {{args}}

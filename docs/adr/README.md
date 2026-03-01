@@ -96,6 +96,7 @@ What are the trade-offs?
 |-----|-------|
 | [0019](0019-cross-session-validation.md) | Cross-session validation |
 | [0025](0025-external-validation-shor-mccarty.md) | External validation against Shor-McCarty scores |
+| [0062](0062-dime-cfscore-external-validation.md) | DIME/CFscore external validation (Phase 14b) |
 | [0035](0035-cross-session-deep-dive-improvements.md) | Cross-session deep dive improvements |
 | [0039](0039-cross-session-validation-enhancements.md) | Cross-session validation enhancements |
 | [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase |
@@ -187,6 +188,7 @@ What are the trade-offs?
 | [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase (R subprocess, field-standard comparison) | Accepted | 2026-02-28 |
 | [0060](0060-test-suite-expansion.md) | Test suite expansion (markers, integration tests, report structure tests) | Accepted | 2026-02-28 |
 | [0061](0061-tsa-r-enrichment.md) | TSA R enrichment (CROPS penalty selection + Bai-Perron CIs) | Accepted | 2026-02-28 |
+| [0062](0062-dime-cfscore-external-validation.md) | DIME/CFscore external validation (Phase 14b, campaign-finance ideology) | Accepted | 2026-02-28 |
 
 ## Creating a New ADR
 
