@@ -401,7 +401,7 @@ All Tier 4 items plus remaining code audit items have detailed implementation do
 
 | # | Enhancement | Milestone | Notes |
 |---|-------------|-----------|-------|
-| R21 | **Parliament/hemicircle charts** | [M4](milestones/m4-hemicycle-charts.md) | Plotly scatter on polar coords, `viz_helpers.py` |
+| R21 | **Parliament/hemicircle charts** | **Done** — `analysis/viz_helpers.py`, hemicycle in EDA report per chamber | Plotly scatter on polar coords |
 | R22 | **Sankey diagrams** for bill flow | [M5](milestones/m5-bill-lifecycle.md) | Scraper captures KLISS HISTORY + EDA Sankey |
 | R23 | **Ridgeline plots** for ideology | [M6](milestones/m6-ridgeline-plots.md) | matplotlib KDE in dynamic IRT report |
 | R24 | **Animated scatter** (Gapminder) | [M7](milestones/m7-animated-scatter.md) | Plotly `animation_frame` in dynamic IRT report |

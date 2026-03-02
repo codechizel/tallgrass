@@ -23,6 +23,7 @@ try:
         TextSection,
         make_gt,
     )
+    from analysis.viz_helpers import PARTY_COLORS, make_hemicycle_chart
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
@@ -33,6 +34,7 @@ except ModuleNotFoundError:
         TextSection,
         make_gt,
     )
+    from viz_helpers import PARTY_COLORS, make_hemicycle_chart  # type: ignore[no-redef]
 
 
 def build_eda_report(
@@ -170,6 +172,34 @@ def _add_chamber_party_composition(report: ReportBuilder, legislators: pl.DataFr
         source_note="Counts exceed constitutional seat limits when mid-session replacements occur.",
     )
     report.add(TableSection(id="chamber-party", title="Chamber x Party Composition", html=html))
+
+    # Hemicycle chart per chamber
+    for chamber in ["House", "Senate"]:
+        chamber_legs = legislators.filter(pl.col("chamber") == chamber)
+        party_counts = chamber_legs.group_by("party").len().sort("party")
+        if party_counts.is_empty():
+            continue
+
+        hemi_seats = [
+            {
+                "label": row["party"],
+                "color": PARTY_COLORS.get(row["party"], "#808080"),
+                "count": row["len"],
+            }
+            for row in party_counts.iter_rows(named=True)
+        ]
+        fig = make_hemicycle_chart(hemi_seats, f"{chamber} — Party Composition")
+        hemi_html = fig.to_html(
+            include_plotlyjs="cdn", full_html=False, div_id=f"hemicycle-{chamber.lower()}"
+        )
+        report.add(
+            InteractiveSection(
+                id=f"hemicycle-{chamber.lower()}",
+                title=f"{chamber} Party Composition (Hemicycle)",
+                html=hemi_html,
+                caption=f"Each dot represents one {chamber} seat, colored by party.",
+            )
+        )
 
 
 def _add_vote_categories(report: ReportBuilder, votes: pl.DataFrame) -> None:
