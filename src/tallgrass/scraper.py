@@ -649,6 +649,169 @@ class KSVoteScraper:
 
         return "; ".join(sponsors)
 
+    @staticmethod
+    def _extract_bill_title(soup: BeautifulSoup) -> str:
+        """Extract bill title from vote page HTML using 3-tier h4 fallback.
+
+        Pitfall #1: <h4> = bill title (not <h2> which is bill number).
+        """
+        # Tier 1: regex match on h4 for standard bill title prefixes
+        title_heading = soup.find(
+            "h4", string=re.compile(r"AN ACT|A CONCURRENT|A RESOLUTION|A JOINT", re.I)
+        )
+        if title_heading:
+            return _clean_text(title_heading)
+
+        # Tier 2: scan h4 for text starting with "AN ACT" or length > 50
+        for h4 in soup.find_all("h4"):
+            text = _clean_text(h4)
+            if text.startswith("AN ACT") or len(text) > 50:
+                return text
+
+        # Tier 3: scan h4 for text > 30 chars that isn't a known non-title heading
+        for h4 in soup.find_all("h4"):
+            text = _clean_text(h4)
+            if len(text) > 30 and not text.startswith(
+                ("SB", "HB", "On roll", "Yea", "Nay", "Senate", "House")
+            ):
+                return text
+
+        return ""
+
+    @staticmethod
+    def _extract_chamber_motion_date(soup: BeautifulSoup) -> tuple[str, str, str]:
+        """Extract chamber, motion text, and vote date from h3 headers.
+
+        Pitfall #1: <h3> contains chamber/date/motion AND vote category headings.
+        Uses _clean_text() to preserve spaces around inline <a> tags (Pitfall #5).
+
+        Returns: (chamber, motion, vote_date) — date in MM/DD/YYYY format.
+        """
+        # Tier 1: strict regex with known delimiter pattern
+        for h3 in soup.find_all("h3"):
+            text = _clean_text(h3)
+            match = re.match(
+                r"(Senate|House)\s*-\s*(.+?)\s*-\s*(\d{2}/\d{2}/\d{4})$",
+                text,
+            )
+            if match:
+                motion = match.group(2).strip().rstrip(" -;")
+                return match.group(1), motion, match.group(3)
+
+        # Tier 2: looser parse for non-standard formatting
+        for h3 in soup.find_all("h3"):
+            text = _clean_text(h3)
+            if text.startswith("Senate") or text.startswith("House"):
+                chamber = "Senate" if text.startswith("Senate") else "House"
+                date_match = re.search(r"(\d{2}/\d{2}/\d{4})", text)
+                vote_date = date_match.group(1) if date_match else ""
+                motion = text.replace(chamber, "", 1).strip(" -")
+                if vote_date:
+                    motion = motion.replace(vote_date, "").strip(" -")
+                return chamber, motion, vote_date
+
+        return "", "", ""
+
+    @staticmethod
+    def _parse_vote_categories(
+        soup: BeautifulSoup,
+    ) -> tuple[dict[str, list[dict[str, str]]], dict[str, dict[str, str]]]:
+        """Parse vote categories and member lists from vote page HTML.
+
+        Pitfall #3: Must scan BOTH <h2> and <h3> for category headings.
+
+        Returns:
+            (vote_categories, new_legislators) where:
+            - vote_categories maps category name to list of {"name": str, "slug": str}
+            - new_legislators maps slug to {"name", "slug", "chamber", "member_url"}
+        """
+        vote_categories: dict[str, list[dict[str, str]]] = {cat: [] for cat in VOTE_CATEGORIES}
+        new_legislators: dict[str, dict[str, str]] = {}
+
+        current_category = None
+        for element in soup.find_all(["h2", "h3", "a"]):
+            if element.name in ("h2", "h3"):
+                text = element.get_text(strip=True)
+                for cat in vote_categories:
+                    if text.lower().startswith(cat.lower()):
+                        current_category = cat
+                        break
+            elif element.name == "a" and current_category is not None:
+                href = element.get("href", "")
+                if "/members/" in href:
+                    name = element.get_text(strip=True).rstrip(",").strip()
+                    slug_match = re.search(r"/members/([^/]+)/", href)
+                    slug = slug_match.group(1) if slug_match else ""
+
+                    if name:
+                        vote_categories[current_category].append({"name": name, "slug": slug})
+
+                        if slug:
+                            leg_chamber = ""
+                            if slug.startswith("sen_"):
+                                leg_chamber = "Senate"
+                            elif slug.startswith("rep_"):
+                                leg_chamber = "House"
+                            new_legislators[slug] = {
+                                "name": name,
+                                "slug": slug,
+                                "chamber": leg_chamber,
+                                "member_url": (
+                                    f"{BASE_URL}{href}" if not href.startswith("http") else href
+                                ),
+                            }
+
+        return vote_categories, new_legislators
+
+    @staticmethod
+    def _extract_party_and_district(soup: BeautifulSoup) -> dict[str, str]:
+        """Extract full name, party, and district from a legislator page.
+
+        Two fallback patterns:
+        - Post-2015: <h2>District N - Republican</h2>
+        - Pre-2015: <h3>Party: Republican</h3>
+
+        Pitfall #2: Must parse the specific <h2> containing "District \\d+",
+        NOT full page text (which always matches "Republican" via dropdown).
+        Pitfall #2b: First <h1> is nav heading, not member name.
+
+        Returns: {"full_name": str, "party": str, "district": str}
+        """
+        result: dict[str, str] = {"full_name": "", "party": "", "district": ""}
+
+        # Full name from <h1> containing "Senator" or "Representative"
+        name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
+        if name_h1:
+            full_name = _clean_text(name_h1)
+            full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
+            full_name = re.sub(r"\s+-\s+.*$", "", full_name)
+            result["full_name"] = full_name
+
+        # Post-2015: party and district from <h2> containing "District \d+"
+        dist_h2 = soup.find("h2", string=re.compile(r"District\s+\d+"))
+        if dist_h2:
+            h2_text = dist_h2.get_text(strip=True)
+            dist_match = re.search(r"District\s+(\d+)", h2_text)
+            if dist_match:
+                result["district"] = dist_match.group(1)
+            if "Republican" in h2_text:
+                result["party"] = "Republican"
+            elif "Democrat" in h2_text:
+                result["party"] = "Democrat"
+
+        # Pre-2015 fallback: party from <h3> "Party: ..."
+        if not result["party"]:
+            for h3 in soup.find_all("h3"):
+                h3_text = h3.get_text(strip=True)
+                if "Party:" in h3_text:
+                    if "Republican" in h3_text:
+                        result["party"] = "Republican"
+                    elif "Democrat" in h3_text:
+                        result["party"] = "Democrat"
+                    break
+
+        return result
+
     # -- Member directory (for ODT sessions) ------------------------------------
 
     def _load_member_directory(self) -> None:
@@ -912,63 +1075,9 @@ class KSVoteScraper:
         # Parse precise datetime from vote_id
         vote_datetime = self._parse_vote_datetime(vote_id)
 
-        # Extract bill title from <h4> (not h2)
-        bill_title = ""
-        title_heading = soup.find(
-            "h4", string=re.compile(r"AN ACT|A CONCURRENT|A RESOLUTION|A JOINT", re.I)
-        )
-        if not title_heading:
-            for h4 in soup.find_all("h4"):
-                text = _clean_text(h4)
-                if text.startswith("AN ACT") or len(text) > 50:
-                    bill_title = text
-                    break
-        else:
-            bill_title = _clean_text(title_heading)
-
-        if not bill_title:
-            for h4 in soup.find_all("h4"):
-                text = _clean_text(h4)
-                if len(text) > 30 and not text.startswith(
-                    ("SB", "HB", "On roll", "Yea", "Nay", "Senate", "House")
-                ):
-                    bill_title = text
-                    break
-
-        # Extract vote description from <h3> (not h2)
-        # Must use _clean_text (separator=" ") because h3 tags can contain
-        # inline <a> elements for legislator names in Committee of the Whole
-        # motions.  get_text(strip=True) would drop spaces around the <a>,
-        # producing mangled text like "Amendment bySenator Franciscowas rejected".
-        chamber = ""
-        vote_date = ""
-        motion = ""
-
-        for h3 in soup.find_all("h3"):
-            text = _clean_text(h3)
-            match = re.match(
-                r"(Senate|House)\s*-\s*(.+?)\s*-\s*(\d{2}/\d{2}/\d{4})$",
-                text,
-            )
-            if match:
-                chamber = match.group(1)
-                motion = match.group(2).strip().rstrip(" -;")
-                vote_date = match.group(3)
-                break
-
-        # Fallback: looser parse
-        if not chamber:
-            for h3 in soup.find_all("h3"):
-                text = _clean_text(h3)
-                if text.startswith("Senate") or text.startswith("House"):
-                    chamber = "Senate" if text.startswith("Senate") else "House"
-                    date_match = re.search(r"(\d{2}/\d{2}/\d{4})", text)
-                    if date_match:
-                        vote_date = date_match.group(1)
-                    motion = text.replace(chamber, "", 1).strip(" -")
-                    if vote_date:
-                        motion = motion.replace(vote_date, "").strip(" -")
-                    break
+        # Extract structured fields via static helpers
+        bill_title = self._extract_bill_title(soup)
+        chamber, motion, vote_date = self._extract_chamber_motion_date(soup)
 
         # Parse vote_type and result from motion text
         vote_type, result = self._parse_vote_type_and_result(motion)
@@ -982,46 +1091,13 @@ class KSVoteScraper:
         short_title = meta.get("short_title", "")
         sponsor = meta.get("sponsor", "")
 
-        # Parse vote categories
-        vote_categories: dict[str, list[dict]] = {cat: [] for cat in VOTE_CATEGORIES}
+        # Parse vote categories and discover new legislators
+        vote_categories, new_legislators = self._parse_vote_categories(soup)
 
-        current_category = None
-        for element in soup.find_all(["h2", "h3", "a"]):
-            if element.name in ("h2", "h3"):
-                text = element.get_text(strip=True)
-                for cat in vote_categories:
-                    if text.lower().startswith(cat.lower()):
-                        current_category = cat
-                        break
-            elif element.name == "a" and current_category is not None:
-                href = element.get("href", "")
-                if "/members/" in href:
-                    name = element.get_text(strip=True).rstrip(",").strip()
-                    slug = re.search(r"/members/([^/]+)/", href)
-                    slug = slug.group(1) if slug else ""
-
-                    if name:
-                        vote_categories[current_category].append(
-                            {
-                                "name": name,
-                                "slug": slug,
-                            }
-                        )
-
-                        if slug and slug not in self.legislators:
-                            leg_chamber = ""
-                            if slug.startswith("sen_"):
-                                leg_chamber = "Senate"
-                            elif slug.startswith("rep_"):
-                                leg_chamber = "House"
-                            self.legislators[slug] = {
-                                "name": name,
-                                "slug": slug,
-                                "chamber": leg_chamber,
-                                "member_url": (
-                                    f"{BASE_URL}{href}" if not href.startswith("http") else href
-                                ),
-                            }
+        # Merge new legislators into registry
+        for slug, info in new_legislators.items():
+            if slug not in self.legislators:
+                self.legislators[slug] = info
 
         # Compute total votes (all categories)
         total_votes = sum(len(members) for members in vote_categories.values())
@@ -1180,43 +1256,12 @@ class KSVoteScraper:
                 continue
 
             soup = BeautifulSoup(result.html, "lxml")
+            parsed = self._extract_party_and_district(soup)
 
-            # Full name from <h1> containing "Senator" or "Representative"
-            name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
-            if name_h1:
-                full_name = _clean_text(name_h1)
-                # Strip title prefix and leadership suffix
-                full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
-                full_name = re.sub(r"\s+-\s+.*$", "", full_name)
-                info["full_name"] = full_name
-            else:
-                info["full_name"] = info.get("name", "")
-
-            # Party and district from <h2> containing "District \d+"
-            info["party"] = ""
-            info["district"] = ""
-            dist_h2 = soup.find("h2", string=re.compile(r"District\s+\d+"))
-            if dist_h2:
-                h2_text = dist_h2.get_text(strip=True)
-                # e.g. "District 27 - Republican"
-                dist_match = re.search(r"District\s+(\d+)", h2_text)
-                if dist_match:
-                    info["district"] = dist_match.group(1)
-                if "Republican" in h2_text:
-                    info["party"] = "Republican"
-                elif "Democrat" in h2_text:
-                    info["party"] = "Democrat"
-
-            # Pre-2015 fallback: party is in <h3> as "Party: Republican"
-            if not info["party"]:
-                for h3 in soup.find_all("h3"):
-                    h3_text = h3.get_text(strip=True)
-                    if "Party:" in h3_text:
-                        if "Republican" in h3_text:
-                            info["party"] = "Republican"
-                        elif "Democrat" in h3_text:
-                            info["party"] = "Democrat"
-                        break
+            # Use parsed full_name if found, else fall back to existing name
+            info["full_name"] = parsed["full_name"] or info.get("name", "")
+            info["party"] = parsed["party"]
+            info["district"] = parsed["district"]
 
         print(f"  Enriched {len(slugs_to_fetch)} legislators")
 

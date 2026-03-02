@@ -142,68 +142,48 @@ class TestVoteCategoryParsing:
     def test_yea_from_h3(self, vote_page_html: str):
         """Bug #3: Yea heading as <h3> — must be recognized."""
         soup = BeautifulSoup(vote_page_html, "lxml")
-        categories = self._parse_categories(soup)
+        categories, _ = KSVoteScraper._parse_vote_categories(soup)
         assert len(categories["Yea"]) == 3
 
     def test_nay_from_h2(self, vote_page_html: str):
         """Bug #3: Nay heading as <h2> — must also be recognized."""
         soup = BeautifulSoup(vote_page_html, "lxml")
-        categories = self._parse_categories(soup)
+        categories, _ = KSVoteScraper._parse_vote_categories(soup)
         assert len(categories["Nay"]) == 2
 
     def test_absent_from_h3(self, vote_page_html: str):
         soup = BeautifulSoup(vote_page_html, "lxml")
-        categories = self._parse_categories(soup)
+        categories, _ = KSVoteScraper._parse_vote_categories(soup)
         assert len(categories["Absent and Not Voting"]) == 1
 
     def test_member_links_extracted(self, vote_page_html: str):
         """Member slugs are extracted from href."""
         soup = BeautifulSoup(vote_page_html, "lxml")
-        categories = self._parse_categories(soup)
+        categories, _ = KSVoteScraper._parse_vote_categories(soup)
         slugs = [m["slug"] for m in categories["Yea"]]
         assert "sen_doe_john_1" in slugs
         assert "sen_smith_jane_1" in slugs
 
     def test_total_count(self, vote_page_html: str):
         soup = BeautifulSoup(vote_page_html, "lxml")
-        categories = self._parse_categories(soup)
+        categories, _ = KSVoteScraper._parse_vote_categories(soup)
         total = sum(len(members) for members in categories.values())
         assert total == 6
 
     def test_empty_categories_default(self, vote_page_html: str):
         """Categories with no members should be empty lists."""
         soup = BeautifulSoup(vote_page_html, "lxml")
-        categories = self._parse_categories(soup)
+        categories, _ = KSVoteScraper._parse_vote_categories(soup)
         assert len(categories["Present and Passing"]) == 0
         assert len(categories["Not Voting"]) == 0
 
-    @staticmethod
-    def _parse_categories(soup: BeautifulSoup) -> dict[str, list[dict]]:
-        """Replicate the category parsing logic from _parse_vote_page."""
-        import re
-
-        from tallgrass.scraper import VOTE_CATEGORIES
-
-        vote_categories: dict[str, list[dict]] = {cat: [] for cat in VOTE_CATEGORIES}
-        current_category = None
-
-        for element in soup.find_all(["h2", "h3", "a"]):
-            if element.name in ("h2", "h3"):
-                text = element.get_text(strip=True)
-                for cat in vote_categories:
-                    if text.lower().startswith(cat.lower()):
-                        current_category = cat
-                        break
-            elif element.name == "a" and current_category is not None:
-                href = element.get("href", "")
-                if "/members/" in href:
-                    name = element.get_text(strip=True).rstrip(",").strip()
-                    slug = re.search(r"/members/([^/]+)/", href)
-                    slug = slug.group(1) if slug else ""
-                    if name:
-                        vote_categories[current_category].append({"name": name, "slug": slug})
-
-        return vote_categories
+    def test_new_legislators_returned(self, vote_page_html: str):
+        """New legislators discovered during category parsing are returned."""
+        soup = BeautifulSoup(vote_page_html, "lxml")
+        _, new_legislators = KSVoteScraper._parse_vote_categories(soup)
+        assert "sen_doe_john_1" in new_legislators
+        assert new_legislators["sen_doe_john_1"]["chamber"] == "Senate"
+        assert new_legislators["sen_doe_john_1"]["name"] == "Doe, John"
 
 
 # ── Legislator parsing ───────────────────────────────────────────────────────
@@ -236,15 +216,15 @@ class TestLegislatorParsing:
     def test_name_from_second_h1(self, member_page_html: str):
         """Bug #2b: First h1 is 'Legislators' nav heading, not the name."""
         soup = BeautifulSoup(member_page_html, "lxml")
-        name, _, _ = self._parse_legislator(soup)
-        assert name == "Schreiber"
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["full_name"] == "Schreiber"
 
     def test_leadership_suffix_stripped(self, member_page_html: str):
         """Bug #2b: ' - Senate Minority Leader' must be stripped."""
         soup = BeautifulSoup(member_page_html, "lxml")
-        name, _, _ = self._parse_legislator(soup)
-        assert "Leader" not in name
-        assert "Minority" not in name
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert "Leader" not in parsed["full_name"]
+        assert "Minority" not in parsed["full_name"]
 
     def test_all_leadership_suffixes(self):
         """Four suffix variants from the real site."""
@@ -263,14 +243,14 @@ class TestLegislatorParsing:
             </body></html>
             """
             soup = BeautifulSoup(html, "lxml")
-            name, _, _ = self._parse_legislator(soup)
-            assert name == "Smith", f"Failed to strip suffix '{suffix}'"
+            parsed = KSVoteScraper._extract_party_and_district(soup)
+            assert parsed["full_name"] == "Smith", f"Failed to strip suffix '{suffix}'"
 
     def test_party_from_h2_not_dropdown(self, member_page_html: str):
         """Bug #2: Party must come from h2 'District N - Party', not the dropdown."""
         soup = BeautifulSoup(member_page_html, "lxml")
-        _, party, _ = self._parse_legislator(soup)
-        assert party == "Democrat"
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["party"] == "Democrat"
 
     def test_republican_detection(self):
         html = """
@@ -285,44 +265,13 @@ class TestLegislatorParsing:
         </body></html>
         """
         soup = BeautifulSoup(html, "lxml")
-        _, party, _ = self._parse_legislator(soup)
-        assert party == "Republican"
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["party"] == "Republican"
 
     def test_district_extraction(self, member_page_html: str):
         soup = BeautifulSoup(member_page_html, "lxml")
-        _, _, district = self._parse_legislator(soup)
-        assert district == "27"
-
-    @staticmethod
-    def _parse_legislator(soup: BeautifulSoup) -> tuple[str, str, str]:
-        """Replicate the legislator parsing logic from enrich_legislators."""
-        import re
-
-        from tallgrass.scraper import _clean_text
-
-        # Full name from h1 containing "Senator" or "Representative"
-        name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
-        full_name = ""
-        if name_h1:
-            full_name = _clean_text(name_h1)
-            full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
-            full_name = re.sub(r"\s+-\s+.*$", "", full_name)
-
-        # Party and district from h2 containing "District \d+"
-        party = ""
-        district = ""
-        dist_h2 = soup.find("h2", string=re.compile(r"District\s+\d+"))
-        if dist_h2:
-            h2_text = dist_h2.get_text(strip=True)
-            dist_match = re.search(r"District\s+(\d+)", h2_text)
-            if dist_match:
-                district = dist_match.group(1)
-            if "Republican" in h2_text:
-                party = "Republican"
-            elif "Democrat" in h2_text:
-                party = "Democrat"
-
-        return full_name, party, district
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["district"] == "27"
 
 
 # ── Vote page metadata ──────────────────────────────────────────────────────
@@ -346,62 +295,26 @@ class TestVotePageMetadata:
 
     def test_title_from_h4(self, vote_metadata_html: str):
         """Bug #1: Bill title is in <h4>, not <h2>."""
-        import re
-
         soup = BeautifulSoup(vote_metadata_html, "lxml")
-        title_heading = soup.find(
-            "h4", string=re.compile(r"AN ACT|A CONCURRENT|A RESOLUTION|A JOINT", re.I)
-        )
-        assert title_heading is not None
-        assert "AN ACT concerning taxation" in _clean_text(title_heading)
+        title = KSVoteScraper._extract_bill_title(soup)
+        assert "AN ACT concerning taxation" in title
 
     def test_chamber_from_h3(self, vote_metadata_html: str):
         """Bug #1: Chamber is in <h3>, not <h2>."""
-        import re
-
         soup = BeautifulSoup(vote_metadata_html, "lxml")
-        chamber = ""
-        for h3 in soup.find_all("h3"):
-            text = _clean_text(h3)
-            match = re.match(
-                r"(Senate|House)\s*-\s*(.+?)\s*-\s*(\d{2}/\d{2}/\d{4})$",
-                text,
-            )
-            if match:
-                chamber = match.group(1)
-                break
+        chamber, _, _ = KSVoteScraper._extract_chamber_motion_date(soup)
         assert chamber == "Senate"
 
     def test_motion_from_h3(self, vote_metadata_html: str):
         """Motion text extracted from the h3 chamber/date line."""
-        import re
-
         soup = BeautifulSoup(vote_metadata_html, "lxml")
-        motion = ""
-        for h3 in soup.find_all("h3"):
-            text = _clean_text(h3)
-            match = re.match(
-                r"(Senate|House)\s*-\s*(.+?)\s*-\s*(\d{2}/\d{2}/\d{4})$",
-                text,
-            )
-            if match:
-                motion = match.group(2).strip().rstrip(" -;")
-                break
+        _, motion, _ = KSVoteScraper._extract_chamber_motion_date(soup)
         assert "Emergency Final Action" in motion
 
     def test_vote_date_from_h3(self, vote_metadata_html: str):
         """Date extracted from the h3 chamber/date line."""
         soup = BeautifulSoup(vote_metadata_html, "lxml")
-        vote_date = ""
-        for h3 in soup.find_all("h3"):
-            text = _clean_text(h3)
-            match = re.match(
-                r"(Senate|House)\s*-\s*(.+?)\s*-\s*(\d{2}/\d{2}/\d{4})$",
-                text,
-            )
-            if match:
-                vote_date = match.group(3)
-                break
+        _, _, vote_date = KSVoteScraper._extract_chamber_motion_date(soup)
         assert vote_date == "01/15/2025"
 
 
@@ -424,8 +337,8 @@ class TestPreFifteenLegislatorParsing:
         </body></html>
         """
         soup = BeautifulSoup(html, "lxml")
-        _, party, _ = self._parse_legislator(soup)
-        assert party == "Republican"
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["party"] == "Republican"
 
     def test_democrat_from_h3(self):
         html = """
@@ -437,8 +350,8 @@ class TestPreFifteenLegislatorParsing:
         </body></html>
         """
         soup = BeautifulSoup(html, "lxml")
-        _, party, _ = self._parse_legislator(soup)
-        assert party == "Democrat"
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["party"] == "Democrat"
 
     def test_h2_takes_priority_over_h3(self):
         """When h2 has party info, h3 fallback is not used."""
@@ -451,46 +364,8 @@ class TestPreFifteenLegislatorParsing:
         </body></html>
         """
         soup = BeautifulSoup(html, "lxml")
-        _, party, _ = self._parse_legislator(soup)
-        assert party == "Republican"
-
-    @staticmethod
-    def _parse_legislator(soup: BeautifulSoup) -> tuple[str, str, str]:
-        """Replicate the legislator parsing logic including pre-2015 fallback."""
-        # Full name from h1 containing "Senator" or "Representative"
-        name_h1 = soup.find("h1", string=re.compile(r"^(Senator|Representative)\s+"))
-        full_name = ""
-        if name_h1:
-            full_name = _clean_text(name_h1)
-            full_name = re.sub(r"^(Senator|Representative)\s+", "", full_name)
-            full_name = re.sub(r"\s+-\s+.*$", "", full_name)
-
-        # Party and district from h2 containing "District \d+"
-        party = ""
-        district = ""
-        dist_h2 = soup.find("h2", string=re.compile(r"District\s+\d+"))
-        if dist_h2:
-            h2_text = dist_h2.get_text(strip=True)
-            dist_match = re.search(r"District\s+(\d+)", h2_text)
-            if dist_match:
-                district = dist_match.group(1)
-            if "Republican" in h2_text:
-                party = "Republican"
-            elif "Democrat" in h2_text:
-                party = "Democrat"
-
-        # Pre-2015 fallback: party from h3 "Party: ..."
-        if not party:
-            for h3 in soup.find_all("h3"):
-                h3_text = h3.get_text(strip=True)
-                if "Party:" in h3_text:
-                    if "Republican" in h3_text:
-                        party = "Republican"
-                    elif "Democrat" in h3_text:
-                        party = "Democrat"
-                    break
-
-        return full_name, party, district
+        parsed = KSVoteScraper._extract_party_and_district(soup)
+        assert parsed["party"] == "Republican"
 
 
 # ── odt_view link detection ───────────────────────────────────────────────

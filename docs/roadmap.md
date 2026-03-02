@@ -264,13 +264,13 @@ Clustering, bipartite, network, profiles all build lookup dicts the same way. Id
 
 ### Refactoring: Large Functions
 
-#### R8. `_parse_vote_page()` — 191 lines → [M2](milestones/m2-scraper-refactoring.md)
+#### ~~R8. `_parse_vote_page()` — 191 lines~~ — Done
 
-`scraper.py:917-1108` — Does title extraction, header parsing, vote category parsing, and record creation in one function. Split into helpers.
+**Fixed.** Extracted `_extract_bill_title()`, `_extract_chamber_motion_date()`, `_parse_vote_categories()` as static methods. `_parse_vote_page()` is now a thin coordinator. `_parse_vote_categories()` returns `new_legislators` instead of mutating `self.legislators` as a side effect.
 
-#### R9. `enrich_legislators()` — 64 lines with 4 party-detection fallbacks → [M2](milestones/m2-scraper-refactoring.md)
+#### ~~R9. `enrich_legislators()` — 64 lines~~ — Done
 
-`scraper.py:1172-1235` — Extract `_extract_party_and_district()`.
+**Fixed.** Extracted `_extract_party_and_district()` static method with post-2015/pre-2015 fallbacks. `enrich_legislators()` loop body reduced to a single method call.
 
 ### Efficiency
 
@@ -317,7 +317,7 @@ Marker registered in `pyproject.toml` and `just test-fast` skips it, but no test
 | Bugs (B1-B3) | 3/3 | 3 | ~15 lines fixed |
 | Dead code (D1-D2) | 2/2 | 2 | ~20 lines removed |
 | Cross-file dedup (R1-R4) | 4/4 | 7 | ~400 lines removed, `phase_utils.py` created |
-| Large functions (R8-R9) | 0/2 | 2 | Deferred |
+| Large functions (R8-R9) | 2/2 | 2 | 4 static methods extracted |
 | Efficiency (E1-E3) | 3/3 | 3 | E1: vectorized bipartite |
 | Error handling (H1-H3) | 3/3 | 3 | Crash prevention |
 | Tests (T1-T2) | 1/2 | 2 | T1 deferred |
