@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.report import (
     FigureSection,
+    InteractiveSection,
     ReportBuilder,
     TableSection,
     TextSection,
@@ -236,6 +237,68 @@ class TestReportBuilder:
         assert "</html>" in html
         assert "<head>" in html
         assert "<body>" in html
+
+
+# ── Accessibility (WCAG 2.1 AA) ─────────────────────────────────────────────
+
+
+class TestAccessibility:
+    """Alt-text and aria-label support for screen readers."""
+
+    def test_figure_alt_text_override(self):
+        section = FigureSection(
+            id="f1", title="My Chart", image_data="abc",
+            alt_text="Bar chart showing vote counts by party for SB 1.",
+        )
+        html = section.render()
+        assert 'alt="Bar chart showing vote counts by party for SB 1."' in html
+        assert 'alt="My Chart"' not in html
+
+    def test_figure_alt_text_falls_back_to_title(self):
+        section = FigureSection(id="f1", title="My Chart", image_data="abc")
+        html = section.render()
+        assert 'alt="My Chart"' in html
+
+    def test_figure_from_file_passes_alt_text(self, tmp_path):
+        png_path = tmp_path / "test.png"
+        png_path.write_bytes(b"\x89PNG")
+        section = FigureSection.from_file(
+            "f1", "Plot", png_path, alt_text="Scatter plot of ideal points.",
+        )
+        assert section.alt_text == "Scatter plot of ideal points."
+        html = section.render()
+        assert 'alt="Scatter plot of ideal points."' in html
+
+    def test_figure_from_file_no_alt_text(self, tmp_path):
+        png_path = tmp_path / "test.png"
+        png_path.write_bytes(b"\x89PNG")
+        section = FigureSection.from_file("f1", "Plot", png_path)
+        assert section.alt_text is None
+        html = section.render()
+        assert 'alt="Plot"' in html
+
+    def test_interactive_aria_label(self):
+        section = InteractiveSection(
+            id="net", title="Network",
+            html="<div>graph</div>",
+            aria_label="Interactive co-voting network with 125 legislators as nodes.",
+        )
+        html = section.render()
+        assert 'aria-label="Interactive co-voting network with 125 legislators as nodes."' in html
+
+    def test_interactive_no_aria_label(self):
+        section = InteractiveSection(id="net", title="Network", html="<div>graph</div>")
+        html = section.render()
+        assert "aria-label" not in html
+
+    def test_interactive_aria_label_on_container_div(self):
+        section = InteractiveSection(
+            id="plot1", title="Scatter",
+            html="<div>plotly</div>",
+            aria_label="Interactive scatter of ideal points.",
+        )
+        html = section.render()
+        assert '<div class="interactive-container" id="plot1" aria-label="Interactive scatter of ideal points.">' in html
 
 
 # ── make_gt() ────────────────────────────────────────────────────────────────

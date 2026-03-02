@@ -63,6 +63,7 @@ class FigureSection:
     title: str
     image_data: str  # base64-encoded PNG
     caption: str | None = None
+    alt_text: str | None = None  # descriptive alt-text for screen readers (WCAG 2.1 AA)
 
     @classmethod
     def from_file(
@@ -71,11 +72,12 @@ class FigureSection:
         title: str,
         path: Path,
         caption: str | None = None,
+        alt_text: str | None = None,
     ) -> FigureSection:
         """Create a FigureSection from a PNG file on disk."""
         data = path.read_bytes()
         b64 = base64.b64encode(data).decode("ascii")
-        return cls(id=id, title=title, image_data=b64, caption=caption)
+        return cls(id=id, title=title, image_data=b64, caption=caption, alt_text=alt_text)
 
     @classmethod
     def from_figure(
@@ -85,17 +87,19 @@ class FigureSection:
         fig: object,
         caption: str | None = None,
         dpi: int = 150,
+        alt_text: str | None = None,
     ) -> FigureSection:
         """Create a FigureSection from an in-memory matplotlib Figure."""
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")  # type: ignore[union-attr]
         buf.seek(0)
         b64 = base64.b64encode(buf.read()).decode("ascii")
-        return cls(id=id, title=title, image_data=b64, caption=caption)
+        return cls(id=id, title=title, image_data=b64, caption=caption, alt_text=alt_text)
 
     def render(self) -> str:
+        alt = self.alt_text or self.title
         parts = [f'<div class="figure-container" id="{self.id}">']
-        parts.append(f'<img src="data:image/png;base64,{self.image_data}" alt="{self.title}" />')
+        parts.append(f'<img src="data:image/png;base64,{self.image_data}" alt="{alt}" />')
         if self.caption:
             parts.append(f'<p class="caption">{self.caption}</p>')
         parts.append("</div>")
@@ -146,9 +150,11 @@ class InteractiveSection:
     title: str
     html: str
     caption: str | None = None
+    aria_label: str | None = None  # accessible label for interactive content (WCAG 2.1 AA)
 
     def render(self) -> str:
-        parts = [f'<div class="interactive-container" id="{self.id}">']
+        aria = f' aria-label="{self.aria_label}"' if self.aria_label else ""
+        parts = [f'<div class="interactive-container" id="{self.id}"{aria}>']
         parts.append(self.html)
         if self.caption:
             parts.append(f'<p class="caption">{self.caption}</p>')
