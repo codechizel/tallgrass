@@ -23,15 +23,18 @@ Root cause: `UPSTREAM_PHASES` was refactored from short to full IDs, but consume
 
 The one correct access (`manifests.get("06_network")` at line 638) was already using the full ID.
 
-### Remaining Items (Roadmap)
+### Also Fixed
 
-**B. Monitoring callback non-functional with nutpie (low priority — DOCUMENT)**
+**B. Monitoring callback non-functional with nutpie (low priority — FIXED)**
 
-The `create_monitoring_callback()` in `experiment_monitor.py` writes status JSON for `pm.sample(callback=...)`, which nutpie doesn't support. All three sampling functions accept `callback=` for API compatibility but explicitly print "ignored". `just monitor` always shows "No experiment running."
+`create_monitoring_callback()` wrote status JSON for `pm.sample(callback=...)`, which nutpie doesn't support. All sampling functions accepted `callback=` for API compatibility but printed "ignored". `just monitor` always showed "No experiment running."
 
-Mitigating factor: nutpie provides its own terminal progress bar via `progress_bar=True` (step size, divergences, gradients/draw per chain). Real-time monitoring works — just not through `just monitor`.
-
-Action: Either strip the dead callback infrastructure or replace with a nutpie-aware heartbeat. Not urgent — the operational need (watching MCMC progress) is met by the terminal progress bar.
+**Fix:** Removed the entire dead callback chain:
+- Deleted `create_monitoring_callback()` from `experiment_monitor.py` (~60 lines)
+- Removed `callback=` parameter from `build_per_chamber_model()` and `build_joint_model()`
+- Removed callback creation/passing from `experiment_runner.py`
+- Removed 5 callback tests from `test_experiment_monitor.py`
+- Updated `just monitor` to check PID file instead of status JSON (nutpie shows its own terminal progress bar via Rust's indicatif crate)
 
 **C. Dead helpers in `irt.py` (low priority — FIXED)**
 
@@ -56,5 +59,8 @@ Cache filenames were derived from URLs via character replacement and truncated t
 ## Consequences
 
 - Synthesis reports now display actual EDA/indices/clustering manifest data instead of fallback defaults
-- Remaining items are tracked here for future cleanup passes
-- No architectural changes needed — all remaining items are localized fixes
+- All 20+ analysis phases now support `--session 2024s` for special sessions
+- Cache key collisions eliminated via SHA-256 hashing (existing caches invalidated)
+- ~270 lines of dead code removed (callback infrastructure + joint model helpers)
+- `just monitor` now checks PID file; nutpie's built-in progress bar handles real-time MCMC monitoring
+- All 5 audit findings resolved

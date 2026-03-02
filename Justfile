@@ -272,9 +272,9 @@ typecheck:
     uvx ty check src/
     uvx ty check analysis/
 
-# Monitor running experiment
+# Check if an experiment is running (nutpie shows its own progress bar in the terminal)
 monitor:
-    @cat /tmp/tallgrass/experiment.status.json 2>/dev/null | python3 -m json.tool || echo "No experiment running"
+    @if [ -f /tmp/tallgrass/experiment.pid ] && kill -0 "$(cat /tmp/tallgrass/experiment.pid)" 2>/dev/null; then echo "Experiment running (PID $(cat /tmp/tallgrass/experiment.pid))"; ps -p "$(cat /tmp/tallgrass/experiment.pid)" -o pid,etime,command | tail -1; else echo "No experiment running"; fi
 
 # Full check (lint + typecheck + tests)
 check:

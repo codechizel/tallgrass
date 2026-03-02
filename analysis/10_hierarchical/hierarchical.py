@@ -421,7 +421,6 @@ def build_per_chamber_model(
     target_accept: float = HIER_TARGET_ACCEPT,
     xi_offset_initvals: np.ndarray | None = None,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
-    callback=None,
 ) -> tuple[az.InferenceData, float]:
     """Build 2-level hierarchical IRT and sample with nutpie's Rust NUTS.
 
@@ -435,13 +434,9 @@ def build_per_chamber_model(
             reflection mode-splitting — see ADR-0044.
         beta_prior: Specification for the bill discrimination prior.
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
-        callback: Accepted for API compatibility (experiment runner) but ignored.
-            nutpie does not support PyMC-style callbacks.
 
     Returns (InferenceData, sampling_time_seconds).
     """
-    if callback is not None:
-        print("  Note: callback ignored (nutpie does not support PyMC callbacks)")
     if target_accept != HIER_TARGET_ACCEPT:
         print(
             f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"
@@ -773,7 +768,6 @@ def build_joint_model(
     target_accept: float = HIER_TARGET_ACCEPT,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
     alpha_sigma: float = 5.0,
-    callback=None,
     xi_offset_initvals: np.ndarray | None = None,
 ) -> tuple[az.InferenceData, dict, float]:
     """Build 3-level joint cross-chamber hierarchical IRT and sample with nutpie.
@@ -786,15 +780,11 @@ def build_joint_model(
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
         alpha_sigma: Standard deviation for the bill difficulty prior.
             Defaults to 5.0 (legacy). Joint model uses 2.0 for tighter regularization.
-        callback: Accepted for API compatibility but ignored.
-            nutpie does not support PyMC-style callbacks.
         xi_offset_initvals: Optional initial xi_offset values (from PCA).
             If provided, all chains start near these values.
 
     Returns (InferenceData, combined_data_dict, sampling_time_seconds).
     """
-    if callback is not None:
-        print("  Note: callback ignored (nutpie does not support PyMC callbacks)")
     if target_accept != HIER_TARGET_ACCEPT:
         print(
             f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"

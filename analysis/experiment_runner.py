@@ -41,17 +41,9 @@ except ModuleNotFoundError:
     from model_spec import PRODUCTION_BETA, BetaPriorSpec  # type: ignore[no-redef]
 
 try:
-    from analysis.experiment_monitor import (
-        ExperimentLifecycle,
-        PlatformCheck,
-        create_monitoring_callback,
-    )
+    from analysis.experiment_monitor import ExperimentLifecycle, PlatformCheck
 except ModuleNotFoundError:
-    from experiment_monitor import (  # type: ignore[no-redef]
-        ExperimentLifecycle,
-        PlatformCheck,
-        create_monitoring_callback,
-    )
+    from experiment_monitor import ExperimentLifecycle, PlatformCheck  # type: ignore[no-redef]
 
 try:
     from analysis.hierarchical import (
@@ -181,7 +173,6 @@ def _run_per_chamber(
     legislators: pl.DataFrame,
     flat_ip: pl.DataFrame | None,
     out_dir: Path,
-    monitoring: bool = True,
 ) -> dict:
     """Run one chamber with the specified experiment config. Full production output."""
     ch = chamber.lower()
@@ -203,12 +194,6 @@ def _run_per_chamber(
     print(f"  PCA init: {len(xi_init)} params, range [{xi_init.min():.2f}, {xi_init.max():.2f}]")
 
     # Monitoring callback
-    callback = None
-    if monitoring:
-        callback = create_monitoring_callback(
-            config.name, config.description, ch, config.n_samples, config.n_tune
-        )
-
     # Sample using production function with experimental beta_prior
     print_header(f"SAMPLING — {chamber}")
     idata, sampling_time = build_per_chamber_model(
@@ -219,7 +204,6 @@ def _run_per_chamber(
         target_accept=config.target_accept,
         xi_offset_initvals=xi_init,
         beta_prior=config.beta_prior,
-        callback=callback,
     )
 
     # Convergence
@@ -288,20 +272,12 @@ def _run_joint(
     legislators: pl.DataFrame,
     rollcalls: pl.DataFrame,
     out_dir: Path,
-    monitoring: bool = True,
 ) -> dict | None:
     """Run the joint cross-chamber model with experiment config."""
     print_header("JOINT CROSS-CHAMBER MODEL")
 
     house_data = per_chamber_results["House"]["data"]
     senate_data = per_chamber_results["Senate"]["data"]
-
-    # Monitoring callback
-    callback = None
-    if monitoring:
-        callback = create_monitoring_callback(
-            config.name, config.description, "joint", config.n_samples, config.n_tune
-        )
 
     joint_idata, combined_data, joint_time = build_joint_model(
         house_data,
@@ -312,7 +288,6 @@ def _run_joint(
         rollcalls=rollcalls,
         target_accept=config.target_accept,
         beta_prior=config.beta_prior,
-        callback=callback,
     )
 
     joint_convergence = check_hierarchical_convergence(joint_idata, "Joint")

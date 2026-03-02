@@ -1,9 +1,12 @@
 """Experiment monitoring infrastructure for MCMC sampling.
 
-Three components:
+Two components:
   1. PlatformCheck — validates Apple Silicon MCMC constraints before sampling
-  2. Monitoring callback — updates process title + atomic status file during sampling
-  3. ExperimentLifecycle — context manager for PID lock, process group, cleanup
+  2. ExperimentLifecycle — context manager for PID lock, process group, cleanup
+
+nutpie provides its own terminal progress bar (step size, divergences,
+gradients/draw per chain via Rust's indicatif crate). Use `just monitor`
+to check whether an experiment process is alive.
 
 See docs/experiment-framework-deep-dive.md for design rationale.
 """
@@ -15,9 +18,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 STATUS_DIR = Path("/tmp/tallgrass")
@@ -149,68 +150,6 @@ def write_status(status: dict, path: Path = STATUS_PATH) -> None:
         except OSError:
             pass
         raise
-
-
-# ── Monitoring Callback ─────────────────────────────────────────────────────
-
-
-def create_monitoring_callback(
-    experiment_name: str,
-    variant: str,
-    chamber: str,
-    total_draws: int,
-    total_tune: int,
-    status_path: Path = STATUS_PATH,
-):
-    """Create a PyMC callback that updates process title + status file.
-
-    Args:
-        experiment_name: Name of the experiment (e.g. "positive-beta").
-        variant: Variant being run (e.g. "lognormal").
-        chamber: Chamber being sampled (e.g. "house").
-        total_draws: Number of sampling draws.
-        total_tune: Number of tuning draws.
-        status_path: Path for the JSON status file.
-
-    Returns:
-        Callback function compatible with pm.sample(callback=...).
-    """
-    try:
-        from setproctitle import setproctitle
-    except ImportError:
-        setproctitle = None  # type: ignore[assignment]
-
-    start_time = time.time()
-
-    def callback(trace, draw):
-        phase = "tuning" if draw.tuning else "sampling"
-        total = total_tune if draw.tuning else total_draws
-
-        # Layer 1: Process title (every draw, nanosecond cost)
-        if setproctitle is not None:
-            setproctitle(
-                f"tallgrass:{experiment_name}:{chamber}:{phase} draw={draw.draw_idx}/{total}"
-            )
-
-        # Layer 2: Status file (every 50 draws)
-        if draw.draw_idx % 50 == 0:
-            write_status(
-                {
-                    "pid": os.getpid(),
-                    "experiment": experiment_name,
-                    "variant": variant,
-                    "chamber": chamber,
-                    "phase": phase,
-                    "chain": draw.chain,
-                    "draw": draw.draw_idx,
-                    "total": total,
-                    "elapsed_s": round(time.time() - start_time, 1),
-                    "heartbeat": datetime.now(timezone.utc).isoformat(),
-                },
-                status_path,
-            )
-
-    return callback
 
 
 # ── Experiment Lifecycle ────────────────────────────────────────────────────

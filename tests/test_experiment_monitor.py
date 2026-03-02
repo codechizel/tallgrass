@@ -10,7 +10,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -22,7 +22,6 @@ from analysis.experiment_monitor import (
     STATUS_PATH,
     ExperimentLifecycle,
     PlatformCheck,
-    create_monitoring_callback,
     write_status,
 )
 
@@ -117,76 +116,6 @@ class TestWriteStatus:
         loaded = json.loads(status_file.read_text())
         assert loaded["nested"]["a"] == 1
         assert loaded["list"] == [1, 2, 3]
-
-
-# ── Monitoring Callback ─────────────────────────────────────────────────────
-
-
-class TestMonitoringCallback:
-    """Monitoring callback for PyMC sampling."""
-
-    def test_callback_callable(self):
-        cb = create_monitoring_callback("test-exp", "baseline", "house", 2000, 1500)
-        assert callable(cb)
-
-    def test_callback_writes_status_on_draw_0(self, tmp_path: Path):
-        status_file = tmp_path / "status.json"
-        cb = create_monitoring_callback(
-            "test-exp", "lognormal", "senate", 2000, 1500, status_path=status_file
-        )
-        # Simulate a draw at index 0
-        draw = MagicMock()
-        draw.tuning = False
-        draw.draw_idx = 0
-        draw.chain = 0
-        cb(None, draw)
-        assert status_file.exists()
-        data = json.loads(status_file.read_text())
-        assert data["experiment"] == "test-exp"
-        assert data["variant"] == "lognormal"
-        assert data["chamber"] == "senate"
-        assert data["phase"] == "sampling"
-
-    def test_callback_skips_non_50_draws(self, tmp_path: Path):
-        status_file = tmp_path / "status.json"
-        cb = create_monitoring_callback(
-            "test-exp", "baseline", "house", 2000, 1500, status_path=status_file
-        )
-        draw = MagicMock()
-        draw.tuning = True
-        draw.draw_idx = 7
-        draw.chain = 0
-        cb(None, draw)
-        assert not status_file.exists()
-
-    def test_callback_writes_on_multiples_of_50(self, tmp_path: Path):
-        status_file = tmp_path / "status.json"
-        cb = create_monitoring_callback(
-            "test-exp", "baseline", "house", 2000, 1500, status_path=status_file
-        )
-        draw = MagicMock()
-        draw.tuning = False
-        draw.draw_idx = 150
-        draw.chain = 2
-        cb(None, draw)
-        assert status_file.exists()
-        data = json.loads(status_file.read_text())
-        assert data["draw"] == 150
-        assert data["chain"] == 2
-
-    def test_callback_tuning_phase(self, tmp_path: Path):
-        status_file = tmp_path / "status.json"
-        cb = create_monitoring_callback(
-            "test-exp", "baseline", "house", 2000, 1500, status_path=status_file
-        )
-        draw = MagicMock()
-        draw.tuning = True
-        draw.draw_idx = 50
-        draw.chain = 0
-        cb(None, draw)
-        data = json.loads(status_file.read_text())
-        assert data["phase"] == "tuning"
-        assert data["total"] == 1500
 
 
 # ── ExperimentLifecycle ─────────────────────────────────────────────────────
