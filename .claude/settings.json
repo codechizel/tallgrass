@@ -5,6 +5,18 @@
         "matcher": "Write|Edit",
         "hooks": [{"type": "command", "command": "bash .claude/hooks/lint-python.sh $FILE_PATH"}]
       }
+    ],
+    "WorktreeCreate": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/worktree-setup.sh",
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }

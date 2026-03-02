@@ -39,6 +39,17 @@ Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles
 
 `just pipeline 2025-26` runs all 16 phases in order under a single run ID (ADR-0052). Each phase gets `--run-id` automatically. Phase 04b (2D IRT) is excluded from the pipeline but available standalone (ADR-0074).
 
+## Worktrees
+
+Git worktrees for branch isolation. See `.claude/rules/worktree-workflow.md` for full rules.
+
+```bash
+just wt-new feature-name                     # create .claude/worktrees/feature-name/
+just wt-done                                 # merge to main + cleanup + push (run from inside worktree)
+```
+
+**Hard rules:** Never `git checkout main` from a worktree. Never remove a worktree while CWD is inside it. Never `git push origin branch:main`. Use `just wt-done` — it handles all of this correctly.
+
 ## Build Philosophy
 
 - **Check for existing open source solutions first.** Don't reinvent the wheel, but don't force a shoehorned dependency either.

@@ -171,6 +171,63 @@ pipeline session="2025-26" *args:
 dashboard session="2025-26" *args:
     uv run python analysis/dashboard.py {{session}} {{args}}
 
+# --- Worktree lifecycle ---
+
+# Path to the primary (non-worktree) repo root
+_main_root := `git worktree list --porcelain | head -1 | sed 's/^worktree //'`
+
+# Create a new worktree with branch worktree-<name>
+wt-new name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    MAIN_ROOT="{{_main_root}}"
+    WT_PATH="$MAIN_ROOT/.claude/worktrees/{{name}}"
+    if [ -d "$WT_PATH" ]; then
+        echo "Error: worktree '{{name}}' already exists at $WT_PATH"
+        exit 1
+    fi
+    git worktree add -b "worktree-{{name}}" "$WT_PATH" main
+    echo ""
+    echo "Worktree ready:"
+    echo "  Path:   $WT_PATH"
+    echo "  Branch: worktree-{{name}}"
+    echo ""
+    echo "To enter: cd $WT_PATH"
+
+# Merge worktree branch to main, remove worktree, delete branch, push
+wt-done:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BRANCH=$(git branch --show-current)
+    if [ -z "$BRANCH" ] || [ "$BRANCH" = "main" ]; then
+        echo "Error: not on a worktree branch (current: ${BRANCH:-detached})"
+        exit 1
+    fi
+    # Verify clean working tree
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "Error: uncommitted changes. Commit or stash first."
+        exit 1
+    fi
+    MAIN_ROOT="{{_main_root}}"
+    WT_PATH=$(pwd)
+    # Fast-forward main to this branch
+    if ! git fetch . "$BRANCH:main"; then
+        echo ""
+        echo "Error: cannot fast-forward main to $BRANCH."
+        echo "Main has diverged. Rebase first: git rebase main"
+        exit 1
+    fi
+    # cd to main repo BEFORE removing worktree (prevents CWD death)
+    cd "$MAIN_ROOT"
+    # Remove worktree + branch
+    git worktree remove "$WT_PATH" 2>/dev/null || git worktree remove --force "$WT_PATH"
+    git branch -d "$BRANCH" 2>/dev/null || git branch -D "$BRANCH" 2>/dev/null
+    git worktree prune
+    # Push updated main
+    git push origin main
+    echo ""
+    echo "Done: merged $BRANCH -> main, removed worktree, pushed."
+
 # Run all tests
 test *args:
     uv run pytest tests/ {{args}} -v
