@@ -23,7 +23,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 
 - `@pytest.mark.scraper` — scraper pipeline tests (8 files, ~264 tests)
 - `@pytest.mark.integration` — end-to-end and real-data tests (~29 tests)
-- `@pytest.mark.slow` — tests that take >5 seconds (~24 tests)
+- `@pytest.mark.slow` — tests that take >5 seconds (~39 tests, including 15 in test_scraper_http.py)
 
 ## Conventions
 
@@ -32,10 +32,12 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - Inline fixtures (HTML parsing uses inline BeautifulSoup, not separate files)
 - CLI tests use monkeypatched FakeScraper class
 - RunContext tests use `tmp_path` for isolated filesystem operations
+- Shared data factories in `tests/factories.py` — `make_legislators()`, `make_votes()`, `make_rollcalls()` with `slug_column` parameter for scraper/analysis schema split (ADR-0066)
 
 ## Scraper Test Files
 
-- `tests/conftest.py` — shared KSSession fixtures (current, historical, special)
+- `tests/conftest.py` — shared KSSession fixtures (current, historical, special) + `sys.path` setup for factories
+- `tests/factories.py` — shared data factory functions (`make_legislators`, `make_votes`, `make_rollcalls`)
 - `tests/test_session.py` — session URL resolution, biennium logic, uses_odt, js_data_paths (~40 tests)
 - `tests/test_scraper_pure.py` — pure functions: bill codes, datetime parsing, result derivation, JS parsing (~45 tests)
 - `tests/test_scraper_html.py` — HTML parsing via static methods (`_extract_bill_title`, `_extract_chamber_motion_date`, `_parse_vote_categories`, `_extract_party_and_district`), pre-2015 party detection, odt_view links (~32 tests)

@@ -2,11 +2,20 @@
 
 Provides pre-built KSSession instances covering the three session types:
 current biennium, historical biennium, and special session.
+
+Shared data factory functions live in ``tests/factories.py`` — import as
+``from factories import make_legislators, make_votes, make_rollcalls``.
 """
+
+import sys
+from pathlib import Path
 
 import pytest
 
 from tallgrass.session import KSSession
+
+# Make tests/ directory importable so test modules can use shared factories
+sys.path.insert(0, str(Path(__file__).parent))
 
 # ── Session fixtures ─────────────────────────────────────────────────────────
 

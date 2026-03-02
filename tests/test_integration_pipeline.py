@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
+from factories import make_legislators
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -51,18 +52,29 @@ _VOTE_SCHEMA = [
 
 def _make_legislators() -> pl.DataFrame:
     """20 legislators: 12R House, 4D House, 3R Senate, 1D Senate."""
-    rows = []
-    for i in range(1, 13):
-        rows.append((f"rep_r{i}", f"R House {i}", "Republican", "House", str(i)))
-    for i in range(1, 5):
-        rows.append((f"rep_d{i}", f"D House {i}", "Democrat", "House", str(100 + i)))
-    for i in range(1, 4):
-        rows.append((f"sen_r{i}", f"R Senate {i}", "Republican", "Senate", str(i)))
-    rows.append(("sen_d1", "D Senate 1", "Democrat", "Senate", "40"))
-    return pl.DataFrame(
-        rows,
-        schema=["slug", "full_name", "party", "chamber", "district"],
-        orient="row",
+    return pl.concat(
+        [
+            make_legislators(
+                [f"R House {i}" for i in range(1, 13)], prefix="rep_r", chamber="House"
+            ),
+            make_legislators(
+                [f"D House {i}" for i in range(1, 5)],
+                prefix="rep_d",
+                party="Democrat",
+                chamber="House",
+                start_district=101,
+            ),
+            make_legislators(
+                [f"R Senate {i}" for i in range(1, 4)], prefix="sen_r", chamber="Senate"
+            ),
+            make_legislators(
+                ["D Senate 1"],
+                prefix="sen_d",
+                party="Democrat",
+                chamber="Senate",
+                start_district=40,
+            ),
+        ]
     )
 
 

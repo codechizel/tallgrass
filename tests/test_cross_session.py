@@ -33,28 +33,9 @@ from analysis.cross_session_data import (
     normalize_name,
     standardize_features,
 )
+from factories import make_legislators
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
-
-
-def _make_legislators(
-    names: list[str],
-    *,
-    prefix: str = "rep",
-    party: str = "Republican",
-    chamber: str = "House",
-    start_district: int = 1,
-) -> pl.DataFrame:
-    """Build a legislators DataFrame matching the CSV schema."""
-    return pl.DataFrame(
-        {
-            "slug": [f"{prefix}_{n.split()[-1].lower()}" for n in names],
-            "full_name": names,
-            "party": [party] * len(names),
-            "chamber": [chamber] * len(names),
-            "district": list(range(start_district, start_district + len(names))),
-        }
-    )
 
 
 def _make_ideal_points(
@@ -85,8 +66,8 @@ def _make_large_matched(n: int = 25) -> tuple[pl.DataFrame, pl.DataFrame, pl.Dat
     names_only_a = [f"Departing D{i}" for i in range(5)]
     names_only_b = [f"Newcomer N{i}" for i in range(5)]
 
-    leg_a = _make_legislators(names_shared + names_only_a)
-    leg_b = _make_legislators(names_shared + names_only_b, prefix="rep2")
+    leg_a = make_legislators(names_shared + names_only_a)
+    leg_b = make_legislators(names_shared + names_only_b, prefix="rep2")
 
     matched = match_legislators(leg_a, leg_b)
     return leg_a, leg_b, matched
@@ -136,15 +117,15 @@ class TestMatchLegislators:
     def test_exact_match(self) -> None:
         """Legislators with the same name should match."""
         names = [f"Member {i}" for i in range(25)]
-        leg_a = _make_legislators(names)
-        leg_b = _make_legislators(names, prefix="rep2")
+        leg_a = make_legislators(names)
+        leg_b = make_legislators(names, prefix="rep2")
         matched = match_legislators(leg_a, leg_b)
         assert matched.height == 25
 
     def test_case_insensitive_match(self) -> None:
         """Matching should be case-insensitive."""
-        leg_a = _make_legislators(["JOHN SMITH"] + [f"M {i}" for i in range(24)])
-        leg_b = _make_legislators(["john smith"] + [f"M {i}" for i in range(24)], prefix="x")
+        leg_a = make_legislators(["JOHN SMITH"] + [f"M {i}" for i in range(24)])
+        leg_b = make_legislators(["john smith"] + [f"M {i}" for i in range(24)], prefix="x")
         matched = match_legislators(leg_a, leg_b)
         assert matched.height == 25
 
@@ -152,31 +133,31 @@ class TestMatchLegislators:
         """Leadership suffixes should not prevent matching."""
         names_a = ["Bob Jones - Speaker"] + [f"M {i}" for i in range(24)]
         names_b = ["Bob Jones"] + [f"M {i}" for i in range(24)]
-        leg_a = _make_legislators(names_a)
-        leg_b = _make_legislators(names_b, prefix="x")
+        leg_a = make_legislators(names_a)
+        leg_b = make_legislators(names_b, prefix="x")
         matched = match_legislators(leg_a, leg_b)
         assert matched.height == 25
 
     def test_partial_overlap(self) -> None:
         """Only shared legislators should appear in output."""
         names_shared = [f"Shared {i}" for i in range(22)]
-        leg_a = _make_legislators(names_shared + ["Only In A", "Also Only A", "Third Only A"])
-        leg_b = _make_legislators(names_shared + ["Only In B", "Also Only B"], prefix="x")
+        leg_a = make_legislators(names_shared + ["Only In A", "Also Only A", "Third Only A"])
+        leg_b = make_legislators(names_shared + ["Only In B", "Also Only B"], prefix="x")
         matched = match_legislators(leg_a, leg_b)
         assert matched.height == 22
 
     def test_too_few_matches_raises(self) -> None:
         """Should raise ValueError if overlap < MIN_OVERLAP."""
-        leg_a = _make_legislators([f"A {i}" for i in range(10)])
-        leg_b = _make_legislators([f"B {i}" for i in range(10)])
+        leg_a = make_legislators([f"A {i}" for i in range(10)])
+        leg_b = make_legislators([f"B {i}" for i in range(10)])
         with pytest.raises(ValueError, match="Only 0 legislators matched"):
             match_legislators(leg_a, leg_b)
 
     def test_chamber_switch_flagged(self) -> None:
         """A legislator who changed chambers should be flagged."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names, chamber="House")
-        leg_b = _make_legislators(names, chamber="House", prefix="x")
+        leg_a = make_legislators(names, chamber="House")
+        leg_b = make_legislators(names, chamber="House", prefix="x")
         # Change one legislator's chamber in session B
         leg_b = leg_b.with_columns(
             pl.when(pl.col("slug") == "x_0")
@@ -191,8 +172,8 @@ class TestMatchLegislators:
     def test_party_switch_flagged(self) -> None:
         """A legislator who changed parties should be flagged."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names, party="Republican")
-        leg_b = _make_legislators(names, party="Republican", prefix="x")
+        leg_a = make_legislators(names, party="Republican")
+        leg_b = make_legislators(names, party="Republican", prefix="x")
         leg_b = leg_b.with_columns(
             pl.when(pl.col("slug") == "x_0")
             .then(pl.lit("Democrat"))
@@ -206,16 +187,16 @@ class TestMatchLegislators:
     def test_slug_column_name_flexibility(self) -> None:
         """Should handle both 'slug' and 'legislator_slug' column names."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names)  # has 'slug' column
-        leg_b = _make_legislators(names, prefix="x").rename({"slug": "legislator_slug"})
+        leg_a = make_legislators(names)  # has 'slug' column
+        leg_b = make_legislators(names, prefix="x").rename({"slug": "legislator_slug"})
         matched = match_legislators(leg_a, leg_b)
         assert matched.height == 25
 
     def test_output_columns(self) -> None:
         """Output should have all expected columns."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names)
-        leg_b = _make_legislators(names, prefix="x")
+        leg_a = make_legislators(names)
+        leg_b = make_legislators(names, prefix="x")
         matched = match_legislators(leg_a, leg_b)
         expected = {
             "name_norm",
@@ -237,8 +218,8 @@ class TestMatchLegislators:
     def test_sorted_by_name(self) -> None:
         """Output should be sorted by name_norm."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names)
-        leg_b = _make_legislators(names, prefix="x")
+        leg_a = make_legislators(names)
+        leg_b = make_legislators(names, prefix="x")
         matched = match_legislators(leg_a, leg_b)
         norms = matched["name_norm"].to_list()
         assert norms == sorted(norms)
@@ -262,8 +243,8 @@ class TestClassifyTurnover:
     def test_no_departing(self) -> None:
         """If all A legislators are in B, departing should be empty."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names)
-        leg_b = _make_legislators(names + ["Extra"], prefix="x")
+        leg_a = make_legislators(names)
+        leg_b = make_legislators(names + ["Extra"], prefix="x")
         matched = match_legislators(leg_a, leg_b)
         cohorts = classify_turnover(leg_a, leg_b, matched)
         assert cohorts["departing"].height == 0
@@ -272,8 +253,8 @@ class TestClassifyTurnover:
     def test_no_new(self) -> None:
         """If all B legislators were in A, new should be empty."""
         names = [f"M {i}" for i in range(25)]
-        leg_a = _make_legislators(names + ["Old Timer"])
-        leg_b = _make_legislators(names, prefix="x")
+        leg_a = make_legislators(names + ["Old Timer"])
+        leg_b = make_legislators(names, prefix="x")
         matched = match_legislators(leg_a, leg_b)
         cohorts = classify_turnover(leg_a, leg_b, matched)
         assert cohorts["departing"].height == 1
@@ -1365,8 +1346,8 @@ class TestMatchLegislatorsFuzzy:
         names_a = names_shared + ["John Smithe"]
         names_b = names_shared + ["John Smith"]
 
-        leg_a = _make_legislators(names_a)
-        leg_b = _make_legislators(names_b, prefix="rep2")
+        leg_a = make_legislators(names_a)
+        leg_b = make_legislators(names_b, prefix="rep2")
 
         exact = match_legislators(leg_a, leg_b)
         fuzzy = match_legislators(leg_a, leg_b, fuzzy_threshold=0.85)
@@ -1377,8 +1358,8 @@ class TestMatchLegislatorsFuzzy:
     def test_none_threshold_no_change(self) -> None:
         """fuzzy_threshold=None should behave identically to default."""
         names = [f"Member {i}" for i in range(25)]
-        leg_a = _make_legislators(names)
-        leg_b = _make_legislators(names, prefix="rep2")
+        leg_a = make_legislators(names)
+        leg_b = make_legislators(names, prefix="rep2")
 
         default = match_legislators(leg_a, leg_b)
         explicit_none = match_legislators(leg_a, leg_b, fuzzy_threshold=None)
@@ -1452,12 +1433,24 @@ class TestAnalyzeFreshmenCohort:
         leg_df_b = pl.DataFrame(
             {
                 "legislator_slug": [
-                    "rep_a", "rep_b", "rep_c", "rep_d",  # returning
-                    "rep_e", "rep_f", "rep_g", "rep_h",  # new
+                    "rep_a",
+                    "rep_b",
+                    "rep_c",
+                    "rep_d",  # returning
+                    "rep_e",
+                    "rep_f",
+                    "rep_g",
+                    "rep_h",  # new
                 ],
                 "full_name": [
-                    "Alice A", "Bob B", "Carol C", "Dave D",
-                    "Eve E", "Frank F", "Grace G", "Hank H",
+                    "Alice A",
+                    "Bob B",
+                    "Carol C",
+                    "Dave D",
+                    "Eve E",
+                    "Frank F",
+                    "Grace G",
+                    "Hank H",
                 ],
                 "party": ["Republican"] * 4 + ["Democrat"] * 2 + ["Republican"] * 2,
                 "chamber": ["house"] * 8,
@@ -1478,12 +1471,8 @@ class TestAnalyzeFreshmenCohort:
                     "slug_b": ["rep_a", "rep_b", "rep_c", "rep_d"],
                 }
             ),
-            "new": pl.DataFrame(
-                {"legislator_slug": ["rep_e", "rep_f", "rep_g", "rep_h"]}
-            ),
-            "departed": pl.DataFrame(
-                {"legislator_slug": ["rep_x", "rep_y"]}
-            ),
+            "new": pl.DataFrame({"legislator_slug": ["rep_e", "rep_f", "rep_g", "rep_h"]}),
+            "departed": pl.DataFrame({"legislator_slug": ["rep_x", "rep_y"]}),
         }
         return turnover, leg_df_b, irt_b
 
@@ -1643,15 +1632,9 @@ class TestComputeBlocStability:
 
     def test_returns_none_for_insufficient_pairs(self):
         """Should return None when fewer than 5 matched legislators."""
-        km_a = pl.DataFrame(
-            {"legislator_slug": ["a", "b", "c"], "cluster": [0, 0, 1]}
-        )
-        km_b = pl.DataFrame(
-            {"legislator_slug": ["a_b", "b_b", "c_b"], "cluster": [0, 1, 1]}
-        )
-        matched = pl.DataFrame(
-            {"slug_a": ["a", "b", "c"], "slug_b": ["a_b", "b_b", "c_b"]}
-        )
+        km_a = pl.DataFrame({"legislator_slug": ["a", "b", "c"], "cluster": [0, 0, 1]})
+        km_b = pl.DataFrame({"legislator_slug": ["a_b", "b_b", "c_b"], "cluster": [0, 1, 1]})
+        matched = pl.DataFrame({"slug_a": ["a", "b", "c"], "slug_b": ["a_b", "b_b", "c_b"]})
         result = compute_bloc_stability(km_a, km_b, matched)
         assert result is None
 
@@ -1671,9 +1654,7 @@ class TestComputeBlocStability:
 
     def test_handles_slug_column_name(self):
         """Should work with 'slug' column (not 'legislator_slug')."""
-        km_a = pl.DataFrame(
-            {"slug": [f"r{i}" for i in range(6)], "cluster": [0, 0, 0, 1, 1, 1]}
-        )
+        km_a = pl.DataFrame({"slug": [f"r{i}" for i in range(6)], "cluster": [0, 0, 0, 1, 1, 1]})
         km_b = pl.DataFrame(
             {
                 "legislator_slug": [f"r{i}_b" for i in range(6)],

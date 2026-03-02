@@ -10,8 +10,8 @@ import json
 from pathlib import Path
 
 import pytest
-from analysis.dashboard import PHASE_ORDER, generate_dashboard
 
+from analysis.dashboard import PHASE_ORDER, generate_dashboard
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 

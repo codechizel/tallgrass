@@ -136,6 +136,7 @@ class TestGetSuccess:
 # ── _get() error classification ──────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestGetErrorClassification:
     """Error types are correctly classified for retry logic."""
 
@@ -270,6 +271,7 @@ class TestGetErrorPageDetection:
 # ── _get() retry behavior ───────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestGetRetries:
     """Retry counts and backoff for different error types."""
 
@@ -346,6 +348,7 @@ class TestFetchMany:
 
         assert set(results.keys()) == set(urls)
 
+    @pytest.mark.slow
     def test_permanent_failures_not_retried_in_waves(self, scraper: KSVoteScraper):
         """404 failures should not be retried in waves."""
         scraper.http.get = MagicMock(return_value=_mock_response(status_code=404))
@@ -360,6 +363,7 @@ class TestFetchMany:
         # Only initial pass calls (404 retries at most 2x in _get), no wave calls
         assert scraper.http.get.call_count == 2
 
+    @pytest.mark.slow
     def test_delay_restored_after_waves(self, scraper: KSVoteScraper):
         """self.delay must be restored to normal after retry waves."""
         original_delay = scraper.delay

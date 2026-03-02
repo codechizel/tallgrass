@@ -258,9 +258,9 @@ Full-codebase audit: scraper, analysis infrastructure, all 17 phases, tests, con
 
 Only 2 occurrences in same file (`scraper.py`) with different case conventions. Not worth extracting.
 
-#### R6. Test helpers duplicated across test files → [M1](milestones/m1-test-infrastructure.md)
+#### ~~R6. Test helpers duplicated across test files~~ — Done
 
-`_make_legislators` (5 files), `_make_votes` (3 files), `_make_rollcalls` (2 files), `_make_matched` (2 files). Consolidate into `conftest.py`.
+**Fixed.** Created `tests/factories.py` with shared `make_legislators()`, `make_votes()`, `make_rollcalls()` factories. `slug_column` parameter handles scraper/analysis schema split. Migrated 5 files: test_cross_session, test_dynamic_irt, test_mca, test_tsa, test_integration_pipeline. Domain-specific helpers (IRT data, vote matrices) kept local.
 
 #### R7. `dict(zip(col.to_list(), col.to_list()))` pattern (14+ occurrences)
 
@@ -306,9 +306,9 @@ Clustering, bipartite, network, profiles all build lookup dicts the same way. Id
 
 ### Tests
 
-#### T1. `@pytest.mark.slow` defined but unused → [M1](milestones/m1-test-infrastructure.md)
+#### ~~T1. `@pytest.mark.slow` defined but unused~~ — Done
 
-Marker registered in `pyproject.toml` and `just test-fast` skips it, but no tests are actually marked. Mark long-running tests (MCMC, cross-session) for faster local iteration.
+**Fixed.** 15 tests in `test_scraper_http.py` marked slow: `TestGetErrorClassification` (7), `TestGetRetries` (6), `TestFetchMany` retry-wave tests (2). `just test-fast` now skips them (0.17s vs 199s).
 
 #### ~~T2. Two weak assertions~~ — Done
 
@@ -320,11 +320,11 @@ Marker registered in `pyproject.toml` and `just test-fast` skips it, but no test
 |----------|------|-------|---------------|
 | Bugs (B1-B3) | 3/3 | 3 | ~15 lines fixed |
 | Dead code (D1-D2) | 2/2 | 2 | ~20 lines removed |
-| Cross-file dedup (R1-R4) | 4/4 | 7 | ~400 lines removed, `phase_utils.py` created |
+| Cross-file dedup (R1-R4, R6) | 5/5 | 7 | ~400 lines removed, `phase_utils.py` + `factories.py` created |
 | Large functions (R8-R9) | 2/2 | 2 | 4 static methods extracted |
 | Efficiency (E1-E3) | 3/3 | 3 | E1: vectorized bipartite |
 | Error handling (H1-H3) | 3/3 | 3 | Crash prevention |
-| Tests (T1-T2) | 1/2 | 2 | T1 deferred |
+| Tests (T1-T2) | 2/2 | 2 | T1: slow markers, T2: weak assertions |
 
 1909 tests passing, lint clean, typecheck clean.
 

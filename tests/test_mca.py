@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import polars as pl
+from factories import make_rollcalls, make_votes
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -34,61 +35,6 @@ from analysis.mca import (
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 
-def _make_votes(n_legislators: int = 20, n_votes: int = 30, seed: int = 42) -> pl.DataFrame:
-    """Create synthetic vote data with clear party structure."""
-    rng = np.random.default_rng(seed)
-    rows = []
-    for i in range(n_legislators):
-        slug = f"rep_leg{i}" if i < n_legislators // 2 else f"rep_dem{i}"
-        is_rep = i < n_legislators // 2
-        for j in range(n_votes):
-            # Republicans and Democrats vote differently on ~70% of votes
-            if j < n_votes * 0.7:
-                is_yea = (is_rep and rng.random() > 0.2) or (not is_rep and rng.random() > 0.8)
-                vote = "Yea" if is_yea else "Nay"
-            else:
-                vote = "Yea" if rng.random() > 0.3 else "Nay"
-            # Small chance of absence
-            if rng.random() < 0.05:
-                vote = "Absent and Not Voting"
-            rows.append(
-                {
-                    "legislator_slug": slug,
-                    "vote_id": f"vote_{j}",
-                    "vote": vote,
-                }
-            )
-    return pl.DataFrame(rows)
-
-
-def _make_rollcalls(n_votes: int = 30) -> pl.DataFrame:
-    """Create matching rollcalls for synthetic data."""
-    return pl.DataFrame(
-        {
-            "vote_id": [f"vote_{j}" for j in range(n_votes)],
-            "chamber": ["House"] * n_votes,
-            "bill_number": [f"HB {j}" for j in range(n_votes)],
-        }
-    )
-
-
-def _make_legislators(n_legislators: int = 20) -> pl.DataFrame:
-    """Create matching legislators for synthetic data."""
-    rows = []
-    for i in range(n_legislators):
-        slug = f"rep_leg{i}" if i < n_legislators // 2 else f"rep_dem{i}"
-        rows.append(
-            {
-                "slug": slug,
-                "full_name": f"Legislator {i}",
-                "party": "Republican" if i < n_legislators // 2 else "Democrat",
-                "district": str(i + 1),
-                "chamber": "House",
-            }
-        )
-    return pl.DataFrame(rows)
-
-
 def _make_categorical_matrix() -> pl.DataFrame:
     """Create a small categorical vote matrix for unit tests."""
     return pl.DataFrame(
@@ -110,8 +56,8 @@ class TestBuildCategoricalVoteMatrix:
 
     def test_returns_string_categories(self):
         """Matrix values should be categorical strings, not numeric."""
-        votes = _make_votes()
-        rollcalls = _make_rollcalls()
+        votes = make_votes(n_votes=30, slug_column="legislator_slug", include_absence=True)
+        rollcalls = make_rollcalls(n_votes=30)
         matrix, stats = build_categorical_vote_matrix(
             votes,
             rollcalls,
@@ -156,8 +102,8 @@ class TestBuildCategoricalVoteMatrix:
 
     def test_filter_stats_populated(self):
         """Filter stats dict should contain all expected keys."""
-        votes = _make_votes()
-        rollcalls = _make_rollcalls()
+        votes = make_votes(n_votes=30, slug_column="legislator_slug", include_absence=True)
+        rollcalls = make_rollcalls(n_votes=30)
         _, stats = build_categorical_vote_matrix(
             votes,
             rollcalls,

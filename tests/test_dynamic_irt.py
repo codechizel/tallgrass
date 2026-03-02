@@ -6,14 +6,12 @@ Run:
 
 from __future__ import annotations
 
+from functools import partial
+
 import numpy as np
 import polars as pl
-import pymc as pm
 import pytest
 from analysis.dynamic_irt import (
-    DEFAULT_TAU_SIGMA,
-    SMALL_CHAMBER_TAU_SIGMA,
-    SMALL_CHAMBER_THRESHOLD,
     XI_INIT_PRIOR_SIGMA,
     build_dynamic_irt_graph,
     plot_ridgeline_ideology,
@@ -31,28 +29,13 @@ from analysis.dynamic_irt_data import (
     prepare_emirt_csv,
     stack_bienniums,
 )
+from factories import make_legislators as _make_legislators_shared
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
 
-def _make_legislators(
-    names: list[str],
-    *,
-    prefix: str = "rep",
-    party: str = "Republican",
-    chamber: str = "House",
-    start_district: int = 1,
-) -> pl.DataFrame:
-    """Build a legislators DataFrame matching the CSV schema."""
-    return pl.DataFrame(
-        {
-            "legislator_slug": [f"{prefix}_{n.split()[-1].lower()}" for n in names],
-            "full_name": names,
-            "party": [party] * len(names),
-            "chamber": [chamber] * len(names),
-            "district": list(range(start_district, start_district + len(names))),
-        }
-    )
+# Dynamic IRT uses analysis schema (legislator_slug column)
+_make_legislators = partial(_make_legislators_shared, slug_column="legislator_slug")
 
 
 def _make_vote_matrix(

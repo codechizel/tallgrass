@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
+from factories import make_legislators
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -45,28 +46,33 @@ from analysis.tsa_r_data import (
 
 
 def _make_legislators(n_rep: int = 60, n_dem: int = 25, chamber: str = "House") -> pl.DataFrame:
-    """Create a synthetic legislators DataFrame."""
-    prefix = "rep_" if chamber == "House" else "sen_"
-    rows = []
-    for i in range(n_rep):
-        rows.append(
-            {
-                "legislator_slug": f"{prefix}r{i:03d}",
-                "full_name": f"Rep{i}",
-                "party": "Republican",
-                "district": str(i + 1),
-            }
+    """Create a synthetic legislators DataFrame using shared factory.
+
+    Slug format matches _make_votes: {prefix}_{party_char}{i:03d}
+    e.g. rep_r000, rep_d000, sen_r000, sen_d000.
+    """
+    prefix = "rep" if chamber == "House" else "sen"
+    parts = [
+        make_legislators(
+            names=[f"r{i:03d}" for i in range(n_rep)],
+            prefix=prefix,
+            party="Republican",
+            chamber=chamber,
+            slug_column="legislator_slug",
+        ),
+    ]
+    if n_dem > 0:
+        parts.append(
+            make_legislators(
+                names=[f"d{i:03d}" for i in range(n_dem)],
+                prefix=prefix,
+                party="Democrat",
+                chamber=chamber,
+                start_district=n_rep + 1,
+                slug_column="legislator_slug",
+            ),
         )
-    for i in range(n_dem):
-        rows.append(
-            {
-                "legislator_slug": f"{prefix}d{i:03d}",
-                "full_name": f"Dem{i}",
-                "party": "Democrat",
-                "district": str(n_rep + i + 1),
-            }
-        )
-    return pl.DataFrame(rows)
+    return pl.concat(parts)
 
 
 def _make_votes(
