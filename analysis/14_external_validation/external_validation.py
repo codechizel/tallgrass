@@ -438,7 +438,9 @@ def main() -> None:
                         continue
 
                     # Match
-                    matched, unmatched = match_legislators(irt_df, sm_chamber_df, chamber)
+                    matched, unmatched = match_legislators(
+                        irt_df, sm_chamber_df, chamber, start_year=start_year
+                    )
                     n_unmatched_ours = unmatched.filter(pl.col("source") == "our_data").height
                     n_unmatched_sm = unmatched.filter(pl.col("source") == "shor_mccarty").height
                     print(

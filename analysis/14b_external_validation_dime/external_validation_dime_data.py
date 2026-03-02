@@ -335,14 +335,73 @@ def match_dime_legislators(
     return matched, unmatched_report
 
 
+def _parse_dime_district(dime_df: pl.DataFrame) -> pl.DataFrame:
+    """Add ``_dime_district`` Int64 column parsed from DIME's district string.
+
+    DIME district formats vary: ``"KS-113"``, ``"KS01"``, ``"KS-7"``, ``"27"``.
+    Extracts the trailing numeric portion and casts to Int64.
+    """
+    if "district" not in dime_df.columns:
+        return dime_df.with_columns(pl.lit(None).cast(pl.Int64).alias("_dime_district"))
+
+    return dime_df.with_columns(
+        pl.col("district")
+        .cast(pl.Utf8)
+        .str.replace(r"^[A-Za-z]*-?0*", "")
+        .cast(pl.Int64, strict=False)
+        .alias("_dime_district")
+    )
+
+
+def _deduplicate_with_district(
+    candidates: pl.DataFrame,
+    ext_district_col: str,
+) -> pl.DataFrame:
+    """Deduplicate last-name matches using district tiebreaker.
+
+    - Single candidate per legislator → kept as-is.
+    - Multiple candidates → prefer the one whose district matches; if none match, reject.
+    """
+    counts = candidates.group_by("normalized_name").agg(pl.len().alias("_n"))
+
+    single_names = counts.filter(pl.col("_n") == 1)["normalized_name"].to_list()
+    singles = candidates.filter(pl.col("normalized_name").is_in(single_names))
+
+    multi_names = counts.filter(pl.col("_n") > 1)["normalized_name"].to_list()
+    if not multi_names:
+        return singles
+
+    multi = candidates.filter(pl.col("normalized_name").is_in(multi_names))
+
+    has_district = "district" in multi.columns and ext_district_col in multi.columns
+    if has_district:
+        district_matched = multi.filter(pl.col("district") == pl.col(ext_district_col))
+        district_matched = district_matched.unique(subset=["normalized_name"])
+    else:
+        district_matched = pl.DataFrame()
+
+    if district_matched.height > 0:
+        return pl.concat([singles, district_matched], how="diagonal")
+    return singles
+
+
 def _phase2_last_name_match(
     our_df: pl.DataFrame,
     dime_df: pl.DataFrame,
     dime_join_cols: list[str],
 ) -> pl.DataFrame:
-    """Phase 2: Match by last name only, deduplicating to first match per legislator."""
+    """Phase 2: Match by last name with district tiebreaker for ambiguous cases.
+
+    When multiple DIME candidates share a last name with one of our legislators:
+    - If one candidate's district matches → use that match.
+    - If no candidate's district matches → reject (no match is better than wrong match).
+    Single-candidate matches are kept as-is regardless of district.
+    """
     if our_df.height == 0 or dime_df.height == 0:
         return pl.DataFrame()
+
+    # Add DIME district column for tiebreaking
+    dime_df = _parse_dime_district(dime_df)
 
     # Extract last names
     our_with_last = our_df.with_columns(
@@ -357,7 +416,7 @@ def _phase2_last_name_match(
     )
 
     # Build DIME select for join
-    dime_select_cols = ["_last_name", "normalized_name", "name"]
+    dime_select_cols = ["_last_name", "normalized_name", "name", "_dime_district"]
     for col in dime_join_cols:
         if col not in ("normalized_name", "name") and col in dime_with_last.columns:
             dime_select_cols.append(col)
@@ -375,11 +434,11 @@ def _phase2_last_name_match(
     if candidates.height == 0:
         return pl.DataFrame()
 
-    # Deduplicate: one match per our legislator
-    deduped = candidates.unique(subset=["normalized_name"])
+    # District tiebreaker for ambiguous last-name matches
+    deduped = _deduplicate_with_district(candidates, "_dime_district")
 
     # Drop helper columns
-    drop_cols = ["_last_name", "dime_normalized_name"]
+    drop_cols = ["_last_name", "dime_normalized_name", "_dime_district"]
     drop_cols = [c for c in drop_cols if c in deduped.columns]
     return deduped.drop(drop_cols)
 

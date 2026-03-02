@@ -4,7 +4,7 @@
 
 1. **Different constructs require different expectations.** CFscores measure donor ideology (who funds you), not voting ideology (how you vote). Overall correlation r ≈ 0.75-0.90 is expected for state legislatures — lower than Shor-McCarty because SM and our IRT both measure the same construct (voting). This is not a failure; it is the expected behavior of a cross-construct comparison.
 
-2. **Name matching reuses Phase 14 infrastructure.** The same `normalize_our_name()` function from Phase 14 handles our legislator names. DIME provides separate `lname`/`fname` fields (already lowercase), so `normalize_dime_name()` is simpler than SM's "Last, First" parser.
+2. **Name matching reuses Phase 14 infrastructure.** The same `normalize_our_name()` function from Phase 14 handles our legislator names. DIME provides separate `lname`/`fname` fields (already lowercase), so `normalize_dime_name()` is simpler than SM's "Last, First" parser. Phase 2 district tiebreaker parses DIME's variable-format `district` strings (`"KS-113"`, `"KS01"`, `"KS-7"`) to Int64 for disambiguation (ADR-0075).
 
 3. **Incumbent-only matching.** Our IRT ideal points are for legislators who actually cast votes. DIME includes challengers and open-seat candidates who have CFscores but no voting record. Matching against non-incumbents would inflate unmatched rates without adding value.
 

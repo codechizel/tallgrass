@@ -149,7 +149,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (74 decisions)
+- ADRs: `docs/adr/README.md` (75 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -199,6 +199,7 @@ Key references:
 - Pipeline audit: ADR-0072 (8-biennium review, 18 findings, 6 fixes — except syntax, prediction leakage, sample threshold, logging)
 - W-NOMINATE all-biennium run: ADR-0073 (6 R compatibility bugs fixed, all 8 bienniums validated, PPC expanded to 6/8)
 - Convergence resolution: ADR-0074 (joint model off by default, 2D IRT dropped from pipeline, dynamic IRT prior fixed)
+- Name matcher district tiebreaker: ADR-0075 (Phase 14 + 14b district disambiguation, shrinkage null investigation)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`

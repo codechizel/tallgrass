@@ -4,7 +4,7 @@
 
 1. **Rank-order equivalence, not scale equivalence.** Shor-McCarty `np_score` is career-fixed (one score per legislator). Our `xi_mean` varies by biennium. We compare rank ordering within a session, not absolute scale values. This is why Spearman ρ is reported alongside Pearson r.
 
-2. **Name matching sufficiency.** Kansas legislator names are distinct enough that normalized "first last" matching catches ~90% of cases. Middle names, nicknames, and generational suffixes are the main failure modes. A two-phase strategy (exact match, then last-name fallback) handles the long tail.
+2. **Name matching sufficiency.** Kansas legislator names are distinct enough that normalized "first last" matching catches ~90% of cases. Middle names, nicknames, and generational suffixes are the main failure modes. A two-phase strategy (exact match, then last-name + district tiebreaker) handles the long tail. District disambiguation uses SM's year-specific district columns (ADR-0075).
 
 3. **SM coverage is complete for the overlap period.** The April 2023 dataset covers Kansas legislators through 2020. We assume every legislator active in 2011-2020 who cast sufficient votes appears in the SM data.
 
@@ -24,14 +24,14 @@
 
 ### Name Matching Algorithm
 
-**Decision:** Two-phase matching: exact normalized name, then last-name-only with deduplication.
+**Decision:** Two-phase matching: exact normalized name, then last-name with district tiebreaker (ADR-0075).
 
 **Alternatives considered:**
 - Fuzzy string matching (Levenshtein): adds complexity, risk of false matches
 - District-based matching only: names in different districts may collide
 - Manual mapping: does not scale across 5 bienniums
 
-**Impact:** Phase 1 handles the common case (identical first/last). Phase 2 catches middle-name divergences (our data includes full middle names, SM often omits them). The `NICKNAME_MAP` dict handles edge cases discovered during real runs.
+**Impact:** Phase 1 handles the common case (identical first/last). Phase 2 catches middle-name divergences (our data includes full middle names, SM often omits them). When multiple SM candidates share a last name, district breaks the tie using year-specific `hdistrict{YYYY}`/`sdistrict{YYYY}` columns. If no district match, the match is rejected (no match is better than a wrong match). Single-candidate matches are unaffected. The `NICKNAME_MAP` dict handles edge cases discovered during real runs.
 
 ### Correlation Methods
 

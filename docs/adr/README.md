@@ -108,6 +108,7 @@ What are the trade-offs?
 | [0059](0059-wnominate-validation-phase.md) | W-NOMINATE + OC validation phase |
 | [0063](0063-ppc-loo-standalone-phase.md) | Standalone PPC + LOO-CV phase (Phase 4c) |
 | [0073](0073-wnominate-all-biennium-production-run.md) | W-NOMINATE all-biennium production run + R compatibility fixes |
+| [0075](0075-name-matcher-district-tiebreaker.md) | Name matcher district tiebreaker + shrinkage null investigation |
 
 ### Infrastructure
 
@@ -213,6 +214,7 @@ What are the trade-offs?
 | [0072](0072-pipeline-audit-fixes.md) | Full pipeline audit — 8-biennium review, 6 fixes (except syntax, data leakage, sample threshold, logging) | Accepted | 2026-03-02 |
 | [0073](0073-wnominate-all-biennium-production-run.md) | W-NOMINATE all-biennium production run + R compatibility fixes (6 bugs, 8 bienniums) | Accepted | 2026-03-02 |
 | [0074](0074-convergence-resolution.md) | Resolve 3 systematic MCMC convergence failures (joint default off, 2D IRT dropped, dynamic prior fixed) | Accepted | 2026-03-02 |
+| [0075](0075-name-matcher-district-tiebreaker.md) | Name matcher district tiebreaker + shrinkage null investigation (3 incorrect matches fixed, 6 tests) | Accepted | 2026-03-02 |
 
 ## Creating a New ADR
 

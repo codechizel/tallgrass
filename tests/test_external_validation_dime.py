@@ -507,6 +507,105 @@ class TestMatchDimeLegislators:
         assert matched.height == 1
 
 
+# ── District Tiebreaker ──────────────────────────────────────────────────────
+
+
+class TestDimeDistrictTiebreaker:
+    """Phase 2 district tiebreaker disambiguates same-last-name DIME candidates."""
+
+    def test_selects_correct_district_match(self):
+        """When two DIME candidates share a last name, district breaks the tie."""
+        our = _make_our_df(
+            [
+                {
+                    "full_name": "Charles Weber",
+                    "xi_mean": 0.5,
+                    "district": 85,
+                    "party": "Republican",
+                    "legislator_slug": "rep_weber_chuck",
+                },
+            ]
+        )
+        dime = _make_dime_df(
+            [
+                {
+                    "name": "weber, chuck",
+                    "normalized_name": "chuck weber",
+                    "recipient_cfscore": 0.6,
+                    "district": "KS-85",
+                },
+                {
+                    "name": "weber, brian",
+                    "normalized_name": "brian weber",
+                    "recipient_cfscore": 0.3,
+                    "district": "KS-119",
+                },
+            ]
+        )
+        matched, _ = match_dime_legislators(our, dime, "House")
+        assert matched.height == 1
+        assert matched["dime_name"][0] == "weber, chuck"
+
+    def test_rejects_when_no_district_match(self):
+        """When no DIME candidate's district matches, reject the match entirely."""
+        our = _make_our_df(
+            [
+                {
+                    "full_name": "Charles Weber",
+                    "xi_mean": 0.5,
+                    "district": 42,
+                    "party": "Republican",
+                    "legislator_slug": "rep_weber_charles",
+                },
+            ]
+        )
+        dime = _make_dime_df(
+            [
+                {
+                    "name": "weber, chuck",
+                    "normalized_name": "chuck weber",
+                    "recipient_cfscore": 0.6,
+                    "district": "KS-85",
+                },
+                {
+                    "name": "weber, brian",
+                    "normalized_name": "brian weber",
+                    "recipient_cfscore": 0.3,
+                    "district": "KS-119",
+                },
+            ]
+        )
+        matched, _ = match_dime_legislators(our, dime, "House")
+        assert matched.height == 0
+
+    def test_single_candidate_kept_without_district_check(self):
+        """Single last-name candidate kept regardless of district match."""
+        our = _make_our_df(
+            [
+                {
+                    "full_name": "Robert Wilson",
+                    "xi_mean": 0.5,
+                    "district": 10,
+                    "party": "Republican",
+                    "legislator_slug": "rep_wilson",
+                },
+            ]
+        )
+        dime = _make_dime_df(
+            [
+                {
+                    "name": "wilson, bob",
+                    "normalized_name": "bob wilson",
+                    "recipient_cfscore": 0.6,
+                    "district": "KS-99",
+                },
+            ]
+        )
+        matched, _ = match_dime_legislators(our, dime, "House")
+        # Single candidate — kept even though districts don't match
+        assert matched.height == 1
+
+
 # ── Overlap Detection ────────────────────────────────────────────────────────
 
 

@@ -224,6 +224,7 @@ def match_legislators(
     our_df: pl.DataFrame,
     sm_df: pl.DataFrame,
     chamber: str,
+    start_year: int = 0,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Match our legislators to SM legislators by normalized name.
 
@@ -234,6 +235,7 @@ def match_legislators(
         our_df: Our IRT ideal points (must have full_name, xi_mean, district, party).
         sm_df: SM data filtered to the correct chamber/biennium.
         chamber: "House" or "Senate" for the unmatched report.
+        start_year: Biennium start year (e.g. 2011). Used to resolve SM district columns.
 
     Returns:
         (matched_df, unmatched_report_df)
@@ -276,6 +278,8 @@ def match_legislators(
         phase2_matches = _phase2_last_name_match(
             unmatched_ours,
             sm_df.filter(pl.col("normalized_name").is_in(list(unmatched_sm_names))),
+            start_year=start_year,
+            chamber=chamber,
         )
         if phase2_matches.height > 0:
             matched = pl.concat([matched, phase2_matches])
@@ -291,13 +295,55 @@ def match_legislators(
     return matched, unmatched_report
 
 
+def _extract_sm_district(
+    sm_df: pl.DataFrame,
+    start_year: int,
+    chamber: str,
+) -> pl.DataFrame:
+    """Add an ``_sm_district`` Int64 column from year-specific SM district columns.
+
+    SM stores districts as ``hdistrict{YYYY}`` (House) / ``sdistrict{YYYY}`` (Senate).
+    Coalesces across biennium years, returning the first non-null value per legislator.
+    """
+    prefix = "h" if chamber == "House" else "s"
+    end_year = start_year + 1
+    dist_cols = [
+        f"{prefix}district{y}"
+        for y in (start_year, end_year)
+        if f"{prefix}district{y}" in sm_df.columns
+    ]
+
+    if not dist_cols:
+        return sm_df.with_columns(pl.lit(None).cast(pl.Int64).alias("_sm_district"))
+
+    # Coalesce across years, strip leading zeros, cast to Int64
+    expr = pl.coalesce([pl.col(c) for c in dist_cols])
+    return sm_df.with_columns(
+        expr.str.strip_chars()
+        .str.replace(r"^0+", "")
+        .cast(pl.Int64, strict=False)
+        .alias("_sm_district")
+    )
+
+
 def _phase2_last_name_match(
     our_df: pl.DataFrame,
     sm_df: pl.DataFrame,
+    start_year: int,
+    chamber: str,
 ) -> pl.DataFrame:
-    """Phase 2: Match by last name only, deduplicating to first match per legislator."""
+    """Phase 2: Match by last name with district tiebreaker for ambiguous cases.
+
+    When multiple SM candidates share a last name with one of our legislators:
+    - If one candidate's district matches → use that match.
+    - If no candidate's district matches → reject (no match is better than wrong match).
+    Single-candidate matches are kept as-is regardless of district.
+    """
     if our_df.height == 0 or sm_df.height == 0:
         return pl.DataFrame()
+
+    # Add SM district column for tiebreaking
+    sm_df = _extract_sm_district(sm_df, start_year, chamber)
 
     # Extract last names
     our_with_last = our_df.with_columns(
@@ -313,9 +359,9 @@ def _phase2_last_name_match(
 
     # Join on last name
     candidates = our_with_last.join(
-        sm_with_last.select("_last_name", "normalized_name", "np_score", "name").rename(
-            {"normalized_name": "sm_normalized_name", "name": "sm_name"}
-        ),
+        sm_with_last.select(
+            "_last_name", "normalized_name", "np_score", "name", "_sm_district"
+        ).rename({"normalized_name": "sm_normalized_name", "name": "sm_name"}),
         on="_last_name",
         how="inner",
     )
@@ -323,12 +369,51 @@ def _phase2_last_name_match(
     if candidates.height == 0:
         return pl.DataFrame()
 
-    # If multiple SM matches for one of our legislators, take first match
-    # (district tiebreaker not implemented — ambiguity is rare in KS data)
-    deduped = candidates.unique(subset=["normalized_name"])
+    # District tiebreaker for ambiguous last-name matches
+    deduped = _deduplicate_with_district(candidates, "_sm_district")
 
     # Drop helper columns
-    return deduped.drop("_last_name", "sm_normalized_name")
+    helper = ("_last_name", "sm_normalized_name", "_sm_district")
+    drop_cols = [c for c in helper if c in deduped.columns]
+    return deduped.drop(drop_cols)
+
+
+def _deduplicate_with_district(
+    candidates: pl.DataFrame,
+    ext_district_col: str,
+) -> pl.DataFrame:
+    """Deduplicate last-name matches using district tiebreaker.
+
+    - Single candidate per legislator → kept as-is.
+    - Multiple candidates → prefer the one whose district matches; if none match, reject.
+    """
+    # Count candidates per our legislator
+    counts = candidates.group_by("normalized_name").agg(pl.len().alias("_n"))
+
+    # Single-candidate matches: keep directly
+    single_names = counts.filter(pl.col("_n") == 1)["normalized_name"].to_list()
+    singles = candidates.filter(pl.col("normalized_name").is_in(single_names))
+
+    # Multi-candidate matches: use district to disambiguate
+    multi_names = counts.filter(pl.col("_n") > 1)["normalized_name"].to_list()
+    if not multi_names:
+        return singles
+
+    multi = candidates.filter(pl.col("normalized_name").is_in(multi_names))
+
+    # Keep rows where our district matches the external dataset's district
+    has_district = "district" in multi.columns and ext_district_col in multi.columns
+    if has_district:
+        district_matched = multi.filter(pl.col("district") == pl.col(ext_district_col))
+        # Take first per legislator in case of remaining duplicates
+        district_matched = district_matched.unique(subset=["normalized_name"])
+    else:
+        # No district data — reject all ambiguous matches
+        district_matched = pl.DataFrame()
+
+    if district_matched.height > 0:
+        return pl.concat([singles, district_matched], how="diagonal")
+    return singles
 
 
 def _build_unmatched_report(

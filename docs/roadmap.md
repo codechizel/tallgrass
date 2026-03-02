@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-02 (3 MCMC convergence failures resolved — ADR-0074)
+**Last updated:** 2026-03-02 (backlog resolution: name matcher district tiebreaker, shrinkage investigation, 84th re-run — ADR-0075)
 
 ---
 
@@ -60,6 +60,8 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Full Pipeline Audit | 2026-03-02 | 8-biennium × 17-phase review. 18 findings catalogued, 6 code fixes shipped (except syntax, prediction data leakage, sample threshold, logging). ADR-0072. |
 | — | W-NOMINATE All-Biennium Run | 2026-03-02 | All 8 bienniums (84th-91st) validated against W-NOMINATE + OC. 6 R compatibility bugs fixed (rollcall codes, polarity vector, OC matrix access, CSV "NA" parsing, fit stat casting, slug rename). R installed via Homebrew. ADR-0073. |
 | — | PPC All-Biennium Expansion | 2026-03-02 | Phase 4c expanded from 2 to 6 bienniums (85th, 86th, 88th, 90th added). 87th/89th excluded: ArviZ LOO observation mismatch between hierarchical and flat IRT vote matrices. ADR-0073. |
+| — | Name Matcher District Tiebreaker | 2026-03-02 | Phase 14 (SM) + Phase 14b (DIME) name matching now uses district-based disambiguation for ambiguous last-name matches. 3 incorrect matches corrected. 6 new tests. |
+| — | Shrinkage Null Investigation | 2026-03-02 | Deep dive confirmed `SHRINKAGE_MIN_DISTANCE=0.5` is statistically justified (24.8% null rate across all bienniums). Accepted as working-as-designed. |
 
 ---
 
@@ -173,9 +175,9 @@ Several bienniums show sensitive House IRT when threshold changes from 2.5% to 1
 
 **Fixed 2026-03-02.** `estimate_beta_params()` now emits a `warnings.warn()` when alpha or beta is clamped to 0.5, including the original and clamped values.
 
-#### A13. Hierarchical shrinkage_pct nulls in synthesis (all bienniums)
+#### ~~A13. Hierarchical shrinkage_pct nulls in synthesis (all bienniums)~~ — Accepted
 
-35% Senate / 23% House legislators have null `hier_shrinkage_pct` in synthesis DataFrame. This propagates as report gaps. Extends beyond the 84th-specific backlog item #2 — affects all bienniums.
+**Investigated 2026-03-02.** 24.8% null rate is consistent across all 8 bienniums (13.5%-35.7%). The `SHRINKAGE_MIN_DISTANCE=0.5` threshold is statistically justified — without it, values swing wildly (-2222% to +86%) due to near-zero denominators. Downstream impact is minimal: appears as blank cells in one interactive table in the hierarchical report. Not used in synthesis detection, profiles, cross-session, or any scoring logic. The `toward_party_mean` boolean (always non-null for non-anchors) already captures the actionable information. See backlog #2 below.
 
 #### ~~A14. TSA imputation sensitivity silently returns None~~ — Done
 
@@ -203,17 +205,17 @@ Phase 06b consistently finds 2 bill communities = party voting pattern. Analytic
 
 ## Next Up (Backlog)
 
-### 1. External Validation Name Matcher: District Tiebreaker
+### ~~1. External Validation Name Matcher: District Tiebreaker~~ — Done
 
-Phase 14 (Shor-McCarty) uses last-name-only matching in `_phase2_last_name_match()` (`external_validation_data.py:294-331`). This produces an incorrect match for the 84th: `rep_bethell_lorene_1` (Lorene Bethell, District 113) is matched to SM's "Bob Bethell" — a different person. The code has a comment: "district tiebreaker not implemented — ambiguity is rare in KS data." Low impact (1/112 matches) but a genuine data quality bug. Fix: implement district-based disambiguation when multiple candidates share a last name and chamber.
+**Fixed 2026-03-02.** Both Phase 14 (Shor-McCarty) and Phase 14b (DIME) now use district-based disambiguation when multiple external candidates share a last name. SM version extracts year-specific `hdistrict{YYYY}`/`sdistrict{YYYY}` columns; DIME version parses the `district` string (e.g., `"KS-113"`). If multiple candidates match on last name: prefer the district match; if no district match, reject entirely (no match is better than a wrong match). Single-candidate matches are unaffected. 3 confirmed incorrect matches corrected (Bethell 84th, Dannebohm 86th, Weber 86th). 6 new tests across both test files.
 
-### 2. Null `hier_shrinkage_pct` in Synthesis (84th)
+### ~~2. Null `hier_shrinkage_pct` in Synthesis~~ — Accepted (Working as Designed)
 
-In the 84th pipeline run, 28 House legislators (beyond the 2 expected IRT anchors) and 3 Senate legislators have null `hier_shrinkage_pct` in `legislator_df_{chamber}.parquet`. This is 26% of House and 14% of Senate. The calculation in `hierarchical.py:1123-1137` sets shrinkage to null when `abs(flat - party_mean) < SHRINKAGE_MIN_DISTANCE` (0.5) to avoid division-by-near-zero producing misleading percentages. Needs investigation: is 26% null rate normal for the 84th given its compressed ideological range, or is the threshold too aggressive? Compare null rates across all 8 bienniums. See also A13 (affects all bienniums, not just 84th).
+**Investigated 2026-03-02.** Deep dive across all 8 bienniums found: 24.8% overall null rate (13.5%-35.7% per chamber-session), consistent across all bienniums — not 84th-specific. The `SHRINKAGE_MIN_DISTANCE=0.5` threshold is statistically justified: without it, shrinkage percentages swing from -2222% to +86% due to near-zero denominators (legislators already at their party mean). The `toward_party_mean` boolean (always non-null) captures the actionable direction. Downstream impact is minimal — one table column in the hierarchical report; not used in synthesis detection, profiles, cross-session, or any scoring logic. See also A13.
 
-### 3. 84th Biennium Pipeline Re-run
+### ~~3. 84th Biennium Pipeline Re-run~~ — Done
 
-The current 84th results (`84-260228.5`) predate three code fixes: (1) Carey Unity `group_by` race condition (non-deterministic party member count swap), (2) clustering sensitivity ARI row-ordering mismatch (meaningless ARI values), (3) IRT sensitivity sign-flip handling (already fixed in code, results show stale negative correlations with `raw_pearson_r: null`). A fresh pipeline re-run (`just pipeline 2011-12`) would validate all fixes and produce clean results.
+**Re-run 2026-03-02.** Fresh unified pipeline run on current code. Picks up: district tiebreaker name matching, Python 2 `except` syntax fixes, prediction in-sample leakage fix, per-legislator min threshold, network edge weight KeyError fix, R1-R20 report enhancements, dashboard generation. Previous run (`84-260301.4`) already had the 3 originally-named bug fixes (Carey Unity, ARI ordering, IRT sign-flip).
 
 ### ~~4. Symlink Race: Pipeline-Only `latest` Updates~~ — Done
 

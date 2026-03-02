@@ -590,6 +590,135 @@ class TestMatchLegislators:
         assert matched.height == 2
 
 
+# ── District Tiebreaker ──────────────────────────────────────────────────────
+
+
+class TestDistrictTiebreaker:
+    """Phase 2 district tiebreaker disambiguates same-last-name candidates."""
+
+    def test_selects_correct_district_match(self):
+        """When two SM candidates share a last name, district breaks the tie."""
+        our = _make_our_df(
+            [
+                {
+                    "full_name": "Chuck Weber",
+                    "xi_mean": 0.5,
+                    "district": 85,
+                    "party": "Republican",
+                    "legislator_slug": "rep_weber_chuck",
+                },
+            ]
+        )
+        # Two SM Webers with different districts
+        sm = pl.DataFrame(
+            [
+                {
+                    "name": "Weber, Chuck",
+                    "normalized_name": "chuck weber",
+                    "np_score": 0.6,
+                    "hdistrict2015": "085",
+                    "hdistrict2016": "085",
+                    "house2015": 1,
+                    "house2016": 1,
+                },
+                {
+                    "name": "Weber, Brian",
+                    "normalized_name": "brian weber",
+                    "np_score": 0.3,
+                    "hdistrict2015": "119",
+                    "hdistrict2016": "119",
+                    "house2015": 1,
+                    "house2016": 1,
+                },
+            ]
+        )
+        # Phase 1 won't match (chuck weber != chuck weber? actually it would)
+        # To force Phase 2, ensure Phase 1 doesn't match by using different first name
+        our_nick = _make_our_df(
+            [
+                {
+                    "full_name": "Charles Weber",
+                    "xi_mean": 0.5,
+                    "district": 85,
+                    "party": "Republican",
+                    "legislator_slug": "rep_weber_chuck",
+                },
+            ]
+        )
+        matched, _ = match_legislators(our_nick, sm, "House", start_year=2015)
+        assert matched.height == 1
+        assert matched["sm_name"][0] == "Weber, Chuck"
+
+    def test_rejects_when_no_district_match(self):
+        """When no SM candidate's district matches, reject the match entirely."""
+        our = _make_our_df(
+            [
+                {
+                    "full_name": "Charles Weber",
+                    "xi_mean": 0.5,
+                    "district": 42,
+                    "party": "Republican",
+                    "legislator_slug": "rep_weber_charles",
+                },
+            ]
+        )
+        # Two SM Webers, neither in district 42
+        sm = pl.DataFrame(
+            [
+                {
+                    "name": "Weber, Chuck",
+                    "normalized_name": "chuck weber",
+                    "np_score": 0.6,
+                    "hdistrict2015": "085",
+                    "hdistrict2016": "085",
+                    "house2015": 1,
+                    "house2016": 1,
+                },
+                {
+                    "name": "Weber, Brian",
+                    "normalized_name": "brian weber",
+                    "np_score": 0.3,
+                    "hdistrict2015": "119",
+                    "hdistrict2016": "119",
+                    "house2015": 1,
+                    "house2016": 1,
+                },
+            ]
+        )
+        matched, _ = match_legislators(our, sm, "House", start_year=2015)
+        assert matched.height == 0
+
+    def test_single_candidate_kept_without_district_check(self):
+        """Single last-name candidate kept regardless of district match."""
+        our = _make_our_df(
+            [
+                {
+                    "full_name": "Robert Wilson",
+                    "xi_mean": 0.5,
+                    "district": 10,
+                    "party": "Republican",
+                    "legislator_slug": "rep_wilson",
+                },
+            ]
+        )
+        sm = pl.DataFrame(
+            [
+                {
+                    "name": "Wilson, Bob",
+                    "normalized_name": "bob wilson",
+                    "np_score": 0.6,
+                    "hdistrict2015": "099",
+                    "hdistrict2016": "099",
+                    "house2015": 1,
+                    "house2016": 1,
+                },
+            ]
+        )
+        matched, _ = match_legislators(our, sm, "House", start_year=2015)
+        # Single candidate — kept even though districts don't match
+        assert matched.height == 1
+
+
 # ── Correlations ─────────────────────────────────────────────────────────────
 
 
