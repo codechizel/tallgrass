@@ -194,39 +194,66 @@ wt-new name:
     echo ""
     echo "To enter: cd $WT_PATH"
 
-# Merge worktree branch to main, remove worktree, delete branch, push
-wt-done:
+# Merge worktree branch to main, remove worktree, delete branch.
+# Usage: just wt-done              (from inside worktree — auto-detects path/branch)
+#        just wt-done feature-name  (from main repo — prevents CWD death in Claude Code)
+# Delegates to _wt-done-impl in the MAIN repo's Justfile so that worktrees
+# created before a Justfile fix still pick up the latest logic.
+wt-done *name:
     #!/usr/bin/env bash
     set -euo pipefail
-    BRANCH=$(git branch --show-current)
+    MAIN_ROOT="{{_main_root}}"
+    NAME="{{name}}"
+    if [ -n "$NAME" ]; then
+        # Called with worktree name — resolve path and branch from name
+        WT_PATH="$MAIN_ROOT/.claude/worktrees/$NAME"
+        BRANCH="worktree-$NAME"
+        if [ ! -d "$WT_PATH" ]; then
+            echo "Error: worktree not found at $WT_PATH"
+            exit 1
+        fi
+    else
+        # Called from inside worktree — auto-detect
+        WT_PATH="$(pwd)"
+        BRANCH="$(git branch --show-current)"
+    fi
+    just --justfile "$MAIN_ROOT/Justfile" _wt-done-impl "$WT_PATH" "$BRANCH"
+
+# Implementation: called by wt-done with worktree path and branch name.
+# Lives in the main repo's Justfile so fixes are always picked up.
+[private]
+_wt-done-impl wt_path branch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BRANCH="{{branch}}"
+    WT_PATH="{{wt_path}}"
+    MAIN_ROOT="{{_main_root}}"
     if [ -z "$BRANCH" ] || [ "$BRANCH" = "main" ]; then
         echo "Error: not on a worktree branch (current: ${BRANCH:-detached})"
         exit 1
     fi
-    # Verify clean working tree
-    if ! git diff --quiet || ! git diff --cached --quiet; then
+    # Verify clean working tree (check from the worktree)
+    if ! git -C "$WT_PATH" diff --quiet || ! git -C "$WT_PATH" diff --cached --quiet; then
         echo "Error: uncommitted changes. Commit or stash first."
         exit 1
     fi
-    MAIN_ROOT="{{_main_root}}"
-    WT_PATH=$(pwd)
-    # Fast-forward main to this branch
-    if ! git fetch . "$BRANCH:main"; then
+    # Fast-forward main to the worktree branch
+    # (git fetch . branch:main is blocked by Git 2.35+ when main is checked out
+    # in the primary repo, so we use merge-base check + update-ref instead)
+    if ! git -C "$WT_PATH" merge-base --is-ancestor main HEAD; then
         echo ""
         echo "Error: cannot fast-forward main to $BRANCH."
         echo "Main has diverged. Rebase first: git rebase main"
         exit 1
     fi
-    # cd to main repo BEFORE removing worktree (prevents CWD death)
-    cd "$MAIN_ROOT"
-    # Remove worktree + branch
+    git -C "$WT_PATH" update-ref refs/heads/main HEAD
+    # Remove worktree + branch (already running from main, no CWD death risk)
     git worktree remove "$WT_PATH" 2>/dev/null || git worktree remove --force "$WT_PATH"
     git branch -d "$BRANCH" 2>/dev/null || git branch -D "$BRANCH" 2>/dev/null
     git worktree prune
-    # Push updated main
-    git push origin main
     echo ""
-    echo "Done: merged $BRANCH -> main, removed worktree, pushed."
+    echo "Done: merged $BRANCH -> main, removed worktree."
+    echo "Run 'git push origin main' when ready."
 
 # Run all tests
 test *args:

@@ -45,10 +45,11 @@ Git worktrees for branch isolation. See `.claude/rules/worktree-workflow.md` for
 
 ```bash
 just wt-new feature-name                     # create .claude/worktrees/feature-name/
-just wt-done                                 # merge to main + cleanup + push (run from inside worktree)
+just wt-done feature-name                    # merge to main + cleanup (from main repo — prevents CWD death)
+just wt-done                                 # same, but auto-detects (from inside worktree only)
 ```
 
-**Hard rules:** Never `git checkout main` from a worktree. Never remove a worktree while CWD is inside it. Never `git push origin branch:main`. Use `just wt-done` — it handles all of this correctly.
+**Hard rules:** Never `git checkout main` from a worktree. Never remove a worktree while CWD is inside it. Never `git push origin branch:main`. Claude Code sessions **must** call `just wt-done <name>` from the main repo, never from inside the worktree.
 
 ## Build Philosophy
 
@@ -160,7 +161,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (76 decisions)
+- ADRs: `docs/adr/README.md` (77 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -213,6 +214,7 @@ Key references:
 - Name matcher district tiebreaker: ADR-0075 (Phase 14 + 14b district disambiguation, shrinkage null investigation)
 - Audit findings resolution: ADR-0076 (A6-A18: bridge-builder harmonic centrality, surprising vote split, IRT sensitivity interpretation, small-group warning, BiCM Senate threshold, document-and-accept annotations)
 - Audit findings deep dive: `docs/audit-findings-deep-dive.md` (research classification of all 13 remaining findings)
+- Worktree CWD death prevention: ADR-0077 (update-ref fix, named wt-done, forwarder pattern)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`
