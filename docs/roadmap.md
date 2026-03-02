@@ -254,7 +254,7 @@ Full-codebase audit: scraper, analysis infrastructure, all 17 phases, tests, con
 
 Only 2 occurrences in same file (`scraper.py`) with different case conventions. Not worth extracting.
 
-#### R6. Test helpers duplicated across test files
+#### R6. Test helpers duplicated across test files → [M1](milestones/m1-test-infrastructure.md)
 
 `_make_legislators` (5 files), `_make_votes` (3 files), `_make_rollcalls` (2 files), `_make_matched` (2 files). Consolidate into `conftest.py`.
 
@@ -264,11 +264,11 @@ Clustering, bipartite, network, profiles all build lookup dicts the same way. Id
 
 ### Refactoring: Large Functions
 
-#### R8. `_parse_vote_page()` — 191 lines
+#### R8. `_parse_vote_page()` — 191 lines → [M2](milestones/m2-scraper-refactoring.md)
 
 `scraper.py:917-1108` — Does title extraction, header parsing, vote category parsing, and record creation in one function. Split into helpers.
 
-#### R9. `enrich_legislators()` — 64 lines with 4 party-detection fallbacks
+#### R9. `enrich_legislators()` — 64 lines with 4 party-detection fallbacks → [M2](milestones/m2-scraper-refactoring.md)
 
 `scraper.py:1172-1235` — Extract `_extract_party_and_district()`.
 
@@ -302,7 +302,7 @@ Clustering, bipartite, network, profiles all build lookup dicts the same way. Id
 
 ### Tests
 
-#### T1. `@pytest.mark.slow` defined but unused
+#### T1. `@pytest.mark.slow` defined but unused → [M1](milestones/m1-test-infrastructure.md)
 
 Marker registered in `pyproject.toml` and `just test-fast` skips it, but no tests are actually marked. Mark long-running tests (MCMC, cross-session) for faster local iteration.
 
@@ -395,16 +395,27 @@ Prioritized improvements to HTML report output, based on a comprehensive survey 
 | R19 | **Voting bloc stability tracking** | **Done** — `cross_session_data.py:compute_bloc_stability()`, Plotly Sankey, ARI, transition matrix |
 | R20 | **Scrollytelling in Synthesis** | **Done** — `ScrollySection` in report.py, IntersectionObserver JS, `--scrolly` flag |
 
-### Tier 4: Nice-to-Have
+### Tier 4: Nice-to-Have — Milestoned
 
-| # | Enhancement | Notes |
-|---|-------------|-------|
-| R21 | **Parliament/hemicircle charts** for vote composition | Visually striking (Flourish/Plotly). Not analytically essential. |
-| R22 | **Sankey diagrams** for bill flow (intro → committee → floor → passage) | Requires bill lifecycle data beyond roll calls. |
-| R23 | **Ridgeline plots** for temporal ideology distributions | Alternative to existing density plots. More compact for multi-session views. |
-| R24 | **Animated scatter** (Gapminder-style) for dynamic IRT | Engaging but complex. Plotly `animation_frame`. |
-| R25 | **Descriptive alt text** for all figures | Accessibility improvement. Current `FigureSection` uses title only, not descriptive. |
-| R26 | **Bill outcome prediction model** | Logistic regression on bill passage. Stanford CS229 achieves ~80% on congressional data. Requires bill-level features. |
+All Tier 4 items plus remaining code audit items have detailed implementation documents in [`docs/milestones/`](milestones/). Each milestone is self-contained with file paths, function signatures, test strategy, and documentation requirements.
+
+| # | Enhancement | Milestone | Notes |
+|---|-------------|-----------|-------|
+| R21 | **Parliament/hemicircle charts** | [M4](milestones/m4-hemicycle-charts.md) | Plotly scatter on polar coords, `viz_helpers.py` |
+| R22 | **Sankey diagrams** for bill flow | [M5](milestones/m5-bill-lifecycle.md) | Scraper captures KLISS HISTORY + EDA Sankey |
+| R23 | **Ridgeline plots** for ideology | [M6](milestones/m6-ridgeline-plots.md) | matplotlib KDE in dynamic IRT report |
+| R24 | **Animated scatter** (Gapminder) | [M7](milestones/m7-animated-scatter.md) | Plotly `animation_frame` in dynamic IRT report |
+| R25 | **Descriptive alt text** | [M3](milestones/m3-accessibility-alt-text.md) | WCAG 2.1 AA — 162 FigureSections across 24 files |
+| R26 | **Prediction enhancement** | [M8](milestones/m8-prediction-enhancement.md) | Sponsor party, SHAP passage, stratified accuracy |
+
+Additional milestones from code audit:
+
+| Milestone | Scope | Document |
+|-----------|-------|----------|
+| M1 | `@pytest.mark.slow` + test helper consolidation | [M1](milestones/m1-test-infrastructure.md) |
+| M2 | Extract `_parse_vote_page()` + `enrich_legislators()` helpers | [M2](milestones/m2-scraper-refactoring.md) |
+
+**Recommended order:** M1 → M2 → M5 → M4 → M6 → M7 → M3 → M8 (all independent, can be done in any order).
 
 ### Key Library Additions (All Integrated)
 
