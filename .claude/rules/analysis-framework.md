@@ -25,10 +25,10 @@ Phases live in numbered subdirectories (`analysis/01_eda/`, `analysis/07_indices
 
 Each phase produces a self-contained HTML report with SPSS/APA-style tables and embedded plots:
 
-- `analysis/report.py` — Generic: `TableSection`, `FigureSection`, `TextSection`, `ReportBuilder`, `make_gt()`, Jinja2 template + CSS
+- `analysis/report.py` — Generic: `TableSection`, `FigureSection`, `TextSection`, `KeyFindingsSection`, `InteractiveTableSection`, `InteractiveSection`, `ReportBuilder`, `make_gt()`, `make_interactive_table()`, Jinja2 template + CSS (ADR-0069)
 - `analysis/run_context.py` — `RunContext` context manager: structured output, elapsed timing, auto-primers, `strip_leadership_suffix()` utility, `generate_run_id()`, `resolve_upstream_dir()` (ADR-0052)
 - Phase-specific report builders: `*_report.py` in each subdirectory (e.g., `analysis/01_eda/eda_report.py`)
-- Enhancement survey: `docs/report-enhancement-survey.md` (current inventory, gap analysis, 26 prioritized recommendations in `docs/roadmap.md`)
+- Enhancement survey: `docs/report-enhancement-survey.md` (current inventory, gap analysis, 26 prioritized recommendations — R1-R13 implemented, ADR-0069)
 
 ## Key Data Modules (Pure Logic, No I/O)
 
@@ -39,6 +39,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 - `analysis/14_external_validation/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
 - `analysis/14b_external_validation_dime/external_validation_dime_data.py` — DIME parsing, name normalization, biennium filtering, CFscore matching
 - `analysis/16_dynamic_irt/dynamic_irt_data.py` — Global roster, cross-biennium vote stacking, bridge coverage, emIRT interface
+- `analysis/11_synthesis/coalition_labeler.py` — Auto-named coalitions from clusters (party composition, IRT ideal points)
 
 ## Design Documents
 

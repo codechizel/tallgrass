@@ -14,14 +14,28 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
-except ModuleNotFoundError:
-    from report import (  # type: ignore[no-redef]
+    from analysis.report import (
         FigureSection,
+        InteractiveSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
         make_gt,
+        make_interactive_table,
+    )
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
     )
 
 
@@ -37,6 +51,10 @@ def build_network_report(
     """Build the full network HTML report by adding sections to the ReportBuilder."""
     chambers = [c for c in ["House", "Senate"] if c in results and "summary" in results[c]]
 
+    findings = _generate_network_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_data_summary(report, results, chambers)
     _add_how_to_read(report)
 
@@ -49,6 +67,9 @@ def build_network_report(
 
     for chamber in chambers:
         _add_network_party_figure(report, plots_dir, chamber)
+
+    for chamber in chambers:
+        _add_network_interactive(report, plots_dir, chamber)
 
     for chamber in chambers:
         _add_network_irt_figure(report, plots_dir, chamber)
@@ -246,6 +267,25 @@ def _add_network_party_figure(report: ReportBuilder, plots_dir: Path, chamber: s
         )
 
 
+def _add_network_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Embed the interactive PyVis network graph in the report."""
+    path = plots_dir / f"network_interactive_{chamber.lower()}.html"
+    if path.exists():
+        html = path.read_text(encoding="utf-8")
+        report.add(
+            InteractiveSection(
+                id=f"network-interactive-{chamber.lower()}",
+                title=f"{chamber} Interactive Network",
+                html=html,
+                caption=(
+                    f"Interactive version of the {chamber} co-voting network. "
+                    "Drag nodes to rearrange, scroll to zoom, hover for details. "
+                    "Node color = party, node size proportional to degree."
+                ),
+            )
+        )
+
+
 def _add_network_irt_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
     path = plots_dir / f"network_irt_{chamber.lower()}.png"
     if path.exists():
@@ -286,10 +326,9 @@ def _add_centrality_table(
     available = [c for c in display_cols if c in df.columns]
     df = df.select(available)
 
-    html = make_gt(
+    html = make_interactive_table(
         df,
         title=f"{chamber} — Centrality Measures ({df.height} legislators)",
-        subtitle="Sorted by betweenness centrality (descending)",
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -312,7 +351,7 @@ def _add_centrality_table(
         },
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"centrality-table-{chamber.lower()}",
             title=f"{chamber} Centrality Table",
             html=html,
@@ -1099,6 +1138,56 @@ def _add_downstream_findings(
     </ul>
     """
     report.add(TextSection(id="downstream-findings", title="Downstream Findings", html=html))
+
+
+def _generate_network_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from network results."""
+    findings: list[str] = []
+
+    for chamber in ["House", "Senate"]:
+        if chamber not in results or "summary" not in results[chamber]:
+            continue
+        s = results[chamber].get("summary", {})
+        n_communities = s.get("n_communities")
+        modularity = s.get("modularity")
+
+        # Community count from resolution_df
+        res_df = results[chamber].get("resolution_df")
+        if res_df is not None and res_df.height > 0:
+            # Pick the row with highest modularity
+            best_idx = res_df["modularity"].arg_max()
+            if best_idx is not None:
+                n_communities = int(res_df["n_communities"][best_idx])
+                modularity = float(res_df["modularity"][best_idx])
+
+        if n_communities is not None and modularity is not None:
+            findings.append(
+                f"{chamber}: <strong>{n_communities}</strong> communities detected "
+                f"(modularity = {modularity:.3f})."
+            )
+
+        # Top bridge legislator
+        bridges = results[chamber].get("bridges")
+        if bridges is not None and bridges.height > 0:
+            top = bridges.head(1)
+            name = top["full_name"][0]
+            betw = float(top["betweenness"][0])
+            findings.append(
+                f"{chamber} top bridge: <strong>{name}</strong> (betweenness = {betw:.4f})."
+            )
+
+        break  # First chamber only
+
+    # Party assortativity
+    for chamber in ["House", "Senate"]:
+        if chamber not in results or "summary" not in results[chamber]:
+            continue
+        assort = results[chamber].get("summary", {}).get("assortativity_party")
+        if assort is not None:
+            findings.append(f"Party assortativity: <strong>{assort:.3f}</strong> ({chamber}).")
+            break
+
+    return findings
 
 
 def _add_analysis_parameters(

@@ -545,6 +545,15 @@ wheels = [
 ]
 
 [[package]]
+name = "itables"
+version = "2.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/c1/bd0bdc1314cf2d682d4e364c2df381f127a39c7d1953a008af5de66f9e7d/itables-2.7.0.tar.gz", hash = "sha256:fd9e541973a654f79dcebbd7c0d875a08db7b99a3fc467a91de260c78f6643ea", size = 2386312, upload-time = "2026-02-04T19:52:14.823Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/f9/dffe93846eb054da789173c3c03e8f6a565e2c18bb941d54085032f8060b/itables-2.7.0-py3-none-any.whl", hash = "sha256:68910282840c0770da2f336a207e64c75e052b31949ac97faa15a1f621727a4c", size = 2420679, upload-time = "2026-02-04T19:52:08.031Z" },
+]
+
+[[package]]
 name = "jedi"
 version = "0.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -575,6 +584,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/41/f2/d34e8b3a08a9cc79a50b2208a93dce981fe615b64d5a4d4abee421d898df/joblib-1.5.3.tar.gz", hash = "sha256:8561a3269e6801106863fd0d6d84bb737be9e7631e33aaed3fb9ce5953688da3", size = 331603, upload-time = "2025-12-15T08:41:46.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/91/984aca2ec129e2757d1e4e3c81c3fcda9d0f85b74670a094cc443d9ee949/joblib-1.5.3-py3-none-any.whl", hash = "sha256:5fc3c5039fc5ca8c0276333a188bbd59d6b7ab37fe6632daa76bc7f9ec18e713", size = 309071, upload-time = "2025-12-15T08:41:44.973Z" },
+]
+
+[[package]]
+name = "jsonpickle"
+version = "4.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/a6/d07afcfdef402900229bcca795f80506b207af13a838d4d99ad45abf530c/jsonpickle-4.1.1.tar.gz", hash = "sha256:f86e18f13e2b96c1c1eede0b7b90095bbb61d99fedc14813c44dc2f361dbbae1", size = 316885, upload-time = "2025-06-02T20:36:11.57Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/73/04df8a6fa66d43a9fd45c30f283cc4afff17da671886e451d52af60bdc7e/jsonpickle-4.1.1-py3-none-any.whl", hash = "sha256:bb141da6057898aa2438ff268362b126826c812a1721e31cf08a6e142910dc91", size = 47125, upload-time = "2025-06-02T20:36:08.647Z" },
 ]
 
 [[package]]
@@ -1083,6 +1101,19 @@ wheels = [
 ]
 
 [[package]]
+name = "plotly"
+version = "6.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "narwhals" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e3/4f/8a10a9b9f5192cb6fdef62f1d77fa7d834190b2c50c0cd256bd62879212b/plotly-6.5.2.tar.gz", hash = "sha256:7478555be0198562d1435dee4c308268187553cc15516a2f4dd034453699e393", size = 7015695, upload-time = "2026-01-14T21:26:51.222Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/67/f95b5460f127840310d2187f916cf0023b5875c0717fdf893f71e1325e87/plotly-6.5.2-py3-none-any.whl", hash = "sha256:91757653bd9c550eeea2fa2404dba6b85d1e366d54804c340b2c874e5a7eb4a4", size = 9895973, upload-time = "2026-01-14T21:26:47.135Z" },
+]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1290,6 +1321,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
+name = "pyvis"
+version = "0.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipython" },
+    { name = "jinja2" },
+    { name = "jsonpickle" },
+    { name = "networkx" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/4b/e37e4e5d5ee1179694917b445768bdbfb084f5a59ecd38089d3413d4c70f/pyvis-0.3.2-py3-none-any.whl", hash = "sha256:5720c4ca8161dc5d9ab352015723abb7a8bb8fb443edeb07f7a322db34a97555", size = 756038, upload-time = "2023-02-24T20:29:46.758Z" },
 ]
 
 [[package]]
@@ -1634,6 +1679,7 @@ dev = [
     { name = "great-tables" },
     { name = "igraph" },
     { name = "ipython" },
+    { name = "itables" },
     { name = "jinja2" },
     { name = "leidenalg" },
     { name = "matplotlib" },
@@ -1641,10 +1687,12 @@ dev = [
     { name = "numpy" },
     { name = "nutpie" },
     { name = "pandas" },
+    { name = "plotly" },
     { name = "polars" },
     { name = "prince" },
     { name = "pymc" },
     { name = "pytest" },
+    { name = "pyvis" },
     { name = "ruff" },
     { name = "ruptures" },
     { name = "scikit-learn" },
@@ -1674,6 +1722,7 @@ dev = [
     { name = "great-tables", specifier = ">=0.15" },
     { name = "igraph", specifier = ">=0.11" },
     { name = "ipython", specifier = ">=8.0" },
+    { name = "itables", specifier = ">=2.6" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "leidenalg", specifier = ">=0.11" },
     { name = "matplotlib", specifier = ">=3.10.8" },
@@ -1681,10 +1730,12 @@ dev = [
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "nutpie", specifier = ">=0.16" },
     { name = "pandas", specifier = ">=2.0" },
+    { name = "plotly", specifier = ">=6.0" },
     { name = "polars", specifier = ">=1.38.1" },
     { name = "prince", specifier = ">=0.13" },
     { name = "pymc", specifier = ">=5.10" },
     { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pyvis", specifier = ">=0.3" },
     { name = "ruff", specifier = ">=0.9" },
     { name = "ruptures", specifier = ">=1.1" },
     { name = "scikit-learn", specifier = ">=1.6" },

@@ -2123,6 +2123,406 @@ def plot_ppc_yea_rate(
     return bayesian_p
 
 
+# ── Party Density + ICC Curves ───────────────────────────────────────────────
+
+
+def plot_party_density(
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Plot overlapping KDE density curves of ideal points per party.
+
+    Red = Republican, Blue = Democrat, Gray = Independent.
+    Vertical lines at party means, annotated overlap region.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    for party in ["Republican", "Democrat", "Independent"]:
+        party_data = ideal_points.filter(pl.col("party") == party)
+        if party_data.height < 2:
+            continue
+
+        xi_vals = party_data["xi_mean"].to_numpy()
+        color = PARTY_COLORS.get(party, "#999999")
+
+        kde = stats.gaussian_kde(xi_vals)
+        x_range = np.linspace(xi_vals.min() - 0.5, xi_vals.max() + 0.5, 300)
+        density = kde(x_range)
+
+        ax.fill_between(x_range, density, alpha=0.3, color=color)
+        ax.plot(x_range, density, color=color, linewidth=2, label=party)
+        ax.axvline(
+            xi_vals.mean(),
+            color=color,
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.7,
+        )
+
+    ax.set_xlabel("Ideal Point (xi)")
+    ax.set_ylabel("Density")
+    ax.set_title(f"{chamber} — Party Ideal Point Distributions")
+    ax.legend()
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"party_density_{chamber.lower()}.png")
+
+
+def plot_icc_curves(
+    bill_params: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+    n_curves: int = 5,
+) -> None:
+    """Plot Item Characteristic Curves for the most discriminating bills.
+
+    Shows P(Yea | theta) for the top n_curves bills by |beta|, colored by
+    the sign of beta (red = conservative-Yea, blue = liberal-Yea).
+    """
+    bp = bill_params.with_columns(pl.col("beta_mean").abs().alias("abs_beta"))
+    top_bills = bp.sort("abs_beta", descending=True).head(n_curves)
+
+    if top_bills.height == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    theta = np.linspace(-3, 3, 300)
+
+    for row in top_bills.iter_rows(named=True):
+        a = row["beta_mean"]  # discrimination
+        b = row["alpha_mean"]  # difficulty
+        prob = 1.0 / (1.0 + np.exp(-(a * theta - b)))
+        color = PARTY_COLORS["Republican"] if a > 0 else PARTY_COLORS["Democrat"]
+        label_str = row.get("bill_number", row.get("vote_id", ""))
+        ax.plot(theta, prob, color=color, linewidth=2, label=label_str, alpha=0.8)
+
+    ax.axhline(0.5, color="#999", linestyle=":", linewidth=1)
+    ax.axvline(0, color="#999", linestyle=":", linewidth=1)
+    ax.set_xlabel("Ideal Point (theta)")
+    ax.set_ylabel("P(Yea | theta)")
+    ax.set_title(f"{chamber} — Item Characteristic Curves (Top {n_curves} by |beta|)")
+    ax.legend(fontsize=9, loc="lower right")
+    ax.set_ylim(-0.02, 1.02)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"icc_curves_{chamber.lower()}.png")
+
+
+def plot_ideal_points_interactive(
+    ideal_points: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Plotly interactive scatter of ideal points with hover details."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    for party, color in PARTY_COLORS.items():
+        subset = ideal_points.filter(pl.col("party") == party)
+        if subset.is_empty():
+            continue
+
+        hover_text = [
+            f"{row['full_name']}<br>Party: {row['party']}<br>"
+            f"District: {row.get('district', 'N/A')}<br>"
+            f"Ideal Point: {row['xi_mean']:.3f}<br>"
+            f"SD: {row['xi_sd']:.3f}<br>"
+            f"HDI: [{row.get('xi_hdi_2.5', 0):.3f}, {row.get('xi_hdi_97.5', 0):.3f}]"
+            for row in subset.iter_rows(named=True)
+        ]
+
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(subset.height)),
+                y=subset["xi_mean"].to_list(),
+                mode="markers",
+                name=party,
+                marker={"color": color, "size": 8, "opacity": 0.7},
+                text=hover_text,
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        title=f"{chamber} — Ideal Points (hover for details)",
+        xaxis_title="Legislator Index (sorted by ideal point)",
+        yaxis_title="Ideal Point (xi_mean)",
+        hovermode="closest",
+        template="plotly_white",
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs=True)
+    (out_dir / f"ideal_points_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: ideal_points_interactive_{chamber.lower()}.html")
+
+
+def plot_irt_vs_pca_interactive(
+    ideal_points: pl.DataFrame,
+    pca_scores: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Plotly interactive scatter of IRT vs PCA with hover details."""
+    import plotly.graph_objects as go
+
+    merged = ideal_points.select("legislator_slug", "xi_mean", "party", "full_name").join(
+        pca_scores.select("legislator_slug", "PC1"),
+        on="legislator_slug",
+        how="inner",
+    )
+    if merged.is_empty():
+        return
+
+    xi = merged["xi_mean"].to_numpy()
+    pc1 = merged["PC1"].to_numpy()
+    pearson_r = float(np.corrcoef(xi, pc1)[0, 1])
+
+    fig = go.Figure()
+    for party, color in PARTY_COLORS.items():
+        subset = merged.filter(pl.col("party") == party)
+        if subset.is_empty():
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=subset["PC1"].to_list(),
+                y=subset["xi_mean"].to_list(),
+                mode="markers",
+                name=party,
+                marker={"color": color, "size": 8, "opacity": 0.7},
+                text=[
+                    f"{row['full_name']}<br>IRT: {row['xi_mean']:.3f}<br>PCA: {row['PC1']:.3f}"
+                    for row in subset.iter_rows(named=True)
+                ],
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        title=f"{chamber} — IRT vs PCA (r = {pearson_r:.4f})",
+        xaxis_title="PCA PC1",
+        yaxis_title="IRT Ideal Point (xi_mean)",
+        hovermode="closest",
+        template="plotly_white",
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs=True)
+    (out_dir / f"irt_vs_pca_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: irt_vs_pca_interactive_{chamber.lower()}.html")
+
+
+# ── Cutting Lines + Swing Votes ──────────────────────────────────────────────
+
+MIN_BETA_FOR_CUTTING = 0.5  # Only compute cutting points for bills with |beta| > this
+SWING_VOTE_DISTANCE = 0.5  # Within this distance of cutting point = swing legislator
+CLOSE_VOTE_MARGIN = 5  # Margin <= this to be considered a close vote
+
+
+def compute_cutting_points(
+    bill_params: pl.DataFrame,
+    ideal_points: pl.DataFrame,
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    chamber: str,
+) -> pl.DataFrame:
+    """Compute cutting points for discriminating bills.
+
+    Cutting point = alpha / beta — the ideal point where P(Yea) = 0.5.
+    For each bill with |beta| > MIN_BETA_FOR_CUTTING, finds the nearest legislator.
+    """
+    bp = bill_params.filter(pl.col("beta_mean").abs() > MIN_BETA_FOR_CUTTING)
+    if bp.is_empty():
+        return pl.DataFrame()
+
+    ip_arr = ideal_points.sort("xi_mean")
+    ip_slugs = ip_arr["legislator_slug"].to_list()
+    ip_vals = ip_arr["xi_mean"].to_numpy()
+
+    # Get margin for each vote
+    prefix = "rep_" if chamber == "House" else "sen_"
+    chamber_votes = votes.filter(pl.col("legislator_slug").str.starts_with(prefix))
+    margins = (
+        chamber_votes.filter(pl.col("vote").is_in(["Yea", "Nay"]))
+        .group_by("vote_id")
+        .agg(
+            pl.col("vote").filter(pl.col("vote") == "Yea").len().alias("yea"),
+            pl.col("vote").filter(pl.col("vote") == "Nay").len().alias("nay"),
+        )
+        .with_columns((pl.col("yea") - pl.col("nay")).abs().alias("margin"))
+    )
+    margin_map = dict(zip(margins["vote_id"].to_list(), margins["margin"].to_list()))
+
+    rows = []
+    for row in bp.iter_rows(named=True):
+        beta = row["beta_mean"]
+        alpha = row["alpha_mean"]
+        cutting_point = alpha / beta
+
+        # Find nearest legislator
+        dists = np.abs(ip_vals - cutting_point)
+        nearest_idx = int(np.argmin(dists))
+        nearest_slug = ip_slugs[nearest_idx]
+        nearest_dist = float(dists[nearest_idx])
+
+        vid = row["vote_id"]
+        margin = margin_map.get(vid)
+
+        rows.append(
+            {
+                "vote_id": vid,
+                "bill_number": row.get("bill_number", vid),
+                "beta_mean": beta,
+                "alpha_mean": alpha,
+                "cutting_point": cutting_point,
+                "nearest_legislator": nearest_slug,
+                "nearest_distance": nearest_dist,
+                "margin": margin,
+            }
+        )
+
+    return pl.DataFrame(rows).sort("beta_mean", descending=True)
+
+
+def identify_swing_votes(
+    cutting_points: pl.DataFrame,
+    ideal_points: pl.DataFrame,
+    votes: pl.DataFrame,
+) -> pl.DataFrame:
+    """Identify swing legislators — those near the cutting point on close votes."""
+    if cutting_points.is_empty():
+        return pl.DataFrame()
+
+    close = cutting_points.filter(
+        pl.col("margin").is_not_null() & (pl.col("margin") <= CLOSE_VOTE_MARGIN)
+    )
+    if close.is_empty():
+        return pl.DataFrame()
+
+    ip_map = dict(
+        zip(
+            ideal_points["legislator_slug"].to_list(),
+            ideal_points["xi_mean"].to_list(),
+        )
+    )
+    name_map = {}
+    if "full_name" in ideal_points.columns:
+        name_map = dict(
+            zip(
+                ideal_points["legislator_slug"].to_list(),
+                ideal_points["full_name"].to_list(),
+            )
+        )
+    party_map = {}
+    if "party" in ideal_points.columns:
+        party_map = dict(
+            zip(
+                ideal_points["legislator_slug"].to_list(),
+                ideal_points["party"].to_list(),
+            )
+        )
+
+    swing_counts: dict[str, int] = {}
+    for row in close.iter_rows(named=True):
+        cp = row["cutting_point"]
+        for slug, xi in ip_map.items():
+            if abs(xi - cp) <= SWING_VOTE_DISTANCE:
+                swing_counts[slug] = swing_counts.get(slug, 0) + 1
+
+    if not swing_counts:
+        return pl.DataFrame()
+
+    rows = [
+        {
+            "legislator_slug": slug,
+            "full_name": name_map.get(slug, slug),
+            "party": party_map.get(slug, ""),
+            "swing_count": count,
+            "ideal_point": ip_map.get(slug, 0.0),
+        }
+        for slug, count in swing_counts.items()
+    ]
+    return pl.DataFrame(rows).sort("swing_count", descending=True)
+
+
+def plot_cutting_lines(
+    bill_params: pl.DataFrame,
+    ideal_points: pl.DataFrame,
+    votes: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+    n_bills: int = 5,
+) -> None:
+    """VoteView-style cutting line visualization for top discriminating bills."""
+    bp = (
+        bill_params.filter(pl.col("beta_mean").abs() > MIN_BETA_FOR_CUTTING)
+        .with_columns(pl.col("beta_mean").abs().alias("abs_beta"))
+        .sort("abs_beta", descending=True)
+        .head(n_bills)
+    )
+
+    if bp.is_empty():
+        return
+
+    ip = ideal_points.sort("xi_mean")
+    ip_slugs = ip["legislator_slug"].to_list()
+    ip_vals = ip["xi_mean"].to_numpy()
+    ip_parties = ip["party"].to_list() if "party" in ip.columns else ["Unknown"] * ip.height
+
+    # Build vote lookup
+    vote_lookup: dict[str, dict[str, str]] = {}
+    for row in votes.iter_rows(named=True):
+        vid = row["vote_id"]
+        if vid not in vote_lookup:
+            vote_lookup[vid] = {}
+        vote_lookup[vid][row["legislator_slug"]] = row["vote"]
+
+    fig, axes = plt.subplots(n_bills, 1, figsize=(12, 3 * n_bills))
+    if n_bills == 1:
+        axes = [axes]
+
+    for i, (ax, row) in enumerate(zip(axes, bp.iter_rows(named=True))):
+        vid = row["vote_id"]
+        beta = row["beta_mean"]
+        alpha = row["alpha_mean"]
+        cutting_point = alpha / beta
+        bill_num = row.get("bill_number", vid)
+
+        bill_votes = vote_lookup.get(vid, {})
+
+        for j, (slug, xi, party) in enumerate(zip(ip_slugs, ip_vals, ip_parties)):
+            v = bill_votes.get(slug)
+            if v == "Yea":
+                color = "#2ca02c"  # green
+                marker = "^"
+            elif v == "Nay":
+                color = "#d62728"  # red
+                marker = "v"
+            else:
+                continue
+
+            ax.scatter(xi, 0, c=color, marker=marker, s=40, alpha=0.7, zorder=2)
+
+        ax.axvline(cutting_point, color="black", linewidth=2, linestyle="--", zorder=3)
+        direction = "Conservative-Yea" if beta > 0 else "Liberal-Yea"
+        ax.set_title(f"{bill_num} (β={beta:.2f}, {direction})", fontsize=10)
+        ax.set_yticks([])
+        ax.set_xlabel("Ideal Point (Liberal ← → Conservative)")
+        ax.spines["top"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    fig.suptitle(
+        f"{chamber} — Cutting Lines for Top {n_bills} Discriminating Bills",
+        fontsize=14,
+        fontweight="bold",
+        y=1.02,
+    )
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"cutting_lines_{chamber.lower()}.png")
+
+
 # ── Phase 7: PCA Comparison ─────────────────────────────────────────────────
 
 
@@ -2556,6 +2956,10 @@ def main() -> None:
         house_matrix, senate_matrix, full_matrix = load_eda_matrices(eda_dir)
         pca_house, pca_senate = load_pca_scores(pca_dir)
         rollcalls, legislators = load_metadata(data_dir)
+        prefix = data_dir.name
+        raw_votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
+        if "legislator_slug" not in raw_votes.columns and "slug" in raw_votes.columns:
+            raw_votes = raw_votes.rename({"slug": "legislator_slug"})
 
         print(f"  House filtered: {house_matrix.height} x {len(house_matrix.columns) - 1}")
         print(f"  Senate filtered: {senate_matrix.height} x {len(senate_matrix.columns) - 1}")
@@ -2682,6 +3086,30 @@ def main() -> None:
             plot_discrimination(bill_params, chamber, ctx.plots_dir)
             plot_irt_vs_pca(ideal_points, pca_scores, chamber, ctx.plots_dir)
             plot_traces(idata, data, chamber, ctx.plots_dir)
+            plot_party_density(ideal_points, chamber, ctx.plots_dir)
+            plot_icc_curves(bill_params, chamber, ctx.plots_dir)
+            plot_ideal_points_interactive(ideal_points, chamber, ctx.plots_dir)
+            plot_irt_vs_pca_interactive(ideal_points, pca_scores, chamber, ctx.plots_dir)
+
+            # Cutting lines + swing votes
+            cutting_pts = compute_cutting_points(
+                bill_params, ideal_points, raw_votes, rollcalls, chamber
+            )
+            cutting_pts_result = cutting_pts
+            swing_result = pl.DataFrame()
+            if not cutting_pts.is_empty():
+                cutting_pts.write_parquet(
+                    ctx.data_dir / f"cutting_points_{chamber.lower()}.parquet"
+                )
+                plot_cutting_lines(bill_params, ideal_points, raw_votes, chamber, ctx.plots_dir)
+                swing_result = identify_swing_votes(cutting_pts, ideal_points, raw_votes)
+                if not swing_result.is_empty():
+                    swing_result.write_parquet(
+                        ctx.data_dir / f"swing_votes_{chamber.lower()}.parquet"
+                    )
+                    print(f"  {swing_result.height} swing legislators identified")
+                    for row in swing_result.head(5).iter_rows(named=True):
+                        print(f"    {row['full_name']}: {row['swing_count']} close votes")
 
             # ── Phase 7: PCA comparison ──
             print_header(f"PHASE 7: PCA COMPARISON — {chamber}")
@@ -2717,6 +3145,8 @@ def main() -> None:
                 "cons_slug": cons_slug,
                 "lib_slug": lib_slug,
                 "paradox": paradox,
+                "cutting_points": cutting_pts_result,
+                "swing_votes": swing_result,
             }
 
         # ── Joint Cross-Chamber Equating ──

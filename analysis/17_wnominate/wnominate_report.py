@@ -14,10 +14,18 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -47,6 +55,10 @@ def build_wnominate_report(
     plots_dir: Path,
 ) -> None:
     """Build the full W-NOMINATE + OC validation HTML report."""
+    findings = _generate_wnominate_key_findings(all_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_how_to_read(report)
     _add_executive_summary(report, all_results, session)
     _add_correlation_matrix(report, all_results)
@@ -471,6 +483,64 @@ def _add_methodology(report: ReportBuilder, dims: int) -> None:
             ),
         )
     )
+
+
+def _generate_wnominate_key_findings(all_results: dict[str, dict]) -> list[str]:
+    """Generate key findings for the W-NOMINATE + OC validation report."""
+    findings: list[str] = []
+
+    # Collect IRT vs W-NOMINATE correlations across chambers
+    irt_wnom_rs: list[float] = []
+    for data in all_results.values():
+        corr = data.get("correlations", {})
+        iw = corr.get("irt_wnom", {})
+        r = iw.get("pearson_r")
+        if r is not None:
+            irt_wnom_rs.append(r)
+
+    if irt_wnom_rs:
+        mean_r = sum(irt_wnom_rs) / len(irt_wnom_rs)
+        findings.append(
+            f"IRT vs W-NOMINATE: mean Pearson r = <strong>{mean_r:.3f}</strong> "
+            f"across <strong>{len(irt_wnom_rs)}</strong> chamber(s) "
+            f"— {'exceeds' if mean_r >= 0.95 else 'below'} the 0.95 literature benchmark."
+        )
+
+    # Collect fit statistics — correct classification rates
+    cc_values: list[tuple[str, str, float]] = []
+    for data in all_results.values():
+        chamber = data.get("chamber", "?")
+        fs = data.get("fit_stats", {})
+        for method, label in [("wnominate", "W-NOMINATE"), ("oc", "OC")]:
+            cc = fs.get(f"{method}_correctClassification")
+            if cc is not None:
+                cc_values.append((chamber, label, cc))
+
+    if cc_values:
+        best = max(cc_values, key=lambda x: x[2])
+        findings.append(
+            f"Best classification: <strong>{best[1]}</strong> in <strong>{best[0]}</strong> "
+            f"correctly classifies <strong>{best[2]:.1%}</strong> of votes."
+        )
+
+    # IRT vs OC correlation
+    irt_oc_rs: list[float] = []
+    for data in all_results.values():
+        corr = data.get("correlations", {})
+        io = corr.get("irt_oc", {})
+        r = io.get("pearson_r")
+        n = io.get("n", 0)
+        if r is not None and n > 0:
+            irt_oc_rs.append(r)
+
+    if irt_oc_rs:
+        mean_oc_r = sum(irt_oc_rs) / len(irt_oc_rs)
+        findings.append(
+            f"IRT vs Optimal Classification: mean r = <strong>{mean_oc_r:.3f}</strong> "
+            f"— nonparametric OC confirms the scaling."
+        )
+
+    return findings
 
 
 def _add_references(report: ReportBuilder) -> None:

@@ -14,14 +14,26 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
-except ModuleNotFoundError:
-    from report import (  # type: ignore[no-redef]
+    from analysis.report import (
         FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
         make_gt,
+        make_interactive_table,
+    )
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
     )
 
 # Import CONTESTED_PARTY_THRESHOLD via the lazy import in _add_analysis_parameters.
@@ -39,6 +51,10 @@ def build_clustering_report(
     skip_sensitivity: bool = False,
 ) -> None:
     """Build the full clustering HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_clustering_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_data_summary(report, results)
     _add_interpretation_intro(report)
 
@@ -152,10 +168,9 @@ def _add_party_loyalty_table(
     available = [c for c in display_cols if c in sorted_loy.columns]
     df = sorted_loy.select(available)
 
-    html = make_gt(
+    html = make_interactive_table(
         df,
         title=f"{chamber} — Party Loyalty ({df.height} legislators)",
-        subtitle="Fraction of contested votes agreeing with party median",
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -164,12 +179,13 @@ def _add_party_loyalty_table(
             "n_agree": "Agreed",
         },
         number_formats={"loyalty_rate": ".3f"},
-        source_note=(
+        caption=(
+            f"Fraction of contested votes agreeing with party median. "
             f"Contested: >= {_CONTESTED_PARTY_THRESHOLD * 100:.0f}% of party dissents on that vote."
         ),
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"party-loyalty-{chamber.lower()}",
             title=f"{chamber} Party Loyalty",
             html=html,
@@ -974,6 +990,45 @@ def _add_within_party_summary_table(
             html=html,
         )
     )
+
+
+def _generate_clustering_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from clustering results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        km = result.get("kmeans", {})
+        optimal_k = km.get("optimal_k")
+        if optimal_k is not None:
+            findings.append(
+                f"{chamber} optimal cluster count: <strong>k = {optimal_k}</strong> (party split)."
+            )
+
+        # Cross-method ARI
+        comparison = result.get("comparison", {})
+        mean_ari = comparison.get("mean_ari")
+        if mean_ari is not None:
+            findings.append(
+                f"{chamber} cross-method agreement: mean ARI = <strong>{mean_ari:.3f}</strong>."
+            )
+
+        break  # First chamber only
+
+    # HDBSCAN noise
+    for chamber, result in results.items():
+        hdb = result.get("hdbscan")
+        if hdb and hdb.get("n_noise", 0) > 0:
+            noise_names = hdb.get("noise_names", [])
+            label = ", ".join(noise_names[:3])
+            if len(noise_names) > 3:
+                label += f" (+{len(noise_names) - 3} more)"
+            findings.append(
+                f"HDBSCAN flagged <strong>{hdb['n_noise']}</strong> noise points "
+                f"in {chamber}: {label}."
+            )
+            break
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

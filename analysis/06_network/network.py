@@ -434,6 +434,39 @@ def build_kappa_network(
     return _graph_from_kappa_matrix(mat, slugs, ip_dict, threshold, extra_attrs)
 
 
+def generate_pyvis_network(G: nx.Graph, chamber: str, out_dir: Path) -> None:
+    """Generate an interactive PyVis HTML network visualization.
+
+    Nodes colored by party (Republican=#E81B23, Democrat=#0015BC, Independent=#999999),
+    sized proportional to degree.
+    """
+    from pyvis.network import Network
+
+    if G.number_of_nodes() == 0:
+        return
+
+    net = Network(height="600px", width="100%", notebook=False, cdn_resources="in_line")
+    net.from_nx(G)
+
+    # Compute degree for sizing
+    degrees = dict(G.degree())
+    max_deg = max(degrees.values()) if degrees else 1
+
+    for node in net.nodes:
+        node_id = node["id"]
+        party = G.nodes[node_id].get("party", "Unknown")
+        node["color"] = PARTY_COLORS.get(party, "#999999")
+        deg = degrees.get(node_id, 1)
+        node["size"] = 10 + 30 * (deg / max_deg)
+        full_name = G.nodes[node_id].get("full_name", node_id)
+        node["title"] = f"{full_name} ({party}), degree={deg}"
+
+    out_path = out_dir / f"network_interactive_{chamber.lower()}.html"
+    html = net.generate_html()
+    out_path.write_text(html, encoding="utf-8")
+    print(f"  Saved interactive network: {out_path.name}")
+
+
 def compute_network_summary(G: nx.Graph) -> dict:
     """Compute summary statistics for a network graph."""
     n_nodes = G.number_of_nodes()
@@ -2742,6 +2775,10 @@ def main() -> None:
                 f"Who Votes With Whom? ({n_nodes} legislators, {n_edges} connections)",
                 ctx.plots_dir / f"network_party_{chamber.lower()}.png",
             )
+
+            # Interactive PyVis network
+            generate_pyvis_network(G, chamber, ctx.plots_dir)
+
             # Network layout (IRT gradient)
             plot_network_layout(
                 G,

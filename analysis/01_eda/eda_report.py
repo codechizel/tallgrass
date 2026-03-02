@@ -14,9 +14,23 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, ReportBuilder, TableSection, make_gt
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 
 
 def build_eda_report(
@@ -33,9 +47,15 @@ def build_eda_report(
     eigenvalue_findings: dict | None = None,
     desposato_findings: dict | None = None,
     item_total_findings: dict | None = None,
+    strategic_absence: pl.DataFrame | None = None,
     plots_dir: Path,
 ) -> None:
     """Build the full EDA HTML report by adding sections to the ReportBuilder."""
+    # Key findings
+    findings = _generate_key_findings(votes, rollcalls, legislators, stat_findings, participation)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_session_overview(report, votes, rollcalls, legislators)
     _add_chamber_party_composition(report, legislators)
     _add_vote_categories(report, votes)
@@ -52,6 +72,8 @@ def build_eda_report(
     _add_participation_summary(report, participation)
     _add_participation_figure(report, plots_dir, "House")
     _add_participation_figure(report, plots_dir, "Senate")
+    if strategic_absence is not None and not strategic_absence.is_empty():
+        _add_absenteeism_analysis(report, strategic_absence)
     if party_unity is not None and not party_unity.is_empty():
         _add_party_unity(report, party_unity)
     if eigenvalue_findings:
@@ -465,6 +487,74 @@ def _add_participation_figure(report: ReportBuilder, plots_dir: Path, chamber: s
         )
 
 
+def _add_absenteeism_analysis(report: ReportBuilder, absence: pl.DataFrame) -> None:
+    """Absenteeism analysis: ranked legislators by absence rate with strategic flags."""
+    # Summary table: top absentees per chamber
+    for chamber in ["House", "Senate"]:
+        prefix = "rep_" if chamber == "House" else "sen_"
+        chamber_df = absence.filter(pl.col("legislator_slug").str.starts_with(prefix))
+        if chamber_df.is_empty():
+            continue
+
+        top = chamber_df.head(15).select(
+            "full_name",
+            "party",
+            pl.col("overall_absence_rate").round(3),
+            pl.col("pl_absence_rate").round(3),
+            pl.col("absence_ratio").round(1),
+            "absent_on_pl",
+            "total_votes",
+        )
+        html = make_gt(
+            top,
+            title=f"{chamber} — Absenteeism Rankings",
+            subtitle="Top 15 legislators by overall absence rate",
+            column_labels={
+                "full_name": "Legislator",
+                "party": "Party",
+                "overall_absence_rate": "Overall Absence %",
+                "pl_absence_rate": "Party-Line Absence %",
+                "absence_ratio": "Strategic Ratio",
+                "absent_on_pl": "Absences on PL Votes",
+                "total_votes": "Total Votes",
+            },
+            number_formats={
+                "overall_absence_rate": "{:.1%}",
+                "pl_absence_rate": "{:.1%}",
+                "absence_ratio": "{:.1f}x",
+            },
+            source_note=(
+                "Strategic ratio = party-line absence rate / overall absence rate. "
+                "Ratio >= 2.0x with >= 3 party-line absences flags potential strategic absence."
+            ),
+        )
+        report.add(
+            TableSection(
+                id=f"absenteeism-{chamber.lower()}", title=f"{chamber} Absenteeism", html=html
+            )
+        )
+
+    # Flagged strategic absentees
+    flagged = absence.filter((pl.col("absence_ratio") >= 2.0) & (pl.col("absent_on_pl") >= 3))
+    if not flagged.is_empty():
+        names = flagged["full_name"].to_list()
+        n = flagged.height
+        text = (
+            f"<strong>{n} legislator(s) flagged for potential strategic absence:</strong> "
+            + ", ".join(names)
+            + ". These legislators miss party-line votes at more than twice their overall "
+            "absence rate, suggesting absences may not be random."
+        )
+    else:
+        text = (
+            "No legislators were flagged for strategic absence. All absence patterns "
+            "appear consistent with general absence rates."
+        )
+    report.add(
+        TextSection(id="strategic-absence-flags", title="Strategic Absence Flags", text=text)
+    )
+
+
 def _add_filtering_decisions(report: ReportBuilder, manifests: dict) -> None:
     """Table 15: Filtering decisions summary (before/after/dropped per filter)."""
     rows = []
@@ -703,6 +793,74 @@ def _add_item_total_summary(report: ReportBuilder, item_total_findings: dict) ->
     report.add(
         TableSection(id="item-total-corr", title="Item-Total Correlation Screening", html=html)
     )
+
+
+def _generate_key_findings(
+    votes: pl.DataFrame,
+    rollcalls: pl.DataFrame,
+    legislators: pl.DataFrame,
+    stat_findings: dict,
+    participation: pl.DataFrame,
+) -> list[str]:
+    """Generate 3-5 key findings from EDA results."""
+    findings: list[str] = []
+
+    # Roll call and legislator counts
+    n_rollcalls = rollcalls.height
+    n_legislators = legislators.height
+    findings.append(
+        f"Session covered <strong>{n_rollcalls:,}</strong> roll calls across "
+        f"<strong>{n_legislators}</strong> legislators."
+    )
+
+    # Party-line vs bipartisan
+    vote_with_party = votes.join(
+        legislators.select("slug", "party"),
+        left_on="legislator_slug",
+        right_on="slug",
+    )
+    substantive = vote_with_party.filter(pl.col("vote").is_in(["Yea", "Nay"]))
+    party_agg = (
+        substantive.group_by("vote_id", "party")
+        .agg(
+            (pl.col("vote") == "Yea").sum().alias("yea"),
+            (pl.col("vote") == "Nay").sum().alias("nay"),
+        )
+        .with_columns((pl.col("yea") / (pl.col("yea") + pl.col("nay"))).alias("yea_rate"))
+    )
+    pivoted = party_agg.pivot(on="party", index="vote_id", values="yea_rate")
+    if "Republican" in pivoted.columns and "Democrat" in pivoted.columns:
+        party_line = pivoted.filter(
+            ((pl.col("Republican") > 0.9) & (pl.col("Democrat") < 0.1))
+            | ((pl.col("Republican") < 0.1) & (pl.col("Democrat") > 0.9))
+        )
+        pct_party_line = 100 * party_line.height / pivoted.height if pivoted.height > 0 else 0
+        findings.append(
+            f"<strong>{pct_party_line:.0f}%</strong> of votes were party-line "
+            f"(each party >90% on opposite sides)."
+        )
+
+    # Lowest participation
+    if participation.height > 0:
+        worst = participation.sort("participation_rate").head(1)
+        worst_name = worst["full_name"][0]
+        worst_rate = float(worst["participation_rate"][0]) * 100
+        findings.append(
+            f"Lowest participation: <strong>{worst_name}</strong> ({worst_rate:.0f}% of "
+            f"chamber roll calls)."
+        )
+
+    # Rice cohesion
+    rice_data = stat_findings.get("rice_summary", [])
+    for row in rice_data:
+        if row["party"] == "Republican":
+            findings.append(
+                f"Republican mean Rice cohesion: <strong>{row['mean']:.2f}</strong> "
+                f"({row['pct_perfect'] * 100:.0f}% of votes perfectly unified)."
+            )
+            break
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

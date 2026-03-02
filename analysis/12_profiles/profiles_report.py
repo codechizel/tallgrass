@@ -14,9 +14,21 @@ except ModuleNotFoundError:
     from profiles_data import ProfileTarget  # type: ignore[no-redef]
 
 try:
-    from analysis.report import FigureSection, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, TableSection, TextSection, make_gt  # type: ignore[no-redef]
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        KeyFindingsSection,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 
 
 def build_profiles_report(
@@ -28,6 +40,10 @@ def build_profiles_report(
     session: str,
 ) -> None:
     """Build the full profiles report with intro + per-legislator sections."""
+    findings = _generate_profiles_key_findings(targets, all_data)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_intro(report, targets, session)
 
     for target in targets:
@@ -243,6 +259,38 @@ def _add_surprising_votes_table(
             html=html,
         )
     )
+
+
+def _generate_profiles_key_findings(
+    targets: list[ProfileTarget],
+    all_data: dict[str, dict],
+) -> list[str]:
+    """Generate 2-4 key findings from profiles results."""
+    findings: list[str] = []
+
+    if not targets:
+        return findings
+
+    n_targets = len(targets)
+    names = [t.full_name for t in targets[:3]]
+    label = ", ".join(names)
+    if n_targets > 3:
+        label += f" (+{n_targets - 3} more)"
+    plural = "s" if n_targets != 1 else ""
+    findings.append(f"Profiling <strong>{n_targets}</strong> legislator{plural}: {label}.")
+
+    # Key metrics from first target with data
+    for target in targets:
+        data = all_data.get(target.slug, {})
+        defections = data.get("defections")
+        if defections is not None and hasattr(defections, "height") and defections.height > 0:
+            findings.append(
+                f"<strong>{target.full_name}</strong>: {defections.height} defection"
+                f"{'s' if defections.height != 1 else ''} from party majority."
+            )
+            break
+
+    return findings
 
 
 def _add_neighbors_figure(

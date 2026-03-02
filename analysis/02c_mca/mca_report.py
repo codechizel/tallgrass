@@ -14,9 +14,23 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 
 
 TOP_CONTRIBUTIONS = 20  # Number of top contributions to show per dimension
@@ -33,6 +47,10 @@ def build_mca_report(
     correction: str,
 ) -> None:
     """Build the full MCA HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_mca_key_findings(results, pca_validation)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     for chamber, result in results.items():
         _add_inertia_summary(report, result, chamber, correction)
         _add_inertia_figure(report, plots_dir, chamber)
@@ -421,6 +439,49 @@ def _add_sensitivity_table(report: ReportBuilder, findings: dict) -> None:
             html=html,
         )
     )
+
+
+def _generate_mca_key_findings(
+    results: dict[str, dict],
+    pca_validation: dict[str, dict],
+) -> list[str]:
+    """Generate 2-4 key findings from MCA results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        ev_df = result.get("eigenvalues_df")
+        if ev_df is not None and ev_df.height > 0:
+            dim1_inertia = float(ev_df["inertia_pct"][0])
+            findings.append(
+                f"{chamber} Dim1 captures <strong>{dim1_inertia:.1f}%</strong> of "
+                f"corrected inertia."
+            )
+
+        hs = result.get("horseshoe", {})
+        if hs.get("detected"):
+            findings.append(
+                f"{chamber} <strong>horseshoe effect detected</strong> "
+                f"(R² = {hs['r2']:.3f}) — Dim2 is an artifact, not a genuine dimension."
+            )
+        elif hs.get("r2") is not None:
+            findings.append(
+                f"{chamber} no horseshoe effect (R² = {hs['r2']:.3f}) — "
+                f"Dim2 captures genuine variation."
+            )
+        break  # First chamber only
+
+    # PCA agreement
+    for chamber, data in pca_validation.items():
+        if isinstance(data, dict) and not data.get("skipped"):
+            r = data.get("spearman_r")
+            if r is not None:
+                findings.append(
+                    f"MCA Dim1 vs PCA PC1: Spearman <strong>r = {r:.3f}</strong> "
+                    f"({data.get('verdict', 'N/A')})."
+                )
+            break
+
+    return findings
 
 
 def _add_analysis_parameters(

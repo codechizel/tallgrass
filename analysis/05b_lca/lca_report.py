@@ -14,9 +14,23 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 
 
 def build_lca_report(
@@ -26,6 +40,10 @@ def build_lca_report(
     plots_dir: Path,
 ) -> None:
     """Build the full LCA HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_lca_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_data_summary(report, results)
 
     for chamber in results:
@@ -514,6 +532,45 @@ def _add_discriminating_bills(
             html=html,
         )
     )
+
+
+def _generate_lca_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from LCA results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        optimal_k = result.get("optimal_k")
+        if optimal_k is not None:
+            findings.append(
+                f"{chamber} BIC selects <strong>K = {optimal_k}</strong> latent classes."
+            )
+
+        salsa = result.get("salsa", {})
+        if salsa.get("detected"):
+            findings.append(
+                f"{chamber} <strong>Salsa effect detected</strong> — classes are "
+                f"quantitative grading, not qualitatively distinct factions."
+            )
+        elif optimal_k and optimal_k > 2 and salsa.get("mean_correlation") is not None:
+            findings.append(
+                f"{chamber} Salsa effect not detected "
+                f"(mean profile r = {salsa['mean_correlation']:.3f})."
+            )
+
+        break  # First chamber only
+
+    # Clustering agreement
+    for chamber, result in results.items():
+        ari_scores = result.get("ari_scores", {})
+        if ari_scores:
+            best_pair = max(ari_scores, key=ari_scores.get)
+            best_ari = ari_scores[best_pair]
+            findings.append(
+                f"Strongest LCA agreement: <strong>{best_pair}</strong> (ARI = {best_ari:.3f})."
+            )
+            break
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

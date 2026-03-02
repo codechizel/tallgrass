@@ -11,9 +11,25 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, TableSection, TextSection, make_gt  # type: ignore[no-redef]
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
+    )
 
 if TYPE_CHECKING:
     try:
@@ -34,6 +50,10 @@ def build_synthesis_report(
     session: str,
 ) -> None:
     """Build the full synthesis report (29-32 sections depending on detections)."""
+    findings = _generate_synthesis_key_findings(leg_dfs, notables)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     # 1. intro
     _add_intro(report, manifests, notables)
     # 2. pipeline
@@ -1039,6 +1059,57 @@ def _add_discrimination_figure(report: object, upstream_plots: dict, chamber: st
         )
 
 
+def _generate_synthesis_key_findings(
+    leg_dfs: dict[str, pl.DataFrame],
+    notables: dict,
+) -> list[str]:
+    """Generate 2-4 key findings from synthesis results."""
+    findings: list[str] = []
+
+    # Top maverick
+    mavericks = notables.get("mavericks", {})
+    if mavericks:
+        for _key, mav in mavericks.items():
+            if hasattr(mav, "full_name") and hasattr(mav, "maverick_rate"):
+                findings.append(
+                    f"Top maverick: <strong>{mav.full_name}</strong> "
+                    f"({mav.maverick_rate:.0%} defection rate)."
+                )
+                break
+            elif hasattr(mav, "full_name"):
+                findings.append(f"Top maverick: <strong>{mav.full_name}</strong>.")
+                break
+
+    # Bridge builders
+    bridges = notables.get("bridges", {})
+    if bridges:
+        names = [v.full_name for v in bridges.values() if hasattr(v, "full_name")]
+        if names:
+            label = ", ".join(names[:2])
+            findings.append(f"Bridge builders: <strong>{label}</strong>.")
+
+    # Paradox legislator
+    paradoxes = notables.get("paradoxes", {})
+    if paradoxes:
+        for _key, par in paradoxes.items():
+            if hasattr(par, "full_name"):
+                findings.append(
+                    f"Paradox legislator: <strong>{par.full_name}</strong> — "
+                    f"party label contradicts voting behavior."
+                )
+                break
+
+    # Total legislators
+    total = sum(df.height for df in leg_dfs.values())
+    if total > 0:
+        findings.append(
+            f"Synthesis covers <strong>{total}</strong> legislators across "
+            f"{len(leg_dfs)} chamber{'s' if len(leg_dfs) != 1 else ''}."
+        )
+
+    return findings[:4]
+
+
 def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
     """Section 30: Full Legislature Scorecard — ALL legislators, both chambers."""
     frames = []
@@ -1069,10 +1140,9 @@ def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
 
     display = combined.select(display_cols)
 
-    html = make_gt(
+    html = make_interactive_table(
         display,
         title=f"Full Legislature Scorecard — {session}",
-        subtitle="Every legislator, sorted by ideology within chamber",
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -1097,7 +1167,7 @@ def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
             "UMAP1": ".3f",
             "UMAP2": ".3f",
         },
-        source_note=(
+        caption=(
             "IRT Ideology: Bayesian ideal point (negative = liberal, positive = conservative). "
             "Party Unity: CQ-standard (fraction of party votes with party majority). "
             "Cluster Loyalty: agreement rate on contested votes. "
@@ -1108,7 +1178,7 @@ def _add_full_scorecard(report: object, leg_dfs: dict, session: str) -> None:
     )
 
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id="full-scorecard",
             title="Full Legislature Scorecard",
             html=html,

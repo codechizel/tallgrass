@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-01 (report enhancement survey — 26 items added to backlog)
+**Last updated:** 2026-03-01 (R1-R13 report enhancements implemented — ADR-0069)
 
 ---
 
@@ -56,6 +56,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 6b | Bipartite Bill-Legislator Network | 2026-02-28 | Two-mode network (legislators × bills). Bill polarization, bridge bills, bill communities (Leiden on Newman projection), BiCM backbone extraction (statistical validation via maximum-entropy null model), Phase 6 comparison. Deep dive: `docs/bipartite-network-deep-dive.md`, design: `analysis/design/bipartite.md`, ADR-0065. |
 | — | 84th Biennium Pipeline Stress Test | 2026-03-01 | Full 17-phase pipeline + PPC + External Validation + DIME on 2011-12 data. 8 bug fixes (column naming, IRT sensitivity sign flip, arviz/matplotlib deprecations, DIME party type). LCA class membership tables added. ADR-0066. |
 | — | Open-Source Readiness | 2026-03-01 | MIT LICENSE, README, CONTRIBUTING, pyproject metadata, CI expansion (lint+typecheck+test). 9 bug fixes (except syntax, Jinja2 autoescape, sign-flip DuplicateError, circular import, PID race). Phase 04b tests (16 new). 1701 total tests. ADR-0067. |
+| — | Report Enhancements (R1-R13) | 2026-03-01 | 3 new section types (KeyFindings, InteractiveTable, Interactive), ITables for 10+ large tables, Plotly interactive scatters (IRT, PCA, indices), PyVis network graphs, key findings in all 22+ reports, party density + ICC in flat IRT, cutting lines + swing votes, BPI + plus-minus indices, coalition labeler, absenteeism analysis. 39 new tests (1716 total). ADR-0069. |
 
 ---
 
@@ -125,38 +126,48 @@ In the 84th pipeline run, 28 House legislators (beyond the 2 expected IRT anchor
 
 The current 84th results (`84-260228.5`) predate three code fixes: (1) Carey Unity `group_by` race condition (non-deterministic party member count swap), (2) clustering sensitivity ARI row-ordering mismatch (meaningless ARI values), (3) IRT sensitivity sign-flip handling (already fixed in code, results show stale negative correlations with `raw_pearson_r: null`). A fresh pipeline re-run (`just pipeline 2011-12`) would validate all fixes and produce clean results.
 
+### ~~4. Symlink Race: Pipeline-Only `latest` Updates~~ — Done
+
+**Completed 2026-03-01.** `RunContext` now tracks `_explicit_run_id` to distinguish pipeline (explicit) from standalone (auto-generated) run IDs. Only explicit run IDs update `latest` and report convenience symlinks. 3 new tests + 1 updated test. ADR-0069.
+
+### ~~5. Dynamic IRT Sign Identification~~ — Done
+
+**Completed 2026-03-01.** Informative `xi_init` prior from static IRT: loads Phase 04 ideal points, maps to global roster, uses `Normal(xi_init_mu, 0.75)` instead of `Normal(0, 1)`. Transfers the well-identified sign convention. Post-hoc correction (ADR-0068) retained as diagnostic safety net. ADR-0069.
+
+### ~~6. Dynamic IRT Senate Convergence~~ — Done
+
+**Completed 2026-03-01.** Adaptive tau: small chambers (<80 legs) get `HalfNormal(0.15)` + global tau; large chambers keep `HalfNormal(0.5)` + per-party tau. MCMC budget increased to 2000/2000/4. `--tau-sigma` CLI override for experimentation. 5 new graph construction tests. ADR-0069.
+
 ---
 
-## Report Enhancement Backlog
+## ~~Report Enhancement Backlog~~ — R1-R13 Done (ADR-0069)
 
 Prioritized improvements to HTML report output, based on a comprehensive survey of the open-source landscape, academic standards, and general-audience best practices. Full analysis: [`docs/report-enhancement-survey.md`](report-enhancement-survey.md).
 
-### Tier 1: High-Impact, Lower Effort
+**R1-R13 completed 2026-03-01.** Three new section types (`KeyFindingsSection`, `InteractiveTableSection`, `InteractiveSection`), three new dependencies (itables, plotly, pyvis), five new analytical features (BPI, plus-minus, cutting lines, swing votes, coalition labeler), all 22+ report builders enhanced with key findings. See ADR-0069.
 
-Presentation-layer enhancements — no pipeline changes required.
+### ~~Tier 1: High-Impact, Lower Effort~~ — All Done
 
-| # | Enhancement | Phases | Effort | Rationale |
-|---|-------------|--------|--------|-----------|
-| R1 | **Key Findings section** at top of every report | All 17 | Low | Every newsroom leads with findings. Academic papers have abstracts. Our reports jump straight to tables. Auto-generate 3-5 bullets from results data. |
-| R2 | **ITables for legislator tables** (sort, search, filter, paginate) | All phases with full tables | Low | Every modern data site has searchable tables. Static HTML tables in 2026 feel dated. Zero-dependency library (v2.6+), Polars support. |
-| R3 | **Party ideal point density overlay** | 04 IRT | Low | The single most published figure in IRT literature (Bafumi et al. 2005, Shor & McCarty 2011). Overlapping KDE curves show party separation and overlap at a glance. Missing from Phase 04; hierarchical has party posteriors but flat does not. |
-| R4 | **Headline-style section titles** | All (Synthesis already partial) | Low | "Moderate Republicans Broke Ranks on 23 Key Votes" instead of "Cluster Analysis Results." Makes reports scannable and quotable. Follows FiveThirtyEight, Economist, Pew design. |
-| R5 | **Absenteeism as analysis** (not just filtering) | 01 EDA, 07 Indices | Low | General audiences care deeply about who shows up. ProPublica and GovTrack use missed votes as a headline metric. Data already computed; present as finding, not filter. Rank legislators, correlate with vote closeness. |
-| R6 | **ICCs in flat IRT report** | 04 IRT | Low | Code already exists in Phase 10 hierarchical. Item characteristic curves are standard in psychometric reporting. Show for top 5-10 most discriminating bills. |
+| # | Enhancement | Status |
+|---|-------------|--------|
+| R1 | **Key Findings section** at top of every report | **Done** — all 22+ report builders |
+| R2 | **ITables for legislator tables** (sort, search, filter) | **Done** — 10+ large tables converted |
+| R3 | **Party ideal point density overlay** | **Done** — `plot_party_density()` in Phase 04 |
+| R4 | **Headline-style section titles** | **Done** — Synthesis data-driven, others use subtitle |
+| R5 | **Absenteeism as analysis** | **Done** — EDA report, strategic absence flags |
+| R6 | **ICCs in flat IRT report** | **Done** — `plot_icc_curves()` in Phase 04 |
 
-### Tier 2: High-Impact, Medium Effort
+### ~~Tier 2: High-Impact, Medium Effort~~ — All Done
 
-New analysis code or visualization infrastructure changes.
-
-| # | Enhancement | Phases | Effort | Rationale |
-|---|-------------|--------|--------|-----------|
-| R7 | **Per-vote spatial visualization** (cutting lines) | 04 IRT | Medium | VoteView's signature figure — legislators on ideology axis with cutting line showing Yea/Nay split. The most recognizable chart in legislative analysis. No equivalent in Tallgrass. Show for top-5 most discriminating votes per chamber. |
-| R8 | **Swing vote identification** | 04 IRT or 07 Indices | Medium | "Whose vote decided the outcome?" — the most newsworthy question for close votes. Identify legislator(s) with ideal points nearest the cutting point on margin-≤5 votes. Aggregate to "swing vote frequency" ranking. |
-| R9 | **Plotly for ideology scatter plots** | 02 PCA, 04 IRT, 05 Clustering | Medium | Interactive hover-to-identify on the most viewed figures. Plotly v6 has native Polars support, standalone HTML fragment export via `.to_html(full_html=False)`. Requires new section type in `report.py`. |
-| R10 | **PyVis for network graphs** | 06 Network, 06b Bipartite | Medium | Interactive force-directed networks (drag, zoom, hover) from existing NetworkX objects. `from_nx(G)` one-liner. Standalone HTML output. Current static PNGs don't convey network structure well. |
-| R11 | **Predicted vs. actual ("plus-minus") framing** | 07 Indices or 08 Prediction | Medium | FiveThirtyEight's most effective device: "Expected to vote with party 78%, actually 92%. Difference: +14." Dumbbell chart + ranked table. Uses existing prediction and party unity data. |
-| R12 | **Vote-based bipartisanship index** | 07 Indices | Medium | Distinct from maverick score. Maverick = breaks from own party. Bipartisan = aligns with opposing party on party-line votes. Lugar Center BPI is the cosponsorship standard; vote-based analogue is straightforward. |
-| R13 | **Named/described coalitions** | 05 Clustering, 11 Synthesis | Medium | Phases 05/05b/06 identify groups by number. Journalists need: "the moderate Republican faction (12 members, median IRT -0.3)." Auto-label from party composition, IRT range, and size. |
+| # | Enhancement | Status |
+|---|-------------|--------|
+| R7 | **Per-vote spatial visualization** (cutting lines) | **Done** — `plot_cutting_lines()` in Phase 04 |
+| R8 | **Swing vote identification** | **Done** — `identify_swing_votes()` in Phase 04 |
+| R9 | **Plotly for ideology scatter plots** | **Done** — IRT, PCA, Indices interactive scatters |
+| R10 | **PyVis for network graphs** | **Done** — Phase 06 interactive network |
+| R11 | **Predicted vs. actual ("plus-minus")** | **Done** — `compute_plus_minus()` + dumbbell chart |
+| R12 | **Vote-based bipartisanship index** | **Done** — `compute_bipartisanship_index()` + scatter |
+| R13 | **Named/described coalitions** | **Done** — `coalition_labeler.py` with auto-naming |
 
 ### Tier 3: High-Impact, Higher Effort
 

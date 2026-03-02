@@ -14,14 +14,26 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
-except ModuleNotFoundError:
-    from report import (  # type: ignore[no-redef]
+    from analysis.report import (
         FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
         make_gt,
+        make_interactive_table,
+    )
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
     )
 
 
@@ -35,6 +47,10 @@ def build_irt_2d_report(
     n_chains: int,
 ) -> None:
     """Build the full 2D IRT HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_irt_2d_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_experimental_banner(report)
     _add_model_specification(report)
 
@@ -218,10 +234,9 @@ def _add_ideal_point_table(
     available = [c for c in display_cols if c in ip.columns]
     df = ip.select(available)
 
-    html = make_gt(
+    html = make_interactive_table(
         df,
         title=f"{chamber} — 2D Ideal Points (ranked by Dim 1)",
-        subtitle=f"{df.height} legislators, positive Dim 1 = conservative",
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -240,10 +255,10 @@ def _add_ideal_point_table(
             "xi_dim2_hdi_3%": "+.3f",
             "xi_dim2_hdi_97%": "+.3f",
         },
-        source_note="HDI = 95% Highest Density Interval. Dim 2 HDIs may be wide.",
+        caption="HDI = 95% Highest Density Interval. Dim 2 HDIs may be wide.",
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"ideal-points-2d-{chamber.lower()}",
             title=f"{chamber} 2D Ideal Points",
             html=html,
@@ -369,6 +384,41 @@ def _add_interpretation_guide(report: ReportBuilder) -> None:
             ),
         )
     )
+
+
+def _generate_irt_2d_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from 2D IRT results."""
+    findings: list[str] = []
+
+    # Convergence status
+    all_ok = True
+    for chamber, result in results.items():
+        diag = result.get("diagnostics", {})
+        if diag.get("xi_rhat_max", 2.0) >= 1.05 or diag.get("xi_ess_min", 0) < 200:
+            all_ok = False
+            break
+    if all_ok:
+        findings.append(
+            "All 2D convergence diagnostics <strong>passed</strong> "
+            "(relaxed thresholds: R-hat < 1.05, ESS > 200)."
+        )
+    else:
+        findings.append("<strong>WARNING:</strong> Some 2D convergence diagnostics did not pass.")
+
+    # Dim 1 vs PC1 correlation
+    for chamber, result in results.items():
+        corrs = result.get("correlations", {})
+        r_dim1 = corrs.get("dim1_vs_pc1_pearson")
+        r_dim2 = corrs.get("dim2_vs_pc2_pearson")
+        if r_dim1 is not None:
+            findings.append(
+                f"{chamber} Dim 1 vs PCA PC1: <strong>r = {r_dim1:.3f}</strong>"
+                + (f" (Dim 2 vs PC2: r = {r_dim2:.3f})" if r_dim2 is not None else "")
+                + "."
+            )
+        break
+
+    return findings
 
 
 def _add_analysis_parameters(

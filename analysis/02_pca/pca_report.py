@@ -15,9 +15,21 @@ import numpy as np
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, ReportBuilder, TableSection, make_gt
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        make_gt,
+    )
 
 TOP_LOADINGS = 15  # Number of top positive/negative loadings to show
 
@@ -32,6 +44,10 @@ def build_pca_report(
     n_components: int,
 ) -> None:
     """Build the full PCA HTML report by adding ~14 sections to the ReportBuilder."""
+    findings = _generate_pca_key_findings(results, validation_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     for chamber, result in results.items():
         _add_pca_summary(report, result, chamber)
         _add_dimensionality_diagnostics(report, result, chamber)
@@ -492,6 +508,51 @@ def _add_validation_table(report: ReportBuilder, results: dict[str, dict]) -> No
             html=html,
         )
     )
+
+
+def _generate_pca_key_findings(
+    results: dict[str, dict],
+    validation_results: dict[str, dict],
+) -> list[str]:
+    """Generate 2-4 key findings from PCA results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        pca = result.get("pca")
+        if pca is None:
+            continue
+        ev = pca.explained_variance_ratio_
+        if len(ev) > 0:
+            pc1_pct = float(ev[0]) * 100
+            findings.append(
+                f"{chamber} PC1 explains <strong>{pc1_pct:.1f}%</strong> of vote variance "
+                f"(eigenvalue ratio = {result.get('eigenvalue_ratio', 0):.1f})."
+            )
+        break  # Only first chamber for conciseness
+
+    # Validation accuracy
+    for chamber, data in validation_results.items():
+        acc = data.get("accuracy")
+        auc = data.get("auc_roc")
+        base = data.get("base_accuracy")
+        if acc is not None and auc is not None:
+            findings.append(
+                f"{chamber} holdout validation: <strong>{acc:.1%}</strong> accuracy "
+                f"(AUC-ROC = {auc:.3f}, base rate = {base:.1%})."
+            )
+            break
+
+    # Parallel analysis
+    for chamber, result in results.items():
+        n_sig = result.get("n_significant")
+        if n_sig is not None:
+            findings.append(
+                f"Parallel analysis retains <strong>{n_sig}</strong> significant "
+                f"dimension{'s' if n_sig != 1 else ''} in {chamber}."
+            )
+            break
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:

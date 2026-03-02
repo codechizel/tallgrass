@@ -15,10 +15,18 @@ import numpy as np
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -36,6 +44,10 @@ def build_prediction_report(
 ) -> None:
     """Build the full prediction HTML report by adding sections to the ReportBuilder."""
     chambers = [c for c in ["House", "Senate"] if c in results]
+
+    findings = _generate_prediction_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
 
     _add_data_summary(report, results, chambers)
     _add_how_to_read(report)
@@ -854,6 +866,50 @@ def _add_passage_interpretation(
             html=html,
         )
     )
+
+
+def _generate_prediction_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from prediction results."""
+    findings: list[str] = []
+
+    for chamber in ["House", "Senate"]:
+        if chamber not in results:
+            continue
+        result = results[chamber]
+
+        # Best model accuracy and AUC
+        models = result.get("model_comparison")
+        if models is not None and hasattr(models, "height") and models.height > 0:
+            best = models.sort("accuracy", descending=True).head(1)
+            model_name = best["model"][0]
+            acc = float(best["accuracy"][0])
+            auc = float(best["auc_roc"][0]) if "auc_roc" in best.columns else None
+            detail = f", AUC-ROC = {auc:.3f}" if auc is not None else ""
+            findings.append(
+                f"{chamber} best model: <strong>{model_name}</strong> "
+                f"(accuracy = {acc:.1%}{detail})."
+            )
+        elif result.get("vote_model"):
+            vm = result["vote_model"]
+            acc = vm.get("accuracy")
+            auc = vm.get("auc_roc")
+            if acc is not None:
+                detail = f", AUC-ROC = {auc:.3f}" if auc is not None else ""
+                findings.append(
+                    f"{chamber} XGBoost vote prediction: <strong>{acc:.1%}</strong> "
+                    f"accuracy{detail}."
+                )
+
+        # Top SHAP feature
+        shap_data = result.get("shap_importance")
+        if shap_data is not None and hasattr(shap_data, "height") and shap_data.height > 0:
+            top_feature = shap_data.sort("mean_abs_shap", descending=True).head(1)
+            feat_name = top_feature["feature"][0]
+            findings.append(f"{chamber} top predictive feature: <strong>{feat_name}</strong>.")
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_downstream_findings(

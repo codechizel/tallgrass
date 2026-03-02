@@ -2157,6 +2157,7 @@ def main() -> None:
             eigenvalue_findings=eigenvalue_findings,
             desposato_findings=desposato_findings,
             item_total_findings=item_total_findings,
+            strategic_absence=strategic_absence,
             plots_dir=ctx.plots_dir,
         )
 

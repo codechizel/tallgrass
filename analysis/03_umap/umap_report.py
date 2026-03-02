@@ -14,9 +14,21 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
-    from report import FigureSection, ReportBuilder, TableSection, make_gt
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        make_gt,
+    )
 
 
 def build_umap_report(
@@ -30,6 +42,10 @@ def build_umap_report(
     min_dist: float,
 ) -> None:
     """Build the full UMAP HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_umap_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     for chamber, result in results.items():
         _add_umap_parameters(report, result, chamber)
         _add_landscape_figure(report, plots_dir, chamber)
@@ -375,6 +391,34 @@ def _add_stability_table(
             html=html,
         )
     )
+
+
+def _generate_umap_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from UMAP results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        validation = result.get("validation", {})
+        tw = validation.get("trustworthiness")
+        if tw is not None:
+            label = "excellent" if tw > 0.95 else "good" if tw > 0.80 else "moderate"
+            findings.append(f"{chamber} trustworthiness: <strong>{tw:.3f}</strong> ({label}).")
+
+        pca_r = validation.get("pca_pc1_spearman")
+        irt_r = validation.get("irt_spearman")
+        if pca_r is not None and irt_r is not None:
+            findings.append(
+                f"{chamber} UMAP1 alignment: PCA PC1 rho = <strong>{pca_r:.3f}</strong>, "
+                f"IRT rho = <strong>{irt_r:.3f}</strong>."
+            )
+        elif pca_r is not None:
+            findings.append(
+                f"{chamber} UMAP1 vs PCA PC1: Spearman rho = <strong>{pca_r:.3f}</strong>."
+            )
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_analysis_config(

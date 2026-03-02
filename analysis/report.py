@@ -3,11 +3,14 @@
 Produces a self-contained HTML file with SPSS/APA-style tables, embedded plots,
 and a navigable table of contents. Each analysis phase adds sections independently.
 
-Three section types:
+Six section types:
   - TableSection: Pre-rendered HTML (from great_tables). The caller builds the GT
     object via make_gt() and passes the HTML string.
   - FigureSection: Base64-embedded PNG. Classmethods for on-disk and in-memory figures.
   - TextSection: Raw HTML block.
+  - InteractiveTableSection: Searchable/sortable table via ITables (offline mode).
+  - InteractiveSection: Raw HTML fragment (Plotly/PyVis output).
+  - KeyFindingsSection: Bullet-point summary rendered above the TOC.
 
 ReportBuilder assembles sections into a single HTML file via a Jinja2 template.
 
@@ -116,7 +119,56 @@ class TextSection:
         return "\n".join(parts)
 
 
-SectionType = TableSection | FigureSection | TextSection
+@dataclass(frozen=True)
+class InteractiveTableSection:
+    """A searchable/sortable table rendered by ITables (offline mode)."""
+
+    id: str
+    title: str
+    html: str  # pre-rendered ITables HTML
+    caption: str | None = None
+
+    def render(self) -> str:
+        parts = [f'<div class="interactive-table-container" id="{self.id}">']
+        parts.append(self.html)
+        if self.caption:
+            parts.append(f'<p class="caption">{self.caption}</p>')
+        parts.append("</div>")
+        return "\n".join(parts)
+
+
+@dataclass(frozen=True)
+class InteractiveSection:
+    """A raw HTML fragment for interactive content (Plotly/PyVis output)."""
+
+    id: str
+    title: str
+    html: str
+    caption: str | None = None
+
+    def render(self) -> str:
+        parts = [f'<div class="interactive-container" id="{self.id}">']
+        parts.append(self.html)
+        if self.caption:
+            parts.append(f'<p class="caption">{self.caption}</p>')
+        parts.append("</div>")
+        return "\n".join(parts)
+
+
+@dataclass(frozen=True)
+class KeyFindingsSection:
+    """Bullet-point key findings rendered above the TOC."""
+
+    findings: list[str]
+
+    def render(self) -> str:
+        items = "\n".join(f"  <li>{f}</li>" for f in self.findings)
+        return f'<div class="key-findings">\n<h2>Key Findings</h2>\n<ul>\n{items}\n</ul>\n</div>'
+
+
+SectionType = (
+    TableSection | FigureSection | TextSection | InteractiveTableSection | InteractiveSection
+)
 
 
 # ── make_gt Helper ────────────────────────────────────────────────────────────
@@ -200,6 +252,86 @@ def _decimals_from_fmt(fmt: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+# ── make_interactive_table Helper ────────────────────────────────────────────
+
+
+def make_interactive_table(
+    df: object,
+    title: str | None = None,
+    column_labels: dict[str, str] | None = None,
+    number_formats: dict[str, str] | None = None,
+    caption: str | None = None,
+) -> str:
+    """Build a searchable/sortable table via ITables and return HTML string.
+
+    Uses ITables in offline (connected=False) mode for self-contained reports.
+    All rows shown (paging=False). Client-side search and sort.
+
+    Args:
+        df: A polars DataFrame to display.
+        title: Table title (rendered as <h4> above the table).
+        column_labels: Mapping of column name -> display label.
+        number_formats: Mapping of column name -> Python format spec (e.g. ".3f").
+        caption: Caption text below the table.
+
+    Returns:
+        HTML string with embedded DataTable (self-contained).
+    """
+    import polars as pl
+    from itables import to_html_datatable
+
+    if not isinstance(df, pl.DataFrame):
+        msg = f"make_interactive_table expects a polars DataFrame, got {type(df).__name__}"
+        raise TypeError(msg)
+
+    # Apply number formatting by creating string columns
+    formatted = df
+    if number_formats:
+        for col_name, fmt in number_formats.items():
+            if col_name in formatted.columns:
+                formatted = formatted.with_columns(
+                    pl.col(col_name)
+                    .map_elements(
+                        lambda v, f=fmt: f"{v:{f}}" if v is not None else "",
+                        return_dtype=pl.String,
+                    )
+                    .alias(col_name)
+                )
+
+    # Rename columns for display
+    if column_labels:
+        rename_map = {k: v for k, v in column_labels.items() if k in formatted.columns}
+        if rename_map:
+            formatted = formatted.rename(rename_map)
+
+    html_parts = []
+    if title:
+        html_parts.append(f"<h4>{title}</h4>")
+
+    table_html = to_html_datatable(
+        formatted,
+        paging=False,
+        connected=False,
+        showIndex=False,
+    )
+    html_parts.append(table_html)
+
+    if caption:
+        html_parts.append(f'<p class="caption">{caption}</p>')
+
+    return "\n".join(html_parts)
+
+
+def _itables_init_html() -> str:
+    """Return ITables offline init HTML for injection into <head>.
+
+    With ITables >= 2.6 and connected=False, each to_html_datatable() call
+    embeds the DataTables JS inline. This helper returns an empty string since
+    no separate initialization is needed — the JS is bundled per-table.
+    """
+    return ""
+
+
 # ── ReportBuilder ─────────────────────────────────────────────────────────────
 
 
@@ -212,10 +344,17 @@ class ReportBuilder:
     git_hash: str = ""
     elapsed_display: str = ""
     _sections: list[tuple[str, SectionType]] = field(default_factory=list)
+    _key_findings: KeyFindingsSection | None = field(default=None)
 
-    def add(self, section: SectionType) -> None:
-        """Append a titled section to the report."""
-        self._sections.append((section.title, section))
+    def add(self, section: SectionType | KeyFindingsSection) -> None:
+        """Append a titled section to the report.
+
+        KeyFindingsSection is stored separately and rendered above the TOC.
+        """
+        if isinstance(section, KeyFindingsSection):
+            self._key_findings = section
+        else:
+            self._sections.append((section.title, section))
 
     @property
     def has_sections(self) -> bool:
@@ -237,6 +376,13 @@ class ReportBuilder:
                 }
             )
 
+        # Key findings rendered above the TOC
+        key_findings_html = self._key_findings.render() if self._key_findings else ""
+
+        # Inject ITables init JS if any InteractiveTableSection is present
+        has_itables = any(isinstance(s, InteractiveTableSection) for _, s in self._sections)
+        extra_head = _itables_init_html() if has_itables else ""
+
         now = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M %Z")
         template = _get_template()
         return template.render(
@@ -248,6 +394,8 @@ class ReportBuilder:
             toc_items=toc_items,
             sections=rendered_sections,
             css=REPORT_CSS,
+            key_findings_html=key_findings_html,
+            extra_head=extra_head,
         )
 
     def write(self, path: Path) -> None:
@@ -327,6 +475,40 @@ section.report-section h2 {
   height: auto;
 }
 .text-container { margin-bottom: 12px; }
+.interactive-table-container {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.interactive-container {
+  margin: 12px 0;
+  padding: 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #fafafa;
+}
+.key-findings {
+  background: #f0f7ff;
+  border: 1px solid #b3d4fc;
+  border-radius: 6px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+}
+.key-findings h2 {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1a3a5c;
+  margin-bottom: 10px;
+}
+.key-findings ul {
+  padding-left: 20px;
+  margin: 0;
+}
+.key-findings li {
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 4px;
+  color: #1a1a1a;
+}
 .caption {
   font-size: 12px;
   color: #666;
@@ -356,6 +538,7 @@ REPORT_TEMPLATE = """\
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ title }}</title>
   <style>{{ css }}</style>
+  {{ extra_head }}
 </head>
 <body>
   <header>
@@ -368,6 +551,8 @@ REPORT_TEMPLATE = """\
 <span>Git: <code>{{ git_hash[:8] }}</code></span>{% endif %}
     </div>
   </header>
+
+  {{ key_findings_html }}
 
   <nav class="toc">
     <h2>Table of Contents</h2>

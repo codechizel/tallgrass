@@ -1411,6 +1411,246 @@ def plot_co_defection_heatmap(
     save_fig(fig, out_dir / f"co_defection_heatmap_{chamber.lower()}.png")
 
 
+# ── Phase 6b: Bipartisanship Index ───────────────────────────────────────────
+
+
+def compute_bipartisanship_index(
+    votes: pl.DataFrame,
+    party_votes_df: pl.DataFrame,
+    legislators: pl.DataFrame,
+    chamber: str,
+    session: str,
+) -> pl.DataFrame:
+    """Compute Lugar Center-style Bipartisanship Index per legislator.
+
+    BPI = (votes with opposing party majority on party votes) / (total party votes present)
+
+    Distinct from maverick: maverick = voting against own party; BPI = voting *with*
+    the opposing party. A legislator who abstains on party votes has neither high
+    maverick nor high BPI.
+
+    Returns DataFrame with: legislator_slug, full_name, party, district,
+    bpi_score, votes_with_opposition, party_votes_present, session.
+    """
+    pv = party_votes_df.filter(pl.col("is_party_vote"))
+    if pv.height == 0:
+        return pl.DataFrame()
+
+    pv_ids = set(pv["vote_id"].to_list())
+    r_majority = dict(zip(pv["vote_id"].to_list(), pv["r_majority"].to_list()))
+    d_majority = dict(zip(pv["vote_id"].to_list(), pv["d_majority"].to_list()))
+
+    leg_party = dict(zip(legislators["slug"].to_list(), legislators["party"].to_list()))
+
+    indiv = votes.filter(pl.col("vote_id").is_in(pv_ids) & pl.col("vote").is_in(["Yea", "Nay"]))
+
+    leg_data: dict[str, dict] = {}
+    for row in indiv.iter_rows(named=True):
+        slug = row["legislator_slug"]
+        party = leg_party.get(slug)
+        if not party or party not in ("Republican", "Democrat"):
+            continue
+        vid = row["vote_id"]
+        vote_cat = row["vote"]
+
+        # Opposition majority position
+        opp_maj = d_majority.get(vid) if party == "Republican" else r_majority.get(vid)
+        if opp_maj is None:
+            continue
+
+        if slug not in leg_data:
+            leg_data[slug] = {
+                "party": party,
+                "party_votes_present": 0,
+                "votes_with_opposition": 0,
+            }
+
+        d = leg_data[slug]
+        d["party_votes_present"] += 1
+
+        if vote_cat == opp_maj:
+            d["votes_with_opposition"] += 1
+
+    if not leg_data:
+        return pl.DataFrame()
+
+    rows = []
+    leg_names = dict(zip(legislators["slug"].to_list(), legislators["full_name"].to_list()))
+    leg_districts = dict(zip(legislators["slug"].to_list(), legislators["district"].to_list()))
+    for slug, d in leg_data.items():
+        n = d["party_votes_present"]
+        if n == 0:
+            continue
+        rows.append(
+            {
+                "legislator_slug": slug,
+                "full_name": leg_names.get(slug, slug),
+                "party": d["party"],
+                "district": leg_districts.get(slug, ""),
+                "bpi_score": d["votes_with_opposition"] / n,
+                "votes_with_opposition": d["votes_with_opposition"],
+                "party_votes_present": n,
+                "session": session,
+            }
+        )
+
+    return pl.DataFrame(rows).sort("bpi_score", descending=True)
+
+
+def plot_bpi_vs_maverick(
+    bpi: pl.DataFrame,
+    unity: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """Scatter plot comparing BPI and maverick rate for a chamber."""
+    if bpi.is_empty() or unity.is_empty():
+        return
+
+    merged = bpi.join(
+        unity.select("legislator_slug", "maverick_rate"),
+        on="legislator_slug",
+        how="inner",
+    )
+    if merged.is_empty():
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for party, color in PARTY_COLORS.items():
+        subset = merged.filter(pl.col("party") == party)
+        if subset.is_empty():
+            continue
+        ax.scatter(
+            subset["maverick_rate"].to_numpy(),
+            subset["bpi_score"].to_numpy(),
+            c=color,
+            label=party,
+            alpha=0.6,
+            s=30,
+            edgecolors="white",
+            linewidth=0.3,
+        )
+        for row in subset.sort("bpi_score", descending=True).head(3).iter_rows(named=True):
+            ax.annotate(
+                row["full_name"],
+                (row["maverick_rate"], row["bpi_score"]),
+                fontsize=7,
+                alpha=0.8,
+            )
+
+    # Diagonal reference
+    lim = (
+        max(
+            merged["maverick_rate"].max() or 0.1,
+            merged["bpi_score"].max() or 0.1,
+        )
+        * 1.1
+    )
+    ax.plot([0, lim], [0, lim], "k--", alpha=0.3, linewidth=0.8)
+
+    ax.set_xlabel("Maverick Rate")
+    ax.set_ylabel("Bipartisanship Index")
+    ax.set_title(f"{chamber} — BPI vs Maverick Rate")
+    ax.legend(frameon=True, framealpha=0.9)
+    fig.tight_layout()
+    fig.savefig(out_dir / f"bpi_vs_maverick_{chamber.lower()}.png", dpi=150)
+    plt.close(fig)
+    print(f"  Saved: bpi_vs_maverick_{chamber.lower()}.png")
+
+
+# ── Plus-Minus: Predicted vs Actual Party Loyalty ────────────────────────────
+
+
+def compute_plus_minus(
+    unity_df: pl.DataFrame,
+    chamber: str,
+    session: str,
+) -> pl.DataFrame:
+    """Compute plus-minus: actual unity vs party mean (expected baseline).
+
+    Plus-minus = actual unity - party mean unity.
+    Positive = more partisan than average party member.
+    Negative = less partisan than average party member.
+    """
+    if unity_df.is_empty():
+        return pl.DataFrame()
+
+    # Party mean unity as baseline
+    party_means = unity_df.group_by("party").agg(
+        pl.col("unity_score").mean().alias("party_mean_unity")
+    )
+
+    result = unity_df.join(party_means, on="party", how="left")
+    result = result.with_columns(
+        (pl.col("unity_score") - pl.col("party_mean_unity")).alias("plus_minus")
+    )
+
+    display_cols = [
+        "legislator_slug",
+        "full_name",
+        "party",
+        "district",
+        "unity_score",
+        "party_mean_unity",
+        "plus_minus",
+        "party_votes_present",
+    ]
+    available = [c for c in display_cols if c in result.columns]
+    result = (
+        result.select(available).with_columns(pl.lit(session).alias("session")).sort("plus_minus")
+    )
+
+    return result
+
+
+def plot_plus_minus_dumbbell(
+    plus_minus: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+    n_show: int = 30,
+) -> None:
+    """Dumbbell chart: expected (party mean) vs actual unity."""
+    if plus_minus.is_empty():
+        return
+
+    # Show extremes: most negative and most positive
+    bottom = plus_minus.head(n_show // 2)
+    top = plus_minus.tail(n_show // 2)
+    display = pl.concat([bottom, top]).sort("plus_minus")
+
+    fig, ax = plt.subplots(figsize=(10, max(6, display.height * 0.3)))
+
+    names = display["full_name"].to_list()
+    actual = display["unity_score"].to_numpy()
+    expected = display["party_mean_unity"].to_numpy()
+    parties = display["party"].to_list()
+
+    y_pos = list(range(len(names)))
+
+    for i, (name, act, exp, party) in enumerate(zip(names, actual, expected, parties)):
+        color = PARTY_COLORS.get(party, "#888888")
+        # Dumbbell line
+        ax.plot([exp, act], [i, i], color=color, linewidth=1.5, alpha=0.6)
+        # Expected (party mean)
+        ax.scatter(exp, i, color="gray", s=30, zorder=3, marker="|")
+        # Actual
+        ax.scatter(act, i, color=color, s=50, zorder=4)
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names, fontsize=7)
+    ax.set_xlabel("Party Unity Score")
+    ax.set_title(
+        f"{chamber} — Plus-Minus: Actual vs Party Mean Unity",
+        fontsize=14,
+        fontweight="bold",
+    )
+    ax.axvline(1.0, color="gray", alpha=0.3, linestyle=":")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"plus_minus_{chamber.lower()}.png")
+
+
 # ── Phase 7: Veto Override Subgroup ──────────────────────────────────────────
 
 
@@ -1488,6 +1728,7 @@ def cross_reference_upstream(
 
             # Plot
             plot_unity_vs_irt(merged, chamber, rho, out_dir)
+            plot_unity_vs_irt_interactive(merged, chamber, rho, out_dir)
 
     centrality = upstream.get("centrality")
     if centrality is not None and maverick_df.height > 0:
@@ -1578,6 +1819,48 @@ def plot_unity_vs_irt(
     ax.spines["right"].set_visible(False)
     fig.tight_layout()
     save_fig(fig, out_dir / f"unity_vs_irt_{chamber.lower()}.png")
+
+
+def plot_unity_vs_irt_interactive(
+    merged: pl.DataFrame,
+    chamber: str,
+    rho: float,
+    out_dir: Path,
+) -> None:
+    """Plotly interactive scatter: party unity vs IRT ideal point."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    for party, color in PARTY_COLORS.items():
+        subset = merged.filter(pl.col("party") == party)
+        if subset.is_empty():
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=subset["xi_mean"].to_list(),
+                y=subset["unity_score"].to_list(),
+                mode="markers",
+                name=party,
+                marker={"color": color, "size": 8, "opacity": 0.7},
+                text=[
+                    f"{row['full_name']}<br>IRT: {row['xi_mean']:.3f}<br>"
+                    f"Unity: {row['unity_score']:.3f}<br>Party: {row['party']}"
+                    for row in subset.iter_rows(named=True)
+                ],
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        title=f"{chamber} — Unity vs IRT (Spearman rho = {rho:.3f})",
+        xaxis_title="IRT Ideal Point (Liberal ← → Conservative)",
+        yaxis_title="Party Unity Score (CQ standard)",
+        hovermode="closest",
+        template="plotly_white",
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs=True)
+    (out_dir / f"unity_vs_irt_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: unity_vs_irt_interactive_{chamber.lower()}.html")
 
 
 # ── Phase 9: Sensitivity ────────────────────────────────────────────────────
@@ -1839,6 +2122,31 @@ def main() -> None:
             chamber_results["unity"] = unity_df
             chamber_results["maverick"] = maverick_df
             chamber_results["co_defection"] = co_defection
+
+            # ── Phase 6b: Bipartisanship Index ──
+            print_header(f"PHASE 6b: BIPARTISANSHIP INDEX — {chamber}")
+            bpi_df = compute_bipartisanship_index(
+                votes, party_votes_df, legislators, chamber, args.session
+            )
+            if bpi_df.height > 0:
+                bpi_df.write_parquet(ctx.data_dir / f"bipartisanship_{chamber.lower()}.parquet")
+                print(f"  {bpi_df.height} legislators scored")
+                top_bpi = bpi_df.head(3)
+                for row in top_bpi.iter_rows(named=True):
+                    print(f"    {row['full_name']}: BPI={row['bpi_score']:.3f}")
+                if unity_df is not None and not unity_df.is_empty():
+                    plot_bpi_vs_maverick(bpi_df, unity_df, chamber, ctx.plots_dir)
+            chamber_results["bipartisanship"] = bpi_df
+
+            # ── Plus-Minus ──
+            if unity_df is not None and not unity_df.is_empty():
+                print_header(f"PLUS-MINUS — {chamber}")
+                pm_df = compute_plus_minus(unity_df, chamber, args.session)
+                if pm_df.height > 0:
+                    pm_df.write_parquet(ctx.data_dir / f"plus_minus_{chamber.lower()}.parquet")
+                    plot_plus_minus_dumbbell(pm_df, chamber, ctx.plots_dir)
+                    print(f"  {pm_df.height} legislators scored")
+                chamber_results["plus_minus"] = pm_df
 
             # ── Phase 5: ENP ──
             print_header(f"PHASE 5: EFFECTIVE NUMBER OF PARTIES — {chamber}")

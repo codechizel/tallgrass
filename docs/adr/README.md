@@ -128,6 +128,7 @@ What are the trade-offs?
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions |
 | [0060](0060-test-suite-expansion.md) | Test suite expansion (markers, integration, report structure) |
 | [0067](0067-open-source-readiness.md) | Open-source readiness polish |
+| [0069](0069-report-enhancement-infrastructure.md) | Report enhancement infrastructure (R1-R13) |
 
 ## Chronological Index
 
@@ -201,6 +202,7 @@ What are the trade-offs?
 | [0066](0066-84th-pipeline-stress-test-fixes.md) | 84th pipeline stress test fixes (8 bugs, 1 enhancement) | Accepted | 2026-03-01 |
 | [0067](0067-open-source-readiness.md) | Open-source readiness polish (LICENSE, README, 9 bug fixes, 16 tests, CI expansion) | Accepted | 2026-03-01 |
 | [0068](0068-dynamic-irt-sign-correction.md) | Dynamic IRT post-hoc sign correction (per-period xi negation, static IRT reference) | Accepted | 2026-03-01 |
+| [0069](0069-report-enhancement-infrastructure.md) | Report enhancement infrastructure (R1-R13: ITables, Plotly, PyVis, key findings, BPI, cutting lines, coalition labeler) | Accepted | 2026-03-01 |
 
 ## Creating a New ADR
 

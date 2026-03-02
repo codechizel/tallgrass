@@ -2,6 +2,8 @@
 
 A comprehensive review of Tallgrass's current HTML report output, gaps relative to academic standards and general-audience best practices, and opportunities from the open-source ecosystem. Based on a full inventory of all 17 phase reports (~300+ sections), a survey of the open-source legislative analysis landscape, and a review of what academics, newsrooms, and civic tech organizations report.
 
+> **Implementation status (2026-03-01):** R1-R13 (Tier 1 + Tier 2) are all implemented. See ADR-0069 for details. Tier 3 and Tier 4 remain as future backlog.
+
 ## Table of Contents
 
 1. [Current Report Inventory](#current-report-inventory)
@@ -18,7 +20,7 @@ A comprehensive review of Tallgrass's current HTML report output, gaps relative 
 
 ## Current Report Inventory
 
-Tallgrass generates 17 HTML reports across its analysis pipeline. The report system uses `ReportBuilder` (Jinja2 template with embedded CSS), three section types (`TableSection`, `FigureSection`, `TextSection`), and `make_gt()` for APA-style Polars tables via great_tables. All figures are static matplotlib/seaborn PNGs base64-encoded into the HTML.
+Tallgrass generates 17 HTML reports across its analysis pipeline. The report system uses `ReportBuilder` (Jinja2 template with embedded CSS), six section types (`TableSection`, `FigureSection`, `TextSection`, `KeyFindingsSection`, `InteractiveTableSection`, `InteractiveSection`), `make_gt()` for APA-style Polars tables via great_tables, and `make_interactive_table()` for searchable/sortable tables via ITables. Figures include both static matplotlib PNGs (base64-encoded) and interactive Plotly/PyVis HTML fragments.
 
 | Phase | Report | Sections | Notable Features |
 |-------|--------|----------|------------------|

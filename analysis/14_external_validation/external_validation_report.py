@@ -14,10 +14,18 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -53,6 +61,10 @@ def build_external_validation_report(
     plots_dir: Path,
 ) -> None:
     """Build the full external validation HTML report."""
+    findings = _generate_external_key_findings(all_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_how_to_read(report)
     _add_sm_summary(report, sm_total, sessions)
     _add_matching_summary(report, all_results)
@@ -498,6 +510,45 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
         source_note="See analysis/design/external_validation.md for justification.",
     )
     report.add(TableSection(id="analysis-params", title="Analysis Parameters", html=html))
+
+
+def _generate_external_key_findings(all_results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from external validation results."""
+    findings: list[str] = []
+
+    if not all_results:
+        return findings
+
+    # Count correlations and find strongest
+    n_correlations = len(all_results)
+    best_r = 0.0
+    best_session = ""
+    total_r = 0.0
+    n_valid = 0
+    for key, data in all_results.items():
+        r = data.get("pearson_r")
+        if r is not None:
+            abs_r = abs(r)
+            total_r += abs_r
+            n_valid += 1
+            if abs_r > best_r:
+                best_r = abs_r
+                best_session = f"{data.get('session', '?')} {data.get('chamber', '?')}"
+
+    findings.append(f"<strong>{n_correlations}</strong> IRT-vs-Shor-McCarty correlations computed.")
+
+    if n_valid > 0:
+        mean_r = total_r / n_valid
+        findings.append(
+            f"Mean |r| = <strong>{mean_r:.3f}</strong> across all session-chamber pairs."
+        )
+
+    if best_session:
+        findings.append(
+            f"Strongest correlation: <strong>{best_session}</strong> (|r| = {best_r:.3f})."
+        )
+
+    return findings
 
 
 def _add_references(report: ReportBuilder) -> None:

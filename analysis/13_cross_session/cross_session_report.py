@@ -14,10 +14,18 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -49,6 +57,10 @@ def build_cross_session_report(
     session_b_label: str,
 ) -> None:
     """Build the full cross-session HTML report by adding sections."""
+    findings = _generate_cross_session_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_overview(report, results, session_a_label, session_b_label)
     _add_matching_summary(report, results)
 
@@ -479,6 +491,40 @@ def _add_detection_validation(report: ReportBuilder, results: dict) -> None:
             html=html,
         )
     )
+
+
+def _generate_cross_session_key_findings(results: dict) -> list[str]:
+    """Generate 2-4 key findings from cross-session results."""
+    findings: list[str] = []
+
+    matched = results.get("matched")
+    if matched is not None and hasattr(matched, "height"):
+        findings.append(f"<strong>{matched.height}</strong> legislators matched across sessions.")
+
+    for chamber in sorted(results.get("chambers", [])):
+        cr = results.get(chamber, {})
+
+        # IRT correlation
+        stability = cr.get("stability")
+        if stability is not None and hasattr(stability, "columns"):
+            if "pearson_r" in stability.columns and stability.height > 0:
+                irt_r = float(stability["pearson_r"][0])
+                findings.append(f"{chamber} IRT correlation: <strong>r = {irt_r:.3f}</strong>.")
+
+        # Top shifter
+        shifted = cr.get("shifted")
+        if shifted is not None and hasattr(shifted, "height") and shifted.height > 0:
+            sort_col = "abs_delta_xi" if "abs_delta_xi" in shifted.columns else "delta_xi"
+            top = shifted.sort(sort_col, descending=True).head(1)
+            name = top["full_name"][0]
+            shift = float(top["delta_xi"][0])
+            findings.append(
+                f"{chamber} top shifter: <strong>{name}</strong> (shift = {shift:+.3f})."
+            )
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_methodology(

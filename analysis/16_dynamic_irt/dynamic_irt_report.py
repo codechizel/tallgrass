@@ -12,10 +12,18 @@ Usage (called from dynamic_irt.py):
 from pathlib import Path
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -37,6 +45,11 @@ def build_dynamic_irt_report(
 ) -> None:
     """Build the full dynamic IRT HTML report by adding sections."""
     chambers = results.get("chambers", [])
+
+    findings = _generate_dynamic_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_overview(report, results, biennium_labels)
 
     for chamber in sorted(chambers):
@@ -710,6 +723,47 @@ def _add_model_priors(report: ReportBuilder, results: dict) -> None:
             html="\n".join(lines),
         )
     )
+
+
+def _generate_dynamic_key_findings(results: dict) -> list[str]:
+    """Generate 2-4 key findings from dynamic IRT results."""
+    findings: list[str] = []
+
+    chambers = results.get("chambers", [])
+    n_periods = results.get("n_periods") or results.get("n_bienniums")
+    if n_periods is not None:
+        findings.append(f"Dynamic IRT estimated across <strong>{n_periods}</strong> time periods.")
+
+    for chamber in sorted(chambers):
+        cr = results.get(chamber, {})
+
+        # Polarization trend
+        polarization = cr.get("polarization_trend", {})
+        slope = polarization.get("slope")
+        if slope is not None:
+            direction = "increasing" if slope > 0 else "decreasing"
+            findings.append(
+                f"{chamber} polarization: <strong>{direction}</strong> trend (slope = {slope:.4f})."
+            )
+
+        # Top movers
+        movers = cr.get("top_movers")
+        if movers is not None and hasattr(movers, "height") and movers.height > 0:
+            top = movers.head(1)
+            name_col = "full_name" if "full_name" in top.columns else "legislator_slug"
+            name = top[name_col][0]
+            shift_col = "total_shift" if "total_shift" in top.columns else "total_drift"
+            if shift_col in top.columns:
+                shift = float(top[shift_col][0])
+                findings.append(
+                    f"{chamber} largest mover: <strong>{name}</strong> (total shift = {shift:.3f})."
+                )
+            else:
+                findings.append(f"{chamber} largest mover: <strong>{name}</strong>.")
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_methodology(report: ReportBuilder) -> None:

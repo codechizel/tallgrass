@@ -43,6 +43,9 @@ dev = [
     "stepmix>=2.2.1",
     "bicm>=3.1",
     "fastcluster>=1.3",
+    "itables>=2.6",
+    "plotly>=6.0",
+    "pyvis>=0.3",
 ]
 
 [build-system]
@@ -104,6 +107,9 @@ replace-imports-with-any = [
     "ruptures.**",
     "stepmix.**",
     "bicm.**",
+    "itables.**",
+    "plotly.**",
+    "pyvis.**",
 ]
 # analysis/ scripts use bare imports (not a package) — allow them.
 # Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to

@@ -15,6 +15,7 @@ import polars as pl
 try:
     from analysis.report import (
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -23,6 +24,7 @@ try:
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -40,6 +42,10 @@ def build_ppc_report(
     plots_dir: Path,
 ) -> None:
     """Build the full PPC + LOO-CV HTML report."""
+    findings = _generate_ppc_key_findings(all_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_how_to_read(report)
     _add_executive_summary(report, all_results, session)
 
@@ -507,6 +513,63 @@ def _add_model_ranking(
             html="\n".join(parts),
         )
     )
+
+
+def _generate_ppc_key_findings(all_results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from PPC results."""
+    findings: list[str] = []
+
+    # Best model by GMP across all chambers
+    best_gmp = 0.0
+    best_model = ""
+    best_chamber = ""
+    for ch_name, ch_data in all_results.items():
+        for model_name, model_data in ch_data.get("models", {}).items():
+            ppc = model_data.get("ppc", {})
+            gmp = ppc.get("mean_gmp", 0)
+            if gmp > best_gmp:
+                best_gmp = gmp
+                best_model = model_name
+                best_chamber = ch_name
+
+    if best_model:
+        findings.append(
+            f"Best calibrated model: <strong>{best_model}</strong> "
+            f"({best_chamber}, GMP = {best_gmp:.3f})."
+        )
+
+    # LOO-CV winner (if available)
+    for ch_name, ch_data in sorted(all_results.items()):
+        models_with_loo = {n: d for n, d in ch_data.get("models", {}).items() if "loo" in d}
+        if len(models_with_loo) >= 2:
+            loo_ranked = sorted(
+                models_with_loo.items(),
+                key=lambda x: x[1]["loo"]["elpd_loo"],
+                reverse=True,
+            )
+            winner = loo_ranked[0]
+            findings.append(
+                f"{ch_name} LOO-CV winner: <strong>{winner[0]}</strong> "
+                f"(ELPD = {winner[1]['loo']['elpd_loo']:.1f})."
+            )
+            break
+
+    # Overall misfit rate
+    total_items = 0
+    total_misfit = 0
+    for ch_data in all_results.values():
+        for model_data in ch_data.get("models", {}).values():
+            item = model_data.get("item_fit", {})
+            total_items += item.get("n_votes", 0)
+            total_misfit += item.get("n_misfitting", 0)
+    if total_items > 0:
+        misfit_pct = 100 * total_misfit / total_items
+        findings.append(
+            f"Item misfit rate: <strong>{misfit_pct:.1f}%</strong> "
+            f"({total_misfit}/{total_items} votes across all models)."
+        )
+
+    return findings
 
 
 def _add_methodology(report: ReportBuilder) -> None:

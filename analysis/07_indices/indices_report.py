@@ -14,14 +14,28 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
-except ModuleNotFoundError:
-    from report import (  # type: ignore[no-redef]
+    from analysis.report import (
         FigureSection,
+        InteractiveSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
         make_gt,
+        make_interactive_table,
+    )
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
     )
 
 # Constants duplicated from indices.py to avoid circular import
@@ -45,6 +59,11 @@ def build_indices_report(
     skip_sensitivity: bool = False,
 ) -> None:
     """Build the full indices HTML report by adding sections to the ReportBuilder."""
+    # Key findings
+    findings = _generate_indices_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_data_summary(report, results)
     _add_how_to_read(report)
     _add_party_vote_summary(report, results)
@@ -85,6 +104,17 @@ def build_indices_report(
 
     _add_maverick_interpretation(report)
 
+    # Bipartisanship index
+    for chamber, result in results.items():
+        _add_bipartisanship_table(report, result, chamber)
+        _add_bipartisanship_vs_maverick_figure(report, plots_dir, chamber)
+    _add_bipartisanship_interpretation(report)
+
+    # Plus-minus
+    for chamber, result in results.items():
+        _add_plus_minus_figure(report, plots_dir, chamber)
+        _add_plus_minus_table(report, result, chamber)
+
     # Veto overrides
     _add_veto_override_table(report, results)
 
@@ -92,6 +122,7 @@ def build_indices_report(
     if not skip_cross_ref:
         for chamber in results:
             _add_unity_vs_irt_figure(report, plots_dir, chamber)
+            _add_unity_vs_irt_interactive(report, plots_dir, chamber)
         _add_cross_ref_table(report, results)
         _add_cross_ref_interpretation(report)
 
@@ -525,10 +556,9 @@ def _add_unity_full_table(
     available = [c for c in display_cols if c in unity.columns]
     display = unity.sort("unity_score").select(available)
 
-    html = make_gt(
+    html = make_interactive_table(
         display,
         title=f"{chamber} — Party Unity Scores ({display.height} legislators)",
-        subtitle="CQ-standard party unity, all legislators shown (never truncated)",
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -539,13 +569,13 @@ def _add_unity_full_table(
             "party_votes_present": "Party Votes Present",
         },
         number_formats={"unity_score": ".3f", "maverick_rate": ".3f"},
-        source_note=(
+        caption=(
             "Unity = votes with party majority / party votes present. "
             "Maverick = 1 - unity. Higher unity = more loyal to party."
         ),
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"unity-full-{chamber.lower()}",
             title=f"{chamber} Full Unity Table",
             html=html,
@@ -784,10 +814,11 @@ def _add_maverick_full_table(
     available = [c for c in display_cols if c in maverick.columns]
     display = maverick.sort("maverick_rate", descending=True).select(available)
 
-    html = make_gt(
+    html = make_interactive_table(
         display,
-        title=f"{chamber} — Maverick Scores ({display.height} legislators)",
-        subtitle="All legislators shown (never truncated), sorted by maverick rate",
+        title=(
+            f"{chamber} — Maverick Scores ({display.height} legislators, sorted by maverick rate)"
+        ),
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -804,7 +835,7 @@ def _add_maverick_full_table(
         },
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"maverick-full-{chamber.lower()}",
             title=f"{chamber} Full Maverick Table",
             html=html,
@@ -936,6 +967,22 @@ def _add_unity_vs_irt_figure(
         )
 
 
+def _add_unity_vs_irt_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Embed Plotly interactive unity vs IRT scatter."""
+    path = plots_dir / f"unity_vs_irt_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    html = path.read_text()
+    report.add(
+        InteractiveSection(
+            id=f"interactive-unity-irt-{chamber.lower()}",
+            title=f"{chamber} Unity vs IRT (Interactive)",
+            html=html,
+            caption="Hover over points to see legislator details.",
+        )
+    )
+
+
 def _add_cross_ref_table(
     report: ReportBuilder,
     results: dict[str, dict],
@@ -1047,6 +1094,210 @@ def _add_sensitivity_table(
             html=html,
         )
     )
+
+
+def _add_bipartisanship_table(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Table: ALL legislators with bipartisanship index — never truncated."""
+    bpi = result.get("bipartisanship")
+    if bpi is None or bpi.height == 0:
+        return
+
+    display_cols = [
+        "full_name",
+        "party",
+        "district",
+        "bpi_score",
+        "votes_with_opposition",
+        "party_votes_present",
+    ]
+    available = [c for c in display_cols if c in bpi.columns]
+    display = bpi.sort("bpi_score", descending=True).select(available)
+
+    html = make_interactive_table(
+        display,
+        title=f"{chamber} — Bipartisanship Index ({display.height} legislators)",
+        column_labels={
+            "full_name": "Legislator",
+            "party": "Party",
+            "district": "District",
+            "bpi_score": "BPI",
+            "votes_with_opposition": "Votes w/ Opposition",
+            "party_votes_present": "Party Votes Present",
+        },
+        number_formats={"bpi_score": ".3f"},
+        caption=(
+            "BPI = votes with opposing party majority / party votes present. "
+            "Higher BPI = more bipartisan. Distinct from maverick (which measures "
+            "voting against own party)."
+        ),
+    )
+    report.add(
+        InteractiveTableSection(
+            id=f"bipartisanship-{chamber.lower()}",
+            title=f"{chamber} Bipartisanship Index",
+            html=html,
+        )
+    )
+
+
+def _add_bipartisanship_vs_maverick_figure(
+    report: ReportBuilder, plots_dir: Path, chamber: str
+) -> None:
+    """Figure: BPI vs maverick scatter for a chamber."""
+    fname = f"bpi_vs_maverick_{chamber.lower()}.png"
+    path = plots_dir / fname
+    if not path.exists():
+        return
+    report.add(
+        FigureSection.from_file(
+            id=f"bpi-vs-maverick-{chamber.lower()}",
+            title=f"{chamber} — BPI vs Maverick Rate",
+            path=path,
+            caption=(
+                f"Bipartisanship Index vs maverick rate for {chamber} legislators. "
+                "Points above the diagonal vote with the opposing party more than they "
+                "vote against their own."
+            ),
+        )
+    )
+
+
+def _add_bipartisanship_interpretation(report: ReportBuilder) -> None:
+    """Text block: interpreting the bipartisanship index."""
+    report.add(
+        TextSection(
+            id="bipartisanship-interpretation",
+            title="Interpreting the Bipartisanship Index",
+            html=(
+                "<p>The <strong>Bipartisanship Index (BPI)</strong> measures how often a "
+                "legislator votes with the <em>opposing</em> party's majority on party votes. "
+                "It is inspired by the Lugar Center's Bipartisan Index for the U.S. Congress.</p>"
+                "<p><strong>BPI vs Maverick:</strong> These are conceptually distinct:</p>"
+                "<ul>"
+                "<li><strong>Maverick rate</strong> = voting against your <em>own</em> party. "
+                "A maverick might abstain or vote 'Present' rather than cross the aisle.</li>"
+                "<li><strong>BPI</strong> = voting <em>with</em> the opposing party. This "
+                "specifically measures cross-partisan cooperation.</li>"
+                "</ul>"
+                "<p>In practice, BPI and maverick scores are highly correlated because most "
+                "party votes are binary (Yea/Nay). But they can diverge when legislators "
+                "strategically abstain on party votes rather than crossing the aisle.</p>"
+                "<p>High BPI legislators are the most likely bridge-builders — they actively "
+                "vote with the other side, not just against their own.</p>"
+            ),
+        )
+    )
+
+
+def _add_plus_minus_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Figure: plus-minus dumbbell chart."""
+    path = plots_dir / f"plus_minus_{chamber.lower()}.png"
+    if not path.exists():
+        return
+    report.add(
+        FigureSection.from_file(
+            id=f"plus-minus-{chamber.lower()}",
+            title=f"{chamber} Plus-Minus",
+            path=path,
+            caption=(
+                f"Dumbbell chart showing actual unity (colored dot) vs party mean "
+                f"unity (gray mark) for {chamber} legislators. Distance right of "
+                "the gray mark = more partisan than average; left = less partisan."
+            ),
+        )
+    )
+
+
+def _add_plus_minus_table(report: ReportBuilder, result: dict, chamber: str) -> None:
+    """Table: plus-minus scores for all legislators."""
+    pm = result.get("plus_minus")
+    if pm is None or pm.is_empty():
+        return
+
+    display_cols = [
+        "full_name",
+        "party",
+        "unity_score",
+        "party_mean_unity",
+        "plus_minus",
+        "party_votes_present",
+    ]
+    available = [c for c in display_cols if c in pm.columns]
+    display = pm.sort("plus_minus").select(available)
+
+    html = make_interactive_table(
+        display,
+        title=f"{chamber} — Plus-Minus ({display.height} legislators)",
+        column_labels={
+            "full_name": "Legislator",
+            "party": "Party",
+            "unity_score": "Actual Unity",
+            "party_mean_unity": "Party Mean",
+            "plus_minus": "Plus-Minus",
+            "party_votes_present": "Party Votes",
+        },
+        number_formats={
+            "unity_score": ".3f",
+            "party_mean_unity": ".3f",
+            "plus_minus": "+.3f",
+        },
+        caption=(
+            "Plus-minus = actual unity − party mean unity. "
+            "Positive = more partisan than average party member."
+        ),
+    )
+    report.add(
+        InteractiveTableSection(
+            id=f"plus-minus-table-{chamber.lower()}",
+            title=f"{chamber} Plus-Minus Scores",
+            html=html,
+        )
+    )
+
+
+def _generate_indices_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 3-5 key findings from indices results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        # Rice cohesion
+        rice_summary = result.get("rice_summary", {})
+        for party in ["Republican", "Democrat"]:
+            stats = rice_summary.get(party)
+            if stats:
+                findings.append(
+                    f"{chamber} {party}s maintained <strong>{stats['mean']:.0%}</strong> "
+                    f"mean Rice cohesion ({stats['pct_perfect_unity']:.0f}% unanimous)."
+                )
+                break  # Just show majority party
+
+        # Top maverick
+        maverick = result.get("maverick")
+        if maverick is not None and maverick.height > 0:
+            top = maverick.sort("maverick_rate", descending=True).head(1)
+            name = top["full_name"][0]
+            rate = float(top["maverick_rate"][0])
+            findings.append(
+                f"Top {chamber} maverick: <strong>{name}</strong> ({rate:.0%} defection rate)."
+            )
+
+        break  # Only show first chamber to stay concise
+
+    # Party vote fraction
+    total_party = sum(r.get("n_party_votes", 0) for r in results.values())
+    total_votes = sum(r.get("n_total_votes", 1) for r in results.values())
+    if total_votes > 0:
+        pct = 100 * total_party / total_votes
+        findings.append(
+            f"<strong>{pct:.0f}%</strong> of roll calls were party votes "
+            f"(majority R vs majority D)."
+        )
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

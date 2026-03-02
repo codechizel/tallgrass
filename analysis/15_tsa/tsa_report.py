@@ -14,10 +14,18 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -46,6 +54,10 @@ def build_tsa_report(
     r_available: bool = False,
 ) -> None:
     """Build the full TSA HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_tsa_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_data_summary(report, results)
     _add_how_to_read(report)
 
@@ -614,6 +626,47 @@ def _add_veto_crossref_table(
             html=html,
         )
     )
+
+
+def _generate_tsa_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from TSA results."""
+    findings: list[str] = []
+
+    for chamber, result in results.items():
+        # Changepoints
+        cp_summary = result.get("changepoint_summary")
+        if cp_summary is not None and hasattr(cp_summary, "height"):
+            n_cp = cp_summary.height
+            findings.append(
+                f"{chamber}: <strong>{n_cp}</strong> changepoint"
+                f"{'s' if n_cp != 1 else ''} detected in party cohesion."
+            )
+
+        # Drift trend
+        drift_summary = result.get("drift_summary", {})
+        overall_trend = drift_summary.get("overall_trend")
+        if overall_trend is not None:
+            direction = "increasing" if overall_trend > 0 else "decreasing"
+            findings.append(
+                f"{chamber} ideological drift: <strong>{direction}</strong> "
+                f"trend (slope = {overall_trend:.4f})."
+            )
+
+        # Top mover
+        top_movers = result.get("top_movers")
+        if top_movers is not None and hasattr(top_movers, "height") and top_movers.height > 0:
+            top = top_movers.head(1)
+            name_col = "full_name" if "full_name" in top.columns else "legislator_slug"
+            name = top[name_col][0]
+            drift_col = "total_drift" if "total_drift" in top.columns else "drift"
+            drift = float(top[drift_col][0])
+            findings.append(
+                f"{chamber} most volatile: <strong>{name}</strong> (drift = {drift:.3f})."
+            )
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_analysis_parameters(

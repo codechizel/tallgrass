@@ -149,7 +149,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (68 decisions)
+- ADRs: `docs/adr/README.md` (69 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -194,7 +194,7 @@ Key references:
 - Nutpie hierarchical experiment: `results/experimental_lab/2026-02-27_nutpie-hierarchical/experiment.md` (Experiment 2: hierarchical per-chamber with Numba, House convergence test)
 - Nutpie production migration: ADR-0051 (per-chamber hierarchical), ADR-0053 (flat IRT + joint hierarchical — all models now use nutpie)
 - 84th biennium analysis: `docs/84th-biennium-analysis.md` (full pipeline review, moderate Republican faction, 2012 purge, data quality flags)
-- Report enhancement survey: `docs/report-enhancement-survey.md` (current report inventory, gap analysis, open-source tools, 26 prioritized recommendations)
+- Report enhancement survey: `docs/report-enhancement-survey.md` (current report inventory, gap analysis, open-source tools, 26 prioritized recommendations — R1-R13 implemented, ADR-0069)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`

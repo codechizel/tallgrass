@@ -14,14 +14,26 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
-except ModuleNotFoundError:
-    from report import (  # type: ignore[no-redef]
+    from analysis.report import (
         FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
         make_gt,
+        make_interactive_table,
+    )
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
     )
 
 
@@ -33,6 +45,10 @@ def build_hierarchical_report(
     plots_dir: Path,
 ) -> None:
     """Build the full hierarchical IRT HTML report by adding sections."""
+    findings = _generate_hierarchical_key_findings(chamber_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_intro(report)
     _add_how_to_read(report)
 
@@ -349,13 +365,12 @@ def _add_shrinkage_table(
         "shrinkage_pct": ".1f",
     }
 
-    html = make_gt(
+    html = make_interactive_table(
         display,
         title=f"{chamber} — Hierarchical Ideal Points ({display.height} legislators)",
-        subtitle="All legislators shown (never truncated), sorted by ideal point",
         column_labels={k: v for k, v in labels.items() if k in display.columns},
         number_formats={k: v for k, v in formats.items() if k in display.columns},
-        source_note=(
+        caption=(
             "Ideal Point: positive = conservative, negative = liberal. "
             "Party Mean: the posterior mean for this legislator's party. "
             "Change from Flat: how much the estimate moved compared to the standard IRT model. "
@@ -363,7 +378,7 @@ def _add_shrinkage_table(
         ),
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"ideal-points-{chamber.lower()}",
             title=f"{chamber} Hierarchical Ideal Points",
             html=html,
@@ -580,6 +595,57 @@ def _add_flat_vs_hier_comparison(
             html="".join(parts),
         )
     )
+
+
+def _generate_hierarchical_key_findings(
+    chamber_results: dict[str, dict],
+) -> list[str]:
+    """Generate 2-4 key findings from hierarchical IRT results."""
+    findings: list[str] = []
+
+    # Convergence
+    all_converged = True
+    for chamber, res in chamber_results.items():
+        conv = res.get("convergence", {})
+        if conv.get("max_rhat", 2.0) >= 1.01 or conv.get("min_ess", 0) < 400:
+            all_converged = False
+            break
+    if all_converged:
+        findings.append(
+            "All hierarchical models <strong>converged</strong> (R-hat < 1.01, ESS > 400)."
+        )
+    else:
+        findings.append(
+            "<strong>WARNING:</strong> Some hierarchical convergence diagnostics did not pass."
+        )
+
+    # Party posteriors
+    for chamber, res in chamber_results.items():
+        gp = res.get("group_params")
+        if gp is not None and gp.height >= 2:
+            r_row = gp.filter(pl.col("party") == "Republican")
+            d_row = gp.filter(pl.col("party") == "Democrat")
+            if r_row.height > 0 and d_row.height > 0:
+                r_mean = float(r_row["mu_mean"][0])
+                d_mean = float(d_row["mu_mean"][0])
+                sep = abs(r_mean - d_mean)
+                findings.append(
+                    f"{chamber} party means: R = <strong>{r_mean:+.2f}</strong>, "
+                    f"D = <strong>{d_mean:+.2f}</strong> (separation = {sep:.2f})."
+                )
+        break  # First chamber only
+
+    # Shrinkage summary
+    for chamber, res in chamber_results.items():
+        ip = res.get("ideal_points")
+        if ip is not None and "shrinkage" in ip.columns:
+            mean_shrink = float(ip["shrinkage"].mean())
+            findings.append(
+                f"{chamber} mean shrinkage: <strong>{mean_shrink:.1%}</strong> toward party mean."
+            )
+        break
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

@@ -15,10 +15,18 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -57,6 +65,10 @@ def build_dime_report(
     plots_dir: Path,
 ) -> None:
     """Build the full DIME external validation HTML report."""
+    findings = _generate_dime_key_findings(all_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_how_to_read(report)
     _add_dime_summary(report, dime_total, sessions)
     _add_matching_summary(report, all_results)
@@ -630,6 +642,53 @@ def _add_analysis_parameters(report: ReportBuilder) -> None:
         source_note="See analysis/design/external_validation_dime.md for justification.",
     )
     report.add(TableSection(id="analysis-params", title="Analysis Parameters", html=html))
+
+
+def _generate_dime_key_findings(all_results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from DIME validation results."""
+    findings: list[str] = []
+
+    if not all_results:
+        return findings
+
+    # Match rate and correlation
+    n_results = len(all_results)
+    total_matched = 0
+    total_r = 0.0
+    n_valid = 0
+    for data in all_results.values():
+        matched = data.get("n_matched", 0)
+        total_matched += matched
+        r = data.get("pearson_r")
+        if r is not None:
+            total_r += abs(r)
+            n_valid += 1
+
+    if n_valid > 0:
+        mean_r = total_r / n_valid
+        findings.append(
+            f"<strong>{n_results}</strong> IRT-vs-CFscore correlations, "
+            f"mean |r| = <strong>{mean_r:.3f}</strong>."
+        )
+
+    if total_matched > 0:
+        findings.append(
+            f"<strong>{total_matched}</strong> total legislator-CFscore matches "
+            f"across all sessions."
+        )
+
+    # SM comparison note (if sm_comparison is in any result)
+    for data in all_results.values():
+        sm_r = data.get("sm_pearson_r")
+        dime_r = data.get("pearson_r")
+        if sm_r is not None and dime_r is not None:
+            findings.append(
+                f"SM |r| = {abs(sm_r):.3f} vs DIME |r| = {abs(dime_r):.3f} "
+                f"for {data.get('session', '?')} {data.get('chamber', '?')}."
+            )
+            break
+
+    return findings
 
 
 def _add_references(report: ReportBuilder) -> None:

@@ -14,10 +14,18 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -38,6 +46,10 @@ def build_beta_binomial_report(
     plots_dir: Path,
 ) -> None:
     """Build the full beta-binomial HTML report by adding sections to the ReportBuilder."""
+    findings = _generate_beta_binomial_key_findings(chamber_results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     _add_what_is_shrinkage(report)
     _add_how_to_read(report)
 
@@ -377,6 +389,42 @@ def _add_cross_chamber_comparison(
             html=html,
         )
     )
+
+
+def _generate_beta_binomial_key_findings(
+    chamber_results: dict[str, dict],
+) -> list[str]:
+    """Generate 2-4 key findings from beta-binomial results."""
+    findings: list[str] = []
+
+    for chamber, result in chamber_results.items():
+        shrinkage = result.get("shrinkage_summary", {})
+        min_shrink = shrinkage.get("min_shrinkage")
+        max_shrink = shrinkage.get("max_shrinkage")
+        if min_shrink is not None and max_shrink is not None:
+            findings.append(
+                f"{chamber} shrinkage range: <strong>{min_shrink:.1%}</strong> to "
+                f"<strong>{max_shrink:.1%}</strong>."
+            )
+
+        # Most/least loyal from loyalty data
+        loyalty_df = result.get("loyalty_df")
+        if loyalty_df is not None and loyalty_df.height > 0:
+            sorted_loy = loyalty_df.sort("bayesian_rate", descending=True)
+            most = sorted_loy.head(1)
+            least = sorted_loy.tail(1)
+            most_name = most["full_name"][0] if "full_name" in most.columns else "N/A"
+            most_rate = float(most["bayesian_rate"][0])
+            least_name = least["full_name"][0] if "full_name" in least.columns else "N/A"
+            least_rate = float(least["bayesian_rate"][0])
+            findings.append(
+                f"{chamber} most loyal: <strong>{most_name}</strong> ({most_rate:.0%}), "
+                f"least loyal: <strong>{least_name}</strong> ({least_rate:.0%})."
+            )
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:

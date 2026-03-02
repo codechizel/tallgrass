@@ -14,14 +14,28 @@ from pathlib import Path
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
-except ModuleNotFoundError:
-    from report import (  # type: ignore[no-redef]
+    from analysis.report import (
         FigureSection,
+        InteractiveSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
         make_gt,
+        make_interactive_table,
+    )
+except ModuleNotFoundError:
+    from report import (  # type: ignore[no-redef]
+        FigureSection,
+        InteractiveSection,
+        InteractiveTableSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+        make_interactive_table,
     )
 
 TOP_DISCRIMINATING = 15  # Number of top/bottom discriminating votes to show
@@ -41,6 +55,11 @@ def build_irt_report(
     n_chains: int,
 ) -> None:
     """Build the full IRT HTML report by adding sections to the ReportBuilder."""
+    # Key findings
+    findings = _generate_irt_key_findings(results, pca_comparisons)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
+
     # Model config + convergence
     for chamber, result in results.items():
         if chamber == "Joint":
@@ -54,8 +73,10 @@ def build_irt_report(
         if chamber == "Joint":
             continue
         _add_forest_figure(report, plots_dir, chamber)
+        _add_party_density_figure(report, plots_dir, chamber)
         _add_paradox_spotlight_figure(report, plots_dir, chamber, result)
         _add_ideal_point_table(report, result, chamber)
+        _add_ideal_points_interactive(report, plots_dir, chamber)
     _add_ideal_point_interpretation(report)
 
     # Discrimination
@@ -63,8 +84,16 @@ def build_irt_report(
         if chamber == "Joint":
             continue
         _add_discrimination_figure(report, plots_dir, chamber)
+        _add_icc_curves_figure(report, plots_dir, chamber)
         _add_top_discriminating_votes(report, result, chamber)
     _add_discrimination_interpretation(report)
+
+    # Cutting lines + swing votes
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
+        _add_cutting_lines_figure(report, plots_dir, chamber)
+        _add_swing_vote_table(report, result, chamber)
 
     # Traces
     for chamber in results:
@@ -86,6 +115,7 @@ def build_irt_report(
             if chamber == "Joint":
                 continue
             _add_pca_comparison_figure(report, plots_dir, chamber)
+            _add_irt_vs_pca_interactive(report, plots_dir, chamber)
         _add_pca_comparison_table(report, pca_comparisons)
 
     if validation_results:
@@ -278,6 +308,43 @@ def _add_forest_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> 
         )
 
 
+def _add_party_density_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Figure: Party ideal point density overlay."""
+    path = plots_dir / f"party_density_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-party-density-{chamber.lower()}",
+                f"{chamber} Party Ideal Point Distributions",
+                path,
+                caption=(
+                    f"Overlapping KDE density curves of ideal points by party ({chamber}). "
+                    "Dashed lines = party means. Overlap region indicates cross-pressured "
+                    "legislators whose positions cannot be distinguished by party alone."
+                ),
+            )
+        )
+
+
+def _add_icc_curves_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Figure: Item Characteristic Curves for top discriminating bills."""
+    path = plots_dir / f"icc_curves_{chamber.lower()}.png"
+    if path.exists():
+        report.add(
+            FigureSection.from_file(
+                f"fig-icc-{chamber.lower()}",
+                f"{chamber} Item Characteristic Curves",
+                path,
+                caption=(
+                    f"P(Yea | theta) for the most discriminating bills ({chamber}). "
+                    "Red = conservative-Yea (beta > 0), Blue = liberal-Yea (beta < 0). "
+                    "Steeper curves = stronger party separation. The crossing point "
+                    "(P = 0.5) is the bill's cutting point on the ideology scale."
+                ),
+            )
+        )
+
+
 def _add_paradox_spotlight_figure(
     report: ReportBuilder,
     plots_dir: Path,
@@ -334,10 +401,12 @@ def _add_ideal_point_table(
     available = [c for c in display_cols if c in ip.columns]
     df = ip.select(available)
 
-    html = make_gt(
+    html = make_interactive_table(
         df,
-        title=f"{chamber} — Legislator Ideal Points (ranked by xi_mean)",
-        subtitle=f"{df.height} legislators, positive = conservative",
+        title=(
+            f"{chamber} — Legislator Ideal Points "
+            f"({df.height} legislators, positive = conservative)"
+        ),
         column_labels={
             "full_name": "Legislator",
             "party": "Party",
@@ -353,10 +422,10 @@ def _add_ideal_point_table(
             "xi_hdi_2.5": ".3f",
             "xi_hdi_97.5": ".3f",
         },
-        source_note="HDI = 95% Highest Density Interval.",
+        caption="HDI = 95% Highest Density Interval.",
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"ideal-points-{chamber.lower()}",
             title=f"{chamber} Ideal Points",
             html=html,
@@ -428,18 +497,18 @@ def _add_top_discriminating_votes(
     if "is_veto_override" in combined.columns:
         labels["is_veto_override"] = "Veto Override"
 
-    html = make_gt(
+    html = make_interactive_table(
         combined,
-        title=f"{chamber} — Most Discriminating Roll Calls",
-        subtitle=(
-            f"Top {TOP_DISCRIMINATING} conservative-Yea (β > 0) and "
+        title=(
+            f"{chamber} — Most Discriminating Roll Calls: "
+            f"top {TOP_DISCRIMINATING} conservative-Yea (β > 0) and "
             f"{TOP_DISCRIMINATING} liberal-Yea (β < 0)"
         ),
         column_labels=labels,
         number_formats={"beta_mean": ".3f", "beta_sd": ".3f", "alpha_mean": ".3f"},
     )
     report.add(
-        TableSection(
+        InteractiveTableSection(
             id=f"discrim-votes-{chamber.lower()}",
             title=f"{chamber} Top Discriminating Votes",
             html=html,
@@ -497,6 +566,38 @@ def _add_pca_comparison_figure(
                 ),
             )
         )
+
+
+def _add_ideal_points_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Embed Plotly interactive ideal point scatter."""
+    path = plots_dir / f"ideal_points_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    html = path.read_text()
+    report.add(
+        InteractiveSection(
+            id=f"interactive-ideal-points-{chamber.lower()}",
+            title=f"{chamber} Ideal Points (Interactive)",
+            html=html,
+            caption="Hover over points to see legislator details, ideal point, and HDI.",
+        )
+    )
+
+
+def _add_irt_vs_pca_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Embed Plotly interactive IRT vs PCA scatter."""
+    path = plots_dir / f"irt_vs_pca_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    html = path.read_text()
+    report.add(
+        InteractiveSection(
+            id=f"interactive-irt-pca-{chamber.lower()}",
+            title=f"{chamber} IRT vs PCA (Interactive)",
+            html=html,
+            caption="Hover over points to see both IRT and PCA scores.",
+        )
+    )
 
 
 def _add_pca_comparison_table(
@@ -802,6 +903,58 @@ def _add_discrimination_interpretation(report: ReportBuilder) -> None:
     )
 
 
+def _add_cutting_lines_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    """Figure: VoteView-style cutting line visualization."""
+    path = plots_dir / f"cutting_lines_{chamber.lower()}.png"
+    if not path.exists():
+        return
+    report.add(
+        FigureSection.from_file(
+            id=f"cutting-lines-{chamber.lower()}",
+            title=f"{chamber} Cutting Lines",
+            path=path,
+            caption=(
+                f"Cutting lines for the most discriminating bills ({chamber}). "
+                "Each panel shows legislator ideal points along a horizontal axis. "
+                "Green triangles = Yea, red triangles = Nay. The dashed vertical "
+                "line is the cutting point where P(Yea) = 0.5."
+            ),
+        )
+    )
+
+
+def _add_swing_vote_table(report: ReportBuilder, result: dict, chamber: str) -> None:
+    """Table: swing legislators near cutting points on close votes."""
+    swing = result.get("swing_votes")
+    if swing is None or swing.is_empty():
+        return
+
+    display = swing.head(20).select("full_name", "party", "swing_count", "ideal_point")
+    html = make_gt(
+        display,
+        title=f"{chamber} — Swing Legislators on Close Votes",
+        column_labels={
+            "full_name": "Legislator",
+            "party": "Party",
+            "swing_count": "Close Votes Near Cutting Point",
+            "ideal_point": "Ideal Point",
+        },
+        number_formats={"ideal_point": ".3f"},
+        source_note=(
+            "Swing legislators have ideal points within 0.5 IRT units of the "
+            "cutting point on close votes (margin <= 5). Higher count = more "
+            "often in a pivotal position."
+        ),
+    )
+    report.add(
+        TableSection(
+            id=f"swing-votes-{chamber.lower()}",
+            title=f"{chamber} Swing Legislators",
+            html=html,
+        )
+    )
+
+
 def _add_trace_interpretation(report: ReportBuilder) -> None:
     """Text block: How to interpret trace plots."""
     report.add(
@@ -1016,6 +1169,71 @@ def _add_joint_comparison_table(
             html=html,
         )
     )
+
+
+def _generate_irt_key_findings(
+    results: dict[str, dict],
+    pca_comparisons: dict[str, dict],
+) -> list[str]:
+    """Generate 3-5 key findings from IRT results."""
+    findings: list[str] = []
+
+    # Convergence status
+    all_converged = True
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
+        diag = result.get("diagnostics", {})
+        if diag.get("xi_rhat_max", 2.0) >= 1.01 or diag.get("xi_ess_min", 0) < 400:
+            all_converged = False
+            break
+    if all_converged:
+        findings.append(
+            "All convergence diagnostics <strong>passed</strong> (R-hat < 1.01, ESS > 400)."
+        )
+    else:
+        findings.append("<strong>WARNING:</strong> Some convergence diagnostics did not pass.")
+
+    # Party separation per chamber
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
+        ip = result.get("ideal_points")
+        if ip is None or ip.height == 0:
+            continue
+        r_mean = ip.filter(pl.col("party") == "Republican")["xi_mean"].mean()
+        d_mean = ip.filter(pl.col("party") == "Democrat")["xi_mean"].mean()
+        if r_mean is not None and d_mean is not None:
+            separation = abs(float(r_mean) - float(d_mean))
+            findings.append(
+                f"{chamber} party separation: <strong>{separation:.2f}</strong> IRT units "
+                f"(R mean={float(r_mean):.2f}, D mean={float(d_mean):.2f})."
+            )
+
+    # Most extreme legislator
+    for chamber, result in results.items():
+        if chamber == "Joint":
+            continue
+        ip = result.get("ideal_points")
+        if ip is None or ip.height == 0:
+            continue
+        most_extreme = ip.sort("xi_mean", descending=True).head(1)
+        name = most_extreme["full_name"][0]
+        xi = float(most_extreme["xi_mean"][0])
+        direction = "conservative" if xi > 0 else "liberal"
+        findings.append(
+            f"Most extreme {chamber} legislator: <strong>{name}</strong> "
+            f"(xi={xi:.2f}, {direction})."
+        )
+        break  # Only show for first chamber to keep it concise
+
+    # PCA correlation
+    for chamber, data in pca_comparisons.items():
+        r = data.get("pearson_r", 0)
+        findings.append(f"IRT-PCA correlation ({chamber}): <strong>r={r:.3f}</strong>.")
+        break  # One is enough
+
+    return findings
 
 
 def _add_analysis_parameters(

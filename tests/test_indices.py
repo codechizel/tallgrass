@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.indices import (
     _rice_from_counts,
+    compute_bipartisanship_index,
     compute_carey_unity,
     compute_co_defection_matrix,
     compute_enp_per_vote,
@@ -771,3 +772,175 @@ class TestComputeCareyUnity:
             )
             if r.height > 0 and r["rice_index"][0] is not None:
                 assert row["carey_unity"] <= float(r["rice_index"][0]) + 1e-10
+
+
+# ── compute_bipartisanship_index() ────────────────────────────────────────
+
+
+class TestComputeBipartisanshipIndex:
+    """Lugar Center-style BPI = votes with opposing party majority / party votes present."""
+
+    def _get_party_votes(self, votes, rollcalls, legislators, chamber="House"):
+        pc = compute_party_majority_positions(votes, rollcalls, legislators, chamber)
+        return identify_party_votes(pc, rollcalls, chamber, "test")
+
+    def test_output_columns(self):
+        """BPI DataFrame has required columns."""
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "test"
+        )
+        expected = {
+            "legislator_slug",
+            "full_name",
+            "party",
+            "district",
+            "bpi_score",
+            "votes_with_opposition",
+            "party_votes_present",
+            "session",
+        }
+        assert expected.issubset(set(result.columns))
+
+    def test_loyal_republican_bpi_zero(self):
+        """rep_a votes Yea on rc1 and rc2 (R majority=Yea on both) → BPI=0.
+
+        BPI counts votes *with* opposition majority, not against own party.
+        On party votes, R majority=Yea and D majority=Nay.
+        rep_a votes Yea (with own party, against opposition) → 0 votes with opposition.
+        """
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "test"
+        )
+        rep_a = result.filter(pl.col("legislator_slug") == "rep_a")
+        assert rep_a.height == 1
+        assert rep_a["bpi_score"][0] == pytest.approx(0.0)
+
+    def test_defector_has_positive_bpi(self):
+        """rep_e votes Nay on rc1 (D majority=Nay) → 1 vote with opposition."""
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "test"
+        )
+        rep_e = result.filter(pl.col("legislator_slug") == "rep_e")
+        assert rep_e.height == 1
+        assert rep_e["bpi_score"][0] > 0.0
+        assert int(rep_e["votes_with_opposition"][0]) >= 1
+
+    def test_democrat_crossing_over(self):
+        """dem_z votes Yea on rc2 (R majority=Yea) → 1 vote with opposition."""
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "test"
+        )
+        dem_z = result.filter(pl.col("legislator_slug") == "dem_z")
+        assert dem_z.height == 1
+        assert int(dem_z["votes_with_opposition"][0]) >= 1
+        assert dem_z["bpi_score"][0] > 0.0
+
+    def test_bpi_bounded_zero_one(self):
+        """BPI scores are in [0, 1] for all legislators."""
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "test"
+        )
+        assert (result["bpi_score"] >= 0.0).all()
+        assert (result["bpi_score"] <= 1.0).all()
+
+    def test_sorted_descending(self):
+        """Results are sorted by BPI descending (most bipartisan first)."""
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "test"
+        )
+        scores = result["bpi_score"].to_list()
+        assert scores == sorted(scores, reverse=True)
+
+    def test_no_party_votes_returns_empty(self):
+        """All-unanimous votes → no party votes → empty DataFrame."""
+        votes = pl.DataFrame(
+            [
+                ("rc1", "rep_a", "Yea"),
+                ("rc1", "dem_x", "Yea"),
+            ],
+            schema=["vote_id", "legislator_slug", "vote"],
+            orient="row",
+        )
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["rc1"],
+                "chamber": ["House"],
+                "vote_date": ["01/15/2025"],
+                "motion": ["Final Action"],
+                "bill_number": ["HB 1"],
+            }
+        )
+        legs = pl.DataFrame(
+            {
+                "slug": ["rep_a", "dem_x"],
+                "party": ["Republican", "Democrat"],
+                "full_name": ["Alice", "Xena"],
+                "district": ["D1", "D2"],
+            }
+        )
+        pv = self._get_party_votes(votes, rollcalls, legs)
+        result = compute_bipartisanship_index(votes, pv, legs, "House", "test")
+        assert result.height == 0
+
+    def test_independent_excluded(self):
+        """Independents should not appear in BPI results."""
+        votes = pl.DataFrame(
+            [
+                ("rc1", "rep_a", "Yea"),
+                ("rc1", "rep_b", "Yea"),
+                ("rc1", "ind_z", "Yea"),
+                ("rc1", "dem_x", "Nay"),
+                ("rc1", "dem_y", "Nay"),
+            ],
+            schema=["vote_id", "legislator_slug", "vote"],
+            orient="row",
+        )
+        rollcalls = pl.DataFrame(
+            {
+                "vote_id": ["rc1"],
+                "chamber": ["House"],
+                "vote_date": ["01/15/2025"],
+                "motion": ["FA"],
+                "bill_number": ["HB 1"],
+            }
+        )
+        legs = pl.DataFrame(
+            {
+                "slug": ["rep_a", "rep_b", "ind_z", "dem_x", "dem_y"],
+                "party": ["Republican", "Republican", "Independent", "Democrat", "Democrat"],
+                "full_name": ["A", "B", "Z", "X", "Y"],
+                "district": ["D1", "D2", "D3", "D4", "D5"],
+            }
+        )
+        pv = self._get_party_votes(votes, rollcalls, legs)
+        result = compute_bipartisanship_index(votes, pv, legs, "House", "test")
+        slugs = result["legislator_slug"].to_list()
+        assert "ind_z" not in slugs
+
+    def test_session_column_propagated(self):
+        """Session string is carried through to the output."""
+        pv = self._get_party_votes(
+            _contested_votes(), _contested_rollcalls(), _contested_legislators()
+        )
+        result = compute_bipartisanship_index(
+            _contested_votes(), pv, _contested_legislators(), "House", "my_session"
+        )
+        assert (result["session"] == "my_session").all()

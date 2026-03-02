@@ -15,10 +15,18 @@ import networkx as nx
 import polars as pl
 
 try:
-    from analysis.report import FigureSection, ReportBuilder, TableSection, TextSection, make_gt
+    from analysis.report import (
+        FigureSection,
+        KeyFindingsSection,
+        ReportBuilder,
+        TableSection,
+        TextSection,
+        make_gt,
+    )
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        KeyFindingsSection,
         ReportBuilder,
         TableSection,
         TextSection,
@@ -35,6 +43,10 @@ def build_bipartite_report(
 ) -> None:
     """Build the full bipartite network HTML report."""
     chambers = [c for c in ["House", "Senate"] if c in results and "summary" in results[c]]
+
+    findings = _generate_bipartite_key_findings(results)
+    if findings:
+        report.add(KeyFindingsSection(findings=findings))
 
     _add_data_summary(report, results, chambers)
     _add_how_to_read(report)
@@ -751,6 +763,53 @@ def _add_downstream_findings(
             html=html,
         )
     )
+
+
+def _generate_bipartite_key_findings(results: dict[str, dict]) -> list[str]:
+    """Generate 2-4 key findings from bipartite network results."""
+    findings: list[str] = []
+    import polars as pl
+
+    for chamber in ["House", "Senate"]:
+        if chamber not in results or "summary" not in results[chamber]:
+            continue
+
+        # Polarization
+        pol = results[chamber].get("polarization")
+        if pol is not None and pol.height > 0:
+            median_pol = float(pol["polarization"].median())
+            high_pol = pol.filter(pl.col("polarization") > 0.8).height
+            pct_high = high_pol / pol.height * 100
+            findings.append(
+                f"{chamber}: <strong>{pct_high:.0f}%</strong> of bills are highly "
+                f"polarized (>0.8), median = {median_pol:.2f}."
+            )
+
+        # Bridge bills
+        bridge = results[chamber].get("bridge_bills")
+        if bridge is not None and bridge.height > 0:
+            top = bridge.head(1).row(0, named=True)
+            bn = top.get("bill_number", top.get("vote_id", "?"))
+            findings.append(
+                f"{chamber} top bridge bill: <strong>{bn}</strong> "
+                f"(betweenness = {top.get('betweenness', 0):.4f})."
+            )
+
+        # Backbone density
+        backbone_G = results[chamber].get("backbone_graph")
+        if backbone_G is not None and backbone_G.number_of_nodes() > 0:
+            n_nodes = backbone_G.number_of_nodes()
+            n_edges = backbone_G.number_of_edges()
+            max_possible = n_nodes * (n_nodes - 1) // 2
+            density = n_edges / max_possible if max_possible > 0 else 0
+            findings.append(
+                f"{chamber} BiCM backbone: <strong>{n_edges}</strong> validated edges "
+                f"(density = {density:.4f})."
+            )
+
+        break  # First chamber only
+
+    return findings
 
 
 def _add_analysis_parameters(report: ReportBuilder) -> None:
