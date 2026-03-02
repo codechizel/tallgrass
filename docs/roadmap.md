@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-02 (backlog resolution: name matcher district tiebreaker, shrinkage investigation, 84th re-run — ADR-0075)
+**Last updated:** 2026-03-02 (R14-R20 marked done, backlog fully cleared — ADR-0071, ADR-0075)
 
 ---
 
@@ -62,6 +62,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | PPC All-Biennium Expansion | 2026-03-02 | Phase 4c expanded from 2 to 6 bienniums (85th, 86th, 88th, 90th added). 87th/89th excluded: ArviZ LOO observation mismatch between hierarchical and flat IRT vote matrices. ADR-0073. |
 | — | Name Matcher District Tiebreaker | 2026-03-02 | Phase 14 (SM) + Phase 14b (DIME) name matching now uses district-based disambiguation for ambiguous last-name matches. 3 incorrect matches corrected. 6 new tests. |
 | — | Shrinkage Null Investigation | 2026-03-02 | Deep dive confirmed `SHRINKAGE_MIN_DISTANCE=0.5` is statistically justified (24.8% null rate across all bienniums). Accepted as working-as-designed. |
+| — | Report Enhancements (R14-R20) | 2026-03-02 | Folium district choropleths, full voting record in Profiles, iframe dashboard, CSV downloads (28+ exports), freshmen cohort analysis, bloc stability Sankey, scrollytelling synthesis. 4 new deps (folium, geopandas, scrollama via IntersectionObserver). ADR-0071. |
 
 ---
 
@@ -203,7 +204,7 @@ Phase 06b consistently finds 2 bill communities = party voting pattern. Analytic
 
 ---
 
-## Next Up (Backlog)
+## ~~Backlog~~ — All Cleared
 
 ### ~~1. External Validation Name Matcher: District Tiebreaker~~ — Done
 
@@ -231,11 +232,11 @@ Phase 06b consistently finds 2 bill communities = party voting pattern. Analytic
 
 ---
 
-## ~~Report Enhancement Backlog~~ — R1-R13 Done (ADR-0069)
+## ~~Report Enhancement Backlog~~ — R1-R20 Done (ADR-0069, ADR-0071)
 
 Prioritized improvements to HTML report output, based on a comprehensive survey of the open-source landscape, academic standards, and general-audience best practices. Full analysis: [`docs/report-enhancement-survey.md`](report-enhancement-survey.md).
 
-**R1-R13 completed 2026-03-01.** Three new section types (`KeyFindingsSection`, `InteractiveTableSection`, `InteractiveSection`), three new dependencies (itables, plotly, pyvis), five new analytical features (BPI, plus-minus, cutting lines, swing votes, coalition labeler), all 22+ report builders enhanced with key findings. See ADR-0069.
+**R1-R13 completed 2026-03-01** (ADR-0069). **R14-R20 completed 2026-03-02** (ADR-0071). Three new section types (`KeyFindingsSection`, `InteractiveTableSection`, `InteractiveSection`), seven new dependencies (itables, plotly, pyvis, folium, geopandas + IntersectionObserver JS), five new analytical features (BPI, plus-minus, cutting lines, swing votes, coalition labeler), all 22+ report builders enhanced with key findings. Tier 3 added: district choropleths, full voting records, iframe dashboard, CSV downloads, freshmen cohort, bloc stability, scrollytelling.
 
 ### ~~Tier 1: High-Impact, Lower Effort~~ — All Done
 
@@ -260,19 +261,17 @@ Prioritized improvements to HTML report output, based on a comprehensive survey 
 | R12 | **Vote-based bipartisanship index** | **Done** — `compute_bipartisanship_index()` + scatter |
 | R13 | **Named/described coalitions** | **Done** — `coalition_labeler.py` with auto-naming |
 
-### Tier 3: High-Impact, Higher Effort
+### ~~Tier 3: High-Impact, Higher Effort~~ — All Done
 
-Substantial new features or infrastructure.
-
-| # | Enhancement | Phases | Effort | Rationale |
-|---|-------------|--------|--------|-----------|
-| R14 | **Folium district choropleth maps** | New section in EDA or Profiles | High | Kansas legislative districts colored by ideology, party unity, or maverick score. Requires district GeoJSON (Census/redistricting). Interactive Leaflet maps with hover tooltips. |
-| R15 | **Full voting record per legislator** | 12 Profiles | High | ProPublica, GovTrack, VoteView all show vote-by-vote detail. Profiles currently show defections and surprising votes but not the complete record. ITables with search/sort. |
-| R16 | **Quarto unified dashboard** | All phases | High | Single navigable website combining all 17 phase reports with cross-linking. Supports Python, Plotly, Folium. Publishes to GitHub Pages. Replaces per-phase HTML files. |
-| R17 | **Downloadable CSV alongside reports** | All phases | Medium | VoteView, ProPublica, GovTrack all offer data downloads. Add CSV export links for underlying data tables in each report. |
-| R18 | **Freshmen cohort analysis** | 13 Cross-Session or new | Medium-High | Do newly elected legislators vote differently from incumbents? Convergence toward party mean over time? Comparative density plots, within-session drift. |
-| R19 | **Voting bloc stability tracking** | 13 Cross-Session | Medium-High | Do clusters persist, split, or merge across bienniums? ARI of cluster assignments for returning legislators. Sankey diagram of bloc evolution. |
-| R20 | **Scrollytelling in Synthesis** | 11 Synthesis | High | Progressive narrative reveal (D3.js + Scrollama.js). NYT/WaPo signature format. High engagement but requires JavaScript integration. |
+| # | Enhancement | Status |
+|---|-------------|--------|
+| R14 | **Folium district choropleth maps** | **Done** — `analysis/01_eda/geographic.py`, TIGER/Line GeoJSON, folium+geopandas |
+| R15 | **Full voting record per legislator** | **Done** — `profiles_data.py:build_full_voting_record()`, `--full-record` flag, ITables |
+| R16 | **Iframe dashboard** (lightweight, not Quarto) | **Done** — `analysis/dashboard.py`, sidebar nav + iframe, `just dashboard`, auto-called by pipeline |
+| R17 | **Downloadable CSV alongside reports** | **Done** — `DownloadSection` in report.py, `RunContext.export_csv()`, 28+ export calls |
+| R18 | **Freshmen cohort analysis** | **Done** — `cross_session_data.py:analyze_freshmen_cohort()`, KDE density + KS/t-tests |
+| R19 | **Voting bloc stability tracking** | **Done** — `cross_session_data.py:compute_bloc_stability()`, Plotly Sankey, ARI, transition matrix |
+| R20 | **Scrollytelling in Synthesis** | **Done** — `ScrollySection` in report.py, IntersectionObserver JS, `--scrolly` flag |
 
 ### Tier 4: Nice-to-Have
 
@@ -285,15 +284,15 @@ Substantial new features or infrastructure.
 | R25 | **Descriptive alt text** for all figures | Accessibility improvement. Current `FigureSection` uses title only, not descriptive. |
 | R26 | **Bill outcome prediction model** | Logistic regression on bill passage. Stanford CS229 achieves ~80% on congressional data. Requires bill-level features. |
 
-### Key Library Additions
+### Key Library Additions (All Integrated)
 
 | Library | Purpose | Integration Point |
 |---------|---------|-------------------|
-| [Plotly](https://plotly.com/python/) (v6) | Interactive scatter, bar, heatmap, Sankey | New `InteractiveSection` in `report.py` |
+| [Plotly](https://plotly.com/python/) (v6) | Interactive scatter, bar, heatmap, Sankey | `InteractiveSection` in `report.py` |
 | [PyVis](https://pyvis.readthedocs.io/) | Interactive network graphs | Phase 06, 06b |
 | [ITables](https://github.com/mwouts/itables) (v2.6+) | Searchable/sortable tables | All phases with legislator tables |
-| [Folium](https://python-visualization.github.io/folium/) | Interactive choropleth maps | New geographic sections |
-| [Quarto](https://quarto.org/) | Unified multi-phase dashboard/website | Long-term publishing system |
+| [Folium](https://python-visualization.github.io/folium/) | Interactive choropleth maps | EDA geographic sections |
+| [GeoPandas](https://geopandas.org/) | GeoJSON/shapefile handling | District boundary loading |
 
 ---
 
@@ -305,7 +304,7 @@ All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that Ru
 
 ### ~~Test Suite Expansion~~ — Done
 
-1701 tests across scraper and analysis modules. All passing. Three gaps closed:
+1805 tests across scraper and analysis modules. All passing. Three gaps closed:
 - **Integration tests**: `test_integration_pipeline.py` — synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution (26 tests)
 - **HTML report structural tests**: `test_report_structure.py` — TOC anchors, section ordering, numbering, container types, empty report, CSS embedding, make_gt integration (22 tests)
 - **Pytest markers**: `@pytest.mark.scraper` (264 tests), `@pytest.mark.integration` (29 tests), `@pytest.mark.slow` (24 tests). Registered in `pyproject.toml`. Recipes: `just test-scraper`, `just test-fast`
