@@ -14,6 +14,7 @@ from pathlib import Path
 try:
     from analysis.report import (
         FigureSection,
+        InteractiveSection,
         KeyFindingsSection,
         ReportBuilder,
         TableSection,
@@ -23,6 +24,7 @@ try:
 except ModuleNotFoundError:
     from report import (  # type: ignore[no-redef]
         FigureSection,
+        InteractiveSection,
         KeyFindingsSection,
         ReportBuilder,
         TableSection,
@@ -62,6 +64,7 @@ def build_dynamic_irt_report(
         _add_global_roster(report, cr, chamber)
         _add_polarization_trend(report, plots_dir, chamber)
         _add_ridgeline(report, plots_dir, chamber)
+        _add_animated_scatter(report, plots_dir, chamber)
         _add_trajectories(report, plots_dir, chamber)
         _add_tau_posterior(report, cr, plots_dir, chamber)
         _add_top_movers_table(report, cr, chamber)
@@ -348,6 +351,35 @@ def _add_ridgeline(
                 ),
             )
         )
+
+
+def _add_animated_scatter(
+    report: ReportBuilder,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Add animated ideal point scatter (Gapminder-style)."""
+    path = plots_dir / f"animated_scatter_{chamber}.html"
+    if not path.exists():
+        return
+    report.add(
+        InteractiveSection(
+            id=f"animated-scatter-{chamber.lower()}",
+            title=f"{chamber.capitalize()} — Ideal Point Animation",
+            html=path.read_text(),
+            caption=(
+                "Press play to animate legislator positions across bienniums. "
+                "X-axis: ideal point (left=liberal, right=conservative). "
+                "Y-axis: estimation uncertainty (higher = less certain). "
+                "Hover over any dot for legislator details and 95% credible interval."
+            ),
+            aria_label=(
+                f"Animated scatter plot of {chamber.capitalize()} legislator ideal points "
+                "across bienniums. Each frame shows one biennium with legislators positioned "
+                "by ideal point (x) and uncertainty (y), colored by party."
+            ),
+        )
+    )
 
 
 def _add_trajectories(

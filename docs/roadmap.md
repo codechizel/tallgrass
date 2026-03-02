@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-02 (M6: ridgeline ideology plots in dynamic IRT report)
+**Last updated:** 2026-03-02 (M7: animated ideal point scatter in dynamic IRT report)
 
 ---
 
@@ -67,6 +67,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Scraper Refactoring (M2) | 2026-03-02 | Extracted `_extract_bill_title()`, `_extract_chamber_motion_date()`, `_parse_vote_categories()`, `_extract_party_and_district()` as static methods from `_parse_vote_page()` and `enrich_legislators()`. |
 | — | Bill Lifecycle (M5) | 2026-03-02 | `BillAction` dataclass, KLISS HISTORY capture, `_bill_actions.csv` export. Sankey lifecycle diagram in EDA report. 17 new tests. |
 | — | Ridgeline Plots (M6) | 2026-03-02 | `plot_ridgeline_ideology()` — stacked KDE curves by biennium in dynamic IRT report. Republicans/Democrats shown separately. 3 new tests (73 total in Phase 16). |
+| — | Animated Scatter (M7) | 2026-03-02 | `plot_animated_scatter()` — Gapminder-style Plotly animation in dynamic IRT report. X=ideal point, Y=uncertainty, color=party, frame=biennium. 3 new tests (76 total in Phase 16). |
 
 ---
 
@@ -408,7 +409,7 @@ All Tier 4 items plus remaining code audit items have detailed implementation do
 | R21 | **Parliament/hemicircle charts** | **Done** — `analysis/viz_helpers.py`, hemicycle in EDA report per chamber | Plotly scatter on polar coords |
 | R22 | **Sankey diagrams** for bill flow | [M5](milestones/m5-bill-lifecycle.md) | **Done** — `BillAction` dataclass, `_bill_actions.csv`, lifecycle Sankey in EDA report |
 | R23 | **Ridgeline plots** for ideology | [M6](milestones/m6-ridgeline-plots.md) | **Done** — `plot_ridgeline_ideology()` in dynamic IRT report |
-| R24 | **Animated scatter** (Gapminder) | [M7](milestones/m7-animated-scatter.md) | Plotly `animation_frame` in dynamic IRT report |
+| R24 | **Animated scatter** (Gapminder) | [M7](milestones/m7-animated-scatter.md) | **Done** — `plot_animated_scatter()` in dynamic IRT report |
 | R25 | **Descriptive alt text** | [M3](milestones/m3-accessibility-alt-text.md) | **Done.** WCAG 2.1 AA — alt_text on all FigureSections + aria_label on InteractiveSections across 23 report files |
 | R26 | **Prediction enhancement** | [M8](milestones/m8-prediction-enhancement.md) | Sponsor party, SHAP passage, stratified accuracy |
 
@@ -419,7 +420,7 @@ Additional milestones from code audit:
 | M1 | `@pytest.mark.slow` + test helper consolidation | [M1](milestones/m1-test-infrastructure.md) |
 | M2 | ~~Extract `_parse_vote_page()` + `enrich_legislators()` helpers~~ | **Done** |
 
-**Recommended order:** M1 → M4 → M7 → M8 (all independent, can be done in any order). M2, M3, M5, M6 completed.
+**Recommended order:** M1 → M8 (all independent, can be done in any order). M2, M3, M4, M5, M6, M7 completed.
 
 ### Key Library Additions (All Integrated)
 

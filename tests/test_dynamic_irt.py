@@ -14,6 +14,7 @@ import pytest
 from analysis.dynamic_irt import (
     XI_INIT_PRIOR_SIGMA,
     build_dynamic_irt_graph,
+    plot_animated_scatter,
     plot_ridgeline_ideology,
 )
 from analysis.dynamic_irt_data import (
@@ -1080,6 +1081,65 @@ class TestRidgelinePlot:
         out = tmp_path / "ridgeline_house.png"
         plot_ridgeline_ideology(traj, out)
         assert out.exists()
+
+
+class TestAnimatedScatter:
+    """Tests for Gapminder-style animated ideal point scatter.
+
+    Run: uv run pytest tests/test_dynamic_irt.py -k TestAnimatedScatter -v
+    """
+
+    def test_produces_html(self, tmp_path) -> None:
+        """Animated scatter creates an HTML file."""
+        trajectories = pl.DataFrame({
+            "biennium_label": ["84th (2011-12)"] * 10 + ["85th (2013-14)"] * 10,
+            "full_name": [f"Member {i}" for i in range(10)] * 2,
+            "party": (["Republican"] * 8 + ["Democrat"] * 2) * 2,
+            "xi_mean": list(np.random.default_rng(42).normal(size=20)),
+            "xi_sd": list(np.random.default_rng(43).uniform(0.05, 0.3, size=20)),
+            "xi_hdi_2.5": [-1.0] * 20,
+            "xi_hdi_97.5": [1.0] * 20,
+            "served": [True] * 20,
+        })
+        out_path = plot_animated_scatter(trajectories, "House", tmp_path)
+        assert out_path.exists()
+        assert out_path.stat().st_size > 1000
+
+    def test_contains_plotly(self, tmp_path) -> None:
+        """HTML file includes Plotly references."""
+        trajectories = pl.DataFrame({
+            "biennium_label": ["84th (2011-12)"] * 5,
+            "full_name": [f"M{i}" for i in range(5)],
+            "party": ["Republican"] * 5,
+            "xi_mean": [1.0, 1.1, 0.9, 1.2, 0.8],
+            "xi_sd": [0.1] * 5,
+            "xi_hdi_2.5": [0.5] * 5,
+            "xi_hdi_97.5": [1.5] * 5,
+            "served": [True] * 5,
+        })
+        out_path = plot_animated_scatter(trajectories, "Senate", tmp_path)
+        content = out_path.read_text()
+        assert "plotly" in content.lower()
+
+    def test_filters_unserved(self, tmp_path) -> None:
+        """Only served=True legislators appear in animation."""
+        trajectories = pl.DataFrame({
+            "biennium_label": ["84th (2011-12)"] * 6,
+            "full_name": [f"M{i}" for i in range(6)],
+            "party": ["Republican"] * 6,
+            "xi_mean": [1.0] * 6,
+            "xi_sd": [0.1] * 6,
+            "xi_hdi_2.5": [0.5] * 6,
+            "xi_hdi_97.5": [1.5] * 6,
+            "served": [True] * 3 + [False] * 3,
+        })
+        out_path = plot_animated_scatter(trajectories, "House", tmp_path)
+        assert out_path.exists()
+        # The HTML should exist but only contain 3 served legislators
+        content = out_path.read_text()
+        # M3, M4, M5 are unserved — their names should not appear
+        assert "M0" in content
+        assert "M3" not in content
 
 
 # ── Edge Cases ───────────────────────────────────────────────────────────────

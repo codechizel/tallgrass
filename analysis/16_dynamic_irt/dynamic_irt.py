@@ -965,6 +965,98 @@ def plot_ridgeline_ideology(
     save_fig(fig, out_path)
 
 
+def plot_animated_scatter(
+    trajectories: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> Path:
+    """Gapminder-style animated scatter of ideal points across bienniums.
+
+    X = ideal point, Y = uncertainty, color = party, frame = biennium.
+    Legislators appear/disappear based on served=True.
+
+    Args:
+        trajectories: DataFrame from extract_dynamic_ideal_points().
+        chamber: "House" or "Senate".
+        out_dir: Directory to write HTML file.
+
+    Returns:
+        Path to generated HTML file.
+    """
+    import plotly.express as px
+
+    served = trajectories.filter(pl.col("served"))
+
+    served = served.with_columns(
+        (
+            pl.col("full_name")
+            + "<br>Ideal point: "
+            + pl.col("xi_mean").round(2).cast(pl.Utf8)
+            + "<br>95% HDI: ["
+            + pl.col("xi_hdi_2.5").round(2).cast(pl.Utf8)
+            + ", "
+            + pl.col("xi_hdi_97.5").round(2).cast(pl.Utf8)
+            + "]"
+        ).alias("hover_text")
+    )
+
+    pdf = served.select(
+        "biennium_label", "full_name", "party", "xi_mean", "xi_sd", "hover_text"
+    ).to_pandas()
+
+    party_colors = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#808080"}
+
+    fig = px.scatter(
+        pdf,
+        x="xi_mean",
+        y="xi_sd",
+        color="party",
+        color_discrete_map=party_colors,
+        animation_frame="biennium_label",
+        hover_name="full_name",
+        custom_data=["hover_text"],
+        labels={
+            "xi_mean": "Ideal Point (Conservative → Liberal)",
+            "xi_sd": "Uncertainty (Posterior SD)",
+            "party": "Party",
+        },
+        title=f"{chamber} — Legislator Ideal Points Across Bienniums",
+    )
+
+    fig.update_traces(
+        hovertemplate="%{customdata[0]}<extra></extra>",
+        marker={"size": 8, "opacity": 0.7},
+    )
+
+    # Fix axis ranges across all frames for stable animation
+    x_min = float(pdf["xi_mean"].min()) - 0.5
+    x_max = float(pdf["xi_mean"].max()) + 0.5
+    y_max = float(pdf["xi_sd"].max()) * 1.2
+
+    fig.update_layout(
+        xaxis={"range": [x_min, x_max]},
+        yaxis={"range": [0, y_max]},
+        width=900,
+        height=600,
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "center",
+            "x": 0.5,
+        },
+    )
+
+    # Slow down animation for readability (guard: no updatemenus with single frame)
+    if fig.layout.updatemenus and len(fig.layout.updatemenus) > 0:
+        fig.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 1500
+        fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 500
+
+    out_path = out_dir / f"animated_scatter_{chamber}.html"
+    fig.write_html(out_path, include_plotlyjs="cdn")
+    return out_path
+
+
 def plot_individual_trajectories(
     trajectories: pl.DataFrame,
     top_movers: pl.DataFrame,
@@ -1617,6 +1709,7 @@ def main() -> None:
                 trajectories, ctx.plots_dir / f"polarization_trend_{chamber}.png"
             )
             plot_ridgeline_ideology(trajectories, ctx.plots_dir / f"ridgeline_{chamber}.png")
+            plot_animated_scatter(trajectories, chamber, ctx.plots_dir)
             plot_individual_trajectories(
                 trajectories,
                 top_movers,
