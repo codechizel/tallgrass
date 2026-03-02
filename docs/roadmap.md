@@ -327,7 +327,7 @@ Clustering, bipartite, network, profiles all build lookup dicts the same way. Id
 | Error handling (H1-H3) | 3/3 | 3 | Crash prevention |
 | Tests (T1-T2) | 2/2 | 2 | T1: slow markers, T2: weak assertions |
 
-1909 tests passing, lint clean, typecheck clean.
+1912 tests passing, lint clean, typecheck clean.
 
 ---
 
@@ -417,10 +417,10 @@ Additional milestones from code audit:
 
 | Milestone | Scope | Document |
 |-----------|-------|----------|
-| M1 | `@pytest.mark.slow` + test helper consolidation | [M1](milestones/m1-test-infrastructure.md) |
+| M1 | ~~`@pytest.mark.slow` + test helper consolidation~~ | **Done** — slow markers on retry tests; shared `factories.py` for test data |
 | M2 | ~~Extract `_parse_vote_page()` + `enrich_legislators()` helpers~~ | **Done** |
 
-**Recommended order:** M1 → M8 (all independent, can be done in any order). M2, M3, M4, M5, M6, M7 completed.
+**Recommended order:** M8 (only remaining milestone). M1, M2, M3, M5, M6, M7 completed.
 
 ### Key Library Additions (All Integrated)
 
@@ -442,7 +442,7 @@ All 18 phases define `*_PRIMER` strings (150-200 lines of Markdown each) that Ru
 
 ### ~~Test Suite Expansion~~ — Done
 
-1909 tests across scraper and analysis modules. All passing. Three gaps closed:
+1912 tests across scraper and analysis modules. All passing. Three gaps closed:
 - **Integration tests**: `test_integration_pipeline.py` — synthetic data → EDA → PCA pipeline chain, RunContext lifecycle, upstream resolution (26 tests)
 - **HTML report structural tests**: `test_report_structure.py` — TOC anchors, section ordering, numbering, container types, empty report, CSS embedding, make_gt integration (22 tests)
 - **Pytest markers**: `@pytest.mark.scraper` (264 tests), `@pytest.mark.integration` (29 tests), `@pytest.mark.slow` (24 tests). Registered in `pyproject.toml`. Recipes: `just test-scraper`, `just test-fast`

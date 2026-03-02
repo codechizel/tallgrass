@@ -129,7 +129,17 @@ Total captures oscillation; net captures directional drift.
 8. **Sample**: nutpie Rust NUTS, PCA-informed init, 2000/2000/4 default budget
 9. **Sign correction**: compare dynamic xi with static IRT, negate if r < 0 (ADR-0068; safety net)
 10. **Post-process**: trajectories, decomposition, top movers, static correlation
-11. **Report**: ~16-section HTML report (includes sign corrections and model priors)
+11. **Report**: ~17-section HTML report (includes sign corrections, model priors, animated scatter)
+
+## Visualizations
+
+### Animated Ideal Point Scatter (M7)
+
+Gapminder-style Plotly animation via `plot_animated_scatter(trajectories, chamber, out_dir)`. Each frame is one biennium (84th-91st). Legislators positioned by ideal point (x) and posterior uncertainty (y), colored by party. Only `served=True` legislators appear per frame. Play button auto-advances through bienniums (1500ms per frame, 500ms transition). Axis ranges fixed across frames for stable animation. Uses `plotly.express.scatter()` with `animation_frame="biennium_label"`. Output: standalone HTML with CDN Plotly.js reference. Integrated into report via `InteractiveSection` with WCAG `aria_label`.
+
+### Ridgeline Ideology Plot (M6)
+
+Static matplotlib KDE ridgeline via `plot_ridgeline_ideology()`. Stacked density curves per biennium showing Republican (red) and Democrat (blue) distributions.
 
 ## Comparison with Phase 04 (Static IRT)
 

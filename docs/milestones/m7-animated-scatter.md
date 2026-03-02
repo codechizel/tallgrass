@@ -1,7 +1,8 @@
-# M7: Animated Scatter
+# M7: Animated Scatter — Done
 
 Add Gapminder-style animated Plotly scatter showing legislator ideal points evolving across bienniums.
 
+**Status:** Done (2026-03-02, v2026.03.02.25)
 **Roadmap item:** R24 (animated scatter for dynamic IRT)
 **Estimated effort:** 1 session
 **Dependencies:** None (shares data source with M6 but independent implementation)

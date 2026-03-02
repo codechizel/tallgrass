@@ -1,9 +1,9 @@
-# M1: Test Infrastructure
+# M1: Test Infrastructure — Done
 
 Improve test ergonomics: mark slow tests so `just test-fast` skips them, and consolidate duplicated test factory functions into shared fixtures.
 
 **Roadmap items:** T1 (`@pytest.mark.slow`), R6 (test helper consolidation)
-**Estimated effort:** 1-2 sessions
+**Status:** Done (2026-03-02, v2026.03.02.17)
 
 ---
 
