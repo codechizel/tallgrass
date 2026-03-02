@@ -40,6 +40,8 @@ from importlib.machinery import ModuleSpec
 _MODULE_MAP: dict[str, str] = {
     "eda": "01_eda",
     "eda_report": "01_eda",
+    "bill_lifecycle": "01_eda",
+    "geographic": "01_eda",
     "pca": "02_pca",
     "pca_report": "02_pca",
     "mca": "02c_mca",

@@ -53,6 +53,7 @@ def build_eda_report(
     item_total_findings: dict | None = None,
     strategic_absence: pl.DataFrame | None = None,
     district_maps: dict[str, str] | None = None,
+    bill_actions: pl.DataFrame | None = None,
     plots_dir: Path,
 ) -> None:
     """Build the full EDA HTML report by adding sections to the ReportBuilder."""
@@ -106,6 +107,8 @@ def build_eda_report(
                     ),
                 )
             )
+    if bill_actions is not None and not bill_actions.is_empty():
+        _add_bill_lifecycle_sankey(report, bill_actions)
     _add_integrity_results(report, integrity_findings)
     _add_analysis_parameters(report)
     print(f"  Report: {len(report._sections)} sections added")
@@ -873,6 +876,36 @@ def _add_item_total_summary(report: ReportBuilder, item_total_findings: dict) ->
     )
     report.add(
         TableSection(id="item-total-corr", title="Item-Total Correlation Screening", html=html)
+    )
+
+
+def _add_bill_lifecycle_sankey(report: ReportBuilder, bill_actions: pl.DataFrame) -> None:
+    """Interactive Sankey: bill flow through legislative stages."""
+    try:
+        from analysis.bill_lifecycle import plot_bill_lifecycle_sankey
+    except ModuleNotFoundError:
+        try:
+            from bill_lifecycle import plot_bill_lifecycle_sankey  # type: ignore[no-redef]
+        except ModuleNotFoundError:
+            return
+
+    fig = plot_bill_lifecycle_sankey(bill_actions)
+    if fig is None:
+        return
+
+    html = fig.to_html(include_plotlyjs="cdn", full_html=False)
+    report.add(
+        InteractiveSection(
+            id="bill-lifecycle-sankey",
+            title="Bill Lifecycle Flow",
+            html=html,
+            caption=(
+                "Sankey diagram showing how bills flow through legislative stages. "
+                "Width of each link is proportional to the number of bills making "
+                "that transition. 'Died' is inferred for bills that stall in committee "
+                "without reaching a floor vote."
+            ),
+        )
     )
 
 

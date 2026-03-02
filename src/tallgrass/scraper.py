@@ -30,7 +30,7 @@ from tallgrass.config import (
     WAVE_DELAY,
     WAVE_WORKERS,
 )
-from tallgrass.models import IndividualVote, RollCall
+from tallgrass.models import BillAction, IndividualVote, RollCall
 from tallgrass.output import save_csvs
 from tallgrass.session import KSSession
 
@@ -134,6 +134,7 @@ class KSVoteScraper:
         self.rollcalls: list[RollCall] = []
         self.legislators: dict[str, dict] = {}  # slug -> info
         self.bill_metadata: dict[str, dict] = {}  # normalized code -> API data
+        self.bill_actions: list[BillAction] = []
         self.failures: list[FetchFailure] = []
         self._member_directory: dict[tuple[str, str], dict] | None = None
 
@@ -517,9 +518,26 @@ class KSVoteScraper:
         for bill in content:
             bill_no = bill.get("BILLNO", "")
             history = bill.get("HISTORY", [])
+            code = _normalize_bill_code(bill_no)
+
+            # Capture lifecycle actions for ALL bills (Sankey funnel)
+            for entry in history:
+                self.bill_actions.append(
+                    BillAction(
+                        session=self.session.output_name,
+                        bill_number=code,
+                        action_code=entry.get("action_code", ""),
+                        chamber=entry.get("chamber", ""),
+                        committee_names=tuple(entry.get("committee_names", [])),
+                        occurred_datetime=entry.get("occurred_datetime", ""),
+                        session_date=entry.get("session_date", ""),
+                        status=entry.get("status", ""),
+                        journal_page_number=str(entry.get("journal_page_number", "")),
+                    )
+                )
+
             has_vote = any("Yea:" in entry.get("status", "") for entry in history)
             if has_vote:
-                code = _normalize_bill_code(bill_no)
                 bills_with_votes.add(code)
                 sponsors = bill.get("ORIGINAL_SPONSOR", [])
                 bill_metadata[code] = {
@@ -1429,6 +1447,7 @@ class KSVoteScraper:
             individual_votes=self.individual_votes,
             rollcalls=self.rollcalls,
             legislators=self.legislators,
+            bill_actions=self.bill_actions,
         )
         step_times.append(("Save CSVs", time.time() - t))
 
@@ -1459,6 +1478,11 @@ class KSVoteScraper:
         print(
             f"  {self.session.output_name}_legislators.csv   - {len(self.legislators)} legislators"
         )
+        if self.bill_actions:
+            print(
+                f"  {self.session.output_name}_bill_actions.csv"
+                f"  - {len(self.bill_actions)} bill actions"
+            )
 
         self._print_failure_summary()
 

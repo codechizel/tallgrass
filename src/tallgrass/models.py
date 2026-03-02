@@ -44,3 +44,18 @@ class RollCall:
     not_voting_count: int = 0
     total_votes: int = 0
     passed: bool | None = None
+
+
+@dataclass(frozen=True)
+class BillAction:
+    """One action in a bill's legislative history."""
+
+    session: str
+    bill_number: str
+    action_code: str
+    chamber: str
+    committee_names: tuple[str, ...]  # frozen dataclass → tuple not list
+    occurred_datetime: str
+    session_date: str
+    status: str
+    journal_page_number: str

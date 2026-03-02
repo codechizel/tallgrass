@@ -2134,7 +2134,14 @@ def main() -> None:
         manifests["item_total_correlations"] = item_total_findings
         save_filtering_manifest(manifests, ctx.run_dir)
 
-        # ── 7b. Geographic district maps (optional) ──
+        # ── 7b. Bill lifecycle (optional) ──
+        bill_actions_df: pl.DataFrame | None = None
+        actions_path = data_dir / f"{ctx.session.output_name}_bill_actions.csv"
+        if actions_path.exists():
+            bill_actions_df = pl.read_csv(actions_path)
+            print(f"  Loaded {bill_actions_df.height} bill actions")
+
+        # ── 7c. Geographic district maps (optional) ──
         district_maps: dict[str, str] | None = None
         try:
             from analysis.geographic import create_district_maps, download_kansas_districts
@@ -2178,6 +2185,7 @@ def main() -> None:
             item_total_findings=item_total_findings,
             strategic_absence=strategic_absence,
             district_maps=district_maps,
+            bill_actions=bill_actions_df,
             plots_dir=ctx.plots_dir,
         )
 

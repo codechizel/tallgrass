@@ -4,7 +4,7 @@ import csv
 from dataclasses import asdict, fields
 from pathlib import Path
 
-from tallgrass.models import IndividualVote, RollCall
+from tallgrass.models import BillAction, IndividualVote, RollCall
 
 
 def save_csvs(
@@ -13,6 +13,7 @@ def save_csvs(
     individual_votes: list[IndividualVote],
     rollcalls: list[RollCall],
     legislators: dict[str, dict],
+    bill_actions: list[BillAction] | None = None,
 ) -> None:
     """Save all collected data to CSV files."""
     print("\n" + "=" * 60)
@@ -62,3 +63,16 @@ def save_csvs(
             row = {k: legislators[slug].get(k, "") for k in fieldnames}
             writer.writerow(row)
     print(f"  {legislators_file} ({len(legislators)} rows)")
+
+    # Bill actions (lifecycle history from KLISS API)
+    if bill_actions:
+        actions_file = output_dir / f"{output_name}_bill_actions.csv"
+        with open(actions_file, "w", newline="", encoding="utf-8") as f:
+            fieldnames = [fld.name for fld in fields(BillAction)]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for action in bill_actions:
+                row = asdict(action)
+                row["committee_names"] = "; ".join(row["committee_names"])
+                writer.writerow(row)
+        print(f"  {actions_file} ({len(bill_actions)} rows)")
