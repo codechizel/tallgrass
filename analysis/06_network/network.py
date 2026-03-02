@@ -2126,7 +2126,7 @@ def plot_edge_weight_distribution(
     for u, v, d in G.edges(data=True):
         pu = G.nodes[u].get("party", "")
         pv = G.nodes[v].get("party", "")
-        w = d["weight"]
+        w = d.get("weight", 0.0)
         if pu == "Republican" and pv == "Republican":
             within_r.append(w)
         elif pu == "Democrat" and pv == "Democrat":
@@ -2570,11 +2570,13 @@ def main() -> None:
             print_header(f"PHASE 3: CENTRALITY MEASURES — {chamber}")
             centralities = compute_centralities(G)
             centralities.write_parquet(ctx.data_dir / f"centrality_{chamber.lower()}.parquet")
+            ctx.export_csv(centralities, f"centrality_{chamber.lower()}.csv", f"Network centrality measures for {chamber} legislators")
             print(f"  Saved: centrality_{chamber.lower()}.parquet")
             chamber_results["centralities"] = centralities
 
             bridges = identify_bridge_legislators(centralities, G)
             bridges.write_parquet(ctx.data_dir / f"bridge_legislators_{chamber.lower()}.parquet")
+            ctx.export_csv(bridges, f"bridge_legislators_{chamber.lower()}.csv", f"Cross-party bridge legislators in {chamber}")
             print(f"  Saved: bridge_legislators_{chamber.lower()}.parquet")
             chamber_results["bridges"] = bridges
 
@@ -2613,6 +2615,7 @@ def main() -> None:
                     [{"legislator_slug": n, "community": c} for n, c in best_partition.items()]
                 )
                 comm_df.write_parquet(ctx.data_dir / f"communities_{chamber.lower()}.parquet")
+                ctx.export_csv(comm_df, f"communities_{chamber.lower()}.csv", f"Network community assignments for {chamber} legislators")
                 print(f"  Saved: communities_{chamber.lower()}.parquet")
 
                 # Composition

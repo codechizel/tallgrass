@@ -410,13 +410,13 @@ def _generate_beta_binomial_key_findings(
         # Most/least loyal from loyalty data
         loyalty_df = result.get("loyalty_df")
         if loyalty_df is not None and loyalty_df.height > 0:
-            sorted_loy = loyalty_df.sort("bayesian_rate", descending=True)
+            sorted_loy = loyalty_df.sort("posterior_mean", descending=True)
             most = sorted_loy.head(1)
             least = sorted_loy.tail(1)
             most_name = most["full_name"][0] if "full_name" in most.columns else "N/A"
-            most_rate = float(most["bayesian_rate"][0])
+            most_rate = float(most["posterior_mean"][0])
             least_name = least["full_name"][0] if "full_name" in least.columns else "N/A"
-            least_rate = float(least["bayesian_rate"][0])
+            least_rate = float(least["posterior_mean"][0])
             findings.append(
                 f"{chamber} most loyal: <strong>{most_name}</strong> ({most_rate:.0%}), "
                 f"least loyal: <strong>{least_name}</strong> ({least_rate:.0%})."
