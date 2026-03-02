@@ -192,7 +192,19 @@ def estimate_beta_params(
     alpha = mu * common
     beta = (1 - mu) * common
 
-    return (max(alpha, 0.5), max(beta, 0.5))
+    # Clamp to minimum 0.5 to avoid degenerate Beta distributions
+    clamped_alpha = max(alpha, 0.5)
+    clamped_beta = max(beta, 0.5)
+    if alpha < 0.5 or beta < 0.5:
+        import warnings
+
+        warnings.warn(
+            f"Beta-Binomial MoM produced alpha={alpha:.4f}, beta={beta:.4f} "
+            f"(clamped to {clamped_alpha:.4f}, {clamped_beta:.4f}). "
+            f"This occurs when party loyalty is very high (mu={mu:.4f}).",
+            stacklevel=2,
+        )
+    return (clamped_alpha, clamped_beta)
 
 
 def tarone_test(y: np.ndarray, n: np.ndarray) -> tuple[float, float]:

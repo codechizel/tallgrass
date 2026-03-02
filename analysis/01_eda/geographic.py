@@ -162,7 +162,7 @@ def create_district_maps(
             continue
         try:
             dist_int = int(dist)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):  # fmt: skip
             continue
         district_data[dist_int] = {
             "full_name": row.get("full_name", "Unknown"),
@@ -218,7 +218,7 @@ def _add_party_layer(
             continue
         try:
             dist = int(dist_field)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):  # fmt: skip
             continue
 
         info = district_data.get(dist, {})
@@ -266,7 +266,7 @@ def _add_ideology_layer(
             continue
         try:
             dist = int(dist_field)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):  # fmt: skip
             continue
 
         info = district_data.get(dist, {})

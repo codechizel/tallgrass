@@ -87,6 +87,7 @@ XGB_MAX_DEPTH = 6
 XGB_LEARNING_RATE = 0.1
 TOP_SHAP_FEATURES = 15
 TOP_SURPRISING_N = 20
+MIN_VOTES_RELIABLE = 10  # minimum holdout votes for reliable per-legislator accuracy
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 HARDEST_N = 8
 
@@ -683,9 +684,10 @@ def train_passage_models(
         )
         return {"skipped": True, "reason": f"Minority class has {min_class_count} member(s)"}
 
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y
+    # Train/test split — keep indices so callers can filter original DataFrame
+    indices = np.arange(len(y))
+    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
+        X, y, indices, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y
     )
 
     # Cross-validation
@@ -741,6 +743,7 @@ def train_passage_models(
         "X_test": X_test,
         "y_train": y_train,
         "y_test": y_test,
+        "test_indices": idx_test,
         "feature_names": feature_cols,
         "temporal_results": temporal_results,
     }
@@ -860,6 +863,11 @@ def compute_per_legislator_accuracy(
     )
     leg_acc = leg_acc.join(hardest, on="legislator_slug", how="left")
 
+    # Flag legislators with too few holdout votes for reliable accuracy
+    leg_acc = leg_acc.with_columns(
+        (pl.col("n_votes") >= MIN_VOTES_RELIABLE).alias("reliable"),
+    )
+
     # Join legislator metadata
     ip_meta = ideal_points.select("legislator_slug", "full_name", "party", "xi_mean")
     leg_acc = leg_acc.join(ip_meta, on="legislator_slug", how="left")
@@ -892,7 +900,14 @@ def detect_hardest_legislators(
     if leg_accuracy.height == 0:
         return []
 
-    bottom = leg_accuracy.sort("accuracy").head(n)
+    # Only rank legislators with enough holdout votes for reliable accuracy
+    if "reliable" in leg_accuracy.columns:
+        reliable = leg_accuracy.filter(pl.col("reliable"))
+    else:
+        reliable = leg_accuracy
+    if reliable.height == 0:
+        reliable = leg_accuracy  # fallback if none are reliable
+    bottom = reliable.sort("accuracy").head(n)
     results: list[HardestLegislator] = []
 
     # Compute cross-party midpoint for explanation logic
@@ -1966,10 +1981,11 @@ def main() -> None:
                         a, u = row["accuracy"], row["auc"]
                         print(f"    {m}: Acc={a:.3f}, AUC={u:.3f}")
 
-                # Surprising bills
+                # Surprising bills — evaluate on holdout test set only (avoid in-sample leakage)
+                test_bill_features = bill_features[passage_result["test_indices"].tolist()]
                 surprising_bills = find_surprising_bills(
                     passage_result["models"]["XGBoost"],
-                    bill_features,
+                    test_bill_features,
                     passage_result["feature_names"],
                     rollcalls,
                     top_n=TOP_SURPRISING_N,

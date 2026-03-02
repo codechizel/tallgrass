@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-01 (R1-R13 report enhancements implemented — ADR-0069)
+**Last updated:** 2026-03-02 (full pipeline audit across all 8 bienniums — 18 findings catalogued)
 
 ---
 
@@ -112,6 +112,92 @@ R enrichment is optional — `--skip-r` for Python-only mode. 21 new tests (85 t
 
 ---
 
+## Pipeline Audit Findings (2026-03-02)
+
+Full-pipeline review across all 8 bienniums (84th-91st), 17 phases each, plus cross-session and dynamic IRT. Prioritized by severity.
+
+### Critical: Code Bugs
+
+#### ~~A1. Python 2 `except` syntax across 9 call sites~~ — Done
+
+**Fixed 2026-03-02.** Ruff's formatter stripped parentheses from multi-exception `except` clauses (known ruff bug). All 9 call sites across 6 files fixed with parenthesized tuple + `# fmt: skip`: `network.py` (3), `geographic.py` (3), `tsa_r_data.py` (1), `experiment_monitor.py` (1), `dynamic_irt_report.py` (1).
+
+### High: Systematic Issues (All Bienniums)
+
+#### A2. Joint hierarchical model fails convergence in all 8 bienniums
+
+Every biennium shows the same joint cross-chamber model pathology (256-4,281 divergences, sigma_chamber R-hat 1.14-2.56, ESS 5-39). Root cause: known ADR-0042 issue — `build_joint_model()` deduplicates by `vote_id` (always unique), preventing shared bill parameters. Per-chamber + Stocking-Lord linking works fine. **Decision: either fix the joint model's bill matching or stop running it** (wastes ~4 min/biennium, produces unusable results).
+
+#### A3. 2D IRT (Phase 04b) fails convergence in most bienniums
+
+Senate ESS catastrophically low across all sessions (ESS 6-52, threshold 200). House marginal. Dim 2 captures little beyond noise (Dim2-vs-PC2 r = 0.12-0.82, mostly weak). **Decision: consider House-only or dropping 04b from pipeline runs.**
+
+#### A4. Dynamic IRT Senate convergence failure (cross-session)
+
+Despite ADR-0070 fixes, Senate still shows R-hat 1.84, ESS 3. 87th/88th have sign-flip artifacts (r=-0.657, r=-0.425). House works (R-hat 1.02, ESS 789). **Decision: investigate Senate reparameterization or restrict dynamic IRT to House-only.**
+
+### Medium: Analysis Methodology
+
+#### ~~A5. Prediction: bill passage surprises evaluated in-sample~~ — Done
+
+**Fixed 2026-03-02.** `find_surprising_bills()` now evaluates on holdout test set only (via `test_indices` returned from `train_passage_models`).
+
+#### A6. Prediction: 90% false-positive asymmetry in surprising votes
+
+18/20 surprising votes are false positives (predicted Yea, actual Nay). Systematic Yea-bias from 73% base rate. Not acknowledged in report.
+
+#### ~~A7. Prediction: per-legislator accuracy lacks minimum sample threshold~~ — Done
+
+**Fixed 2026-03-02.** Added `MIN_VOTES_RELIABLE=10` constant and `reliable` boolean column to per-legislator accuracy output. `detect_hardest_legislators()` now filters to reliable-only before ranking.
+
+#### A8. LCA degenerate class probabilities (91st)
+
+All 172 legislators have max_probability=1.0 (zero membership uncertainty). K=2 recovers party split with perfect certainty. Strong party cohesion in current session likely cause — 89th/86th show better differentiation at K=3/4. Not necessarily a code bug, but worth investigating StepMix EM restarts.
+
+#### A9. Clustering always recovers trivial party split (k=2)
+
+All bienniums: k-means on 1D IRT finds k=2 = exact party labels. ARI=1.0 across methods is meaningless. Within-party optimal k (k=6-7) computed but never propagated to downstream.
+
+#### A10. Network betweenness sparsity (66-73% zeros)
+
+Most legislators have betweenness=0.0 across all bienniums. Synthesis bridge-builder detection relies on betweenness, but metric is too sparse. Eigenvector/PageRank centrality would be less sparse.
+
+#### A11. House IRT sensitivity to minority threshold
+
+Several bienniums show sensitive House IRT when threshold changes from 2.5% to 10% (r=0.69-0.80). Not a bug — near-unanimous votes carry signal — but threshold dependence should be documented in reports.
+
+#### ~~A12. Beta-binomial parameter clamping not logged~~ — Done
+
+**Fixed 2026-03-02.** `estimate_beta_params()` now emits a `warnings.warn()` when alpha or beta is clamped to 0.5, including the original and clamped values.
+
+#### A13. Hierarchical shrinkage_pct nulls in synthesis (all bienniums)
+
+35% Senate / 23% House legislators have null `hier_shrinkage_pct` in synthesis DataFrame. This propagates as report gaps. Extends beyond the 84th-specific backlog item #2 — affects all bienniums.
+
+#### ~~A14. TSA imputation sensitivity silently returns None~~ — Done
+
+**Fixed 2026-03-02.** Now prints "Imputation sensitivity: skipped (insufficient complete cases)" when the check returns None.
+
+#### ~~A15. TSA penalty sensitivity not summarized in run log~~ — Done
+
+**Fixed 2026-03-02.** Now prints "Penalty sweep [1-50]: max N changepoint(s) at penalty=X.X" to the run log.
+
+### Low: Known Limitations
+
+#### A16. Small Senate Democrat groups (all bienniums)
+
+Senate Democrats range 8-11 across all bienniums. Hierarchical shrinkage unreliable. Already flagged with warnings. Consistently marginal R-hats expected.
+
+#### A17. Bipartite BiCM backbone extremely sparse (Senate)
+
+95% edge reduction, 73.8% senators isolated. Too sparse for centrality analysis. P-value threshold (0.01) may be too conservative for partisan networks.
+
+#### A18. Bill communities mirror party split (all bienniums)
+
+Phase 06b consistently finds 2 bill communities = party voting pattern. Analytically redundant with clustering/IRT.
+
+---
+
 ## Next Up (Backlog)
 
 ### 1. External Validation Name Matcher: District Tiebreaker
@@ -120,7 +206,7 @@ Phase 14 (Shor-McCarty) uses last-name-only matching in `_phase2_last_name_match
 
 ### 2. Null `hier_shrinkage_pct` in Synthesis (84th)
 
-In the 84th pipeline run, 28 House legislators (beyond the 2 expected IRT anchors) and 3 Senate legislators have null `hier_shrinkage_pct` in `legislator_df_{chamber}.parquet`. This is 26% of House and 14% of Senate. The calculation in `hierarchical.py:1123-1137` sets shrinkage to null when `abs(flat - party_mean) < SHRINKAGE_MIN_DISTANCE` (0.5) to avoid division-by-near-zero producing misleading percentages. Needs investigation: is 26% null rate normal for the 84th given its compressed ideological range, or is the threshold too aggressive? Compare null rates across all 8 bienniums.
+In the 84th pipeline run, 28 House legislators (beyond the 2 expected IRT anchors) and 3 Senate legislators have null `hier_shrinkage_pct` in `legislator_df_{chamber}.parquet`. This is 26% of House and 14% of Senate. The calculation in `hierarchical.py:1123-1137` sets shrinkage to null when `abs(flat - party_mean) < SHRINKAGE_MIN_DISTANCE` (0.5) to avoid division-by-near-zero producing misleading percentages. Needs investigation: is 26% null rate normal for the 84th given its compressed ideological range, or is the threshold too aggressive? Compare null rates across all 8 bienniums. See also A13 (affects all bienniums, not just 84th).
 
 ### 3. 84th Biennium Pipeline Re-run
 

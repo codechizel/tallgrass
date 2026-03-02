@@ -1544,6 +1544,8 @@ def main() -> None:
                     imp_corr = compute_imputation_sensitivity(matrix, slugs, vote_ids, leg_meta)
                     if imp_corr is not None:
                         print(f"  Imputation sensitivity: r={imp_corr:.3f}")
+                    else:
+                        print("  Imputation sensitivity: skipped (insufficient complete cases)")
                     chamber_results["imputation_correlation"] = imp_corr
 
                     chamber_results["rolling_df"] = rolling_df
@@ -1630,6 +1632,18 @@ def main() -> None:
                         sensitivity = run_penalty_sensitivity(rep_weekly["mean_rice"].to_numpy())
                         plot_penalty_sensitivity(sensitivity, chamber, ctx.plots_dir)
                         cp_results["sensitivity"] = sensitivity
+                        max_cps = max(
+                            s["n_changepoints"] for s in sensitivity
+                        )
+                        max_pen = next(
+                            s["penalty"]
+                            for s in sensitivity
+                            if s["n_changepoints"] == max_cps
+                        )
+                        print(
+                            f"  Penalty sweep [1-50]: max {max_cps}"
+                            f" changepoint(s) at penalty={max_pen:.1f}"
+                        )
 
                     # R enrichment: CROPS + Bai-Perron (per-party)
                     if r_available:
