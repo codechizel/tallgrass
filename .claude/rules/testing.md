@@ -76,7 +76,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_lca.py` — vote matrix construction, class enumeration, BIC selection, Salsa effect detection, IRT cross-validation, ARI comparison, within-party LCA, discriminating bills, constants consistency (~37 tests)
 - `tests/test_irt_2d.py` — sign-flip logic, PCA correlation, convergence constants (~16 tests)
 - `tests/test_bill_actions.py` — BillAction dataclass construction, CSV export (headers, committee join, roundtrip, row counts) (~17 tests)
-- `tests/test_bill_lifecycle.py` — bill lifecycle Sankey data: action categorization, stage transitions, chamber filtering, empty/edge cases (~22 tests)
+- `tests/test_bill_lifecycle.py` — bill lifecycle Sankey data: action categorization, stage transitions, died inference, chamber filtering, Sankey plot, constants (~31 tests)
 
 ## Integration & Structure Test Files
 
