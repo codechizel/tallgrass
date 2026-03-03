@@ -2,7 +2,7 @@
 
 ## Output Files
 
-The scraper produces three CSV files per session in `data/kansas/{output_name}/` (e.g., `data/kansas/91st_2025-2026/`).
+The scraper produces four CSV files per session in `data/kansas/{output_name}/` (e.g., `data/kansas/91st_2025-2026/`). A 5th CSV (`bill_texts`) is produced by the separate `tallgrass-text` CLI.
 
 ---
 
@@ -94,14 +94,6 @@ One row per legislator (~172 rows for a full session).
 
 ---
 
-## Joins
-
-- votes → rollcalls: join on `vote_id`
-- votes → legislators: join on `legislator_slug` = `slug`
-- rollcalls → legislators: indirect via votes table
-
----
-
 ## Notes for Analysis
 
 - `vote_datetime` is more precise than `vote_date` and better for deduplication and temporal ordering
@@ -109,6 +101,55 @@ One row per legislator (~172 rows for a full session).
 - For passage analysis, filter to `vote_type` in ("Final Action", "Emergency Final Action") to exclude procedural/committee votes
 - `short_title` from the API is generally cleaner and more concise than `bill_title` from HTML
 - The 5 vote categories are exhaustive — every legislator falls into exactly one per roll call
+
+## bill_actions CSV (`{output_name}_bill_actions.csv`)
+
+One row per bill lifecycle action. Sourced from KLISS API HISTORY data (89th+ only; pre-KLISS sessions may have limited or no data).
+
+| Field | Type | Description |
+|---|---|---|
+| `session` | str | Session label |
+| `bill_number` | str | Bill identifier |
+| `action_code` | str | KLISS action code |
+| `chamber` | str | "Senate" or "House" |
+| `committee_names` | str | Semicolon-joined committee names (may be empty) |
+| `occurred_datetime` | str | ISO 8601 datetime of the action |
+| `session_date` | str | Legislative session date |
+| `status` | str | Action status text |
+| `journal_page_number` | str | Journal page reference |
+
+**Primary key**: `bill_number` + `occurred_datetime` + `action_code`
+
+---
+
+## bill_texts CSV (`{output_name}_bill_texts.csv`)
+
+One row per bill document version. Produced by the `tallgrass-text` CLI (`just text`), not the main vote scraper.
+
+| Field | Type | Description |
+|---|---|---|
+| `session` | str | Session label, e.g., "91st (2025-2026)" |
+| `bill_number` | str | Bill identifier, e.g., "SB 55" — joins to rollcalls/votes on `bill_number` |
+| `document_type` | str | "introduced" or "supp_note" (Phase 1 scope) |
+| `version` | str | Version identifier, e.g., "00_0000" |
+| `text` | str | Extracted full text from PDF |
+| `page_count` | int | Number of pages in source PDF |
+| `source_url` | str | Provenance URL to the original PDF |
+
+**Composite key**: `bill_number` + `document_type` + `version`
+
+---
+
+## Joins (Updated)
+
+- votes -> rollcalls: join on `vote_id`
+- votes -> legislators: join on `legislator_slug` = `slug`
+- rollcalls -> legislators: indirect via votes table
+- rollcalls -> bill_texts: join on `bill_number`
+- rollcalls -> bill_actions: join on `bill_number`
+- bill_texts -> bill_actions: join on `bill_number`
+
+---
 
 ## ODT Sessions (2011-2014)
 

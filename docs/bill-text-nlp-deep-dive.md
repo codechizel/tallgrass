@@ -20,6 +20,7 @@ The highest-value additions are: (1) **BERTopic on full bill text** to replace N
 
 | Component | Location | What it does |
 |-----------|----------|--------------|
+| **Bill text retrieval (BT1)** | `src/tallgrass/text/` | **Completed 2026-03-02.** `tallgrass-text` CLI downloads bill PDFs, extracts text via `pdfplumber`. Multi-state `StateAdapter` Protocol + `KansasAdapter`. Output: `bill_texts.csv`. ADR-0083. |
 | NMF topic features | `analysis/08_prediction/nlp_features.py` | TF-IDF + NMF (K=6) on `short_title`, produces 6 topic proportion columns |
 | Topic visualization | `nlp_features.py:plot_topic_words()` | Multi-panel bar chart of top words per topic |
 | Sponsor party feature | `analysis/08_prediction/prediction.py` | Binary `sponsor_party_R` from `sponsor_slugs` |
@@ -27,6 +28,7 @@ The highest-value additions are: (1) **BERTopic on full bill text** to replace N
 | Bill title extraction | `src/tallgrass/scraper.py:687` | `_extract_bill_title()` from `<h4>` |
 | Short title from API | `src/tallgrass/scraper.py:1122-1125` | KLISS API `SHORTTITLE` field |
 | Sponsor extraction | `src/tallgrass/scraper.py:639` | `_extract_sponsor()` parses `<a>` hrefs |
+| Shared bill discovery | `src/tallgrass/bills.py` | HTML + JS bill URL discovery, shared between vote scraper and text adapter |
 
 ### Why NMF on short titles was the right call (and why it's now the ceiling)
 
@@ -108,9 +110,9 @@ OpenStates (now under Plural, `pluralpolicy.com`) provides JSON bulk downloads i
 
 **Assessment:** Supplementary. Less reliable for Kansas-specific work than direct scraping or LegiScan. More useful if comparing Kansas with other states.
 
-### Recommendation
+### Recommendation — Implemented
 
-**Start with Option A (direct PDF scraping).** You already have the URL pattern, the session logic, and the fetch infrastructure. Add `pdfplumber` to extract text. Use supplemental notes as the primary text source for topic modeling — they're shorter, cleaner, and more semantically dense than raw bill text. Fall back to LegiScan if PDF extraction quality is insufficient.
+**Option A (direct PDF scraping) implemented as BT1 (2026-03-02, ADR-0083).** The `tallgrass-text` CLI downloads introduced versions and supplemental notes, extracts text via `pdfplumber`, and exports to `bill_texts.csv`. Multi-state-ready `StateAdapter` Protocol with `KansasAdapter` as first implementation. Shared bill discovery module (`bills.py`) extracted from scraper. LegiScan remains available as a fallback for cross-state expansion (BT5).
 
 ---
 

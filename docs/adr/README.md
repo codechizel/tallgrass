@@ -35,6 +35,7 @@ What are the trade-offs?
 | [0020](0020-historical-session-support.md) | Historical session support (2011-2026) |
 | [0036](0036-scraper-hardening.md) | Scraper hardening |
 | [0082](0082-merge-special-sessions-into-parent-bienniums.md) | Merge special sessions into parent bienniums |
+| [0083](0083-bill-text-retrieval.md) | Bill text retrieval — multi-state-ready architecture |
 
 ### Dimensionality Reduction
 
@@ -229,6 +230,7 @@ What are the trade-offs?
 | [0080](0080-code-audit-2026-03-02-resolution.md) | Code audit 2026-03-02 — synthesis manifest key fix, 4 remaining cleanup items | Accepted | 2026-03-02 |
 | [0081](0081-sponsor-slugs-phase-11-12-integration.md) | Sponsor slugs integration into Synthesis (n_bills_sponsored) and Profiles (sponsorship section, defection sponsor) | Accepted | 2026-03-02 |
 | [0082](0082-merge-special-sessions-into-parent-bienniums.md) | Merge special sessions into parent bienniums (post-scrape utility, idempotent, column alignment) | Accepted | 2026-03-02 |
+| [0083](0083-bill-text-retrieval.md) | Bill text retrieval — multi-state-ready architecture (StateAdapter Protocol, shared bill discovery, pdfplumber) | Accepted | 2026-03-02 |
 
 ## Creating a New ADR
 

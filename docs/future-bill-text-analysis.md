@@ -47,17 +47,21 @@ Scrape or retrieve full bill text from kslegislature.gov, then use it to:
 
 ---
 
-## Open Questions
+## Open Questions — Answered
 
-1. **Bill text availability** — Does kslegislature.gov serve full bill text in a scrapeable format? HTML, PDF, both? Does it vary by session?
-2. **Text scope** — Full enrolled text, or just the introduced version? Amendments create multiple versions per bill.
-3. **Corpus size** — How much text per biennium? Impacts model choice (LDA vs BERTopic) and embedding storage.
-4. **Integration point** — Does bill text become a new scraper output (a 4th CSV?), or a separate data pipeline that joins on `bill_number`?
+All four original questions have been resolved by BT1 implementation (2026-03-02, ADR-0083):
+
+1. **Bill text availability** — PDF only, deterministic URLs. Pattern: `{li_prefix}/measures/documents/{code}_{version}.pdf`
+2. **Text scope** — Introduced version + supplemental notes in Phase 1. Committee-amended and enrolled versions deferred.
+3. **Corpus size** — Varies by biennium. Extracted via `pdfplumber` into `bill_texts.csv`.
+4. **Integration point** — Separate CLI (`tallgrass-text`) producing a 5th CSV that joins on `bill_number`. Not integrated into the vote scraper.
 
 ---
 
 ## Related
 
-- Phase 6+ (NLP Bill Text Features): Uses `short_title` only, NMF topics. See `analysis/06_prediction/`.
-- TBIP rejection: `docs/method-evaluation.md` — revisit once full text is available.
-- Roadmap: `docs/roadmap.md` — this phase is not yet scheduled.
+- **BT1 implementation**: `src/tallgrass/text/` subpackage — `StateAdapter` Protocol, `KansasAdapter`, `pdfplumber` extraction (ADR-0083)
+- Phase 6+ (NLP Bill Text Features): Uses `short_title` only, NMF topics. See `analysis/08_prediction/`.
+- Bill text NLP deep dive: `docs/bill-text-nlp-deep-dive.md` — comprehensive survey (supersedes this document)
+- TBIP: `docs/method-evaluation.md` — unrejected now that bill text is available (BT3 planned)
+- Roadmap: `docs/roadmap.md` — BT1 complete, BT2-BT5 planned

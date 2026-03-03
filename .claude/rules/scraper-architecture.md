@@ -29,7 +29,39 @@ Two-phase: concurrent fetch via ThreadPoolExecutor (MAX_WORKERS=5), then sequent
 - `FetchResult` — typed HTTP result; `content_bytes` for binary downloads (ODT); cached as `.bin`
 - `FetchFailure` — recorded with bill context (number, motion, path); written to `failure_manifest.json`
 - `VoteLink` — frozen dataclass for vote page links; `is_odt=True` routes to ODT parser
+- `BillInfo` — frozen dataclass in `bills.py` (bill_number, url, raw_entry)
+- `BillDocumentRef` — frozen dataclass in `text/models.py` (bill_number, document_type, url, version, session)
+- `BillText` — frozen dataclass in `text/models.py` (extracted text + metadata)
 - Module constants: `_BILL_URL_RE` (compiled regex), `VOTE_CATEGORIES` (5-tuple), `_normalize_bill_code()`
+
+## Shared Bill Discovery (`bills.py`)
+
+Bill URL discovery logic (HTML listing + JS fallback) is shared between the vote scraper and the bill text adapter. Extracted from `scraper.py` into `src/tallgrass/bills.py`:
+
+- `discover_bill_urls(session, get_fn, base_url)` — returns `list[str]` of bill page URLs
+- `discover_bills(session, get_fn, base_url)` — returns `list[BillInfo]` with parsed bill numbers
+- `parse_js_array()`, `parse_js_bill_data()` — JS data file parsing (unquoted keys, quoted keys)
+- `bill_sort_key()` — natural sort: chamber prefix then numeric part
+- `url_to_bill_number()` — extracts "SB 55" from URL path
+
+The `get_fn: Callable[[str], object] | None` parameter decouples from scraper instance state. `KSVoteScraper.get_bill_urls()` delegates here. `KansasAdapter.discover_bills()` calls the same functions via `BillTextFetcher.get_html()`.
+
+## Bill Text Subpackage (`text/`)
+
+Separate subpackage for bill text retrieval, independent of the vote scraper:
+
+```
+src/tallgrass/text/
+  models.py        — BillDocumentRef, BillText frozen dataclasses
+  protocol.py      — StateAdapter Protocol (multi-state contract)
+  kansas.py        — KansasAdapter: deterministic PDF URL construction
+  fetcher.py       — BillTextFetcher: concurrent download + text extraction
+  extractors.py    — PDF extraction via pdfplumber, text cleaning (pure functions)
+  output.py        — CSV export (bill_texts.csv)
+  cli.py           — tallgrass-text entry point
+```
+
+Multi-state-ready: `StateAdapter` Protocol defines the contract; adding a state requires one new file. `BillTextFetcher` is state-agnostic — takes `list[BillDocumentRef]` from any adapter. See ADR-0083.
 
 ## Static Parsing Helpers
 

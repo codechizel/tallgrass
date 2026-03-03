@@ -4,7 +4,7 @@ Code audit, ecosystem comparison, data quality review, and recommendations for t
 
 ## Scope
 
-This review covers the full scraper codebase (2,332 lines across 7 files), all 8 bienniums of scraped data (84th-91st, 2011-2026), the test suite (202 scraper-specific tests), and a survey of comparable open-source legislative scraping projects.
+This review covers the full scraper codebase (2,332 lines across 7 files + bill text subpackage), all 8 bienniums of scraped data (84th-91st, 2011-2026), the test suite (312 scraper-specific tests), and a survey of comparable open-source legislative scraping projects.
 
 ## Ecosystem Survey
 
@@ -68,13 +68,15 @@ The quote from the profiles design doc — "Normalize upstream in the scraper. T
 The 4-step pipeline is clean and well-separated:
 
 ```
-get_bill_urls()          → list[str]           # Step 1: discover bills
+get_bill_urls()          → list[str]           # Step 1: discover bills (delegates to bills.py)
 _filter_bills_with_votes() → (filtered, metadata)  # Step 1b: KLISS API pre-filter
 get_vote_links()         → list[VoteLink]      # Step 2: scan for vote links
 parse_vote_pages()       → mutates self.*      # Step 3: parse HTML/ODT
 enrich_legislators()     → mutates self.*      # Step 4: fetch party/district
-save_csvs()              → writes 3 CSV files  # Output
+save_csvs()              → writes 4 CSV files  # Output (votes, rollcalls, legislators, bill_actions)
 ```
+
+Bill discovery logic (HTML listing + JS fallback) is extracted into `src/tallgrass/bills.py` — shared between the vote scraper and the bill text adapter (`src/tallgrass/text/`). See ADR-0083.
 
 The two-phase concurrency pattern (concurrent fetch via `ThreadPoolExecutor`, sequential parse) is sound. All shared state mutation happens in the sequential phase. Rate limiting is thread-safe via `threading.Lock()`. No data races observed.
 
@@ -153,7 +155,7 @@ All 10 HTML parsing pitfalls are preserved — each static method's docstring ex
 
 ### Output Integrity
 
-All 8 bienniums produce three well-formed CSVs. Cross-validation results:
+All 8 bienniums produce four well-formed CSVs (votes, rollcalls, legislators, bill_actions). A 5th CSV (bill_texts) is produced by the separate `tallgrass-text` CLI. Cross-validation results:
 
 | Check | 86th-91st | 84th-85th |
 |---|---|---|
@@ -236,7 +238,7 @@ The HTTP and orchestration layers have no direct test coverage:
 | `_fetch_many()` — concurrent fetch + retry waves | ~80 | 0 | High — concurrency, wave mechanics |
 | `_rate_limit()` — thread-safe rate limiting | ~10 | 0 | Medium — lock correctness |
 | `_filter_bills_with_votes()` — KLISS API | ~65 | 0 | Medium — API format handling |
-| `get_bill_urls()` — bill discovery | ~40 | 0 | Medium — HTML + JS fallback flow |
+| `get_bill_urls()` — bill discovery | ~40 | 23 | **Done** — extracted to `bills.py`, tested in `test_bills.py` |
 | `get_vote_links()` — vote link scanning | ~55 | 0 | Low — tested via HTML parsing tests |
 | `_load_member_directory()` — member lookup | ~65 | 0 | Medium — JS fallback, ambiguity handling |
 | `enrich_legislators()` — party/district fetch | ~35 | 0 | Low — parsing tested directly via `_extract_party_and_district()` static method (M2) |
