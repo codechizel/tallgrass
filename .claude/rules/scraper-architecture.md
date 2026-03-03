@@ -71,14 +71,20 @@ Separate subpackage for scraping KanFocus (kanfocus.com) vote tally pages:
 src/tallgrass/kanfocus/
   models.py      — KanFocusVoteRecord, KanFocusLegislator frozen dataclasses
   session.py     — session ID mapping (106-119), URL construction, vote_id generation
-  parser.py      — parse_vote_page() pure function, legislator entry parsing
+  parser.py      — parse_vote_page() pure function, HTML-to-text + legislator parsing
   slugs.py       — slug generation from "Name, R-32nd" format + cross-reference
-  fetcher.py     — KanFocusFetcher: HTTP + file cache + rate limiting + enumeration
+  fetcher.py     — KanFocusFetcher: HTTP + Chrome cookie auth + cache + rate limiting
   output.py      — convert to standard format + gap-fill merge
-  cli.py         — tallgrass-kanfocus entry point
+  cli.py         — tallgrass-kanfocus entry point + data archiving
 ```
 
-Coverage: 78th-91st (1999-2026). Uses `kf_` prefix for vote_ids. Conservative rate limiting (7s delay, single-threaded). See ADR-0088.
+Coverage: 78th-91st (1999-2026). Uses `kf_` prefix for vote_ids. Conservative rate limiting (7s default, 12s recommended during business hours). See ADR-0088.
+
+**Authentication**: Extracts session cookies from Chrome's encrypted cookie database on macOS (Keychain AES key, PBKDF2, 32-byte app-bound prefix skip). Requires active KanFocus login in Chrome.
+
+**Parser**: Auto-detects HTML input and converts to text via BeautifulSoup before regex extraction. Handles newline-separated metadata format from `<table>` layout and strips `document.write()` JS from legislator sections.
+
+**Data archiving**: After each successful biennium, raw HTML cache is copied to `data/kanfocus_archive/{output_name}/`. `--clear-cache` blocked unless archive exists. Cache is restart-safe (hash-keyed HTML files).
 
 ## Static Parsing Helpers
 
