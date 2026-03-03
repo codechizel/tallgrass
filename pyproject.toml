@@ -44,6 +44,9 @@ dev = [
     "ruptures>=1.1",
     "stepmix>=2.2.1",
     "bicm>=3.1",
+    "bertopic>=0.17",
+    "fastembed>=0.4",
+    "hdbscan>=0.8.31",
     "fastcluster>=1.3",
     "itables>=2.6",
     "plotly>=6.0",
@@ -51,6 +54,11 @@ dev = [
     "folium>=0.18",
     "geopandas>=1.0",
     "fpdf2>=2.8.7",
+]
+
+[project.optional-dependencies]
+classify = [
+    "anthropic>=0.40",
 ]
 
 [build-system]
@@ -117,6 +125,10 @@ replace-imports-with-any = [
     "itables.**",
     "plotly.**",
     "pyvis.**",
+    "bertopic.**",
+    "fastembed.**",
+    "hdbscan.**",
+    "anthropic.**",
 ]
 # analysis/ scripts use bare imports (not a package) — allow them.
 # Scripts in numbered subdirectories (e.g. analysis/07_indices/) fall back to
@@ -209,6 +221,13 @@ allowed-unresolved-imports = [
     "bipartite_report",
     "analysis.bipartite",
     "analysis.bipartite_report",
+    "bill_text_data",
+    "bill_text_classify",
+    "bill_text_report",
+    "analysis.bill_text",
+    "analysis.bill_text_data",
+    "analysis.bill_text_classify",
+    "analysis.bill_text_report",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~2084)
+just test                    # run all tests (~2113)
 just test-scraper            # scraper tests only (-m scraper, ~312)
 just test-fast               # skip slow tests (-m "not slow")
 just check                   # full check (lint + typecheck + tests)
@@ -57,6 +57,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_text_fetcher.py` — BillTextFetcher download, caching, HTML error detection, concurrent fetch (~9 tests)
 - `tests/test_text_output.py` — bill_texts.csv export: headers, content, roundtrip, multiline text (~8 tests)
 - `tests/test_text_cli.py` — tallgrass-text argument parsing, list-sessions, entry point (~9 tests)
+- `tests/test_bill_text.py` — Phase 18 bill text analysis: data loading, preprocessing, embedding cache, CAP classification (mocked), similarity, topic-party cohesion, report builder, plotting smoke tests, CLI args (~53 tests)
 
 ## Analysis Test Files
 

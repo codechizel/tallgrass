@@ -147,6 +147,10 @@ dynamic-irt *args:
 wnominate *args:
     uv run python analysis/17_wnominate/wnominate.py {{args}}
 
+# Run bill text analysis (BERTopic topics + optional CAP classification)
+text-analysis *args:
+    uv run python analysis/18_bill_text/bill_text.py {{args}}
+
 # Run full analysis pipeline for a session (all phases grouped under one run ID)
 pipeline session="2025-26" *args:
     #!/usr/bin/env bash

@@ -32,6 +32,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 12. Dynamic IRT | [dynamic_irt.md](dynamic_irt.md) | State-space IRT, random walk evolution, per-party tau, polarization decomposition, bridge coverage, post-hoc sign correction (ADR-0068) |
 | 13. W-NOMINATE + OC | [wnominate.md](wnominate.md) | Validation-only; R subprocess, polarity via PCA, sign alignment, 3×3 correlation matrix |
 | 14. PPC + LOO-CV | [ppc.md](ppc.md) | Validation-only; manual log-likelihood, Q3 local dependence, PSIS-LOO model comparison, graceful degradation |
+| 15. Bill Text Analysis | [bill_text.md](bill_text.md) | BERTopic topics (FastEmbed + HDBSCAN), CAP classification (Claude API, optional), bill similarity, caucus-splitting scores |
 
 ## Pipeline Phase (Experimental)
 

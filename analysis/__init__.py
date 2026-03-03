@@ -24,6 +24,7 @@ Pipeline phases (in order):
   15_tsa              — Time series analysis (drift + changepoints)
   16_dynamic_irt      — Dynamic ideal points (state-space IRT)
   17_wnominate        — W-NOMINATE + Optimal Classification validation
+  18_bill_text         — Bill text analysis (BERTopic + CAP classification)
 
 Shared infrastructure at root: run_context.py, report.py
 
@@ -100,6 +101,10 @@ _MODULE_MAP: dict[str, str] = {
     "wnominate_data": "17_wnominate",
     "wnominate_report": "17_wnominate",
     "irt_beta_experiment": "experimental",
+    "bill_text": "18_bill_text",
+    "bill_text_data": "18_bill_text",
+    "bill_text_classify": "18_bill_text",
+    "bill_text_report": "18_bill_text",
 }
 
 
