@@ -8,7 +8,7 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~1952)
+just test                    # run all tests (~1958)
 just test-scraper            # scraper tests only (-m scraper, ~282)
 just test-fast               # skip slow tests (-m "not slow", ~1873)
 just check                   # full check (lint + typecheck + tests)
@@ -68,7 +68,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_network.py` — network construction, centrality, Leiden/CPM community detection, bridges, threshold sweep, polarization, disparity filter backbone, extreme edge weights (~53 tests)
 - `tests/test_bipartite.py` — bipartite graph construction, bill polarization, bipartite betweenness, bill projection, bill communities, BiCM backbone extraction, backbone comparison, constants (~50 tests)
 - `tests/test_indices.py` — Rice formula, party votes, ENP, unity/maverick, co-defection, Carey UNITY, fractured votes (~37 tests)
-- `tests/test_synthesis.py` — synthesis data loading, build_legislator_df joins, _extract_best_auc, sponsor summary, detect_all integration, minority mavericks, Democrat-majority paradox (~51 tests)
+- `tests/test_synthesis.py` — synthesis data loading, manifest key consistency, build_legislator_df joins, _extract_best_auc, sponsor summary, detect_all integration, minority mavericks, Democrat-majority paradox (~54 tests)
 - `tests/test_synthesis_detect.py` — maverick, bridge-builder, metric paradox detection, annotation slugs, threshold constants, percentile modes (~33 tests)
 - `tests/test_external_validation.py` — SM name normalization, parsing, biennium filtering, matching, correlations, outliers (~65 tests)
 - `tests/test_external_validation_dime.py` — DIME name normalization, parsing, biennium filtering, min-givers filter, matching, overlap detection, correlation reuse (~43 tests)
