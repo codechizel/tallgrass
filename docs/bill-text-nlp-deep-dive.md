@@ -2,7 +2,7 @@
 
 A comprehensive survey of tools, techniques, data sources, and integration strategies for adding full bill text analysis to the tallgrass pipeline.
 
-**Last updated:** 2026-03-02
+**Last updated:** 2026-03-03
 
 ---
 
@@ -334,7 +334,7 @@ Davoodi & Goldwasser at Purdue have produced the most comprehensive academic wor
 
 ### Issue-specific ideal points (Shin 2024)
 
-An R package (`issueirt`) that estimates topic-specific ideal points using roll call votes + user-supplied issue labels. It first estimates multidimensional ideal points, then projects onto issue-specific axes. **Key integration point:** topic labels from BERTopic/CAP classification could feed directly into this model, producing per-policy-area ideal point estimates. This bridges the text analysis (Phase 18) with the IRT infrastructure (Phase 04/10). The R dependency is already established in the pipeline (Phase 15 TSA, Phase 17 W-NOMINATE).
+An R package (`issueirt`) that estimates topic-specific ideal points using roll call votes + user-supplied issue labels. It first estimates multidimensional ideal points, then projects onto issue-specific axes. **Implemented as Phase 19** (ADR-0087) using a simpler approach: topic-stratified flat IRT (reusing Phase 04 infrastructure) rather than the `issueirt` R package. Kansas voting is fundamentally 1D (Phase 04b proved Dim 2 is noise), so the 2D Bingham prior machinery in `issueirt` is unnecessary. Phase 19 runs Phase 04's 2PL IRT on per-topic vote subsets from Phase 18's BERTopic/CAP topic assignments, producing per-policy-area ideal point estimates with sign alignment against the full model.
 
 ### Systematic review of text-based ideal points (2025)
 
@@ -350,7 +350,7 @@ The field has moved from "can NLP handle legislative text?" (2018-2022) to "whic
 
 ### Published integration patterns
 
-The academic literature shows five main patterns for combining text with roll-call analysis. Tallgrass should use Pattern 4 as the primary approach, with Patterns 3 and 5 as future extensions.
+The academic literature shows five main patterns for combining text with roll-call analysis. Tallgrass uses Pattern 4 as the primary approach. Patterns 3 and 5 are now implemented as Phase 18b and Phase 19 respectively.
 
 | Pattern | Description | Example | Fit for tallgrass |
 |---------|-------------|---------|-------------------|
@@ -358,9 +358,9 @@ The academic literature shows five main patterns for combining text with roll-ca
 | **2. Embedding prediction** | Bill text → averaged word embeddings; legislator ideal vectors; bilinear vote prediction | Kraft et al. 2016 | Simpler than Pattern 1, still complex |
 | **3. Text-based ideal points** | Ideal points from text alone, compared post-hoc to vote-based | TBIP (Vafa et al. 2020) | Validation of IRT — Phase 18b (embedding-vote approach, ADR-0086) |
 | **4. Two-stage pipeline** | Extract text features independently, use as covariates in vote/ideal point models | Most common in practice | **Primary approach** — extends Phase 08 |
-| **5. Issue-specific IRT** | Topic labels feed into hierarchical IRT for per-policy-area ideal points | Shin 2024 (`issueirt` R package) | Bridges text and IRT — future extension |
+| **5. Issue-specific IRT** | Topic labels feed into hierarchical IRT for per-policy-area ideal points | Shin 2024 (`issueirt` R package) | Bridges text and IRT — Phase 19 (topic-stratified flat IRT, ADR-0087) |
 
-Pattern 4 is what Phase 08 already does with `sponsor_party_R` — extending it with richer text features is a natural evolution. Pattern 5 (issue-specific ideal points) is particularly appealing: it would produce per-policy-area ideal point estimates (e.g., "how conservative is this legislator on education vs. criminal justice?"), directly serving the nontechnical audience. The `issueirt` R package integrates via R subprocess, following the established pattern from Phase 15 and Phase 17.
+Pattern 4 is what Phase 08 already does with `sponsor_party_R` — extending it with richer text features is a natural evolution. Pattern 5 (issue-specific ideal points) is implemented as Phase 19 (ADR-0087): topic-stratified flat IRT on per-topic vote subsets from Phase 18's BERTopic/CAP topics, producing per-policy-area ideal point estimates (e.g., "how conservative is this legislator on education vs. criminal justice?"). Uses existing Phase 04 IRT infrastructure rather than the `issueirt` R package — Kansas voting is fundamentally 1D, making the 2D Bingham prior unnecessary.
 
 ### Phase architecture
 
@@ -407,6 +407,10 @@ Phase 18 (Bill Text Analysis) ✓ DONE 2026-03-02
 Phase 18b (Text-Based Ideal Points) ✓ DONE 2026-03-03
     depends on: Phase 18 embeddings, Phase 04/10 IRT results
     produces: text-derived ideal points, validation correlations
+                ↓
+Phase 19 (Issue-Specific Ideal Points) ✓ DONE 2026-03-03
+    depends on: Phase 18 topics/CAP, Phase 01 (EDA), Phase 04 IRT
+    produces: per-topic ideal points, cross-topic correlations, outlier detection
 ```
 
 ### Phase numbering
@@ -487,6 +491,14 @@ The four original open questions from `docs/future-bill-text-analysis.md` are no
 - Classic TBIP inapplicable: ~92% committee sponsorship, only ~27 individual sponsors
 - Vote-weighted bill embeddings + PCA → text-derived ideal points
 - Cross-validated against IRT (flat + hierarchical), 36 tests
+
+### Phase 5: Issue-specific ideal points ✓ DONE 2026-03-03
+
+- Topic-stratified flat IRT: Phase 04's 2PL IRT on per-topic vote subsets from Phase 18 (ADR-0087)
+- Two taxonomies: BERTopic (data-driven) + CAP (standardized, cross-state comparable)
+- Relaxed thresholds for smaller per-topic models: R-hat < 1.05, ESS > 200
+- Cross-topic correlation heatmap, ideological profiles, outlier detection, anchor stability
+- Per-topic sign alignment against full IRT, 53 tests
 
 ---
 

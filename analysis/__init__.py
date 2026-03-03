@@ -26,6 +26,7 @@ Pipeline phases (in order):
   17_wnominate        — W-NOMINATE + Optimal Classification validation
   18_bill_text         — Bill text analysis (BERTopic + CAP classification)
   18b_tbip             — Text-based ideal points (embedding-vote approach)
+  19_issue_irt         — Issue-specific ideal points (topic-stratified IRT)
 
 Shared infrastructure at root: run_context.py, report.py
 
@@ -109,6 +110,9 @@ _MODULE_MAP: dict[str, str] = {
     "tbip": "18b_tbip",
     "tbip_data": "18b_tbip",
     "tbip_report": "18b_tbip",
+    "issue_irt": "19_issue_irt",
+    "issue_irt_data": "19_issue_irt",
+    "issue_irt_report": "19_issue_irt",
 }
 
 

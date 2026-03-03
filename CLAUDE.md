@@ -38,7 +38,7 @@ uv run tallgrass-text 2025             # bill text retrieval (direct)
 
 Analysis recipes (all pass `*args` through to the underlying script):
 
-`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just ppc`, `just clustering`, `just lca`, `just network`, `just bipartite`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just wnominate`, `just text-analysis`, `just tbip`.
+`just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just ppc`, `just clustering`, `just lca`, `just network`, `just bipartite`, `just indices`, `just betabinom`, `just hierarchical`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just wnominate`, `just text-analysis`, `just tbip`, `just issue-irt`.
 
 Each maps to `uv run python analysis/NN_phase/phase.py`. Example: `just profiles --names "Masterson"` runs `uv run python analysis/12_profiles/profiles.py --names "Masterson"`.
 
@@ -189,6 +189,8 @@ Phase `18_bill_text` is bill text NLP analysis — BERTopic topic modeling (Fast
 
 Phase `18b_tbip` is text-based ideal points — embedding-vote approach (not true TBIP due to ~92% committee sponsorship). Multiplies vote matrix by Phase 18 bill embeddings, PCA on legislator text profiles, PC1 = text-derived ideal point. Validates against IRT (flat + hierarchical). Standalone with `just tbip`; not in pipeline (requires BT1 + IRT results). Design: `analysis/design/tbip.md`, ADR-0086.
 
+Phase `19_issue_irt` is issue-specific ideal points — topic-stratified flat IRT on per-topic vote subsets from Phase 18 BERTopic/CAP topics. Reuses Phase 04 `build_irt_graph()` / `build_and_sample()` — zero new model code. Two taxonomies: BERTopic (data-driven) + CAP (standardized). Relaxed thresholds (R-hat < 1.05, ESS > 200). Cross-topic correlation heatmap, ideological profile matrix, outlier detection. Standalone with `just issue-irt`; not in pipeline (requires Phase 18 topics + IRT results). Design: `analysis/design/issue_irt.md`, ADR-0087.
+
 See `.claude/rules/analysis-framework.md` for the full pipeline, report system architecture, and design doc index. See `.claude/rules/analytic-workflow.md` for methodology rules, validation requirements, and audience guidance.
 
 Key references:
@@ -232,10 +234,12 @@ Key references:
 - Bipartite design: `analysis/design/bipartite.md` (BiCM backbone, Newman projection, bill communities, Phase 6 comparison)
 - Bill text retrieval: ADR-0083 (StateAdapter Protocol, shared bill discovery, pdfplumber PDF extraction, multi-state-ready)
 - Legislator identity: ADR-0085 (OpenStates OCD person IDs, slug→ocd_id mapping, 3-phase matching, same-name disambiguation)
-- Bill text NLP deep dive: `docs/bill-text-nlp-deep-dive.md` (BERTopic, CAP classification, TBIP, embeddings — BT2 done, BT3-BT5 planned)
+- Bill text NLP deep dive: `docs/bill-text-nlp-deep-dive.md` (BERTopic, CAP classification, TBIP, embeddings — BT2 done, BT3-BT4 done, BT5 planned)
 - Bill text analysis design: `analysis/design/bill_text.md` (BERTopic config, FastEmbed embedding, CAP taxonomy, Rice cohesion, caucus-splitting)
 - Text-based ideal points: ADR-0086 (embedding-vote approach, TBIP alternative for committee-sponsored bills)
 - Text-based ideal points design: `analysis/design/tbip.md` (methodology, assumptions, lower quality thresholds, limitations)
+- Issue-specific ideal points: ADR-0087 (topic-stratified flat IRT, why not issueirt, thresholds, anchor strategy)
+- Issue-specific ideal points design: `analysis/design/issue_irt.md` (two taxonomies, parameters, quality thresholds, assumptions)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (original notes, superseded by deep dive)
 - Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
 - Ward linkage article: `docs/ward-linkage-non-euclidean.md` (why Ward on Kappa distances is impure, the fix)

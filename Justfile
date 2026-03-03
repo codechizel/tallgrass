@@ -159,6 +159,10 @@ text-analysis *args:
 tbip *args:
     uv run python analysis/18b_tbip/tbip.py {{args}}
 
+# Run issue-specific ideal points (topic-stratified IRT)
+issue-irt *args:
+    uv run python analysis/19_issue_irt/issue_irt.py {{args}}
+
 # Run full analysis pipeline for a session (all phases grouped under one run ID)
 pipeline session="2025-26" *args:
     #!/usr/bin/env bash

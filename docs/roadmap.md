@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-02 (OpenStates legislator identity)
+**Last updated:** 2026-03-03 (Phase 19 issue-specific ideal points completed)
 
 ---
 
@@ -70,6 +70,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Animated Scatter (M7) | 2026-03-02 | `plot_animated_scatter()` — Gapminder-style Plotly animation in dynamic IRT report. X=ideal point, Y=uncertainty, color=party, frame=biennium. 3 new tests (76 total in Phase 16). |
 | — | Sponsor Slugs → Synthesis + Profiles | 2026-03-02 | `sponsor_slugs` (M8 scraper output) integrated into Phase 11 and Phase 12. Synthesis: `n_bills_sponsored` in unified scorecard. Profiles: per-legislator sponsorship section (primary/co-sponsor, passage rate), defection sponsor context. Graceful degradation for pre-89th data. 11 new tests (1952 total). ADR-0081. |
 | — | OpenStates Legislator Identity | 2026-03-02 | OCD person IDs (`ocd-person/{uuid}`) from OpenStates for stable cross-biennium legislator identity. `roster.py` module: GitHub tarball download, YAML parsing, slug→ocd_id mapping cached as JSON. 3-phase matching in Phase 13 (OCD ID → name → fuzzy). Dynamic IRT roster groups by OCD ID. Correctly separates same-name legislators (two Mike Thompsons). Backward compatible with older CSVs. 22 new roster tests + 11 OCD matching tests. ADR-0085. |
+| 18b | Text-Based Ideal Points (TBIP) | 2026-03-03 | Embedding-vote approach (not true TBIP due to ~92% committee sponsorship). Multiplies vote matrix by Phase 18 bill embeddings, PCA on legislator text profiles, PC1 = text-derived ideal point. Validates against IRT (flat + hierarchical). Standalone with `just tbip`; not in pipeline (requires BT1 + IRT results). Design: `analysis/design/tbip.md`, ADR-0086. |
 
 ---
 
@@ -136,17 +137,15 @@ Full survey and technical design: [`docs/bill-text-nlp-deep-dive.md`](bill-text-
 **Output:** `bill_topics.csv`, `cap_classifications.csv`, topic distribution plots, policy-area heatmaps, similarity clusters
 **Enriches:** Phase 08 (prediction features), Phase 11 (per-topic voting patterns), Phase 12 ("how did legislator X vote on education bills?"), Phase 07 (policy-area-specific indices)
 
-### BT3. Text-Based Ideal Points — Phase 18b (experimental)
+### ~~BT3. Text-Based Ideal Points — Phase 18b (experimental)~~
 
-TBIP (Vafa, Naidu & Blei, ACL 2020) via NumPyro. Estimates legislator ideal points from bill text alone (no votes). Cross-validates against IRT xi_mean, alongside SM and DIME external validations. NumPyro implementation is JAX-compatible (same stack as nutpie).
+**Completed (2026-03-03).** Embedding-vote approach: multiplies vote matrix by Phase 18 bill embeddings (384-dim BGE), PCA on legislator text profiles, PC1 = text-derived ideal point. Validates against IRT (flat + hierarchical). Not true TBIP (Vafa, Naidu & Blei, ACL 2020) due to ~92% committee sponsorship — no meaningful author mapping. Standalone with `just tbip`; not in pipeline. Design: `analysis/design/tbip.md`, ADR-0086.
 
-**Caveat:** TBIP was designed for authored text (speeches, tweets). Bills are staff-drafted with sponsor attribution — weaker author mapping. Treat as experimental validation, not a replacement for vote-based IRT.
+### ~~BT4. Issue-Specific Ideal Points — Phase 19~~
 
-### BT4. Issue-Specific Ideal Points (future extension)
+**Completed (2026-03-03).** Topic-stratified flat IRT: runs Phase 04 2PL IRT model on per-topic vote subsets from Phase 18 BERTopic/CAP topic assignments. Answers "how conservative is each legislator on education vs taxes?" Two taxonomies: BERTopic (data-driven) + CAP (standardized). Relaxed convergence thresholds (R-hat < 1.05, ESS > 200) for smaller per-topic models. Cross-topic correlation heatmap, ideological profile matrix, outlier detection. Reuses `build_irt_graph()` / `build_and_sample()` — zero new model code, zero new dependencies. Standalone with `just issue-irt`; not in pipeline. Design: `analysis/design/issue_irt.md`, ADR-0087.
 
-Shin 2024 `issueirt` R package. Uses topic labels (from BT2) as hierarchical structure in IRT to estimate per-policy-area ideal points. "How conservative is this legislator on education vs. criminal justice?" R subprocess follows existing pattern (Phase 15, 17).
-
-**Prerequisite:** BT2 topic labels at sufficient quality.
+**Why not `issueirt`?** Shin 2024 R package estimates 2D ideal points per topic, but Phase 04b proved Kansas voting is fundamentally 1D. Package is GitHub-only (4 stars, pre-1.0, rstan dependency, uncertain maintenance).
 
 ### BT5. Model Legislation Detection (future extension)
 
@@ -578,15 +577,15 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 31 | Standalone Posterior Predictive Checks | BAY | **Done** — Phase 4c (ADR-0063), 6/8 bienniums (ADR-0073) |
 | 32 | TSA Hardening (Desposato, CROPS, validation) | TSA | Completed — item #7 above |
 
-| 33 | Bill Text Topic Modeling (BERTopic) | NLP | **Planned** — Phase 18 (BT2) |
-| 34 | Bill Text Policy Classification (CAP) | NLP | **Planned** — Phase 18 (BT2) |
-| 35 | Text-Based Ideal Points (TBIP) | NLP | **Planned** — Phase 18b (BT3, experimental) |
-| 36 | Issue-Specific Ideal Points | BAY | **Planned** — BT4 (future) |
+| 33 | Bill Text Topic Modeling (BERTopic) | NLP | Completed — Phase 18 (BT2) |
+| 34 | Bill Text Policy Classification (CAP) | NLP | Completed — Phase 18 (BT2) |
+| 35 | Text-Based Ideal Points (TBIP) | NLP | Completed — Phase 18b (BT3, embedding-vote approach, ADR-0086) |
+| 36 | Issue-Specific Ideal Points | BAY | Completed — Phase 19 (BT4, topic-stratified IRT, ADR-0087) |
 | 37 | Model Legislation Detection | NLP | **Planned** — BT5 (future) |
 
-**Score: 32 completed, 5 planned, 6 rejected = 43 total**
+**Score: 36 completed, 1 planned, 6 rejected = 43 total**
 
-Note: Methods 29-32 are additions beyond the original 28 (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, TSA Hardening). Methods 33-37 are the bill text NLP pipeline.
+Note: Methods 29-32 are additions beyond the original 28 (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, TSA Hardening). Methods 33-37 are the bill text NLP pipeline. Methods 33-36 completed 2026-03-02/03.
 
 ---
 
