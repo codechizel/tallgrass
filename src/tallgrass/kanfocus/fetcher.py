@@ -207,6 +207,9 @@ class KanFocusFetcher:
         consecutive_empty = 0
         vote_num = 1
         chamber_name = "Senate" if chamber == "S" else "House"
+        import sys
+
+        print(f"    {year} {chamber_name}: ", end="", flush=True)
 
         while consecutive_empty < self.max_empty:
             url = vote_tally_url(session_id, vote_num, year, chamber)
@@ -225,12 +228,13 @@ class KanFocusFetcher:
                 consecutive_empty = 0
                 records.append(record)
 
+            # Progress indicator every 25 pages
+            if vote_num % 25 == 0:
+                print(f"{len(records)}v/{vote_num}p ", end="", flush=True)
+
             vote_num += 1
 
-        if records:
-            print(f"    {year} {chamber_name}: {len(records)} votes (scanned {vote_num - 1} pages)")
-        else:
-            print(f"    {year} {chamber_name}: 0 votes (scanned {vote_num - 1} pages)")
+        print(f"→ {len(records)} votes ({vote_num - 1} pages scanned)", flush=True)
 
         return records
 

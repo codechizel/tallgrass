@@ -1,12 +1,18 @@
 """Command-line interface for KanFocus vote data retrieval."""
 
 import argparse
+import shutil
+from pathlib import Path
 
 from tallgrass.kanfocus.fetcher import DEFAULT_DELAY, KanFocusFetcher
 from tallgrass.kanfocus.output import convert_to_standard, merge_gap_fill, save_full
 from tallgrass.kanfocus.session import session_id_for_biennium
 from tallgrass.kanfocus.slugs import load_existing_slugs
 from tallgrass.session import KSSession
+
+# Raw HTML cache is precious — takes hours to rebuild per biennium.
+# Archive here after each successful run.
+ARCHIVE_DIR = Path("data/kanfocus_archive")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -59,6 +65,12 @@ def main(argv: list[str] | None = None) -> None:
     fetcher = KanFocusFetcher(cache_dir=cache_dir, delay=args.delay)
 
     if args.clear_cache:
+        # Refuse to clear if there's no archive — raw HTML takes hours to rebuild
+        archive = ARCHIVE_DIR / session.output_name
+        if not archive.exists():
+            print(f"  ERROR: no archive at {archive}. Run without --clear-cache first")
+            print("  to build and archive the cache, then clear it if needed.")
+            return
         fetcher.clear_cache()
 
     print("=" * 60)
@@ -95,7 +107,36 @@ def main(argv: list[str] | None = None) -> None:
     else:
         save_full(session.data_dir, session.output_name, votes, rollcalls, legislators)
 
+    # Archive raw HTML cache — this data takes hours to rebuild
+    _archive_cache(cache_dir, session.output_name)
+
     print(f"\nDone: {len(rollcalls)} rollcalls saved to {session.data_dir}")
+
+
+def _archive_cache(cache_dir: Path, output_name: str) -> None:
+    """Copy raw HTML cache to a permanent archive location.
+
+    The cache takes hours to rebuild per biennium. This ensures the raw data
+    survives ``--clear-cache`` and accidental deletion.
+    """
+    archive = ARCHIVE_DIR / output_name
+    html_files = list(cache_dir.glob("*.html"))
+    if not html_files:
+        return
+
+    archive.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for f in html_files:
+        dest = archive / f.name
+        if not dest.exists():
+            shutil.copy2(f, dest)
+            copied += 1
+
+    total = len(list(archive.glob("*.html")))
+    if copied:
+        print(f"\n  Archived {copied} new pages to {archive} ({total} total)")
+    else:
+        print(f"\n  Archive up to date: {archive} ({total} pages)")
 
 
 def _print_sessions() -> None:
