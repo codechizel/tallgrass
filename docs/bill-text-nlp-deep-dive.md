@@ -21,6 +21,7 @@ The highest-value additions are: (1) **BERTopic on full bill text** to replace N
 | Component | Location | What it does |
 |-----------|----------|--------------|
 | **Bill text retrieval (BT1)** | `src/tallgrass/text/` | **Completed 2026-03-02.** `tallgrass-text` CLI downloads bill PDFs, extracts text via `pdfplumber`. Multi-state `StateAdapter` Protocol + `KansasAdapter`. Output: `bill_texts.csv`. ADR-0083. |
+| **Bill text analysis (BT2)** | `analysis/18_bill_text/` | **Completed 2026-03-02.** BERTopic topic modeling (FastEmbed + HDBSCAN), optional CAP classification (Claude API), bill similarity, vote cross-reference. `just text-analysis`. ADR-0084. |
 | NMF topic features | `analysis/08_prediction/nlp_features.py` | TF-IDF + NMF (K=6) on `short_title`, produces 6 topic proportion columns |
 | Topic visualization | `nlp_features.py:plot_topic_words()` | Multi-panel bar chart of top words per topic |
 | Sponsor party feature | `analysis/08_prediction/prediction.py` | Binary `sponsor_party_R` from `sponsor_slugs` |
@@ -379,16 +380,16 @@ Joins to existing data on `session` + `bill_number`. This is a 5th CSV output al
 
 #### Phase 18: Bill Text Analysis
 
-Primary bill text analysis phase. Depends on Phase 01 (EDA) for filtering manifests and Phase 08 upstream data (rollcalls with bill metadata).
+**Completed 2026-03-02.** `analysis/18_bill_text/` — BERTopic topic modeling (FastEmbed ONNX + HDBSCAN + c-TF-IDF), optional CAP 20-category classification via Claude Sonnet API, bill similarity, vote cross-reference. ADR-0084.
 
-1. **Load and preprocess** bill text from `bill_texts.csv`. Strip boilerplate headers/footers, section numbers. Handle encoding issues.
-2. **Embed** using sentence-transformers (`all-mpnet-base-v2`). Cache embeddings per biennium.
-3. **Topic modeling** with BERTopic. Automatic topic discovery. Save topic assignments per bill.
-4. **Policy classification** using CAP 28-category taxonomy (zero-shot or fine-tuned). Save category per bill.
+1. **Load and preprocess** bill text from `bill_texts.csv`. Strip boilerplate (enacting clauses, severability, K.S.A. refs → STATUTE_REF). Prefer supplemental notes over introduced text.
+2. **Embed** using FastEmbed (`BAAI/bge-small-en-v1.5`, 384-dim ONNX). Cache embeddings to parquet.
+3. **Topic modeling** with BERTopic. Automatic topic discovery via HDBSCAN (no fixed K). Save topic assignments per bill.
+4. **Policy classification** using CAP 20-category taxonomy via Claude Sonnet (optional, `--classify`). Content-hash caching for reproducibility.
 5. **Similarity matrix** — cosine similarity between all bill pairs. Identify clusters of related legislation.
-6. **Cross-reference with votes** — which policy areas split the caucus? Which are rubber-stamps? Topic-specific party cohesion scores.
+6. **Cross-reference with votes** — Rice index per topic × party. Caucus-splitting score = 1 - Rice(majority party). Per-topic and per-CAP-category passage rates.
 
-Report: bill topic distribution, topic-by-party heatmap, caucus-splitting topics, model legislation candidates, topic trends across bienniums.
+Report: 13 sections (conditional CAP), topic distribution, party × topic heatmap, caucus-splitting ranking, similarity clusters, bill summaries. 53 tests.
 
 #### Phase 18b: Text-Based Ideal Points (experimental)
 
@@ -399,7 +400,7 @@ Standalone validation phase (like 14/14b). Runs TBIP via NumPyro on bill text + 
 ```
 Scraper → bill_texts.csv
                 ↓
-Phase 18 (Bill Text Analysis)
+Phase 18 (Bill Text Analysis) ✓ DONE 2026-03-02
     depends on: Phase 01 (EDA), bill_texts.csv
     produces: topics, classifications, similarity, embeddings
                 ↓
@@ -469,13 +470,9 @@ The four original open questions from `docs/future-bill-text-analysis.md` are no
 - Output `bill_texts.csv` with introduced version + supplemental notes
 - Start with 91st biennium (current), validate, then backfill historical
 
-### Phase 2: Topic modeling and classification
+### ~~Phase 2: Topic modeling and classification~~
 
-- Add `bertopic`, `sentence-transformers`, `hdbscan` dependencies
-- Implement Phase 18 (Bill Text Analysis)
-- BERTopic topic discovery + CAP zero-shot classification
-- Cross-reference topics with voting patterns
-- HTML report with topic distribution, party heatmaps, caucus-splitting analysis
+**Completed 2026-03-02** (ADR-0084). FastEmbed (ONNX, no PyTorch) replaces sentence-transformers. CAP uses 20 categories (not 28 — matches the standard CAP major topic codebook). `just text-analysis 2025-26` for topics + similarity; `--classify` for CAP via Claude API.
 
 ### Phase 3: Similarity and prediction enrichment
 

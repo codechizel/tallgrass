@@ -127,12 +127,12 @@ Full survey and technical design: [`docs/bill-text-nlp-deep-dive.md`](bill-text-
 **Dependencies:** `pdfplumber`
 **Prerequisite for:** BT2, BT3, BT4, BT5
 
-### BT2. Bill Text Analysis — Phase 18
+### ~~BT2. Bill Text Analysis — Phase 18~~
 
-Topic modeling with BERTopic on full bill text. CAP 28-category zero-shot policy classification. Bill similarity via sentence-transformer embeddings. Cross-reference topics with voting patterns: which policy areas split the caucus, which are rubber-stamps. Topic-specific party cohesion scores.
+**Completed (2026-03-02).** BERTopic topic modeling on full bill text (FastEmbed ONNX embeddings + HDBSCAN + c-TF-IDF). Optional CAP 20-category policy classification via Claude Sonnet API with content-hash caching. Bill similarity via cosine distance on 384-dim BGE embeddings. Vote cross-reference: Rice index per topic × party, caucus-splitting scores. 13-section HTML report with conditional CAP sections. No PyTorch — FastEmbed uses ONNX Runtime (~50-100 MB). 53 new tests (2113 total).
 
-**Dependencies:** `bertopic`, `sentence-transformers`, `hdbscan` (new), `umap-learn` (already installed)
-**Output:** `bill_topics.csv`, topic distribution plots, policy-area heatmaps, model legislation candidates
+**Dependencies:** `bertopic`, `fastembed`, `hdbscan` (core); `anthropic` (optional `[classify]` extra)
+**Output:** `bill_topics.csv`, `cap_classifications.csv`, topic distribution plots, policy-area heatmaps, similarity clusters
 **Enriches:** Phase 08 (prediction features), Phase 11 (per-topic voting patterns), Phase 12 ("how did legislator X vote on education bills?"), Phase 07 (policy-area-specific indices)
 
 ### BT3. Text-Based Ideal Points — Phase 18b (experimental)

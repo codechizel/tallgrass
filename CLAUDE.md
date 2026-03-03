@@ -187,7 +187,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (83 decisions)
+- ADRs: `docs/adr/README.md` (84 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -225,7 +225,7 @@ Key references:
 - Bipartite network deep dive: `docs/bipartite-network-deep-dive.md` (literature survey, BiCM, bill-centric metrics, Kansas-specific considerations)
 - Bipartite design: `analysis/design/bipartite.md` (BiCM backbone, Newman projection, bill communities, Phase 6 comparison)
 - Bill text retrieval: ADR-0083 (StateAdapter Protocol, shared bill discovery, pdfplumber PDF extraction, multi-state-ready)
-- Bill text NLP deep dive: `docs/bill-text-nlp-deep-dive.md` (BERTopic, CAP classification, TBIP, embeddings — BT2-BT5 planned)
+- Bill text NLP deep dive: `docs/bill-text-nlp-deep-dive.md` (BERTopic, CAP classification, TBIP, embeddings — BT2 done, BT3-BT5 planned)
 - Bill text analysis design: `analysis/design/bill_text.md` (BERTopic config, FastEmbed embedding, CAP taxonomy, Rice cohesion, caucus-splitting)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (original notes, superseded by deep dive)
 - Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
