@@ -16,6 +16,15 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 
+from tallgrass.bills import (
+    BILL_URL_RE as _BILL_URL_RE,
+)
+from tallgrass.bills import (
+    bill_sort_key,
+    discover_bill_urls,
+    parse_js_array,
+    parse_js_bill_data,
+)
 from tallgrass.config import (
     BASE_URL,
     BILL_TITLE_MAX_LENGTH,
@@ -33,9 +42,6 @@ from tallgrass.config import (
 from tallgrass.models import BillAction, IndividualVote, RollCall
 from tallgrass.output import save_csvs
 from tallgrass.session import KSSession
-
-# Compiled regex for extracting bill type and number from URLs
-_BILL_URL_RE = re.compile(r"/(sb|hb|scr|hcr|sr|hr)(\d+)/", re.I)
 
 # The 5 vote categories used by the KS Legislature (in display order)
 VOTE_CATEGORIES = ("Yea", "Nay", "Present and Passing", "Absent and Not Voting", "Not Voting")
@@ -366,109 +372,31 @@ class KSVoteScraper:
     def get_bill_urls(self) -> list[str]:
         """Get all bill URLs from the listing pages.
 
-        The KS legislature loads all bills client-side on one page,
-        so we grab all links matching the bill URL pattern.
+        Delegates to ``tallgrass.bills.discover_bill_urls()`` which handles
+        both HTML listing and JS data fallback for pre-2021 sessions.
         """
         print("=" * 60)
         print("Step 1: Fetching bill URLs from listing pages...")
         print("=" * 60)
 
-        bill_urls = set()
-        pattern = self.session.bill_url_pattern
-
-        for label, path in [
-            ("All Bills", self.session.bills_path),
-            ("Senate Bills", self.session.senate_bills_path),
-            ("House Bills", self.session.house_bills_path),
-        ]:
-            print(f"  Fetching {label}...")
-            result = self._get(BASE_URL + path)
-            if not result.ok:
-                continue
-            soup = BeautifulSoup(result.html, "lxml")
-
-            for link in soup.find_all("a", href=True):
-                href = link["href"]
-                if pattern.match(href):
-                    bill_urls.add(href)
-
-        # Fallback: sessions before 2021 load bill lists via JavaScript,
-        # so HTML listing pages may have zero <a> tags matching bill URLs.
-        if not bill_urls and self.session.js_data_paths:
-            print("  HTML listing yielded 0 bills — trying JS data fallback...")
-            bill_urls = self._get_bill_urls_from_js()
-
-        bill_urls = sorted(bill_urls, key=self._bill_sort_key)
-        print(f"  Found {len(bill_urls)} unique bill/resolution URLs")
-        return bill_urls
+        urls = discover_bill_urls(self.session, self._get)
+        print(f"  Found {len(urls)} unique bill/resolution URLs")
+        return urls
 
     @staticmethod
     def _bill_sort_key(url: str) -> tuple[int, int]:
         """Sort bills: SB before HB, then numerically."""
-        match = _BILL_URL_RE.search(url)
-        if match:
-            prefix = match.group(1).lower()
-            number = int(match.group(2))
-            order = {"sb": 0, "sr": 1, "scr": 2, "hb": 3, "hr": 4, "hcr": 5}
-            return (order.get(prefix, 9), number)
-        return (99, 0)
+        return bill_sort_key(url)
 
-    def _get_bill_urls_from_js(self) -> set[str]:
-        """Discover bill URLs from JavaScript data files (pre-2021 sessions).
-
-        The JS files assign a ``measures_data`` variable containing a JSON array
-        of bill objects.  Each object has a ``measures_url`` field with the bill
-        path (e.g., ``/li_2020/b2019_20/measures/hb2001/``).
-        """
-        bill_urls: set[str] = set()
-        pattern = self.session.bill_url_pattern
-
-        for js_path in self.session.js_data_paths:
-            print(f"  Trying JS data file: {js_path}")
-            result = self._get(BASE_URL + js_path)
-            if not result.ok or not result.html:
-                continue
-            parsed = self._parse_js_bill_data(result.html)
-            for url in parsed:
-                if pattern.match(url):
-                    bill_urls.add(url)
-            if bill_urls:
-                print(f"  JS fallback found {len(bill_urls)} bill URLs")
-                break
-
-        return bill_urls
-
-    @staticmethod
     @staticmethod
     def _parse_js_array(js_content: str) -> list[dict]:
-        """Extract the first JSON array from JS source, quoting bare keys.
-
-        Finds ``[...]`` in the source, quotes unquoted JS object-literal keys
-        (``measures_url:`` → ``"measures_url":``), and parses as JSON.
-        Returns empty list on failure.
-        """
-        start = js_content.find("[")
-        end = js_content.rfind("]")
-        if start == -1 or end == -1 or end <= start:
-            return []
-        array_text = js_content[start : end + 1]
-        array_text = re.sub(r"(?m)^(\s+)(\w+):", r'\1"\2":', array_text)
-        try:
-            data = json.loads(array_text)
-        except ValueError:
-            return []
-        return data if isinstance(data, list) else []
+        """Extract the first JSON array from JS source, quoting bare keys."""
+        return parse_js_array(js_content)
 
     @staticmethod
     def _parse_js_bill_data(js_content: str) -> list[str]:
         """Extract bill URLs from a ``measures_data = [...]`` JS assignment."""
-        data = KSVoteScraper._parse_js_array(js_content)
-        urls: list[str] = []
-        for entry in data:
-            url = entry.get("measures_url", "") if isinstance(entry, dict) else ""
-            if url:
-                urls.append(url)
-        return urls
+        return parse_js_bill_data(js_content)
 
     # -- Step 1b: KLISS API pre-filter -----------------------------------------
 

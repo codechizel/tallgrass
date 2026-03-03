@@ -120,9 +120,9 @@ R enrichment is optional — `--skip-r` for Python-only mode. 21 new tests (85 t
 
 Full survey and technical design: [`docs/bill-text-nlp-deep-dive.md`](bill-text-nlp-deep-dive.md).
 
-### BT1. Bill Text Retrieval (scraper extension)
+### ~~BT1. Bill Text Retrieval~~
 
-Extend the scraper to download bill PDFs (introduced version + supplemental notes) from kslegislature.gov and extract text via `pdfplumber`. Output: 5th CSV (`{name}_bill_texts.csv`) with columns `session`, `bill_number`, `version`, `document_type`, `text`, `page_count`, `pdf_url`. Joins to existing data on `bill_number`. Separate fetch step (`just fetch-text 2025`) since it's slow (hundreds of PDF downloads). Start with 91st, validate, then backfill historical.
+**Completed (2026-03-02).** Separate `tallgrass-text` CLI (`just text 2025`) downloads bill PDFs and extracts text via `pdfplumber`. Multi-state-ready architecture: `StateAdapter` Protocol + `KansasAdapter` first implementation. Shared bill discovery module (`bills.py`) extracted from scraper — zero regressions. Output: 5th CSV (`{name}_bill_texts.csv`) with columns `session`, `bill_number`, `document_type`, `version`, `text`, `page_count`, `source_url`. Introduced + supplemental note document types. 108 new tests.
 
 **Dependencies:** `pdfplumber`
 **Prerequisite for:** BT2, BT3, BT4, BT5

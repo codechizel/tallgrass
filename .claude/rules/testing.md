@@ -47,6 +47,16 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip (~10 tests)
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 - `tests/test_merge_special.py` — special session merge: parent_session property, CSV merge, idempotency, column alignment, legislator dedup, CLI flag (~21 tests)
+- `tests/test_bills.py` — shared bill discovery: JS parsing, bill sort, URL-to-number, HTML/JS discovery (~23 tests)
+
+## Bill Text Test Files
+
+- `tests/test_text_models.py` — BillDocumentRef + BillText frozen dataclasses, equality, hashing (~14 tests)
+- `tests/test_text_extractors.py` — PDF extraction via pdfplumber, text cleaning, line number stripping (~16 tests)
+- `tests/test_text_kansas.py` — KansasAdapter URL construction for all 8 bienniums, bill discovery, Kansas cleaning (~29 tests)
+- `tests/test_text_fetcher.py` — BillTextFetcher download, caching, HTML error detection, concurrent fetch (~9 tests)
+- `tests/test_text_output.py` — bill_texts.csv export: headers, content, roundtrip, multiline text (~8 tests)
+- `tests/test_text_cli.py` — tallgrass-text argument parsing, list-sessions, entry point (~9 tests)
 
 ## Analysis Test Files
 

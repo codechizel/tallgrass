@@ -8,10 +8,12 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "tqdm>=4.65",
     "lxml>=5.0",
+    "pdfplumber>=0.11",
 ]
 
 [project.scripts]
 tallgrass = "tallgrass.cli:main"
+tallgrass-text = "tallgrass.text.cli:main"
 
 [dependency-groups]
 dev = [
@@ -48,6 +50,7 @@ dev = [
     "pyvis>=0.3",
     "folium>=0.18",
     "geopandas>=1.0",
+    "fpdf2>=2.8.7",
 ]
 
 [build-system]
@@ -109,6 +112,8 @@ replace-imports-with-any = [
     "ruptures.**",
     "stepmix.**",
     "bicm.**",
+    "pdfplumber.**",
+    "pdfminer.**",
     "itables.**",
     "plotly.**",
     "pyvis.**",

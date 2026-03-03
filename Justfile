@@ -33,6 +33,10 @@ merge-special *args:
 scrape-fresh *args:
     uv run tallgrass --clear-cache {{args}}
 
+# Download and extract bill text
+text *args:
+    uv run tallgrass-text {{args}}
+
 # Lint and format
 lint:
     uv run ruff check --fix src/
