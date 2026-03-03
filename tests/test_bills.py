@@ -2,8 +2,6 @@
 
 from dataclasses import dataclass
 
-import pytest
-
 from tallgrass.bills import (
     BillInfo,
     bill_sort_key,
@@ -14,7 +12,6 @@ from tallgrass.bills import (
     url_to_bill_number,
 )
 from tallgrass.session import KSSession
-
 
 # ── parse_js_array() ───────────────────────────────────────────────────────
 

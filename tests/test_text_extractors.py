@@ -1,6 +1,5 @@
 """Tests for PDF text extraction and cleaning functions."""
 
-import pytest
 from fpdf import FPDF
 
 from tallgrass.text.extractors import (

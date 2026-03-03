@@ -47,6 +47,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip (~10 tests)
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 - `tests/test_merge_special.py` — special session merge: parent_session property, CSV merge, idempotency, column alignment, legislator dedup, CLI flag (~21 tests)
+- `tests/test_roster.py` — OpenStates roster sync: slug extraction, YAML parsing, slug→ocd_id lookup, cache load/save, same-name disambiguation (~22 tests)
 - `tests/test_bills.py` — shared bill discovery: JS parsing, bill sort, URL-to-number, HTML/JS discovery (~23 tests)
 
 ## Bill Text Test Files

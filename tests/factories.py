@@ -19,6 +19,7 @@ def make_legislators(
     chamber: str = "House",
     start_district: int = 1,
     slug_column: str = "slug",
+    ocd_ids: list[str] | None = None,
 ) -> pl.DataFrame:
     """Build a legislators DataFrame.
 
@@ -32,10 +33,13 @@ def make_legislators(
         start_district: Starting district number.
         slug_column: "slug" for scraper-schema tests, "legislator_slug" for
             analysis-schema tests.
+        ocd_ids: Explicit OCD person IDs.  If None, generates empty strings.
     """
     if names is None:
         names = [f"Member {i}" for i in range(n)]
     slugs = [f"{prefix}_{name.split()[-1].lower()}" for name in names]
+    if ocd_ids is None:
+        ocd_ids = [""] * len(names)
     return pl.DataFrame(
         {
             slug_column: slugs,
@@ -43,6 +47,7 @@ def make_legislators(
             "party": [party] * len(names),
             "chamber": [chamber] * len(names),
             "district": list(range(start_district, start_district + len(names))),
+            "ocd_id": ocd_ids,
         }
     )
 

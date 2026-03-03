@@ -143,6 +143,7 @@ class TestSaveCsvs:
                 "party",
                 "district",
                 "member_url",
+                "ocd_id",
             ]
 
     def test_row_counts(self, tmp_path):

@@ -8,6 +8,7 @@ the entire scraping pipeline.  All network calls are monkeypatched.
 Run: uv run pytest tests/test_scraper_http.py -v
 """
 
+import hashlib
 import threading
 import time
 from pathlib import Path
@@ -15,8 +16,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
-
-import hashlib
 
 from tallgrass.config import (
     BILL_TITLE_MAX_LENGTH,

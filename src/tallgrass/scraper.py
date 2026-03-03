@@ -1229,6 +1229,21 @@ class KSVoteScraper:
 
         print(f"  Enriched {len(slugs_to_fetch)} legislators")
 
+        # Attach OpenStates OCD person IDs for stable cross-biennium identity
+        from tallgrass.roster import load_slug_lookup
+
+        slug_to_ocd = load_slug_lookup()
+        matched_count = 0
+        for slug, info in self.legislators.items():
+            ocd_id = slug_to_ocd.get(slug, "")
+            info["ocd_id"] = ocd_id
+            if ocd_id:
+                matched_count += 1
+        if slug_to_ocd:
+            print(f"  OCD IDs: {matched_count}/{len(self.legislators)} legislators matched")
+        else:
+            print("  OCD IDs: roster not synced (run `just roster-sync` to populate)")
+
     # -- Failure reporting -----------------------------------------------------
 
     def _save_failure_manifest(self, total_vote_pages: int) -> Path:

@@ -62,15 +62,21 @@ def _clean_legislators(data_dir: Path) -> pl.DataFrame:
     # Rename slug → legislator_slug to match analysis convention (ADR-0066)
     if "slug" in legislators.columns and "legislator_slug" not in legislators.columns:
         legislators = legislators.rename({"slug": "legislator_slug"})
+    # Backward compat: older CSVs may lack the ocd_id column
+    if "ocd_id" not in legislators.columns:
+        legislators = legislators.with_columns(pl.lit("").alias("ocd_id"))
+
     return legislators.with_columns(
         pl.col("full_name")
         .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
         .alias("full_name"),
         pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
+        pl.col("ocd_id").fill_null("").alias("ocd_id"),
     )
 
 
 # ── Name Normalization ─────────────────────────────────────────────────────
+
 
 def normalize_name(name: str) -> str:
     """Normalize a legislator name for cross-session/biennium matching.

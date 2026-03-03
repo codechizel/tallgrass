@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-02 (bill text NLP roadmap)
+**Last updated:** 2026-03-02 (OpenStates legislator identity)
 
 ---
 
@@ -69,6 +69,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Ridgeline Plots (M6) | 2026-03-02 | `plot_ridgeline_ideology()` — stacked KDE curves by biennium in dynamic IRT report. Republicans/Democrats shown separately. 3 new tests (73 total in Phase 16). |
 | — | Animated Scatter (M7) | 2026-03-02 | `plot_animated_scatter()` — Gapminder-style Plotly animation in dynamic IRT report. X=ideal point, Y=uncertainty, color=party, frame=biennium. 3 new tests (76 total in Phase 16). |
 | — | Sponsor Slugs → Synthesis + Profiles | 2026-03-02 | `sponsor_slugs` (M8 scraper output) integrated into Phase 11 and Phase 12. Synthesis: `n_bills_sponsored` in unified scorecard. Profiles: per-legislator sponsorship section (primary/co-sponsor, passage rate), defection sponsor context. Graceful degradation for pre-89th data. 11 new tests (1952 total). ADR-0081. |
+| — | OpenStates Legislator Identity | 2026-03-02 | OCD person IDs (`ocd-person/{uuid}`) from OpenStates for stable cross-biennium legislator identity. `roster.py` module: GitHub tarball download, YAML parsing, slug→ocd_id mapping cached as JSON. 3-phase matching in Phase 13 (OCD ID → name → fuzzy). Dynamic IRT roster groups by OCD ID. Correctly separates same-name legislators (two Mike Thompsons). Backward compatible with older CSVs. 22 new roster tests + 11 OCD matching tests. ADR-0085. |
 
 ---
 

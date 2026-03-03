@@ -222,6 +222,74 @@ class TestMatchLegislators:
         norms = matched["name_norm"].to_list()
         assert norms == sorted(norms)
 
+    def test_ocd_id_match_preferred(self) -> None:
+        """OCD ID matching should work and take precedence over name."""
+        names = [f"M {i}" for i in range(25)]
+        ocd_ids = [f"ocd-person/{i:04d}" for i in range(25)]
+        leg_a = make_legislators(names, ocd_ids=ocd_ids)
+        leg_b = make_legislators(names, prefix="x", ocd_ids=ocd_ids)
+        matched = match_legislators(leg_a, leg_b)
+        assert matched.height == 25
+
+    def test_ocd_id_disambiguates_same_name(self) -> None:
+        """Two legislators with the same name but different OCD IDs should match separately."""
+        names = [f"M {i}" for i in range(23)] + ["Mike Thompson", "Mike Thompson"]
+        # Session A: sen + rep Thompson with different OCD IDs
+        slugs_a = [f"rep_{i}" for i in range(23)] + ["sen_thompson_1", "rep_thompson_1"]
+        ocd_a = [f"ocd-person/{i:04d}" for i in range(23)] + [
+            "ocd-person/sen-thompson", "ocd-person/rep-thompson"
+        ]
+        leg_a = pl.DataFrame({
+            "slug": slugs_a,
+            "full_name": names,
+            "party": ["Republican"] * 25,
+            "chamber": ["House"] * 23 + ["Senate", "House"],
+            "district": list(range(1, 26)),
+            "ocd_id": ocd_a,
+        })
+        # Session B: same people, different slugs (new biennium)
+        slugs_b = [f"rep2_{i}" for i in range(23)] + ["sen_thompson_1_b", "rep_thompson_1_b"]
+        ocd_b = [f"ocd-person/{i:04d}" for i in range(23)] + [
+            "ocd-person/sen-thompson", "ocd-person/rep-thompson"
+        ]
+        leg_b = pl.DataFrame({
+            "slug": slugs_b,
+            "full_name": names,
+            "party": ["Republican"] * 25,
+            "chamber": ["House"] * 23 + ["Senate", "House"],
+            "district": list(range(1, 26)),
+            "ocd_id": ocd_b,
+        })
+        matched = match_legislators(leg_a, leg_b)
+        assert matched.height == 25
+
+    def test_fallback_to_name_without_ocd_id(self) -> None:
+        """When OCD IDs are empty, should fall back to name matching."""
+        names = [f"M {i}" for i in range(25)]
+        leg_a = make_legislators(names, ocd_ids=[""] * 25)
+        leg_b = make_legislators(names, prefix="x", ocd_ids=[""] * 25)
+        matched = match_legislators(leg_a, leg_b)
+        assert matched.height == 25
+
+    def test_mixed_ocd_and_name_matching(self) -> None:
+        """Some legislators match by OCD ID, others by name."""
+        names = [f"M {i}" for i in range(25)]
+        # First 15 have OCD IDs, last 10 don't
+        ocd_a = [f"ocd-person/{i:04d}" for i in range(15)] + [""] * 10
+        ocd_b = [f"ocd-person/{i:04d}" for i in range(15)] + [""] * 10
+        leg_a = make_legislators(names, ocd_ids=ocd_a)
+        leg_b = make_legislators(names, prefix="x", ocd_ids=ocd_b)
+        matched = match_legislators(leg_a, leg_b)
+        assert matched.height == 25
+
+    def test_no_ocd_id_column_backward_compat(self) -> None:
+        """Older CSVs without ocd_id column should still match by name."""
+        names = [f"M {i}" for i in range(25)]
+        leg_a = make_legislators(names).drop("ocd_id")
+        leg_b = make_legislators(names, prefix="x").drop("ocd_id")
+        matched = match_legislators(leg_a, leg_b)
+        assert matched.height == 25
+
 
 # ── TestClassifyTurnover ─────────────────────────────────────────────────────
 

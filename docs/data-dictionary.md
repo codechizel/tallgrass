@@ -73,6 +73,7 @@ One row per legislator (~172 rows for a full session).
 | `party` | str | "Republican" or "Democrat" (parsed from District h2) |
 | `district` | str | District number |
 | `member_url` | str | Full URL to legislator's member page |
+| `ocd_id` | str | OpenStates OCD person ID (`ocd-person/{uuid}`). Stable cross-biennium identifier. Empty if roster not synced (`just roster-sync`) or no match found. See ADR-0085. |
 
 **Primary key**: `slug`
 

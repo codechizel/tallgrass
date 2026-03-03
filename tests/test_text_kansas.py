@@ -2,8 +2,6 @@
 
 from dataclasses import dataclass
 
-import pytest
-
 from tallgrass.config import BASE_URL
 from tallgrass.session import KSSession
 from tallgrass.text.kansas import (
@@ -13,7 +11,6 @@ from tallgrass.text.kansas import (
     clean_kansas_text,
 )
 from tallgrass.text.models import BillDocumentRef
-
 
 # ── _bill_number_to_code() ───────────────────────────────────────────────
 

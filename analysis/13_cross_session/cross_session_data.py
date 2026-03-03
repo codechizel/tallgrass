@@ -70,18 +70,31 @@ def _add_name_norm(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def _has_ocd_ids(df: pl.DataFrame) -> bool:
+    """Check if a DataFrame has non-empty OCD IDs for matching."""
+    if "ocd_id" not in df.columns:
+        return False
+    non_empty = df.filter(pl.col("ocd_id") != "").height
+    return non_empty > 0
+
+
 def match_legislators(
     leg_a: pl.DataFrame,
     leg_b: pl.DataFrame,
     *,
     fuzzy_threshold: float | None = None,
 ) -> pl.DataFrame:
-    """Match legislators across sessions by normalized full_name.
+    """Match legislators across sessions, preferring OCD ID over name.
+
+    Three-phase matching:
+      0. OCD ID join (when both sessions have ocd_id columns with data)
+      1. Name-norm join on unmatched remainder
+      2. Optional fuzzy matching on still-unmatched names
 
     Args:
         leg_a: Legislators from session A (needs ``full_name``,
             ``slug`` or ``legislator_slug``, ``party``, ``chamber``,
-            ``district``).
+            ``district``).  Optional: ``ocd_id``.
         leg_b: Legislators from session B (same columns).
         fuzzy_threshold: If set, unmatched names go through a second pass
             with :func:`fuzzy_match_legislators` at this similarity
@@ -106,6 +119,7 @@ def match_legislators(
         pl.col("party").alias("party_a"),
         pl.col("chamber").alias("chamber_a"),
         pl.col("district").alias("district_a"),
+        *([pl.col("ocd_id").alias("ocd_id_a")] if "ocd_id" in a.columns else []),
     )
     b_sel = b.select(
         "name_norm",
@@ -114,24 +128,78 @@ def match_legislators(
         pl.col("party").alias("party_b"),
         pl.col("chamber").alias("chamber_b"),
         pl.col("district").alias("district_b"),
+        *([pl.col("ocd_id").alias("ocd_id_b")] if "ocd_id" in b.columns else []),
     )
 
-    matched = (
-        a_sel.join(b_sel, on="name_norm", how="inner")
-        .with_columns(
-            (pl.col("chamber_a") != pl.col("chamber_b")).alias("is_chamber_switch"),
-            (pl.col("party_a") != pl.col("party_b")).alias("is_party_switch"),
+    matched: pl.DataFrame | None = None
+
+    # Phase 0: OCD ID join (stable cross-biennium identity)
+    ocd_matched_slugs_a: set[str] = set()
+    ocd_matched_slugs_b: set[str] = set()
+    if _has_ocd_ids(a) and _has_ocd_ids(b):
+        ocd_pairs = a_sel.filter(pl.col("ocd_id_a") != "").join(
+            b_sel.filter(pl.col("ocd_id_b") != ""),
+            left_on="ocd_id_a",
+            right_on="ocd_id_b",
+            how="inner",
+            suffix="_r",
         )
-        .sort("name_norm")
+        if ocd_pairs.height > 0:
+            # Use session A's name_norm as canonical key
+            ocd_matched = ocd_pairs.select(
+                pl.col("name_norm"),
+                "full_name_a",
+                "slug_a",
+                "party_a",
+                "chamber_a",
+                "district_a",
+                pl.col("full_name_b"),
+                pl.col("slug_b"),
+                pl.col("party_b"),
+                pl.col("chamber_b"),
+                pl.col("district_b"),
+            ).with_columns(
+                (pl.col("chamber_a") != pl.col("chamber_b")).alias("is_chamber_switch"),
+                (pl.col("party_a") != pl.col("party_b")).alias("is_party_switch"),
+            )
+            matched = ocd_matched
+            ocd_matched_slugs_a = set(ocd_matched["slug_a"].to_list())
+            ocd_matched_slugs_b = set(ocd_matched["slug_b"].to_list())
+
+    # Phase 1: Name-norm join on remaining unmatched legislators
+    a_remaining = a_sel.filter(~pl.col("slug_a").is_in(ocd_matched_slugs_a))
+    b_remaining = b_sel.filter(~pl.col("slug_b").is_in(ocd_matched_slugs_b))
+
+    # Drop OCD ID columns before name join
+    drop_a = [c for c in a_remaining.columns if c.startswith("ocd_id")]
+    drop_b = [c for c in b_remaining.columns if c.startswith("ocd_id")]
+    if drop_a:
+        a_remaining = a_remaining.drop(drop_a)
+    if drop_b:
+        b_remaining = b_remaining.drop(drop_b)
+
+    name_matched = a_remaining.join(b_remaining, on="name_norm", how="inner").with_columns(
+        (pl.col("chamber_a") != pl.col("chamber_b")).alias("is_chamber_switch"),
+        (pl.col("party_a") != pl.col("party_b")).alias("is_party_switch"),
     )
+    if name_matched.height > 0:
+        if matched is None:
+            matched = name_matched
+        else:
+            matched = pl.concat([matched, name_matched])
 
-    # Optional fuzzy second pass
+    if matched is None:
+        matched = name_matched.head(0)  # empty with correct schema
+
+    matched = matched.sort("name_norm")
+
+    # Phase 2: Optional fuzzy second pass
     if fuzzy_threshold is not None:
-        matched_names_a = set(matched["name_norm"].to_list())
-        matched_names_b = set(matched["name_norm"].to_list())
+        all_matched_slugs_a = set(matched["slug_a"].to_list()) if matched.height > 0 else set()
+        all_matched_slugs_b = set(matched["slug_b"].to_list()) if matched.height > 0 else set()
 
-        unmatched_a_df = a_sel.filter(~pl.col("name_norm").is_in(matched_names_a))
-        unmatched_b_df = b_sel.filter(~pl.col("name_norm").is_in(matched_names_b))
+        unmatched_a_df = a_remaining.filter(~pl.col("slug_a").is_in(all_matched_slugs_a))
+        unmatched_b_df = b_remaining.filter(~pl.col("slug_b").is_in(all_matched_slugs_b))
 
         if unmatched_a_df.height > 0 and unmatched_b_df.height > 0:
             fuzzy_matches = fuzzy_match_legislators(

@@ -56,7 +56,16 @@ def save_csvs(
     # Legislators
     legislators_file = output_dir / f"{output_name}_legislators.csv"
     with open(legislators_file, "w", newline="", encoding="utf-8") as f:
-        fieldnames = ["name", "full_name", "slug", "chamber", "party", "district", "member_url"]
+        fieldnames = [
+            "name",
+            "full_name",
+            "slug",
+            "chamber",
+            "party",
+            "district",
+            "member_url",
+            "ocd_id",
+        ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for slug in sorted(legislators.keys()):

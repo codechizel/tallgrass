@@ -54,6 +54,7 @@ dev = [
     "folium>=0.18",
     "geopandas>=1.0",
     "fpdf2>=2.8.7",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

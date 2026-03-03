@@ -1,6 +1,5 @@
 """Tests for tallgrass-text CLI argument parsing."""
 
-import pytest
 
 from tallgrass.text.cli import main
 

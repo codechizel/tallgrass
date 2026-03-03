@@ -2,8 +2,6 @@
 
 import csv
 
-import pytest
-
 from tallgrass.text.models import BillText
 from tallgrass.text.output import FIELDNAMES, save_bill_texts
 

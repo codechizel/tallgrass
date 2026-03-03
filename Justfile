@@ -37,6 +37,10 @@ scrape-fresh *args:
 text *args:
     uv run tallgrass-text {{args}}
 
+# Sync OpenStates legislator roster (slug→ocd_id mapping)
+roster-sync:
+    uv run python -c "from tallgrass.roster import sync_roster; sync_roster()"
+
 # Lint and format
 lint:
     uv run ruff check --fix src/

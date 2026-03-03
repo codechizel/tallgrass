@@ -37,6 +37,7 @@ What are the trade-offs?
 | [0082](0082-merge-special-sessions-into-parent-bienniums.md) | Merge special sessions into parent bienniums |
 | [0083](0083-bill-text-retrieval.md) | Bill text retrieval — multi-state-ready architecture |
 | [0084](0084-bill-text-analysis-phase-18.md) | Bill text analysis — Phase 18 (BERTopic + CAP classification) |
+| [0085](0085-openstates-legislator-identity.md) | OpenStates OCD person IDs for stable legislator identity |
 
 ### Dimensionality Reduction
 
@@ -233,6 +234,7 @@ What are the trade-offs?
 | [0082](0082-merge-special-sessions-into-parent-bienniums.md) | Merge special sessions into parent bienniums (post-scrape utility, idempotent, column alignment) | Accepted | 2026-03-02 |
 | [0083](0083-bill-text-retrieval.md) | Bill text retrieval — multi-state-ready architecture (StateAdapter Protocol, shared bill discovery, pdfplumber) | Accepted | 2026-03-02 |
 | [0084](0084-bill-text-analysis-phase-18.md) | Bill text analysis — Phase 18 (BERTopic + CAP classification, FastEmbed, vote cross-reference) | Accepted | 2026-03-02 |
+| [0085](0085-openstates-legislator-identity.md) | OpenStates OCD person IDs for stable legislator identity (slug→ocd_id mapping, 3-phase matching) | Accepted | 2026-03-02 |
 
 ## Creating a New ADR
 

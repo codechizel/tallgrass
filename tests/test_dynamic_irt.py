@@ -253,6 +253,54 @@ class TestBuildGlobalRoster:
         roster, _ = build_global_roster(legs, "House")
         assert "Democrat" in roster["parties"][0]
 
+    def test_ocd_id_groups_same_person(self) -> None:
+        """Same OCD ID across bienniums should produce one roster entry."""
+        leg_t0 = _make_legislators(["Alice Smith"]).with_columns(
+            pl.lit("ocd-person/alice-001").alias("ocd_id")
+        )
+        leg_t1 = _make_legislators(["Alice Smith"]).with_columns(
+            pl.lit("ocd-person/alice-001").alias("ocd_id")
+        )
+        roster, name_to_global = build_global_roster({0: leg_t0, 1: leg_t1}, "House")
+        assert roster.height == 1
+        assert roster["n_periods"][0] == 2
+
+    def test_ocd_id_separates_same_name(self) -> None:
+        """Two legislators with the same name but different OCD IDs get separate entries."""
+        # Two Mike Thompsons — one Senate, one House
+        leg_t0 = pl.DataFrame({
+            "legislator_slug": ["sen_thompson_mike_1", "rep_thompson_mike_1"],
+            "full_name": ["Mike Thompson", "Mike Thompson"],
+            "party": ["Republican", "Republican"],
+            "chamber": ["House", "House"],
+            "district": [1, 2],
+            "ocd_id": ["ocd-person/sen-thompson", "ocd-person/rep-thompson"],
+        })
+        roster, name_to_global = build_global_roster({0: leg_t0}, "House")
+        assert roster.height == 2
+        # Both should have distinct global indices
+        assert len(set(name_to_global.values())) <= 2
+
+    def test_ocd_id_mixed_with_no_ocd(self) -> None:
+        """Legislators with and without OCD IDs both appear in roster."""
+        leg_t0 = pl.DataFrame({
+            "legislator_slug": ["rep_alice_1", "rep_bob_1"],
+            "full_name": ["Alice Smith", "Bob Jones"],
+            "party": ["Republican", "Democrat"],
+            "chamber": ["House", "House"],
+            "district": [1, 2],
+            "ocd_id": ["ocd-person/alice-001", ""],
+        })
+        roster, name_to_global = build_global_roster({0: leg_t0}, "House")
+        assert roster.height == 2
+
+    def test_no_ocd_id_column_backward_compat(self) -> None:
+        """Older CSVs without ocd_id column should still build roster by name."""
+        leg_t0 = _make_legislators(["Alice Smith", "Bob Jones"]).drop("ocd_id")
+        leg_t1 = _make_legislators(["Alice Smith", "Carol White"]).drop("ocd_id")
+        roster, _ = build_global_roster({0: leg_t0, 1: leg_t1}, "House")
+        assert roster.height == 3
+
 
 # ── Stack Bienniums Tests ────────────────────────────────────────────────────
 

@@ -59,10 +59,15 @@ def build_global_roster(
 ) -> tuple[pl.DataFrame, dict[str, int]]:
     """Build a unified legislator roster across all bienniums for one chamber.
 
+    When OCD IDs are available, groups by ``ocd_id`` first (correctly
+    separating same-name legislators like two Mike Thompsons).  Falls back
+    to ``name_norm`` grouping for legislators without OCD IDs or older CSVs.
+
     Args:
         all_legislators: Mapping from time_idx (0-based biennium index) to
             legislator DataFrame.  Each must have ``full_name``,
             ``legislator_slug``, ``party``, ``chamber`` columns.
+            Optional: ``ocd_id``.
         chamber: ``"House"`` or ``"Senate"``.
 
     Returns:
@@ -72,7 +77,7 @@ def build_global_roster(
             slugs (comma-joined per period)
           - name_to_global_idx maps name_norm → int
     """
-    # Collect (name_norm, full_name, party, time_idx, slug) tuples
+    # Collect (name_norm, full_name, party, time_idx, slug, ocd_id) tuples
     records: list[dict] = []
     for t, leg_df in sorted(all_legislators.items()):
         # Filter to the requested chamber
@@ -81,9 +86,12 @@ def build_global_roster(
         else:
             ch_df = leg_df
 
+        has_ocd = "ocd_id" in ch_df.columns
+
         for row in ch_df.iter_rows(named=True):
             slug_col = "legislator_slug" if "legislator_slug" in ch_df.columns else "slug"
             name = row.get("full_name", "")
+            ocd_id = row.get("ocd_id", "") if has_ocd else ""
             records.append(
                 {
                     "name_norm": normalize_name(name),
@@ -91,6 +99,7 @@ def build_global_roster(
                     "party": row.get("party", ""),
                     "time_idx": t,
                     "slug": row.get(slug_col, ""),
+                    "ocd_id": ocd_id or "",
                 }
             )
 
@@ -110,30 +119,31 @@ def build_global_roster(
 
     raw = pl.DataFrame(records)
 
-    # Group by name_norm to build the roster
+    # Determine grouping key: use ocd_id when available, fall back to name_norm.
+    # Records with non-empty ocd_id group by ocd_id; records without group by name_norm.
+    ocd_records = raw.filter(pl.col("ocd_id") != "")
+    no_ocd_records = raw.filter(pl.col("ocd_id") == "")
+
     roster_rows: list[dict] = []
     name_to_global: dict[str, int] = {}
     global_idx = 0
 
-    for name_norm, group in raw.group_by("name_norm"):
-        nn = name_norm[0] if isinstance(name_norm, tuple) else name_norm
-        # Pick the most recent full_name as canonical
+    def _process_group(group: pl.DataFrame, identity_key: str) -> None:
+        nonlocal global_idx
+        nn = group["name_norm"].to_list()[-1]  # most recent name_norm
         full_names = group["full_name"].to_list()
         canonical_name = full_names[-1]
 
-        # Parties across bienniums
         parties = group["party"].unique().sort().to_list()
         party_str = ", ".join(p for p in parties if p)
         if not party_str:
             party_str = "Independent"
 
-        # Time coverage
         periods = sorted(group["time_idx"].unique().to_list())
         first_period = periods[0]
         last_period = periods[-1]
         n_periods = len(periods)
 
-        # Slugs per period
         slug_strs = []
         for t in periods:
             t_slugs = group.filter(pl.col("time_idx") == t)["slug"].to_list()
@@ -153,6 +163,20 @@ def build_global_roster(
             }
         )
         global_idx += 1
+
+    # Group OCD records by ocd_id (handles same-name legislators correctly)
+    if ocd_records.height > 0:
+        for _ocd_id, group in ocd_records.group_by("ocd_id"):
+            _process_group(group, "ocd_id")
+
+    # Group remaining records by name_norm (fallback for old CSVs)
+    if no_ocd_records.height > 0:
+        for name_norm, group in no_ocd_records.group_by("name_norm"):
+            nn = name_norm[0] if isinstance(name_norm, tuple) else name_norm
+            # Skip if this name_norm was already added via OCD ID
+            if nn in name_to_global:
+                continue
+            _process_group(group, "name_norm")
 
     roster = pl.DataFrame(roster_rows)
     return roster, name_to_global
