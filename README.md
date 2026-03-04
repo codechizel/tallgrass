@@ -89,7 +89,7 @@ Each phase produces an HTML report with tables, figures, and plain-English inter
 
 ```bash
 just check          # lint + typecheck + tests (quality gate)
-just test           # run all ~1680 tests
+just test           # run all ~2458 tests
 just test-fast      # skip slow/integration tests
 just lint           # ruff check --fix + ruff format
 just typecheck      # ty check src/ + ty check analysis/
@@ -99,8 +99,8 @@ just typecheck      # ty check src/ + ty check analysis/
 
 ```
 src/tallgrass/     # Scraper package (config, session, models, scraper, output, CLI)
-analysis/          # 17 numbered phase subdirectories + shared infrastructure
-tests/             # ~1680 pytest tests (scraper + all analysis phases)
+analysis/          # 27 numbered phase subdirectories + shared infrastructure
+tests/             # ~2458 pytest tests (scraper + all analysis phases)
 docs/              # Deep dives, ADRs, field surveys, primers
 data/              # Scraped CSV output + external validation data (gitignored)
 results/           # HTML reports + parquet intermediates (gitignored)
@@ -110,7 +110,7 @@ results/           # HTML reports + parquet intermediates (gitignored)
 
 - [Analysis primer](docs/analysis-primer.md) — plain-English guide for general audiences
 - [How IRT works](docs/how-irt-works.md) — general-audience explanation of Bayesian ideal points
-- [Architecture decisions](docs/adr/README.md) — 65 ADRs documenting design choices
+- [Architecture decisions](docs/adr/README.md) — 91 ADRs documenting design choices
 - [Design docs](analysis/design/README.md) — per-phase methodology and implementation
 - [Roadmap](docs/roadmap.md) — completed phases, backlog, rejected methods
 

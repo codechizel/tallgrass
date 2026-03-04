@@ -25,7 +25,7 @@ just check          # lint + typecheck + tests
 just lint           # ruff check --fix + ruff format
 just lint-check     # check without fixing
 just typecheck      # ty check src/ + ty check analysis/
-just test           # ~1680 tests
+just test           # ~2458 tests
 just test-fast      # skip slow/integration tests
 ```
 
@@ -62,10 +62,10 @@ The `N` suffix is sequential within each day, starting at 1.
 
 ```
 src/tallgrass/     Scraper package (pip-installable)
-analysis/          17 numbered phase subdirectories + shared infrastructure
-tests/             Pytest tests (~1680 total)
+analysis/          27 numbered phase subdirectories + shared infrastructure
+tests/             Pytest tests (~2458 total)
 docs/              Deep dives, ADRs, field surveys, primers
-docs/adr/          Architectural Decision Records (65 decisions)
+docs/adr/          Architectural Decision Records (91 decisions)
 analysis/design/   Per-phase methodology and implementation design docs
 ```
 
@@ -89,9 +89,9 @@ analysis/design/   Per-phase methodology and implementation design docs
 
 ## External Data Requirements
 
-- **Shor-McCarty scores** — auto-downloaded on first use (Phase 14)
+- **Shor-McCarty scores** — auto-downloaded on first use (Phase 17)
 - **DIME/CFscores** — manual download from [Stanford DIME project](https://data.stanford.edu/dime) (Phase 18)
-- **R + CRAN packages** — required for Phase 16 (Dynamic IRT) and Phase 17 (W-NOMINATE/OC)
+- **R + CRAN packages** — required for Phase 16 (W-NOMINATE/OC) and Phase 19 (TSA R enrichment)
 
 ## Reporting Issues
 
