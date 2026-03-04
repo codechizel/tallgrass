@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-04 (DB3 complete; --auto-load post-scrape hook)
+**Last updated:** 2026-03-04 (DB4 complete; REST API via Django Ninja)
 
 ---
 
@@ -554,21 +554,32 @@ just kanfocus 2025 --auto-load # KanFocus scrape + load into PostgreSQL
 
 **Prerequisite:** DB2
 
-### DB4. REST API
+### DB4. REST API — COMPLETE (2026-03-04)
 
-Django REST Framework (DRF) API for external consumers. Read-only endpoints for votes, rollcalls, legislators, sessions. Filters by state, biennium, chamber, party, legislator. Pagination for large result sets.
+Read-only public API via [Django Ninja](https://django-ninja.dev/) (`>=1.5,<2`). Ninja chosen over DRF for type-hint alignment (Pydantic v2 schemas), built-in pagination/filtering/throttling/OpenAPI, and consistency with our BaseRally project. Full analysis: [`docs/rest-api-deep-dive.md`](rest-api-deep-dive.md). ADR-0096.
 
-**Key endpoints:**
-- `GET /api/states/` — list states with session counts
-- `GET /api/sessions/?state=KS` — list sessions for a state
-- `GET /api/legislators/?session=91&chamber=Senate` — legislators with filters
-- `GET /api/rollcalls/?session=91&bill=SB+55` — rollcalls with bill filter
-- `GET /api/votes/?legislator=sen_masterson_ty_1` — individual votes
+**Endpoints** (all `GET`, base path `/api/v1/`):
 
-**Deliverables:**
-- DRF serializers, viewsets, router
-- OpenAPI/Swagger documentation
-- Rate limiting for public access
+| Endpoint | Records | Key Filters |
+|----------|---------|-------------|
+| `/sessions/`, `/sessions/{id}/` | ~16 | `state`, `is_special` |
+| `/legislators/`, `/legislators/{id}/` | ~2,000 | `session`, `chamber`, `party`, `search` |
+| `/rollcalls/`, `/rollcalls/{id}/` | ~8,000 | `session`, `chamber`, `bill_number`, `passed`, `date_from/to`, `search` |
+| `/votes/` | ~650,000 | `session`, `legislator_slug`, `rollcall`, `vote` |
+| `/bill-actions/` | ~23,000 | `session`, `bill_number`, `chamber`, `action_code` |
+| `/bill-texts/`, `/bill-texts/{id}/` | ~1,600 | `session`, `bill_number`, `document_type` |
+| `/alec/`, `/alec/{id}/` | ~1,057 | `category`, `task_force`, `search` |
+| `/health` | — | — |
+
+**Delivered:**
+- `legislature/api/` package (schemas, filters, pagination, throttling, 7 endpoint modules)
+- 7 composite database indexes (new migration)
+- `django-ninja>=1.5,<2` in `web` dependency group
+- 64 tests (`@pytest.mark.web`) — endpoints, filtering, pagination, schema validation
+- Auto-generated Swagger UI at `/api/v1/docs`
+- IP-based rate limiting: 60/min lists, 120/min details
+- List vs Detail schemas — lists omit large text fields; rollcall detail nests votes
+- Semicolon-joined fields (`sponsor_slugs`, `committee_names`) parsed into JSON arrays
 
 **Prerequisite:** DB1
 
@@ -612,7 +623,7 @@ DB1 (scaffolding) ─→ DB2 (loader) ─→ DB3 (post-hook)
                                     DB6 (multi-state)
 ```
 
-DB1-DB3 are the critical path — they get data into PostgreSQL. All three are complete. DB4 and DB5 are independent and can proceed in parallel. DB6 is the long-term goal that motivates the entire effort.
+DB1-DB4 are complete — data flows into PostgreSQL and is queryable via REST API. DB5 and DB6 are future work. DB6 is the long-term goal that motivates the entire effort.
 
 ---
 

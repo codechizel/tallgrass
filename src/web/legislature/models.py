@@ -75,6 +75,10 @@ class Legislator(models.Model):
                 name="unique_legislator_slug",
             ),
         ]
+        indexes = [
+            models.Index(fields=["session", "chamber"]),
+            models.Index(fields=["session", "party"]),
+        ]
 
     def __str__(self):
         return f"{self.slug} ({self.session})"
@@ -112,6 +116,11 @@ class RollCall(models.Model):
                 fields=["session", "vote_id"],
                 name="unique_rollcall_vote_id",
             ),
+        ]
+        indexes = [
+            models.Index(fields=["session", "chamber"]),
+            models.Index(fields=["session", "bill_number"]),
+            models.Index(fields=["vote_date"]),
         ]
 
     def __str__(self):
@@ -153,6 +162,9 @@ class BillAction(models.Model):
 
     class Meta:
         ordering = ["session", "bill_number", "occurred_datetime"]
+        indexes = [
+            models.Index(fields=["session", "bill_number"]),
+        ]
 
     def __str__(self):
         return f"{self.bill_number} — {self.action_code}"
@@ -171,6 +183,9 @@ class BillText(models.Model):
 
     class Meta:
         ordering = ["session", "bill_number", "document_type"]
+        indexes = [
+            models.Index(fields=["session", "bill_number"]),
+        ]
 
     def __str__(self):
         return f"{self.bill_number} ({self.document_type})"
