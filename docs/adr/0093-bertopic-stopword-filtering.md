@@ -5,61 +5,73 @@
 
 ## Context
 
-Phase 20 (Bill Text Analysis) uses BERTopic for topic modeling. BERTopic's c-TF-IDF layer extracts topic representations from a `CountVectorizer` internally. The default `CountVectorizer` has `stop_words=None`, meaning English function words (articles, prepositions, conjunctions) are included in the vocabulary.
+Phase 20 (Bill Text Analysis) uses BERTopic for topic modeling. BERTopic's c-TF-IDF layer extracts topic representations from a `CountVectorizer` internally. The default `CountVectorizer` has `stop_words=None`, meaning English function words and legislative boilerplate are included in the vocabulary.
 
-This produced uninterpretable topic labels like "Topic 0: the, of, and, or, to" — pure stopwords that convey no policy content. The clustering itself (UMAP + HDBSCAN on semantic embeddings) was unaffected — only the c-TF-IDF label extraction was broken.
+This produced uninterpretable topic labels. First pass with English-only stopwords still showed labels like "Topic 0: shall, statuteref, person, section, amendments" — legislative boilerplate terms that appear in virtually every bill regardless of policy area. These are as meaningless as "the, of, and" for distinguishing topics.
 
-Phase 15 (Prediction) already uses `stop_words="english"` on its `TfidfVectorizer` for NMF topic modeling on short titles. Phase 20 was missing the equivalent configuration.
+The clustering itself (UMAP + HDBSCAN on semantic embeddings) is unaffected — only the c-TF-IDF label extraction needs filtering.
 
 ## Decision
 
-Pass an explicit `CountVectorizer` to BERTopic with two settings:
+Pass an explicit `CountVectorizer` to BERTopic with four settings:
 
-1. **`stop_words="english"`** — scikit-learn's built-in English stopword list (318 words). Filters articles, prepositions, conjunctions, and other function words from the c-TF-IDF vocabulary.
+### 1. Custom stopwords: English + legislative boilerplate
 
-2. **`ngram_range=(1, 2)`** — allows bigrams alongside unigrams. Legislative terminology is often multi-word ("tax credit", "school district", "criminal penalty", "motor vehicle"). Unigrams alone lose these compound terms.
+`LEGISLATIVE_STOPWORDS` extends scikit-learn's 318 English stopwords with 18 legislative boilerplate terms:
+
+| Category | Terms |
+|----------|-------|
+| Mandatory legal language | `shall` |
+| Preprocessing artifact | `statuteref` (normalized K.S.A. references) |
+| Structural markers | `section`, `subsection`, `paragraph` |
+| Amendatory boilerplate | `amendments`, `amendment`, `amended`, `amend` |
+| Archaic legal connectors | `thereto`, `thereof`, `therein`, `herein`, `hereby`, `hereof` |
+| Legal boilerplate | `pursuant`, `provision`, `provisions` |
+
+Terms deliberately excluded from the list:
+- **`state`, `kansas`** — appear in every bill but form useful bigrams ("state board", "kansas department"). Handled by `max_df` instead, which filters unigrams without blocking bigrams.
+- **`person`, `act`, `means`, `law`** — can be topically meaningful in criminal law, consumer protection, or procedural topics.
+
+### 2. Bigrams: `ngram_range=(1, 2)`
+
+Legislative terminology is often multi-word ("tax credit", "school district", "motor vehicle"). Note: stopwords block bigrams containing those words (e.g., adding "shall" blocks "shall not"), which is desirable — those bigrams are also boilerplate.
+
+### 3. Document frequency filter: `max_df=0.85`
+
+Terms appearing in >85% of individual bills are filtered automatically. This catches domain-ubiquitous terms like "state" and "kansas" without needing them in the stopword list — preserving useful bigrams like "state board" and "kansas department".
+
+### 4. Minimum frequency: `min_df=2`
+
+Terms must appear in at least 2 bills. Filters hapax legomena (single-occurrence terms) that add noise to the vocabulary.
 
 ```python
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, CountVectorizer
 
-vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 2))
-
-topic_model = BERTopic(
-    umap_model=umap_model,
-    hdbscan_model=hdbscan_model,
-    vectorizer_model=vectorizer_model,
-    nr_topics="auto",
-    calculate_probabilities=True,
-    verbose=True,
+vectorizer_model = CountVectorizer(
+    stop_words=ENGLISH_STOP_WORDS | LEGISLATIVE_STOPWORDS,
+    ngram_range=(1, 2),
+    min_df=2,
+    max_df=VECTORIZER_MAX_DF,  # 0.85
 )
 ```
-
-### Why not a custom legislative stopword list?
-
-Considered extending the English stopwords with legislative boilerplate terms ("bill", "act", "section", "shall", "amendment", "kansas"). Decided against it:
-
-- The standard English list solves the immediate problem (function words dominating labels).
-- Legislative terms like "bill" and "act" *are* meaningful when they appear in topic labels — they distinguish procedural from substantive topics.
-- A custom list would require ongoing curation and introduces a maintenance burden without clear benefit.
-- The existing text preprocessing in `bill_text_data.py` already strips boilerplate (enacting clauses, severability, effective dates, K.S.A. references) before embedding — the remaining legislative terms are genuinely topical.
 
 ## Consequences
 
 ### Benefits
 
-- **Topic labels are now interpretable.** Instead of "the, of, and, or, to", topics show substantive terms like "education, school, curriculum" or "tax, credit, income".
-- **Bigram support** captures multi-word legislative concepts that unigrams miss.
-- **Consistent with Phase 15** (Prediction), which already uses `stop_words="english"`.
-- **No impact on clustering.** UMAP + HDBSCAN operate on pre-computed semantic embeddings, not on the c-TF-IDF vocabulary. Topic *assignments* are unchanged; only topic *labels* improve.
+- **Topic labels show policy content.** Instead of "shall, statuteref, person, section, amendments", topics show terms like "tax, property, income" or "school, education, board, school district".
+- **Two-layer filtering.** Curated stopwords for known boilerplate + `max_df` for data-driven ubiquity filtering. Neither alone is sufficient.
+- **Bigram support** captures multi-word legislative concepts.
+- **No impact on clustering.** UMAP + HDBSCAN operate on pre-computed embeddings. Topic *assignments* are unchanged; only *labels* improve.
 
 ### Trade-offs
 
-- **Downstream phases must re-run.** Phase 21 (TBIP) and Phase 22 (Issue IRT) consume Phase 20 topic assignments. Since assignments are unchanged (only labels differ), re-running is optional but recommended for consistent labeling in reports.
-- **Bigram vocabulary is larger.** The `(1, 2)` n-gram range increases the c-TF-IDF vocabulary size. This has negligible performance impact for a ~800-bill corpus.
+- **Custom stopword list requires curation.** If the corpus changes (e.g., adding Missouri or Oklahoma bills), the legislative stopwords may need updating. Mitigated by keeping the list small (18 terms) and letting `max_df` handle the rest.
+- **`max_df=0.85` may filter legitimate high-frequency terms.** In a corpus dominated by one policy area, that area's terms could exceed 85%. Unlikely for a full-biennium Kansas corpus (~800-1300 bills across all policy areas).
 
 ### Files changed
 
-- `analysis/20_bill_text/bill_text.py` — added `CountVectorizer` import, created `vectorizer_model`, passed to `BERTopic()`
-- `analysis/design/bill_text.md` — added vectorizer parameters to design table
-- `docs/adr/0084-bill-text-analysis-phase-18.md` — added vectorizer rows to settings table
+- `analysis/20_bill_text/bill_text.py` — `LEGISLATIVE_STOPWORDS` constant, `VECTORIZER_MAX_DF` constant, updated `CountVectorizer` with combined stopwords + `min_df`/`max_df`
+- `analysis/design/bill_text.md` — updated vectorizer parameters in design table
+- `docs/adr/0084-bill-text-analysis-phase-18.md` — updated vectorizer rows in settings table
 - `docs/bill-text-nlp-deep-dive.md` — noted stopword requirement for c-TF-IDF quality

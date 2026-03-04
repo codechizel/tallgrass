@@ -122,6 +122,30 @@ TOP_SIMILAR_PAIRS = 30
 HEATMAP_TOP_N = 50
 """Number of most-connected bills to show in similarity heatmap."""
 
+VECTORIZER_MAX_DF = 0.85
+"""Maximum document frequency for c-TF-IDF vocabulary.  Terms appearing in
+>85% of bills are filtered — catches domain-ubiquitous words like 'state',
+'kansas' without needing them in the stopword list (and without blocking
+useful bigrams like 'state board')."""
+
+LEGISLATIVE_STOPWORDS: frozenset[str] = frozenset({
+    # Mandatory legal language (every bill)
+    "shall",
+    # Preprocessing artifact (normalized K.S.A. references)
+    "statuteref",
+    # Structural markers
+    "section", "subsection", "paragraph",
+    # Amendatory boilerplate
+    "amendments", "amendment", "amended", "amend",
+    # Archaic legal connectors
+    "thereto", "thereof", "therein",
+    "herein", "hereby", "hereof",
+    "pursuant", "provision", "provisions",
+})
+"""Legislative boilerplate terms filtered from c-TF-IDF topic labels.
+These appear in virtually every Kansas bill regardless of policy area.
+Combined with scikit-learn's English stopwords in the BERTopic vectorizer."""
+
 PARTY_COLORS = {
     "Republican": "#E81B23",
     "Democrat": "#0015BC",
@@ -271,7 +295,7 @@ def fit_topic_model(
     """
     from bertopic import BERTopic
     from hdbscan import HDBSCAN
-    from sklearn.feature_extraction.text import CountVectorizer
+    from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, CountVectorizer
     from umap import UMAP
 
     umap_model = UMAP(
@@ -289,7 +313,12 @@ def fit_topic_model(
         prediction_data=True,
     )
 
-    vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 2))
+    vectorizer_model = CountVectorizer(
+        stop_words=list(ENGLISH_STOP_WORDS | LEGISLATIVE_STOPWORDS),
+        ngram_range=(1, 2),
+        min_df=2,
+        max_df=VECTORIZER_MAX_DF,
+    )
 
     topic_model = BERTopic(
         umap_model=umap_model,
