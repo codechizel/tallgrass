@@ -44,6 +44,7 @@ What are the trade-offs?
 | [0089](0089-model-legislation-detection.md) | Model legislation detection (ALEC + cross-state, BT5) |
 | [0093](0093-bertopic-stopword-filtering.md) | BERTopic stopword filtering for c-TF-IDF topic labels |
 | [0097](0097-kanfocus-cross-validation.md) | KanFocus cross-validation diagnostic (KF vs JE data integrity) |
+| [0098](0098-crossval-multi-motion-and-slug-fixes.md) | Cross-validation fixes (tally-based multi-motion matching, slug resolution) |
 
 ### Dimensionality Reduction
 
@@ -259,6 +260,7 @@ What are the trade-offs?
 | [0095](0095-scraper-db-post-hook.md) | Scraper post-hook — auto-load CSVs into PostgreSQL (DB3: --auto-load flag, subprocess, fail-soft) | Accepted | 2026-03-04 |
 | [0096](0096-rest-api-django-ninja.md) | REST API via Django Ninja (DB4: read-only, Pydantic schemas, FilterSchema, OpenAPI auto-docs) | Accepted | 2026-03-04 |
 | [0097](0097-kanfocus-cross-validation.md) | KanFocus cross-validation diagnostic (KF vs JE data integrity, `--mode crossval`) | Accepted | 2026-03-04 |
+| [0098](0098-crossval-multi-motion-and-slug-fixes.md) | Cross-validation fixes (tally-based multi-motion matching, slug resolution, name fallback) | Accepted | 2026-03-04 |
 
 ## Creating a New ADR
 

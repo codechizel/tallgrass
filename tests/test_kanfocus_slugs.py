@@ -56,6 +56,12 @@ class TestNormalizeName:
     def test_multi_word_last_name(self):
         assert normalize_name("Mary Pilcher Cook") == "Mary Pilcher Cook"
 
+    def test_hyphen_replaced_with_space(self):
+        assert normalize_name("Oletha Faust-Goudeau") == "Oletha Faust Goudeau"
+
+    def test_multiple_hyphens(self):
+        assert normalize_name("Anna Jones-Smith-Brown") == "Anna Jones Smith Brown"
+
 
 # ── generate_slug() ───────────────────────────────────────────────────────
 
@@ -82,7 +88,7 @@ class TestGenerateSlug:
         assert generate_slug("Stephen R. Morris", "S") == "sen_morris_stephen_1"
 
     def test_hyphenated_name(self):
-        assert generate_slug("Oletha Faust-Goudeau", "S") == "sen_faust-goudeau_oletha_1"
+        assert generate_slug("Oletha Faust-Goudeau", "S") == "sen_faust_goudeau_oletha_1"
 
     def test_case_insensitive(self):
         slug = generate_slug("Steve Abrams", "S")
@@ -177,7 +183,10 @@ class TestLoadExistingSlugs:
 
 
 class TestMatchToExisting:
-    """Cross-reference KanFocus names against existing slugs."""
+    """Cross-reference KanFocus names against existing slugs.
+
+    Run: uv run pytest tests/test_kanfocus_slugs.py -k TestMatchToExisting -v
+    """
 
     def test_direct_match(self):
         existing = {"steve abrams": "sen_abrams_steve_1"}
@@ -198,6 +207,69 @@ class TestMatchToExisting:
         existing = {"stephen morris": "sen_morris_stephen_1"}
         result = match_to_existing("Stephen R. Morris", "S", "39th", existing)
         assert result == "sen_morris_stephen_1"
+
+    # -- Nickname matching --
+
+    def test_nickname_brad_to_bradley(self):
+        """KF 'Brad' matches JE 'Bradley'."""
+        existing = {"bradley ralph": "rep_ralph_bradley_1"}
+        result = match_to_existing("Brad Ralph", "H", "1st", existing)
+        assert result == "rep_ralph_bradley_1"
+
+    def test_nickname_bill_to_william(self):
+        """KF 'Bill' matches JE 'William'."""
+        existing = {"william feuerborn": "rep_feuerborn_william_1"}
+        result = match_to_existing("Bill Feuerborn", "H", "10th", existing)
+        assert result == "rep_feuerborn_william_1"
+
+    def test_nickname_reverse_formal_to_nick(self):
+        """JE 'Robert' matches KF 'Bob'."""
+        existing = {"bob grant": "sen_grant_bob_1"}
+        result = match_to_existing("Robert Grant", "S", "5th", existing)
+        assert result == "sen_grant_bob_1"
+
+    def test_nickname_mike_to_michael(self):
+        existing = {"michael thompson": "rep_thompson_michael_1"}
+        result = match_to_existing("Mike Thompson", "H", "1st", existing)
+        assert result == "rep_thompson_michael_1"
+
+    def test_nickname_no_false_match(self):
+        """Nickname fallback doesn't match unrelated names."""
+        existing = {"john smith": "sen_smith_john_1"}
+        result = match_to_existing("Mike Thompson", "H", "1st", existing)
+        assert result is None
+
+    # -- Chamber validation --
+
+    def test_chamber_mismatch_rejects_senate_slug_for_house(self):
+        """Senate slug should not match for a House vote."""
+        existing = {"mike thompson": "sen_thompson_mike_1"}
+        result = match_to_existing("Mike Thompson", "H", "1st", existing)
+        assert result is None
+
+    def test_chamber_mismatch_rejects_house_slug_for_senate(self):
+        existing = {"laura kelly": "rep_kelly_laura_1"}
+        result = match_to_existing("Laura Kelly", "S", "18th", existing)
+        assert result is None
+
+    def test_chamber_match_allows_correct_prefix(self):
+        existing = {"mike thompson": "rep_thompson_mike_1"}
+        result = match_to_existing("Mike Thompson", "H", "1st", existing)
+        assert result == "rep_thompson_mike_1"
+
+    def test_chamber_validation_on_nickname_match(self):
+        """Nickname match also enforces chamber compatibility."""
+        existing = {"william feuerborn": "sen_feuerborn_william_1"}
+        result = match_to_existing("Bill Feuerborn", "H", "10th", existing)
+        assert result is None
+
+    # -- Hyphen normalization --
+
+    def test_hyphen_normalized_in_lookup(self):
+        """Faust-Goudeau normalizes to 'faust goudeau' and matches."""
+        existing = {"oletha faust goudeau": "sen_faust_goudeau_oletha_1"}
+        result = match_to_existing("Oletha Faust-Goudeau", "S", "29th", existing)
+        assert result == "sen_faust_goudeau_oletha_1"
 
 
 # ── build_slug_lookup() ───────────────────────────────────────────────────

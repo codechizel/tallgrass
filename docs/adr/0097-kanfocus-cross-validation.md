@@ -23,7 +23,7 @@ Three frozen dataclasses (`VoteMismatch`, `RollCallComparison`, `CrossValReport`
 
 **Bill number normalization**: `normalize_bill_number()` strips "Sub for" prefixes (including nested: "S Sub for Sub for HB 2007" → "HB 2007") and normalizes whitespace. KanFocus and kslegislature.gov sometimes differ on whether to include the substitution prefix.
 
-**Rollcall matching**: `find_matches()` joins on `(normalized_bill_number, chamber, vote_date)`. First JE rollcall per key wins (multiple motions per bill/day are rare). Returns matched pairs + unmatched KF rollcalls.
+**Rollcall matching**: `find_matches()` joins on `(normalized_bill_number, chamber, vote_date)`. For multi-motion groups (multiple rollcalls sharing the same key), sub-matches by tally vector `(yea, nay, nv_total)` to disambiguate. See ADR-0098 for the multi-motion fix.
 
 **Vote category comparison rules**:
 
@@ -60,4 +60,5 @@ Three frozen dataclasses (`VoteMismatch`, `RollCallComparison`, `CrossValReport`
 - Re-parses cache without network access — safe to run anytime
 - Bill number normalization handles KanFocus-specific substitution prefixes
 - 37 new tests covering normalization, matching, comparison, and report formatting
+- Multi-motion matching and slug resolution bugs fixed in ADR-0098
 - Future use: run across all 8 overlapping bienniums to build a data quality baseline

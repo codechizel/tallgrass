@@ -184,6 +184,73 @@ class TestFindMatches:
         assert len(matched) == 0
         assert len(unmatched) == 1
 
+    # -- Multi-motion tally-based matching --
+
+    def test_multi_motion_same_bill_different_tallies(self):
+        """Two KF rollcalls on the same bill/day match two JE rollcalls by tally."""
+        kf = [
+            _make_rc(bill_number="SB 63", vote_id="kf_1", yea_count=25, nay_count=15),
+            _make_rc(bill_number="SB 63", vote_id="kf_2", yea_count=30, nay_count=10),
+        ]
+        je = [
+            _make_rc(bill_number="SB 63", vote_id="je_1", yea_count=30, nay_count=10),
+            _make_rc(bill_number="SB 63", vote_id="je_2", yea_count=25, nay_count=15),
+        ]
+        matched, unmatched = find_matches(kf, je)
+        assert len(matched) == 2
+        assert len(unmatched) == 0
+        # Verify correct pairing by tally (kf_1 25/15 → je_2 25/15)
+        match_dict = {m[0].vote_id: m[1].vote_id for m in matched}
+        assert match_dict["kf_1"] == "je_2"
+        assert match_dict["kf_2"] == "je_1"
+
+    def test_multi_motion_identical_tallies_paired_positionally(self):
+        """Duplicate tallies on the same bill/day pair positionally."""
+        kf = [
+            _make_rc(bill_number="SB 87", vote_id="kf_1", yea_count=30, nay_count=10),
+            _make_rc(bill_number="SB 87", vote_id="kf_2", yea_count=30, nay_count=10),
+        ]
+        je = [
+            _make_rc(bill_number="SB 87", vote_id="je_1", yea_count=30, nay_count=10),
+            _make_rc(bill_number="SB 87", vote_id="je_2", yea_count=30, nay_count=10),
+        ]
+        matched, unmatched = find_matches(kf, je)
+        assert len(matched) == 2
+        assert len(unmatched) == 0
+
+    def test_multi_motion_kf_extra_unmatched(self):
+        """Extra KF rollcall with no matching tally → unmatched."""
+        kf = [
+            _make_rc(bill_number="SB 1", vote_id="kf_1", yea_count=30, nay_count=10),
+            _make_rc(bill_number="SB 1", vote_id="kf_2", yea_count=20, nay_count=20),
+        ]
+        je = [
+            _make_rc(bill_number="SB 1", vote_id="je_1", yea_count=30, nay_count=10),
+        ]
+        matched, unmatched = find_matches(kf, je)
+        assert len(matched) == 1
+        assert len(unmatched) == 1
+        assert matched[0][0].vote_id == "kf_1"
+        assert unmatched[0].vote_id == "kf_2"
+
+    def test_multi_motion_nv_total_matching(self):
+        """JE nv_total = not_voting + absent_not_voting for tally key."""
+        kf = [
+            _make_rc(
+                bill_number="SB 1", vote_id="kf_1",
+                yea_count=30, nay_count=5, not_voting_count=5,
+            ),
+        ]
+        je = [
+            _make_rc(
+                bill_number="SB 1", vote_id="je_1",
+                yea_count=30, nay_count=5, not_voting_count=2, absent_not_voting_count=3,
+            ),
+        ]
+        matched, unmatched = find_matches(kf, je)
+        assert len(matched) == 1
+        assert len(unmatched) == 0
+
 
 # ── TestCompareTallies ───────────────────────────────────────────────────
 
@@ -301,6 +368,51 @@ class TestCompareIndividualVotes:
     def test_empty_vote_lists(self):
         mismatches, kf_only, je_only = compare_individual_votes([], [])
         assert len(mismatches) == 0
+        assert len(kf_only) == 0
+        assert len(je_only) == 0
+
+    # -- Name-based fallback --
+
+    def test_name_fallback_matches_different_slugs(self):
+        """Different slugs but same name → matched by name, not in kf/je_only."""
+        kf = [_make_vote(slug="rep_smith_john_1", name="John Smith", vote="Yea")]
+        je = [_make_vote(slug="rep_smith_john_2", name="John Smith", vote="Yea")]
+        mismatches, kf_only, je_only = compare_individual_votes(kf, je)
+        assert len(mismatches) == 0
+        assert len(kf_only) == 0
+        assert len(je_only) == 0
+
+    def test_name_fallback_reports_mismatch(self):
+        """Name-matched but different votes → reported as mismatch."""
+        kf = [_make_vote(slug="rep_smith_john_1", name="John Smith", vote="Yea")]
+        je = [_make_vote(slug="rep_smith_john_2", name="John Smith", vote="Nay")]
+        mismatches, kf_only, je_only = compare_individual_votes(kf, je)
+        assert len(mismatches) == 1
+        assert mismatches[0].compatible is False
+        assert len(kf_only) == 0
+        assert len(je_only) == 0
+
+    def test_name_fallback_anv_compatible(self):
+        """Name-matched with ANV/NV difference → compatible mismatch."""
+        kf = [_make_vote(slug="kf_slug_1", name="John Smith", vote="Not Voting")]
+        je = [_make_vote(slug="je_slug_1", name="John Smith", vote="Absent and Not Voting")]
+        mismatches, kf_only, je_only = compare_individual_votes(kf, je)
+        assert len(mismatches) == 1
+        assert mismatches[0].compatible is True
+
+    def test_name_fallback_no_false_match(self):
+        """Different names on different slugs → remain in kf/je_only."""
+        kf = [_make_vote(slug="kf_slug_1", name="John Smith", vote="Yea")]
+        je = [_make_vote(slug="je_slug_1", name="Jane Doe", vote="Yea")]
+        mismatches, kf_only, je_only = compare_individual_votes(kf, je)
+        assert kf_only == ["kf_slug_1"]
+        assert je_only == ["je_slug_1"]
+
+    def test_name_fallback_with_middle_initial(self):
+        """Name normalization strips middle initials for fallback match."""
+        kf = [_make_vote(slug="kf_slug_1", name="Stephen R. Morris", vote="Yea")]
+        je = [_make_vote(slug="je_slug_1", name="Stephen Morris", vote="Yea")]
+        mismatches, kf_only, je_only = compare_individual_votes(kf, je)
         assert len(kf_only) == 0
         assert len(je_only) == 0
 

@@ -16,6 +16,7 @@ Vote category comparison rules:
 import csv
 import hashlib
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from tallgrass.kanfocus.session import (
     session_id_for_biennium,
     vote_tally_url,
 )
+from tallgrass.kanfocus.slugs import normalize_name
 from tallgrass.models import IndividualVote, RollCall
 
 # KF→JE category equivalence for individual vote comparison
@@ -279,6 +281,50 @@ def _match_key(rc: RollCall) -> tuple[str, str, str]:
     return (normalize_bill_number(rc.bill_number), rc.chamber, rc.vote_date)
 
 
+def _tally_key(rc: RollCall) -> tuple[int, int, int]:
+    """Build a tally vector for sub-matching: (yea, nay, nv_total).
+
+    For JE rollcalls, nv_total = not_voting + absent_not_voting (KanFocus
+    merges these into a single not_voting count).
+    """
+    nv_total = rc.not_voting_count + rc.absent_not_voting_count
+    return (rc.yea_count, rc.nay_count, nv_total)
+
+
+def _match_by_tally(
+    kf_list: list[RollCall],
+    je_list: list[RollCall],
+    matched: list[tuple[RollCall, RollCall]],
+    unmatched: list[RollCall],
+) -> None:
+    """Sub-match rollcalls within a (bill, chamber, date) group by tally vector.
+
+    Groups each side by tally key. For each tally that appears on both sides,
+    pairs rollcalls positionally. Leftover KF rollcalls go to unmatched.
+    """
+    kf_by_tally: dict[tuple[int, int, int], list[RollCall]] = defaultdict(list)
+    je_by_tally: dict[tuple[int, int, int], list[RollCall]] = defaultdict(list)
+
+    for rc in kf_list:
+        kf_by_tally[_tally_key(rc)].append(rc)
+    for rc in je_list:
+        je_by_tally[_tally_key(rc)].append(rc)
+
+    used_je: set[str] = set()  # track consumed JE vote_ids
+
+    for tally, kf_group in kf_by_tally.items():
+        je_group = je_by_tally.get(tally, [])
+        # Filter out already-consumed JE rollcalls
+        available_je = [rc for rc in je_group if rc.vote_id not in used_je]
+
+        for i, kf_rc in enumerate(kf_group):
+            if i < len(available_je):
+                matched.append((kf_rc, available_je[i]))
+                used_je.add(available_je[i].vote_id)
+            else:
+                unmatched.append(kf_rc)
+
+
 def find_matches(
     kf_rollcalls: list[RollCall],
     je_rollcalls: list[RollCall],
@@ -286,26 +332,35 @@ def find_matches(
     """Match KF rollcalls to JE rollcalls on (bill_number, chamber, date).
 
     Bill numbers are normalized (Sub-for prefixes stripped) before matching.
+    When multiple rollcalls share the same (bill, chamber, date) key,
+    sub-matches by tally vector (yea, nay, nv_total) to disambiguate
+    multiple motions on the same bill/day.
 
     Returns (matched_pairs, unmatched_kf_rollcalls).
     """
-    je_index: dict[tuple[str, str, str], RollCall] = {}
+    kf_groups: dict[tuple[str, str, str], list[RollCall]] = defaultdict(list)
+    je_groups: dict[tuple[str, str, str], list[RollCall]] = defaultdict(list)
+
+    for rc in kf_rollcalls:
+        kf_groups[_match_key(rc)].append(rc)
     for rc in je_rollcalls:
-        key = _match_key(rc)
-        # First JE rollcall with this key wins (multiple motions per bill/day rare)
-        if key not in je_index:
-            je_index[key] = rc
+        je_groups[_match_key(rc)].append(rc)
 
     matched: list[tuple[RollCall, RollCall]] = []
     unmatched: list[RollCall] = []
 
-    for kf_rc in kf_rollcalls:
-        key = _match_key(kf_rc)
-        je_rc = je_index.get(key)
-        if je_rc is not None:
-            matched.append((kf_rc, je_rc))
+    for key, kf_list in kf_groups.items():
+        je_list = je_groups.get(key)
+        if je_list is None:
+            unmatched.extend(kf_list)
+            continue
+
+        if len(kf_list) == 1 and len(je_list) == 1:
+            # Simple 1:1 — no tally disambiguation needed
+            matched.append((kf_list[0], je_list[0]))
         else:
-            unmatched.append(kf_rc)
+            # Multi-motion: sub-match by tally vector
+            _match_by_tally(kf_list, je_list, matched, unmatched)
 
     return matched, unmatched
 
@@ -315,11 +370,20 @@ def find_matches(
 # ---------------------------------------------------------------------------
 
 
+def _normalize_legislator_name(name: str) -> str:
+    """Normalize a legislator name for cross-source matching."""
+    return normalize_name(name).lower().strip()
+
+
 def compare_individual_votes(
     kf_votes: list[IndividualVote],
     je_votes: list[IndividualVote],
 ) -> tuple[list[VoteMismatch], list[str], list[str]]:
     """Compare individual votes matched by legislator slug.
+
+    Uses slug matching first, then falls back to normalized name matching
+    for any slugs that appear on only one side (catches remaining slug
+    mismatches between KF and JE).
 
     Returns (mismatches, kf_only_slugs, je_only_slugs).
     """
@@ -327,8 +391,48 @@ def compare_individual_votes(
     je_by_slug = {v.legislator_slug: v for v in je_votes}
 
     mismatches: list[VoteMismatch] = []
-    kf_only = sorted(set(kf_by_slug) - set(je_by_slug))
-    je_only = sorted(set(je_by_slug) - set(kf_by_slug))
+    kf_only_set = set(kf_by_slug) - set(je_by_slug)
+    je_only_set = set(je_by_slug) - set(kf_by_slug)
+
+    # Name-based fallback: match KF-only slugs to JE-only slugs by name
+    name_matched_kf: set[str] = set()
+    name_matched_je: set[str] = set()
+    if kf_only_set and je_only_set:
+        je_name_index: dict[str, str] = {}  # normalized_name → je_slug
+        for je_slug in je_only_set:
+            je_v = je_by_slug[je_slug]
+            norm = _normalize_legislator_name(je_v.legislator_name)
+            if norm:
+                je_name_index[norm] = je_slug
+
+        for kf_slug in kf_only_set:
+            kf_v = kf_by_slug[kf_slug]
+            norm = _normalize_legislator_name(kf_v.legislator_name)
+            if norm and norm in je_name_index:
+                je_slug = je_name_index[norm]
+                if je_slug not in name_matched_je:
+                    name_matched_kf.add(kf_slug)
+                    name_matched_je.add(je_slug)
+                    # Compare their votes using the KF slug as the label
+                    je_v = je_by_slug[je_slug]
+                    kf_cat = kf_v.vote
+                    je_cat = je_v.vote
+                    if kf_cat != je_cat:
+                        compatible = (
+                            kf_cat == "Not Voting" and je_cat == "Absent and Not Voting"
+                        ) or (kf_cat == "Absent and Not Voting" and je_cat == "Not Voting")
+                        mismatches.append(
+                            VoteMismatch(
+                                slug=kf_slug,
+                                name=kf_v.legislator_name or je_v.legislator_name,
+                                kf_vote=kf_cat,
+                                je_vote=je_cat,
+                                compatible=compatible,
+                            )
+                        )
+
+    kf_only = sorted(kf_only_set - name_matched_kf)
+    je_only = sorted(je_only_set - name_matched_je)
 
     for slug in sorted(set(kf_by_slug) & set(je_by_slug)):
         kf_v = kf_by_slug[slug]
