@@ -136,7 +136,7 @@ Bill text pipeline: `KansasAdapter.discover_bills()` -> `BillTextFetcher.fetch_a
 
 KanFocus pipeline: `KanFocusFetcher.fetch_biennium()` -> `parse_vote_page()` -> `convert_to_standard()` -> `save_csvs()` (or `merge_gap_fill()` for gap-fill mode). Coverage: 78th-91st (1999-2026). Requires Chrome with active KanFocus login (fetcher extracts cookies from Chrome's encrypted cookie database on macOS via Keychain). Parser auto-detects HTML input and converts to text via BeautifulSoup. Raw HTML archived to `data/kanfocus_archive/` after each run. See ADR-0088.
 
-ALEC pipeline: `enumerate_bills()` -> `fetch_bill_texts()` -> `save_alec_bills()`. Scrapes alec.org/model-policy/ (~1,061 model policies). Cached HTML at `data/external/alec/.cache/`. See ADR-0089.
+ALEC pipeline: `enumerate_bills()` -> `fetch_bill_texts()` -> `save_alec_bills()`. Scrapes alec.org/model-policy/ (~1,057 model policies). Listing page uses `<li class="media-flex">` containers (fallback from `<article>`, ADR-0092). Cached HTML at `data/external/alec/.cache/`. See ADR-0089.
 
 Static parsing helpers (all `@staticmethod` on `KSVoteScraper`): `_extract_bill_title()`, `_extract_chamber_motion_date()`, `_parse_vote_categories()`, `_extract_party_and_district()`. Each docstring references the HTML pitfalls it handles. Tests call these directly.
 
@@ -186,7 +186,7 @@ These are real bugs that were found and fixed. Do NOT regress on them:
 - `passed`: passed/adopted/prevailed/concurred -> True; failed/rejected/sustained -> False; else null
 - Vote categories: Yea, Nay, Present and Passing, Absent and Not Voting, Not Voting (exactly 5). KanFocus has 4 categories (no "Absent and Not Voting" — maps "Not Voting" uniformly).
 - Legislator slugs: `sen_` = Senate, `rep_` = House
-- Column naming: scraper CSVs use `slug` and `vote`; analysis phases rename to `legislator_slug` and expect `vote` (not `vote_category`). Each phase handles the rename at load time (ADR-0066).
+- Column naming: scraper CSVs use `slug` and `vote`; `load_legislators()` keeps `slug` as-is. Three phases (LCA, W-NOMINATE, Bill Text) that need `legislator_slug` rename locally. All other phases use `slug` directly (ADR-0066, ADR-0092).
 - Independent party handling: scraper outputs empty string; all analysis fills to "Independent" at load time (ADR-0021)
 - `sponsor_slugs`: semicolon-joined legislator slugs extracted from bill page `<a>` hrefs (e.g. `"sen_tyson_caryn_1; sen_alley_larry_1"`). Empty for committee sponsors, pre-89th sessions, and data scraped before this feature. Used by Phase 15 (`sponsor_party_R` for prediction), Phase 24 (`n_bills_sponsored` in scorecard), and Phase 25 (per-legislator sponsorship section + defection sponsor display). Text-based fallback via `phase_utils.match_sponsor_to_party()` when slugs unavailable.
 - `BillAction`: KLISS API HISTORY data — `action_code`, `chamber`, `committee_names` (tuple, semicolon-joined in CSV), `occurred_datetime`, `session_date`, `status`, `journal_page_number`. Available for sessions with KLISS API (89th+); pre-KLISS sessions (84th-88th) may have limited or no HISTORY data.
@@ -246,7 +246,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (91 decisions)
+- ADRs: `docs/adr/README.md` (92 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -316,6 +316,7 @@ Key references:
 - Audit findings resolution: ADR-0076 (A6-A18: bridge-builder harmonic centrality, surprising vote split, IRT sensitivity interpretation, small-group warning, BiCM Senate threshold, document-and-accept annotations)
 - Audit findings deep dive: `docs/audit-findings-deep-dive.md` (research classification of all 13 remaining findings)
 - Worktree CWD death prevention: ADR-0077 (update-ref fix, named wt-done, forwarder pattern)
+- 91st pipeline run fixes: ADR-0092 (9 bugs across 12 files — ALEC HTML, slug column, results_root double-nesting, TSA scalar, HDBSCAN, missing votes KanFocus cross-ref)
 - Analytic flags: `docs/analytic-flags.md` (living document of observations)
 - Field survey: `docs/landscape-legislative-vote-analysis.md`
 - Method evaluation: `docs/method-evaluation.md`

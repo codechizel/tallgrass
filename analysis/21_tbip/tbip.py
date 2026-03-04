@@ -416,7 +416,6 @@ def main() -> None:
         session=args.session,
         analysis_name="21_tbip",
         params=vars(args),
-        results_root=results_root,
         primer=TBIP_PRIMER,
         run_id=args.run_id,
     ) as ctx:

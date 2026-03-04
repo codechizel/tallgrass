@@ -151,6 +151,7 @@ What are the trade-offs?
 | [0080](0080-code-audit-2026-03-02-resolution.md) | Code audit 2026-03-02 — manifest key fix, 4 remaining items |
 | [0090](0090-django-project-scaffolding.md) | Django project scaffolding + PostgreSQL (DB1) |
 | [0091](0091-phase-renumbering-two-pipeline-split.md) | Phase renumbering (01-27) + two-pipeline split |
+| [0092](0092-91st-pipeline-run-fixes.md) | 91st pipeline run fixes (9 bugs across 12 files) |
 
 ## Chronological Index
 
@@ -247,6 +248,7 @@ What are the trade-offs?
 | [0089](0089-model-legislation-detection.md) | Model legislation detection (ALEC + cross-state, BT5) | Accepted | 2026-03-03 |
 | [0090](0090-django-project-scaffolding.md) | Django project scaffolding + PostgreSQL (DB1) | Accepted | 2026-03-03 |
 | [0091](0091-phase-renumbering-two-pipeline-split.md) | Phase renumbering (01-27) + two-pipeline split (ADR-0091) | Accepted | 2026-03-03 |
+| [0092](0092-91st-pipeline-run-fixes.md) | 91st pipeline run fixes (9 bugs across 12 files, first full 91st pipeline run) | Accepted | 2026-03-03 |
 
 ## Creating a New ADR
 

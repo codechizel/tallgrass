@@ -285,6 +285,7 @@ def fit_topic_model(
         min_cluster_size=min_cluster_size,
         min_samples=MIN_SAMPLES,
         metric="euclidean",
+        prediction_data=True,
     )
 
     topic_model = BERTopic(
@@ -830,7 +831,6 @@ def main() -> None:
         session=args.session,
         analysis_name="20_bill_text",
         params=vars(args),
-        results_root=results_root,
         primer=BILL_TEXT_PRIMER,
         run_id=args.run_id,
     ) as ctx:
@@ -845,6 +845,8 @@ def main() -> None:
         rollcalls = load_rollcalls(data_dir)
         votes = load_votes(data_dir)
         legislators = load_legislators(data_dir)
+        if "slug" in legislators.columns and "legislator_slug" not in legislators.columns:
+            legislators = legislators.rename({"slug": "legislator_slug"})
         print(f"  Roll calls: {len(rollcalls)}")
         print(f"  Legislators: {len(legislators)}")
 

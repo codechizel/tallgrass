@@ -115,9 +115,16 @@ def parse_bai_perron_result(
     breakpoints = bp_json.get("breakpoints", [])
     if not breakpoints:
         return None
+    # R JSON: scalar when single breakpoint, list when multiple
+    if not isinstance(breakpoints, list):
+        breakpoints = [breakpoints]
 
     ci_lower = bp_json.get("ci_lower", [])
     ci_upper = bp_json.get("ci_upper", [])
+    if not isinstance(ci_lower, list):
+        ci_lower = [ci_lower]
+    if not isinstance(ci_upper, list):
+        ci_upper = [ci_upper]
 
     n = len(weekly_dates)
     rows = []

@@ -59,9 +59,8 @@ def _clean_legislators(data_dir: Path) -> pl.DataFrame:
     """Load and clean legislator CSV (shared implementation)."""
     prefix = data_dir.name
     legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
-    # Rename slug → legislator_slug to match analysis convention (ADR-0066)
-    if "slug" in legislators.columns and "legislator_slug" not in legislators.columns:
-        legislators = legislators.rename({"slug": "legislator_slug"})
+    # Keep CSV column name as-is: scraper outputs "slug", phases reference it directly.
+    # Phases that need "legislator_slug" alias it locally (ADR-0066).
     # Backward compat: older CSVs may lack the ocd_id column
     if "ocd_id" not in legislators.columns:
         legislators = legislators.with_columns(pl.lit("").alias("ocd_id"))

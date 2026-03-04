@@ -509,8 +509,48 @@ def _parse_vote_tally(vote_text: str) -> tuple[int, int, int] | None:
     return yea, nay, abs(yea - nay)
 
 
+def _load_recovered_votes(data_dir: Path) -> set[tuple[str, str]]:
+    """Load (bill_number, vote_date) pairs from KanFocus-sourced rollcalls.
+
+    Returns a set of (bill_number, MM/DD/YYYY date) tuples for votes that
+    were recovered by gap-fill, so the missing votes report can exclude them.
+    """
+    try:
+        import polars as pl
+    except ImportError:
+        return set()
+
+    prefix = data_dir.name
+    rollcalls_path = data_dir / f"{prefix}_rollcalls.csv"
+    if not rollcalls_path.exists():
+        return set()
+
+    rc = pl.read_csv(rollcalls_path)
+    kf = rc.filter(pl.col("vote_id").str.starts_with("kf_"))
+    if kf.is_empty():
+        return set()
+
+    return set(
+        kf.select("bill_number", "vote_date").iter_rows()
+    )
+
+
+def _vote_date_from_url(url: str) -> str | None:
+    """Extract MM/DD/YYYY date from a vote_view URL containing je_YYYYMMDD...."""
+    import re
+
+    m = re.search(r"je_(\d{4})(\d{2})(\d{2})", url)
+    if not m:
+        return None
+    return f"{m.group(2)}/{m.group(3)}/{m.group(1)}"
+
+
 def _append_missing_votes(report: object, session: str) -> None:
-    """Append a Missing Votes section to the report from the failure manifest."""
+    """Append a Missing Votes section to the report from the failure manifest.
+
+    Cross-references against KanFocus rollcalls to exclude votes that were
+    recovered by gap-fill (ADR-0088).  Only genuinely missing votes are shown.
+    """
     from tallgrass.session import STATE_DIR
 
     try:
@@ -530,7 +570,24 @@ def _append_missing_votes(report: object, session: str) -> None:
     if not failures:
         return
 
+    # Filter out failures that were recovered by KanFocus gap-fill
+    recovered = _load_recovered_votes(data_dir)
+    original_count = len(failures)
+    if recovered:
+        still_missing = []
+        for fail in failures:
+            bill = fail.get("bill_number", "")
+            date = _vote_date_from_url(fail.get("vote_url", ""))
+            if date and (bill, date) in recovered:
+                continue
+            still_missing.append(fail)
+        failures = still_missing
+
+    if not failures:
+        return
+
     total = manifest.get("total_vote_pages", "?")
+    recovered_count = original_count - len(failures)
 
     # Parse tallies and sort by margin (closest first), unparseable last
     rows: list[tuple[int | None, dict]] = []
@@ -542,9 +599,16 @@ def _append_missing_votes(report: object, session: str) -> None:
 
     # Build HTML table
     total_display = f"{total:,}" if isinstance(total, int) else total
+    header_parts = [
+        f"{len(failures)} of {total_display} vote pages could not be fetched.",
+    ]
+    if recovered_count > 0:
+        header_parts.append(
+            f" ({recovered_count} additional failures were recovered via KanFocus gap-fill.)"
+        )
+    header_parts.append(" Close votes are bolded.")
     lines = [
-        f"<p>{len(failures)} of {total_display} vote pages could not be fetched."
-        " Close votes are bolded.</p>",
+        f"<p>{''.join(header_parts)}</p>",
         '<table style="width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;">',
         "<thead><tr>"
         '<th style="text-align:left; border-bottom:2px solid #333; padding:6px;">Bill</th>'

@@ -182,7 +182,7 @@ def _add_alec_matches(report: ReportBuilder, results: dict) -> None:
     html = make_interactive_table(
         display_df,
         title="ALEC Model Legislation Matches",
-        number_formats={"Similarity": "{:.3f}", "5-gram Overlap": "{:.3f}"},
+        number_formats={"Similarity": ".3f", "5-gram Overlap": ".3f"},
         caption="Kansas bills matched against ALEC model policy corpus. "
         "Sorted by similarity (highest first).",
     )

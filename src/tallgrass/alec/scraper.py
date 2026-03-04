@@ -182,8 +182,10 @@ def enumerate_bills(
     def _parse_page(html: str) -> list[dict]:
         page_soup = BeautifulSoup(html, "lxml")
         entries = []
-        for article in page_soup.find_all("article"):
-            entry = _parse_listing_entry(article)
+        # Site uses <li class="media-flex"> (not <article>) as listing containers
+        containers = page_soup.find_all("article") or page_soup.find_all("li", class_="media-flex")
+        for item in containers:
+            entry = _parse_listing_entry(item)
             if entry and entry["url"] not in seen_urls:
                 seen_urls.add(entry["url"])
                 entries.append(entry)

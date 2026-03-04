@@ -345,7 +345,6 @@ def main(argv: list[str] | None = None) -> None:
         session=args.session,
         analysis_name="23_model_legislation",
         params=vars(args),
-        results_root=results_root,
         primer=MODEL_LEGISLATION_PRIMER,
         run_id=args.run_id,
     ) as ctx:

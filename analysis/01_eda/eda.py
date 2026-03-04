@@ -1578,7 +1578,7 @@ def analyze_participation(
         for row in pnp_detail.iter_rows(named=True):
             print(
                 f"    {row['full_name']:30s}  {row['party']:12s}  "
-                f"{row['bill_number']:10s}  {row['vote_date']}  {row['chamber']}"
+                f"{(row['bill_number'] or ''):10s}  {row['vote_date']}  {row['chamber']}"
             )
 
     return participation
