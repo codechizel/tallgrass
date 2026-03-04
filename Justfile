@@ -324,7 +324,7 @@ test-web *args:
 # Type check with ty (scraper must pass clean, analysis warnings-only)
 typecheck:
     uvx ty check src/tallgrass/
-    uvx ty check analysis/
+    uvx ty check analysis/ || true
 
 # Check if an experiment is running (nutpie shows its own progress bar in the terminal)
 monitor:
