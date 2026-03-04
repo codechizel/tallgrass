@@ -60,6 +60,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_kanfocus_slugs.py` — slug generation: standard names, suffixes, nicknames, multi-word, cross-reference matching, CSV loading (~23 tests)
 - `tests/test_kanfocus_output.py` — output conversion: date format, passed derivation, vote_type classification, standard format conversion (~27 tests)
 - `tests/test_kanfocus_fetcher.py` — HTTP caching, vote enumeration, consecutive-empty threshold, rate limiting defaults (~9 tests)
+- `tests/test_kanfocus_crossval.py` — cross-validation: bill number normalization, rollcall matching, tally comparison, individual vote comparison (ANV/NV compat), report formatting (~25 tests)
 
 ## Bill Text Test Files
 

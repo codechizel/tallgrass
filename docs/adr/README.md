@@ -43,6 +43,7 @@ What are the trade-offs?
 | [0088](0088-kanfocus-vote-data-adapter.md) | KanFocus vote data adapter (1999-2026, Chrome cookie auth, data archiving) |
 | [0089](0089-model-legislation-detection.md) | Model legislation detection (ALEC + cross-state, BT5) |
 | [0093](0093-bertopic-stopword-filtering.md) | BERTopic stopword filtering for c-TF-IDF topic labels |
+| [0097](0097-kanfocus-cross-validation.md) | KanFocus cross-validation diagnostic (KF vs JE data integrity) |
 
 ### Dimensionality Reduction
 
@@ -257,6 +258,7 @@ What are the trade-offs?
 | [0094](0094-csv-to-postgresql-loader.md) | CSV-to-PostgreSQL loader (DB2: 3 management commands, COPY + bulk_create, idempotent) | Accepted | 2026-03-04 |
 | [0095](0095-scraper-db-post-hook.md) | Scraper post-hook — auto-load CSVs into PostgreSQL (DB3: --auto-load flag, subprocess, fail-soft) | Accepted | 2026-03-04 |
 | [0096](0096-rest-api-django-ninja.md) | REST API via Django Ninja (DB4: read-only, Pydantic schemas, FilterSchema, OpenAPI auto-docs) | Accepted | 2026-03-04 |
+| [0097](0097-kanfocus-cross-validation.md) | KanFocus cross-validation diagnostic (KF vs JE data integrity, `--mode crossval`) | Accepted | 2026-03-04 |
 
 ## Creating a New ADR
 

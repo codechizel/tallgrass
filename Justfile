@@ -41,6 +41,10 @@ text *args:
 kanfocus *args:
     uv run tallgrass-kanfocus {{args}}
 
+# Cross-validate KanFocus cache against kslegislature.gov CSVs
+kanfocus-crossval *args:
+    uv run tallgrass-kanfocus --mode crossval {{args}}
+
 # Scrape ALEC model legislation corpus
 alec *args:
     uv run tallgrass-alec {{args}}

@@ -19,6 +19,7 @@ just scrape 2025                             # → uv run tallgrass 2025
 just scrape-fresh 2025                       # → uv run tallgrass --clear-cache 2025
 just text 2025                               # → uv run tallgrass-text 2025 (bill text retrieval)
 just kanfocus 1999                           # → uv run tallgrass-kanfocus 1999 (KanFocus vote scrape)
+just kanfocus-crossval 2025                  # → cross-validate KF cache vs JE CSVs (read-only)
 just alec                                    # → uv run tallgrass-alec (ALEC model legislation scrape)
 just lint                                    # → ruff check --fix + ruff format
 just lint-check                              # → ruff check + ruff format --check
@@ -134,6 +135,7 @@ src/tallgrass/
     slugs.py      - Slug generation from "Name, R-32nd" format + cross-ref matching
     fetcher.py    - KanFocusFetcher: Chrome cookie auth + HTTP cache + rate limiting
     output.py     - Convert intermediates → standard IndividualVote/RollCall + gap-fill merge
+    crossval.py   - Cross-validate KF cache vs JE CSVs (read-only diagnostic)
     cli.py        - tallgrass-kanfocus entry point + data archiving
 ```
 
@@ -141,7 +143,7 @@ Vote scraper pipeline: `get_bill_urls()` -> `_filter_bills_with_votes()` -> `get
 
 Bill text pipeline: `KansasAdapter.discover_bills()` -> `BillTextFetcher.fetch_all()` -> `save_bill_texts()`
 
-KanFocus pipeline: `KanFocusFetcher.fetch_biennium()` -> `parse_vote_page()` -> `convert_to_standard()` -> `save_csvs()` (or `merge_gap_fill()` for gap-fill mode). Coverage: 78th-91st (1999-2026). Requires Chrome with active KanFocus login (fetcher extracts cookies from Chrome's encrypted cookie database on macOS via Keychain). Parser auto-detects HTML input and converts to text via BeautifulSoup. Raw HTML archived to `data/kanfocus_archive/` after each run. See ADR-0088.
+KanFocus pipeline: `KanFocusFetcher.fetch_biennium()` -> `parse_vote_page()` -> `convert_to_standard()` -> `save_csvs()` (or `merge_gap_fill()` for gap-fill mode). Coverage: 78th-91st (1999-2026). Requires Chrome with active KanFocus login (fetcher extracts cookies from Chrome's encrypted cookie database on macOS via Keychain). Parser auto-detects HTML input and converts to text via BeautifulSoup. Raw HTML archived to `data/kanfocus_archive/` after each run. See ADR-0088. Cross-validation mode (`--mode crossval`): re-parses KanFocus cache and compares overlapping rollcalls against kslegislature.gov CSVs — pure read-only diagnostic, no data mutation. Matches on (normalized_bill_number, chamber, vote_date); handles "Sub for" prefix stripping and ANV/NV category ambiguity. Writes `crossval_report.md` to the session data directory.
 
 ALEC pipeline: `enumerate_bills()` -> `fetch_bill_texts()` -> `save_alec_bills()`. Scrapes alec.org/model-policy/ (~1,057 model policies). Listing page uses `<li class="media-flex">` containers (fallback from `<article>`, ADR-0092). Cached HTML at `data/external/alec/.cache/`. See ADR-0089.
 
@@ -253,7 +255,7 @@ See `.claude/rules/analysis-framework.md` for the full pipeline, report system a
 
 Key references:
 - Design docs: `analysis/design/README.md`
-- ADRs: `docs/adr/README.md` (92 decisions)
+- ADRs: `docs/adr/README.md` (97 decisions)
 - Analysis primer: `docs/analysis-primer.md` (plain-English guide)
 - How IRT works: `docs/how-irt-works.md` (general-audience explanation of anchors, identification, and MCMC divergences)
 - External validation: `docs/external-validation-results.md` (5-biennium results, all 20 correlations "strong")
@@ -299,6 +301,7 @@ Key references:
 - Issue-specific ideal points: ADR-0087 (topic-stratified flat IRT, why not issueirt, thresholds, anchor strategy)
 - Issue-specific ideal points design: `analysis/design/issue_irt.md` (two taxonomies, parameters, quality thresholds, assumptions)
 - KanFocus vote data adapter: ADR-0088 (1999-2026 coverage, Chrome cookie auth, HTML-to-text parsing, gap-fill mode, data archiving)
+- KanFocus cross-validation: ADR-0097 (`--mode crossval`, KF vs JE data integrity, bill number normalization, ANV/NV compatibility)
 - Model legislation detection: ADR-0089 (ALEC + cross-state, embedding similarity, n-gram overlap, BT5)
 - Model legislation design: `analysis/design/model_legislation.md` (thresholds, data sources, architecture, limitations)
 - Django project scaffolding: ADR-0090 (DB1 — 8 models, PostgreSQL, Docker Compose, admin, 63 tests)

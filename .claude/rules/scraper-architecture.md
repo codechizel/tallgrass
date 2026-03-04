@@ -75,10 +75,13 @@ src/tallgrass/kanfocus/
   slugs.py       — slug generation from "Name, R-32nd" format + cross-reference
   fetcher.py     — KanFocusFetcher: HTTP + Chrome cookie auth + cache + rate limiting
   output.py      — convert to standard format + gap-fill merge
+  crossval.py    — cross-validate KF cache vs JE CSVs (read-only diagnostic, ADR-0097)
   cli.py         — tallgrass-kanfocus entry point + data archiving
 ```
 
 Coverage: 78th-91st (1999-2026). Uses `kf_` prefix for vote_ids. Conservative rate limiting (7s default, 12s recommended during business hours). See ADR-0088.
+
+**Cross-validation** (`--mode crossval`): re-parses KanFocus cache and compares overlapping rollcalls against kslegislature.gov CSVs. Matches on `(normalize_bill_number(bill_number), chamber, vote_date)`. Handles "Sub for" prefix stripping and ANV/NV category ambiguity. No network access, no data mutation. Writes `crossval_report.md` to data dir. See ADR-0097.
 
 **Authentication**: Extracts session cookies from Chrome's encrypted cookie database on macOS (Keychain AES key, PBKDF2, 32-byte app-bound prefix skip). Requires active KanFocus login in Chrome.
 

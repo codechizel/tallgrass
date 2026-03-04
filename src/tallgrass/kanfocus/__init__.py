@@ -5,6 +5,10 @@ legislators) so the analysis pipeline works unchanged. Covers 78th-91st
 legislatures (1999-2026).
 """
 
+# Cross-validation (read-only diagnostic)
+from tallgrass.kanfocus.crossval import CrossValReport as CrossValReport
+from tallgrass.kanfocus.crossval import normalize_bill_number as normalize_bill_number
+from tallgrass.kanfocus.crossval import run_crossval as run_crossval
 from tallgrass.kanfocus.fetcher import KanFocusFetcher as KanFocusFetcher
 from tallgrass.kanfocus.models import KanFocusLegislator as KanFocusLegislator
 from tallgrass.kanfocus.models import KanFocusVoteRecord as KanFocusVoteRecord

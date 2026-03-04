@@ -29,9 +29,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["full", "gap-fill"],
+        choices=["full", "gap-fill", "crossval"],
         default="full",
-        help="full: scrape all votes (default). gap-fill: fill missing votes in existing CSVs.",
+        help="full: scrape all votes (default). gap-fill: fill missing votes in existing CSVs. "
+        "crossval: compare cached KF data against JE CSVs (read-only diagnostic).",
     )
     parser.add_argument(
         "--delay",
@@ -67,6 +68,11 @@ def main(argv: list[str] | None = None) -> None:
 
     session = KSSession.from_year(args.year)
     cache_dir = session.data_dir / ".cache" / "kanfocus"
+
+    if args.mode == "crossval":
+        _run_crossval(session, cache_dir)
+        return
+
     fetcher = KanFocusFetcher(cache_dir=cache_dir, delay=args.delay)
 
     if args.clear_cache:
@@ -121,6 +127,46 @@ def main(argv: list[str] | None = None) -> None:
         from tallgrass.db_hook import try_load_session
 
         try_load_session(session.output_name)
+
+
+def _run_crossval(session: KSSession, cache_dir: Path) -> None:
+    """Run cross-validation between KanFocus cache and JE CSVs."""
+    from tallgrass.kanfocus.crossval import format_report, run_crossval
+
+    print("=" * 60)
+    print(f"KanFocus Cross-Validation: {session.label}")
+    print("=" * 60)
+
+    existing_slugs = load_existing_slugs(session.data_dir, session.output_name)
+    if existing_slugs:
+        print(f"\n  Loaded {len(existing_slugs)} existing slugs for cross-reference")
+
+    report = run_crossval(
+        session_label=session.label,
+        start_year=session.start_year,
+        data_dir=session.data_dir,
+        cache_dir=cache_dir,
+        existing_slugs=existing_slugs,
+    )
+
+    # Write report
+    report_path = session.data_dir / "crossval_report.md"
+    md = format_report(report)
+    report_path.write_text(md, encoding="utf-8")
+    print(f"\n  Report written to {report_path}")
+
+    # Print summary
+    print(f"\n  Summary: {report.matched_rollcalls} matched rollcalls")
+    if report.matched_rollcalls:
+        print(f"    Tally exact match: {report.tally_perfect}")
+        print(f"    Tally compatible (ANV/NV): {report.tally_compatible}")
+        print(f"    Tally mismatch: {report.tally_mismatch}")
+        print(f"    Passed agree: {report.passed_agree}")
+        print(f"    Passed disagree: {report.passed_disagree}")
+        print(f"    Individual votes perfect: {report.individual_perfect}")
+        print(f"    Individual votes compatible: {report.individual_compatible}")
+        print(f"    Individual votes mismatch: {report.individual_mismatch}")
+        print(f"    Genuine individual mismatches: {report.total_genuine_mismatches}")
 
 
 def _archive_cache(cache_dir: Path, output_name: str) -> None:
