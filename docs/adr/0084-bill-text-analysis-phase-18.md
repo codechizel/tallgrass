@@ -49,6 +49,8 @@ BERTopic pipeline: pre-computed embeddings → UMAP (10D) → HDBSCAN → c-TF-I
 | HDBSCAN `min_cluster_size` | 15 | CLI-configurable (`--min-cluster-size`) |
 | HDBSCAN `min_samples` | 5 | Conservative noise detection |
 | `nr_topics` | `"auto"` | Let HDBSCAN decide K |
+| CountVectorizer `stop_words` | `"english"` | Filter articles/prepositions from c-TF-IDF (ADR-0093) |
+| CountVectorizer `ngram_range` | `(1, 2)` | Capture legislative bigrams ("tax credit", "school district") |
 
 UMAP `random_state=42` ensures determinism. HDBSCAN is deterministic given the same UMAP output.
 

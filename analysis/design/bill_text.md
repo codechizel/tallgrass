@@ -36,6 +36,8 @@
 | `UMAP_N_NEIGHBORS` | 15 | Balances local/global. BERTopic default. |
 | `UMAP_MIN_DIST` | 0.0 | Allows tight clusters. Standard for topic modeling. |
 | `RANDOM_SEED` | 42 | Reproducibility. UMAP random_state, HDBSCAN is deterministic given same input. |
+| `CountVectorizer.stop_words` | `"english"` | scikit-learn English stopwords. Without this, c-TF-IDF topic labels are dominated by articles/prepositions ("the, of, and"). ADR-0093. |
+| `CountVectorizer.ngram_range` | `(1, 2)` | Unigrams + bigrams. Legislative terms like "tax credit" and "school district" are better captured as bigrams. ADR-0093. |
 | `SIMILARITY_THRESHOLD` | 0.80 | Cosine similarity floor for reported pairs. 0.80 = strong semantic similarity. |
 | `TOP_SIMILAR_PAIRS` | 30 | Limit for report readability. |
 | `HEATMAP_TOP_N` | 50 | Bills shown in similarity heatmap. |

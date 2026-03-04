@@ -147,7 +147,7 @@ These are known pitfalls from the literature and from inspecting Kansas bill PDF
 
 **Why it fits tallgrass:**
 - Automatically discovers number of topics (no K selection needed — unlike NMF/LDA)
-- Produces interpretable topic labels via c-TF-IDF keywords
+- Produces interpretable topic labels via c-TF-IDF keywords (requires `CountVectorizer(stop_words="english")` — without it, topic labels are dominated by function words; ADR-0093)
 - v0.17+ can use LLMs (GPT-4, Claude) as representation models for human-readable topic names
 - Dynamic topic modeling tracks topics over time — maps directly to tracking policy attention across bienniums
 - `.merge_models()` enables incremental/cross-session topic modeling

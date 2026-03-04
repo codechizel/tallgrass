@@ -271,6 +271,7 @@ def fit_topic_model(
     """
     from bertopic import BERTopic
     from hdbscan import HDBSCAN
+    from sklearn.feature_extraction.text import CountVectorizer
     from umap import UMAP
 
     umap_model = UMAP(
@@ -288,9 +289,12 @@ def fit_topic_model(
         prediction_data=True,
     )
 
+    vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 2))
+
     topic_model = BERTopic(
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
+        vectorizer_model=vectorizer_model,
         nr_topics="auto",
         calculate_probabilities=True,
         verbose=True,
