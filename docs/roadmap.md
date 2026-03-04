@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-04 (DB2 CSV-to-PostgreSQL loader complete)
+**Last updated:** 2026-03-04 (DB3 complete; --auto-load post-scrape hook)
 
 ---
 
@@ -71,6 +71,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Sponsor Slugs → Synthesis + Profiles | 2026-03-02 | `sponsor_slugs` (M8 scraper output) integrated into Phase 11 and Phase 12. Synthesis: `n_bills_sponsored` in unified scorecard. Profiles: per-legislator sponsorship section (primary/co-sponsor, passage rate), defection sponsor context. Graceful degradation for pre-89th data. 11 new tests (1952 total). ADR-0081. |
 | — | OpenStates Legislator Identity | 2026-03-02 | OCD person IDs (`ocd-person/{uuid}`) from OpenStates for stable cross-biennium legislator identity. `roster.py` module: GitHub tarball download, YAML parsing, slug→ocd_id mapping cached as JSON. 3-phase matching in Phase 13 (OCD ID → name → fuzzy). Dynamic IRT roster groups by OCD ID. Correctly separates same-name legislators (two Mike Thompsons). Backward compatible with older CSVs. 22 new roster tests + 11 OCD matching tests. ADR-0085. |
 | 18b | Text-Based Ideal Points (TBIP) | 2026-03-03 | Embedding-vote approach (not true TBIP due to ~92% committee sponsorship). Multiplies vote matrix by Phase 18 bill embeddings, PCA on legislator text profiles, PC1 = text-derived ideal point. Validates against IRT (flat + hierarchical). Standalone with `just tbip`; not in pipeline (requires BT1 + IRT results). Design: `analysis/design/tbip.md`, ADR-0086. |
+| 20 | Model Legislation Detection (BT5) | 2026-03-03 | ALEC template matching + cross-state diffusion (MO, OK, NE, CO via OpenStates API). Cosine similarity on BGE embeddings (same vector space as Phase 18) with three-tier classification (near-identical >= 0.95, strong >= 0.85, related >= 0.70). 5-gram overlap confirmation for strong matches. ALEC corpus: ~1,057 model policies scraped via `just alec`. 9-section HTML report. 58 tests. Design: `analysis/design/model_legislation.md`, ADR-0089. |
 
 ---
 
@@ -118,7 +119,7 @@ R enrichment is optional — `--skip-r` for Python-only mode. 21 new tests (85 t
 
 ---
 
-## Next Up: Bill Text NLP Pipeline
+## ~~Bill Text NLP Pipeline~~ — All Complete
 
 Full survey and technical design: [`docs/bill-text-nlp-deep-dive.md`](bill-text-nlp-deep-dive.md).
 
@@ -147,11 +148,9 @@ Full survey and technical design: [`docs/bill-text-nlp-deep-dive.md`](bill-text-
 
 **Why not `issueirt`?** Shin 2024 R package estimates 2D ideal points per topic, but Phase 06 proved Kansas voting is fundamentally 1D. Package is GitHub-only (4 stars, pre-1.0, rstan dependency, uncertain maintenance).
 
-### BT5. Model Legislation Detection (future extension)
+### ~~BT5. Model Legislation Detection — Phase 23~~
 
-Cross-state bill similarity using LegiScan or OpenStates data from other states. Bills with >0.95 cosine similarity across states are model legislation candidates. Based on the Legislative Influence Detector approach (KDD 2016). Requires expanding data acquisition beyond Kansas.
-
-**Prerequisite:** BT1 embeddings, cross-state data source.
+**Completed (2026-03-03).** ALEC template matching + cross-state policy diffusion detection. Cosine similarity on BGE embeddings (same 384-dim vector space as Phase 18) with three-tier classification: near-identical (>= 0.95), strong match (>= 0.85), related (>= 0.70). 5-gram word overlap confirms genuine text reuse for strong matches. ALEC corpus (~1,057 model policies) scraped via `just alec` from alec.org/model-policy/. Cross-state bills from MO, OK, NE, CO via OpenStates API v3. 9-section HTML report with interactive tables, similarity distributions, topic heatmap, and match network. Gracefully skips when bill texts + ALEC corpus both missing. 58 tests. Design: `analysis/design/model_legislation.md`, ADR-0089.
 
 ---
 
@@ -543,18 +542,15 @@ Three management commands that bulk-load CSVs into PostgreSQL. Delete-and-reload
 
 **Prerequisite:** DB1
 
-### DB3. Scraper Post-Hook
+### DB3. Scraper Post-Hook (COMPLETE — 2026-03-04)
 
-After each scrape run, automatically load the new CSVs into PostgreSQL. The scraper continues writing CSVs (unchanged) — the database is a downstream consumer, not the authoritative source (yet).
+**Completed.** `--auto-load` flag on `tallgrass`, `tallgrass-text`, and `tallgrass-kanfocus` CLIs. After a successful scrape, invokes `load_session` management command via subprocess. Scraper remains Django-free — `db_hook.py` shells out to `manage.py`. Fails soft if Django/PostgreSQL unavailable (prints warning, scrape output preserved). Shared helper at `src/tallgrass/db_hook.py`. ADR-0095.
 
 ```bash
-just scrape 2025           # writes CSVs (unchanged)
-just db-load 2025-26       # CSV → PostgreSQL (new command)
+just scrape 2025 --auto-load   # scrape + load into PostgreSQL
+just text 2025 --auto-load     # fetch bill text + load into PostgreSQL
+just kanfocus 2025 --auto-load # KanFocus scrape + load into PostgreSQL
 ```
-
-**Deliverables:**
-- `just db-load` recipe in Justfile
-- Optional `--auto-load` flag on `tallgrass` CLI to chain CSV write + DB load
 
 **Prerequisite:** DB2
 
@@ -616,7 +612,7 @@ DB1 (scaffolding) ─→ DB2 (loader) ─→ DB3 (post-hook)
                                     DB6 (multi-state)
 ```
 
-DB1-DB3 are the critical path — they get data into PostgreSQL. DB4 and DB5 are independent and can proceed in parallel after DB1/DB2. DB6 is the long-term goal that motivates the entire effort.
+DB1-DB3 are the critical path — they get data into PostgreSQL. All three are complete. DB4 and DB5 are independent and can proceed in parallel. DB6 is the long-term goal that motivates the entire effort.
 
 ---
 
@@ -689,11 +685,11 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | 34 | Bill Text Policy Classification (CAP) | NLP | Completed — Phase 18 (BT2) |
 | 35 | Text-Based Ideal Points (TBIP) | NLP | Completed — Phase 21 (BT3, embedding-vote approach, ADR-0086) |
 | 36 | Issue-Specific Ideal Points | BAY | Completed — Phase 19 (BT4, topic-stratified IRT, ADR-0087) |
-| 37 | Model Legislation Detection | NLP | **Planned** — BT5 (future) |
+| 37 | Model Legislation Detection | NLP | Completed — Phase 23 (BT5, ALEC + cross-state, ADR-0089) |
 
-**Score: 36 completed, 1 planned, 6 rejected = 43 total**
+**Score: 37 completed, 0 planned, 6 rejected = 43 total**
 
-Note: Methods 29-32 are additions beyond the original 28 (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, TSA Hardening). Methods 33-37 are the bill text NLP pipeline. Methods 33-36 completed 2026-03-02/03.
+Note: Methods 29-32 are additions beyond the original 28 (Dynamic Ideal Points, DIME/CFscores, Standalone PPC, TSA Hardening). Methods 33-37 are the bill text NLP pipeline. All 5 completed 2026-03-02/03.
 
 ---
 

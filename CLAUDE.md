@@ -39,6 +39,9 @@ uv run tallgrass 2024 --special        # special session (direct)
 uv run tallgrass-text 2025             # bill text retrieval (direct)
 uv run tallgrass-kanfocus 1999         # KanFocus scrape (direct)
 uv run tallgrass-kanfocus 2011 --mode gap-fill  # fill 84th gaps
+just scrape 2025 --auto-load             # → scrape + load CSVs into PostgreSQL
+just text 2025 --auto-load               # → fetch bill text + load into PostgreSQL
+just kanfocus 2025 --auto-load           # → KanFocus scrape + load into PostgreSQL
 ```
 
 Analysis recipes (all pass `*args` through to the underlying script):
@@ -105,6 +108,7 @@ src/tallgrass/
   roster.py     - OpenStates sync: slug→ocd_id mapping, cached JSON (ADR-0085)
   output.py     - CSV export (4 files: votes, rollcalls, legislators, bill_actions)
   merge_special.py - Post-scrape special session merge into parent bienniums
+  db_hook.py    - Post-scrape PostgreSQL loader (subprocess, fail-soft; ADR-0095)
   cli.py        - argparse CLI entry point
   text/
     __init__.py   - Public API re-exports
@@ -299,6 +303,7 @@ Key references:
 - Model legislation design: `analysis/design/model_legislation.md` (thresholds, data sources, architecture, limitations)
 - Django project scaffolding: ADR-0090 (DB1 — 8 models, PostgreSQL, Docker Compose, admin, 63 tests)
 - CSV-to-PostgreSQL loader: ADR-0094 (DB2 — 3 management commands, COPY + bulk_create, field widening, 48 loader tests)
+- Scraper post-hook: ADR-0095 (DB3 — `--auto-load` flag, subprocess invocation, fail-soft design)
 - Data storage: `docs/data-storage-deep-dive.md` (ecosystem survey, PostgreSQL + Django recommended, multi-state scaling, migration path)
 - Future bill text analysis: `docs/future-bill-text-analysis.md` (original notes, superseded by deep dive)
 - Apple Silicon MCMC tuning: `docs/apple-silicon-mcmc-tuning.md` (P/E core scheduling, thread pool caps, parallel chains, batch job rules)
@@ -391,5 +396,7 @@ Justfile recipes: `just db-up` (start PostgreSQL), `just db-down` (stop), `just 
 All Django recipes set `DJANGO_SETTINGS_MODULE=tallgrass_web.settings.local` and `PYTHONPATH=src/web`.
 
 **DB2 loader strategy:** delete-and-reload per session inside `@transaction.atomic`. Legislators and rollcalls use psycopg3 `COPY FROM STDIN` for speed; votes use `bulk_create(batch_size=5000)` because they need FK resolution (slug→Legislator.id, vote_id→RollCall.id). Bill actions and bill texts use COPY. Idempotent — re-running replaces that session's data. `--dry-run` validates without writing. `--skip-bill-text` skips large bill text files. ADR-0094.
+
+**DB3 post-hook:** `--auto-load` flag on `tallgrass`, `tallgrass-text`, and `tallgrass-kanfocus` CLIs. Invokes `load_session` via subprocess after successful scrape — scraper stays Django-free. Fails soft if Django or PostgreSQL unavailable. Shared helper: `src/tallgrass/db_hook.py`. ADR-0095.
 
 Django tests use `pytest.importorskip("django")` — existing non-web tests never import Django. `DJANGO_SETTINGS_MODULE` is NOT set in pyproject.toml. ADR-0090.

@@ -60,6 +60,11 @@ def main(argv: list[str] | None = None) -> None:
         metavar="YEAR|all",
         help="Merge special session into parent biennium (e.g. 2020, or 'all')",
     )
+    parser.add_argument(
+        "--auto-load",
+        action="store_true",
+        help="After scraping, load CSVs into PostgreSQL (requires web dependencies + running DB)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -93,6 +98,11 @@ def main(argv: list[str] | None = None) -> None:
         scraper.clear_cache()
 
     scraper.run(enrich=not args.no_enrich)
+
+    if args.auto_load:
+        from tallgrass.db_hook import try_load_session
+
+        try_load_session(session.output_name)
 
 
 def _run_merge_special(arg: str) -> None:

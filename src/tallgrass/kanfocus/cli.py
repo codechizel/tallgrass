@@ -50,6 +50,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Show KanFocus session ID mapping and exit.",
     )
+    parser.add_argument(
+        "--auto-load",
+        action="store_true",
+        help="After scraping, load CSVs into PostgreSQL (requires web dependencies + running DB)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -111,6 +116,11 @@ def main(argv: list[str] | None = None) -> None:
     _archive_cache(cache_dir, session.output_name)
 
     print(f"\nDone: {len(rollcalls)} rollcalls saved to {session.data_dir}")
+
+    if args.auto_load:
+        from tallgrass.db_hook import try_load_session
+
+        try_load_session(session.output_name)
 
 
 def _archive_cache(cache_dir: Path, output_name: str) -> None:

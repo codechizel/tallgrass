@@ -42,6 +42,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="List known session years and exit",
     )
+    parser.add_argument(
+        "--auto-load",
+        action="store_true",
+        help="After fetching, load CSVs into PostgreSQL (requires web dependencies + running DB)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -101,3 +106,8 @@ def main(argv: list[str] | None = None) -> None:
     save_bill_texts(data_dir, session.output_name, bill_texts)
 
     print(f"\nDone: {len(bill_texts)} bill texts saved to {data_dir}")
+
+    if args.auto_load:
+        from tallgrass.db_hook import try_load_session
+
+        try_load_session(session.output_name)

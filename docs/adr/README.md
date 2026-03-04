@@ -154,6 +154,7 @@ What are the trade-offs?
 | [0091](0091-phase-renumbering-two-pipeline-split.md) | Phase renumbering (01-27) + two-pipeline split |
 | [0092](0092-91st-pipeline-run-fixes.md) | 91st pipeline run fixes (9 bugs across 12 files) |
 | [0094](0094-csv-to-postgresql-loader.md) | CSV-to-PostgreSQL loader (DB2) |
+| [0095](0095-scraper-db-post-hook.md) | Scraper post-hook — auto-load CSVs into PostgreSQL (DB3) |
 
 ## Chronological Index
 
@@ -253,6 +254,7 @@ What are the trade-offs?
 | [0092](0092-91st-pipeline-run-fixes.md) | 91st pipeline run fixes (9 bugs across 12 files, first full 91st pipeline run) | Accepted | 2026-03-03 |
 | [0093](0093-bertopic-stopword-filtering.md) | BERTopic stopword filtering for c-TF-IDF topic labels (CountVectorizer + bigrams) | Accepted | 2026-03-04 |
 | [0094](0094-csv-to-postgresql-loader.md) | CSV-to-PostgreSQL loader (DB2: 3 management commands, COPY + bulk_create, idempotent) | Accepted | 2026-03-04 |
+| [0095](0095-scraper-db-post-hook.md) | Scraper post-hook — auto-load CSVs into PostgreSQL (DB3: --auto-load flag, subprocess, fail-soft) | Accepted | 2026-03-04 |
 
 ## Creating a New ADR
 
