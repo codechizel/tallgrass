@@ -27,9 +27,13 @@ Changed `run_context.py` so report convenience symlinks point to `<run_id>/<phas
 
 Changed `_DEFAULT_DATABASE_URL` in `analysis/db.py` from `postgresql://localhost:5432/tallgrass` to `postgresql://tallgrass:tallgrass@localhost:5432/tallgrass`. These are the standard local dev credentials matching the Docker Compose config and Django settings.
 
-### Phases 20 and 21 skip gracefully on missing bill texts
+### Fix `execute_options` parameter name for psycopg3
 
-Added `try/except FileNotFoundError` around `load_bill_texts()` in both `analysis/20_bill_text/bill_text.py` and `analysis/21_tbip/tbip.py`. On missing data, the phase prints a message and returns cleanly — matching the pattern already used by Phases 22 and 23.
+All `pl.read_database()` calls in `analysis/db.py` used `execute_options={"parameters": [...]}` but psycopg3's `Cursor.execute()` expects `params`, not `parameters`. This caused a `TypeError` that was silently caught by the fallback logic, so the DB was *never* actually used — every phase fell back to CSV. Fixed by changing `"parameters"` to `"params"` in all 4 call sites.
+
+### Phases 20, 21, and 23 skip gracefully on missing bill texts
+
+Added `try/except FileNotFoundError` around `load_bill_texts()` in `analysis/20_bill_text/bill_text.py`, `analysis/21_tbip/tbip.py`, and `analysis/23_model_legislation/model_legislation.py`. On missing data, the phase prints a message and returns cleanly.
 
 ## Consequences
 

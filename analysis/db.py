@@ -138,25 +138,25 @@ FROM legislature_alecmodelbill
 def load_votes_db(session_name: str) -> pl.DataFrame:
     """Load denormalized votes from PostgreSQL (4-table JOIN)."""
     conn = get_connection()
-    return pl.read_database(_VOTES_SQL, conn, execute_options={"parameters": [session_name]})
+    return pl.read_database(_VOTES_SQL, conn, execute_options={"params": [session_name]})
 
 
 def load_rollcalls_db(session_name: str) -> pl.DataFrame:
     """Load rollcalls from PostgreSQL."""
     conn = get_connection()
-    return pl.read_database(_ROLLCALLS_SQL, conn, execute_options={"parameters": [session_name]})
+    return pl.read_database(_ROLLCALLS_SQL, conn, execute_options={"params": [session_name]})
 
 
 def load_legislators_db(session_name: str) -> pl.DataFrame:
     """Load legislators from PostgreSQL."""
     conn = get_connection()
-    return pl.read_database(_LEGISLATORS_SQL, conn, execute_options={"parameters": [session_name]})
+    return pl.read_database(_LEGISLATORS_SQL, conn, execute_options={"params": [session_name]})
 
 
 def load_bill_texts_db(session_name: str) -> pl.DataFrame:
     """Load bill texts from PostgreSQL."""
     conn = get_connection()
-    return pl.read_database(_BILL_TEXTS_SQL, conn, execute_options={"parameters": [session_name]})
+    return pl.read_database(_BILL_TEXTS_SQL, conn, execute_options={"params": [session_name]})
 
 
 def load_alec_db() -> pl.DataFrame:
