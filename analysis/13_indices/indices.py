@@ -33,9 +33,9 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir
 
 try:
     from analysis.indices_report import build_indices_report
@@ -203,6 +203,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip sensitivity analysis on EDA-filtered data",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
@@ -233,19 +234,17 @@ def _rice_from_counts(party_counts: pl.DataFrame) -> pl.DataFrame:
 
 
 def load_raw_data(
-    data_dir: Path,
+    data_dir: Path, *, use_csv: bool = False
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """Load raw CSVs: votes, rollcalls, legislators."""
-    prefix = data_dir.name
-    votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
-    rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
-    legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
-    legislators = legislators.with_columns(
-        pl.col("full_name")
-        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name"),
-        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
-    )
+    """Load votes, rollcalls, and legislators.
+
+    Loads from PostgreSQL by default; CSV fallback.
+    """
+    from analysis.db import load_legislators, load_rollcalls, load_votes
+
+    votes = load_votes(data_dir, use_csv=use_csv)
+    rollcalls = load_rollcalls(data_dir, use_csv=use_csv)
+    legislators = load_legislators(data_dir, use_csv=use_csv)
     return votes, rollcalls, legislators
 
 
@@ -2025,7 +2024,7 @@ def main() -> None:
 
         # ── Phase 1: Load data ──
         print_header("PHASE 1: LOADING DATA")
-        votes, rollcalls, legislators = load_raw_data(data_dir)
+        votes, rollcalls, legislators = load_raw_data(data_dir, use_csv=args.csv)
         print(f"  Votes:       {votes.height:,} rows")
         print(f"  Roll calls:  {rollcalls.height:,} rows")
         print(f"  Legislators: {legislators.height:,} rows")

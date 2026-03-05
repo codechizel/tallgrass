@@ -25,7 +25,7 @@ paths:
 
 ## Separation of Concerns
 - **ETL (scraping) is separate from analysis.** Never modify scraper code for analysis needs.
-- Analysis scripts read from `data/kansas/` CSVs. Intermediates go in results directory.
+- Analysis scripts load data via `analysis/db.py` — PostgreSQL by default, CSV fallback. `--csv` flag forces CSV-only. Intermediates go in results directory.
 
 ## Audience: Nontechnical Consumers
 - Final outputs consumed by journalists, policymakers, engaged citizens.

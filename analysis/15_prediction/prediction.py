@@ -53,9 +53,9 @@ from xgboost import XGBClassifier
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir
 
 try:
     from analysis.prediction_report import build_prediction_report
@@ -218,34 +218,35 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip bill passage prediction (vote prediction only)",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
 # ── Phase 1: Load Data ──────────────────────────────────────────────────────
 
 
-def load_vote_data(data_dir: Path) -> pl.DataFrame:
-    """Load individual votes CSV."""
-    return pl.read_csv(data_dir / f"{data_dir.name}_votes.csv")
+def load_vote_data(data_dir: Path, *, use_csv: bool = False) -> pl.DataFrame:
+    """Load individual votes. DB default, CSV fallback."""
+    from analysis.db import load_votes
+
+    return load_votes(data_dir, use_csv=use_csv)
 
 
-def load_rollcall_data(data_dir: Path) -> pl.DataFrame:
-    """Load rollcalls CSV."""
-    rc = pl.read_csv(data_dir / f"{data_dir.name}_rollcalls.csv")
+def load_rollcall_data(data_dir: Path, *, use_csv: bool = False) -> pl.DataFrame:
+    """Load rollcalls. DB default, CSV fallback."""
+    from analysis.db import load_rollcalls
+
+    rc = load_rollcalls(data_dir, use_csv=use_csv)
     if "vote_type" in rc.columns:
         rc = rc.with_columns(pl.col("vote_type").fill_null("Unknown").alias("vote_type"))
     return rc
 
 
-def load_legislator_data(data_dir: Path) -> pl.DataFrame:
-    """Load legislators CSV."""
-    legislators = pl.read_csv(data_dir / f"{data_dir.name}_legislators.csv")
-    return legislators.with_columns(
-        pl.col("full_name")
-        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name"),
-        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
-    )
+def load_legislator_data(data_dir: Path, *, use_csv: bool = False) -> pl.DataFrame:
+    """Load legislators. DB default, CSV fallback."""
+    from analysis.db import load_legislators
+
+    return load_legislators(data_dir, use_csv=use_csv)
 
 
 def _load_parquet_pair(
@@ -1740,9 +1741,9 @@ def main() -> None:
         print_header("PHASE 1: LOADING DATA")
 
         print("  Loading vote data...")
-        votes = load_vote_data(data_dir)
-        rollcalls = load_rollcall_data(data_dir)
-        legislators = load_legislator_data(data_dir)
+        votes = load_vote_data(data_dir, use_csv=args.csv)
+        rollcalls = load_rollcall_data(data_dir, use_csv=args.csv)
+        legislators = load_legislator_data(data_dir, use_csv=args.csv)
         print(f"    Votes: {votes.height:,} rows")
         print(f"    Roll calls: {rollcalls.height:,} rows")
         print(f"    Legislators: {legislators.height:,} rows")

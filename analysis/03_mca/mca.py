@@ -39,9 +39,9 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
+    from analysis.run_context import RunContext, resolve_upstream_dir
 except ModuleNotFoundError:
-    from run_context import RunContext, resolve_upstream_dir, strip_leadership_suffix
+    from run_context import RunContext, resolve_upstream_dir
 
 try:
     from analysis.phase_utils import print_header, save_fig
@@ -179,27 +179,26 @@ def parse_args() -> argparse.Namespace:
         choices=["benzecri", "greenacre", "none"],
         help="Inertia correction method",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
 # ── Phase 1: Load Data ──────────────────────────────────────────────────────
 
 
-def load_raw_data(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """Load raw scraper CSVs: votes, rollcalls, legislators.
+def load_raw_data(
+    data_dir: Path, *, use_csv: bool = False
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Load votes, rollcalls, and legislators.
 
     MCA needs the full categorical vote values, not binary matrices from EDA.
+    Loads from PostgreSQL by default; CSV fallback.
     """
-    prefix = data_dir.name
-    votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
-    rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
-    legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
-    legislators = legislators.with_columns(
-        pl.col("full_name")
-        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name"),
-        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
-    )
+    from analysis.db import load_legislators, load_rollcalls, load_votes
+
+    votes = load_votes(data_dir, use_csv=use_csv)
+    rollcalls = load_rollcalls(data_dir, use_csv=use_csv)
+    legislators = load_legislators(data_dir, use_csv=use_csv)
     return votes, rollcalls, legislators
 
 
@@ -1044,7 +1043,7 @@ def main() -> None:
 
         # ── Phase 1: Load data ──
         print_header("LOADING DATA")
-        votes, rollcalls, legislators = load_raw_data(data_dir)
+        votes, rollcalls, legislators = load_raw_data(data_dir, use_csv=args.csv)
         print(f"  Votes: {votes.height:,}")
         print(f"  Rollcalls: {rollcalls.height}")
         print(f"  Legislators: {legislators.height}")

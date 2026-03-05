@@ -38,9 +38,9 @@ from sklearn.decomposition import PCA
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext
 
 try:
     from analysis.phase_utils import print_header, save_fig
@@ -161,35 +161,24 @@ R_SUBPROCESS_TIMEOUT = 120
 
 
 def load_data(
-    data_dir: Path,
+    data_dir: Path, *, use_csv: bool = False
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """Load votes, rollcalls, and legislators CSVs from the data directory."""
-    csv_files = sorted(data_dir.glob("*_votes.csv"))
-    if not csv_files:
-        msg = f"No votes CSV found in {data_dir}"
-        raise FileNotFoundError(msg)
+    """Load votes, rollcalls, and legislators.
 
-    prefix = csv_files[0].stem.rsplit("_votes", 1)[0]
-    votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
-    rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
-    legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
+    Loads from PostgreSQL by default; CSV fallback.
+    """
+    from analysis.db import load_legislators, load_rollcalls, load_votes
+
+    votes = load_votes(data_dir, use_csv=use_csv)
+    rollcalls = load_rollcalls(data_dir, use_csv=use_csv)
+    legislators = load_legislators(data_dir, use_csv=use_csv)
     if "slug" in legislators.columns:
         legislators = legislators.rename({"slug": "legislator_slug"})
 
-    # Fill Independent party
-    if "party" in legislators.columns:
-        legislators = legislators.with_columns(
-            pl.col("party").fill_null("Independent").replace("", "Independent")
-        )
+    # Fill Independent party in votes (DB/CSV may have nulls)
     if "party" in votes.columns:
         votes = votes.with_columns(
             pl.col("party").fill_null("Independent").replace("", "Independent")
-        )
-
-    # Strip leadership suffixes
-    if "full_name" in legislators.columns:
-        legislators = legislators.with_columns(
-            pl.col("full_name").map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
         )
 
     return votes, rollcalls, legislators
@@ -1439,6 +1428,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip R enrichment (CROPS + Bai-Perron) even if R is available",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
@@ -1464,7 +1454,7 @@ def main() -> None:
 
         # Load data
         print("\n--- Loading data ---")
-        votes, rollcalls, legislators = load_data(ks.data_dir)
+        votes, rollcalls, legislators = load_data(ks.data_dir, use_csv=args.csv)
         print(f"  Votes:      {votes.height:,} rows")
         print(f"  Roll calls: {rollcalls.height:,} rows")
         print(f"  Legislators: {legislators.height:,} rows")

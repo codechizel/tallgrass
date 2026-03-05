@@ -49,19 +49,17 @@ _PAGE_NUMBERS = re.compile(r"\n\s*\d+\s*\n")
 # ── Data Loading ─────────────────────────────────────────────────────────────
 
 
-def load_bill_texts(data_dir: Path) -> pl.DataFrame:
-    """Load bill_texts.csv, prefer supp_note over introduced when both exist.
+def load_bill_texts(data_dir: Path, *, use_csv: bool = False) -> pl.DataFrame:
+    """Load bill texts, prefer supp_note over introduced when both exist.
 
     Returns a DataFrame with columns: bill_number, text, document_type,
     text_source, page_count, source_url.  One row per bill (deduplicated).
-    """
-    prefix = data_dir.name
-    csv_path = data_dir / f"{prefix}_bill_texts.csv"
-    if not csv_path.exists():
-        msg = f"Bill texts CSV not found: {csv_path}. Run `just text` first."
-        raise FileNotFoundError(msg)
 
-    df = pl.read_csv(csv_path)
+    Loads from PostgreSQL by default; CSV fallback.
+    """
+    from analysis.db import load_bill_texts as db_load_bill_texts
+
+    df = db_load_bill_texts(data_dir, use_csv=use_csv)
 
     # Prefer supp_note over introduced for each bill
     # Sort so supp_note comes first (alphabetically "s" > "i"), then deduplicate
@@ -82,16 +80,18 @@ def load_bill_texts(data_dir: Path) -> pl.DataFrame:
     return df
 
 
-def load_rollcalls(data_dir: Path) -> pl.DataFrame:
-    """Load rollcalls CSV with standard columns."""
-    prefix = data_dir.name
-    return pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
+def load_rollcalls(data_dir: Path, *, use_csv: bool = False) -> pl.DataFrame:
+    """Load rollcalls. DB default, CSV fallback."""
+    from analysis.db import load_rollcalls as db_load_rollcalls
+
+    return db_load_rollcalls(data_dir, use_csv=use_csv)
 
 
-def load_votes(data_dir: Path) -> pl.DataFrame:
-    """Load votes CSV with column rename (slug -> legislator_slug)."""
-    prefix = data_dir.name
-    df = pl.read_csv(data_dir / f"{prefix}_votes.csv")
+def load_votes(data_dir: Path, *, use_csv: bool = False) -> pl.DataFrame:
+    """Load votes with column rename (slug -> legislator_slug). DB default, CSV fallback."""
+    from analysis.db import load_votes as db_load_votes
+
+    df = db_load_votes(data_dir, use_csv=use_csv)
     if "slug" in df.columns and "legislator_slug" not in df.columns:
         df = df.rename({"slug": "legislator_slug"})
     return df

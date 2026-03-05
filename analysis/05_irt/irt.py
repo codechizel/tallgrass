@@ -259,6 +259,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable PCA-informed chain initialization (on by default)",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
@@ -2789,9 +2790,10 @@ def main() -> None:
         else:
             print("  PCA scores not available — skipping PCA-informed initialization")
             pca_house, pca_senate = None, None
-        rollcalls, legislators = load_metadata(data_dir)
-        prefix = data_dir.name
-        raw_votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
+        rollcalls, legislators = load_metadata(data_dir, use_csv=args.csv)
+        from analysis.db import load_votes as db_load_votes
+
+        raw_votes = db_load_votes(data_dir, use_csv=args.csv)
         if "legislator_slug" not in raw_votes.columns and "slug" in raw_votes.columns:
             raw_votes = raw_votes.rename({"slug": "legislator_slug"})
 

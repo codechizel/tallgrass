@@ -80,7 +80,7 @@ src/tallgrass/
   kanfocus/     - KanFocus vote data adapter (tallgrass-kanfocus, 1999-2026)
 ```
 
-27-phase analysis pipeline in `analysis/01_eda/` through `analysis/27_dynamic_irt/`. PEP 302 meta-path finder redirects `from analysis.eda import X` to numbered subdirectories (ADR-0030). See `.claude/rules/analysis-framework.md`.
+27-phase analysis pipeline in `analysis/01_eda/` through `analysis/27_dynamic_irt/`. PEP 302 meta-path finder redirects `from analysis.eda import X` to numbered subdirectories (ADR-0030). `analysis/db.py` provides PostgreSQL loading (psycopg3 + Polars `read_database()`) with CSV fallback; `--csv` flag forces CSV-only mode (ADR-0099). See `.claude/rules/analysis-framework.md`.
 
 Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `.claude/rules/database.md`.
 
@@ -107,6 +107,6 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 
 ## Documentation
 
-- ADRs: `docs/adr/README.md` (97 decisions)
+- ADRs: `docs/adr/README.md` (99 decisions)
 - Design docs: `analysis/design/README.md`
 - Deep dives: `docs/*.md` (search by topic name)

@@ -35,9 +35,9 @@ import seaborn as sns
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 try:
-    from analysis.run_context import RunContext, strip_leadership_suffix
+    from analysis.run_context import RunContext
 except ModuleNotFoundError:
-    from run_context import RunContext, strip_leadership_suffix
+    from run_context import RunContext
 
 try:
     from analysis.phase_utils import print_header, save_fig
@@ -188,6 +188,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session", default="2025-26")
     parser.add_argument("--data-dir", default=None, help="Override data directory path")
     parser.add_argument("--run-id", default=None, help="Run ID for grouped pipeline output")
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
@@ -201,27 +202,24 @@ def numpy_matrix_to_polars(mat: np.ndarray, slugs: list[str]) -> pl.DataFrame:
 # ── 1. Data Loading ─────────────────────────────────────────────────────────
 
 
-def load_data(data_dir: Path) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """Load the three CSVs produced by the scraper.
+def load_data(
+    data_dir: Path, *, use_csv: bool = False
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Load votes, rollcalls, and legislators.
 
-    File naming convention: {output_name}_{type}.csv (e.g. 91st_2025-2026_votes.csv).
-    The data_dir name IS the output_name prefix.
+    Loads from PostgreSQL by default; falls back to CSV when the DB is
+    unavailable or when *use_csv* is True.
     """
-    prefix = data_dir.name
-    votes = pl.read_csv(data_dir / f"{prefix}_votes.csv")
-    rollcalls = pl.read_csv(data_dir / f"{prefix}_rollcalls.csv")
+    from analysis.db import load_legislators, load_rollcalls, load_votes
+
+    votes = load_votes(data_dir, use_csv=use_csv)
+    rollcalls = load_rollcalls(data_dir, use_csv=use_csv)
     # Fill null vote_type (some historical sessions have missing values)
     if "vote_type" in rollcalls.columns:
         rollcalls = rollcalls.with_columns(
             pl.col("vote_type").fill_null("Unknown").alias("vote_type")
         )
-    legislators = pl.read_csv(data_dir / f"{prefix}_legislators.csv")
-    legislators = legislators.with_columns(
-        pl.col("full_name")
-        .map_elements(strip_leadership_suffix, return_dtype=pl.Utf8)
-        .alias("full_name"),
-        pl.col("party").fill_null("Independent").replace("", "Independent").alias("party"),
-    )
+    legislators = load_legislators(data_dir, use_csv=use_csv)
     return votes, rollcalls, legislators
 
 
@@ -2006,7 +2004,7 @@ def main() -> None:
         print(f"Output: {ctx.run_dir}")
 
         # ── 1. Load data ──
-        votes, rollcalls, legislators = load_data(data_dir)
+        votes, rollcalls, legislators = load_data(data_dir, use_csv=args.csv)
         print_session_summary(votes, rollcalls, legislators)
 
         # ── 1b. Data integrity ──

@@ -583,22 +583,17 @@ Read-only public API via [Django Ninja](https://django-ninja.dev/) (`>=1.5,<2`).
 
 **Prerequisite:** DB1
 
-### DB5. Analysis Pipeline Database Integration
+### DB5. Analysis Pipeline Database Integration (COMPLETE)
 
-Allow the analysis pipeline to read from PostgreSQL instead of (or in addition to) CSVs. Polars `pl.read_database()` queries PostgreSQL directly. Optional — CSVs remain the default data source. The pipeline never writes to the database.
+PostgreSQL is the default data source for all 27 analysis phases. `analysis/db.py` uses raw SQL + psycopg3 + Polars `read_database()` — no Django ORM dependency. CSV is the automatic fallback when the DB is unavailable. `--csv` flag forces CSV-only mode.
 
-```python
-# phase_utils.py — load from DB when configured
-if settings.DATABASE_URL:
-    votes = pl.read_database("SELECT ... FROM votes WHERE session_id = ...", conn)
-else:
-    votes = pl.read_csv(data_dir / f"{name}_votes.csv")
-```
-
-**Deliverables:**
-- `phase_utils.load_votes()` / `load_rollcalls()` gain optional DB path
-- `DATABASE_URL` environment variable support
-- No performance regression — PostgreSQL indexed queries are faster than CSV reads
+**Deliverables (all complete):**
+- `analysis/db.py` — centralized DB loading (5 SQL queries, 5 routing functions, connection caching)
+- 9 call sites updated across 8 phase files + `phase_utils.py`
+- `--csv` flag on all affected phase argparsers
+- `psycopg[binary]>=3.2` in `dev` dependency group
+- Unit tests (mocked) + integration tests (`@pytest.mark.web`)
+- ADR-0099
 
 **Prerequisite:** DB2
 
@@ -623,7 +618,7 @@ DB1 (scaffolding) ─→ DB2 (loader) ─→ DB3 (post-hook)
                                     DB6 (multi-state)
 ```
 
-DB1-DB4 are complete — data flows into PostgreSQL and is queryable via REST API. DB5 and DB6 are future work. DB6 is the long-term goal that motivates the entire effort.
+DB1-DB5 are complete — data flows into PostgreSQL, is queryable via REST API, and is the default data source for the analysis pipeline. DB6 is the remaining future work and the long-term goal that motivates the entire effort.
 
 ---
 

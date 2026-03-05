@@ -63,6 +63,7 @@ dev = [
     "fpdf2>=2.8.7",
     "pyyaml>=6.0",
     "pytest-django>=4.5",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -251,6 +252,8 @@ allowed-unresolved-imports = [
     "analysis.model_legislation",
     "analysis.model_legislation_data",
     "analysis.model_legislation_report",
+    "analysis.db",
+    "db",
 ]
 
 # Analysis code: suppress noise from third-party stubs while ty matures.

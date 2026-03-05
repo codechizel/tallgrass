@@ -316,6 +316,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="FastEmbed model (default: same as Phase 18)",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args(argv)
 
 
@@ -334,8 +335,14 @@ def main(argv: list[str] | None = None) -> None:
     bill_text_csvs = list(data_dir.glob("*_bill_texts.csv"))
     alec_csv = Path("data/external/alec/alec_model_bills.csv")
     if not bill_text_csvs and not alec_csv.exists():
-        print("[Phase 23] Skipping: no bill texts or ALEC corpus (run `just text` + `just alec`)")
-        return
+        from analysis.db import db_available
+
+        if args.csv or not db_available():
+            print(
+                "[Phase 23] Skipping: no bill texts or ALEC corpus "
+                "(run `just text` + `just alec`)"
+            )
+            return
 
     embedding_model = args.embedding_model or btd.DEFAULT_EMBEDDING_MODEL
     threshold = args.threshold
@@ -352,7 +359,7 @@ def main(argv: list[str] | None = None) -> None:
 
         # ── Step 1: Load Kansas bill texts + embeddings ──────────────────
         print("\n[Step 1] Loading Kansas bill texts...")
-        ks_bill_texts = btd.load_bill_texts(data_dir)
+        ks_bill_texts = btd.load_bill_texts(data_dir, use_csv=args.csv)
         n_ks = len(ks_bill_texts)
         print(f"  Loaded {n_ks} Kansas bill texts")
 
@@ -385,7 +392,9 @@ def main(argv: list[str] | None = None) -> None:
         # ── Step 2: Load and embed ALEC corpus ───────────────────────────
         print("\n[Step 2] Loading ALEC corpus...")
         try:
-            alec_texts, alec_ids, alec_metadata = load_alec_corpus(args.alec_dir)
+            alec_texts, alec_ids, alec_metadata = load_alec_corpus(
+                args.alec_dir, use_csv=args.csv
+            )
             n_alec = len(alec_texts)
             print(f"  Loaded {n_alec} ALEC model bills")
 

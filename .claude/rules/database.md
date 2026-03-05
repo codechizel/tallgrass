@@ -2,10 +2,11 @@
 paths:
   - "src/web/**/*.py"
   - "src/tallgrass/db_hook.py"
+  - "analysis/db.py"
   - "docker-compose.yml"
 ---
 
-# Web / Database (DB1-DB4)
+# Web / Database (DB1-DB5)
 
 Django project at `src/web/` for PostgreSQL-backed data access. The scraper continues writing CSVs; the DB2 loader imports them into PostgreSQL; the DB4 REST API exposes them publicly.
 
@@ -64,6 +65,16 @@ Delete-and-reload per session inside `@transaction.atomic`. Legislators and roll
 
 Read-only public API via Django Ninja at `/api/v1/`. 7 resource routers (sessions, legislators, rollcalls, votes, bill-actions, bill-texts, ALEC) + health check. Pydantic v2 schemas with list/detail separation (lists omit large text fields). `FilterSchema` per resource with optional query parameters. `LimitOffsetPagination` (default 100, max 1000). IP-based rate limiting via `AnonRateThrottle`. Semicolon-joined fields (`sponsor_slugs`, `committee_names`) parsed into JSON arrays. Rollcall detail nests votes. Auto-generated OpenAPI docs at `/api/v1/docs`. ADR-0096.
 
+## DB5 Analysis Pipeline Loading
+
+`analysis/db.py` — Django-free module using raw SQL + psycopg3 + Polars `read_database()`. PostgreSQL is the default data source for all analysis phases; CSV is the automatic fallback when the DB is unavailable.
+
+- **Connection:** `DATABASE_URL` env var (default: `postgresql://localhost:5432/tallgrass`). Connection cached per process.
+- **Routing:** `load_votes(data_dir, *, use_csv=False)` and siblings try DB first, fall back to CSV on failure. `use_csv=True` skips DB entirely.
+- **CLI:** `--csv` flag on each phase's argparser forces CSV-only mode.
+- **Session mapping:** `data_dir.name` (e.g. `91st_2025-2026`) maps directly to `Session.name` in the DB.
+- **Unchanged:** Parquet inter-phase reads, cross-state texts (Phase 23), bill_actions. ADR-0099.
+
 ## Testing
 
-Django tests use `pytest.importorskip("django")` — existing non-web tests never import Django. `DJANGO_SETTINGS_MODULE` is NOT set in pyproject.toml. ADR-0090.
+Django tests use `pytest.importorskip("django")` — existing non-web tests never import Django. `DJANGO_SETTINGS_MODULE` is NOT set in pyproject.toml. DB5 unit tests mock the connection; integration tests use `@pytest.mark.web`. ADR-0090.

@@ -277,6 +277,7 @@ def parse_args() -> argparse.Namespace:
         default=MIN_CLUSTER_SIZE,
         help=f"HDBSCAN min_cluster_size (default: {MIN_CLUSTER_SIZE})",
     )
+    parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
 
 
@@ -857,8 +858,14 @@ def main() -> None:
     # Check bill texts exist (run `just text` first)
     bill_text_csv = data_dir / f"{session.output_name}_bill_texts.csv"
     if not bill_text_csv.exists():
-        print(f"[Phase 20] Skipping: bill texts not found (run `just text {args.session}` first)")
-        return
+        from analysis.db import db_available
+
+        if args.csv or not db_available():
+            print(
+                f"[Phase 20] Skipping: bill texts not found "
+                f"(run `just text {args.session}` first)"
+            )
+            return
 
     with RunContext(
         session=args.session,
@@ -872,12 +879,12 @@ def main() -> None:
         # ── Load data ────────────────────────────────────────────────────
         print_header("Loading Data")
 
-        bill_texts = load_bill_texts(data_dir)
+        bill_texts = load_bill_texts(data_dir, use_csv=args.csv)
         print(f"  Bills with text: {len(bill_texts)}")
 
-        rollcalls = load_rollcalls(data_dir)
-        votes = load_votes(data_dir)
-        legislators = load_legislators(data_dir)
+        rollcalls = load_rollcalls(data_dir, use_csv=args.csv)
+        votes = load_votes(data_dir, use_csv=args.csv)
+        legislators = load_legislators(data_dir, use_csv=args.csv)
         if "slug" in legislators.columns and "legislator_slug" not in legislators.columns:
             legislators = legislators.rename({"slug": "legislator_slug"})
         print(f"  Roll calls: {len(rollcalls)}")

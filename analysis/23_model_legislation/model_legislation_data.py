@@ -32,20 +32,21 @@ MIN_TEXT_LENGTH = 100
 # ── Data Loading ─────────────────────────────────────────────────────────────
 
 
-def load_alec_corpus(alec_dir: Path) -> tuple[list[str], list[str], pl.DataFrame]:
-    """Load ALEC model bills from CSV.
+def load_alec_corpus(
+    alec_dir: Path, *, use_csv: bool = False
+) -> tuple[list[str], list[str], pl.DataFrame]:
+    """Load ALEC model bills.
 
     Returns:
         texts: Raw bill texts (one per model bill).
         identifiers: Unique identifiers for each bill (URL-based).
         metadata_df: DataFrame with title, category, bill_type, etc.
-    """
-    csv_path = alec_dir / "alec_model_bills.csv"
-    if not csv_path.exists():
-        msg = f"ALEC corpus not found: {csv_path}. Run `just alec` first."
-        raise FileNotFoundError(msg)
 
-    df = pl.read_csv(csv_path)
+    Loads from PostgreSQL by default; CSV fallback.
+    """
+    from analysis.db import load_alec
+
+    df = load_alec(alec_dir, use_csv=use_csv)
 
     # Filter out empty texts
     df = df.filter(

@@ -433,9 +433,9 @@ def compare_individual_votes(
                 kf_cat = kf_v.vote
                 je_cat = je_v.vote
                 if kf_cat != je_cat:
-                    compatible = (
-                        kf_cat == "Not Voting" and je_cat == "Absent and Not Voting"
-                    ) or (kf_cat == "Absent and Not Voting" and je_cat == "Not Voting")
+                    compatible = (kf_cat == "Not Voting" and je_cat == "Absent and Not Voting") or (
+                        kf_cat == "Absent and Not Voting" and je_cat == "Not Voting"
+                    )
                     mismatches.append(
                         VoteMismatch(
                             slug=kf_slug,
