@@ -12,6 +12,7 @@ from tallgrass.kanfocus.output import (
     _convert_date,
     _derive_passed,
     _parse_bool,
+    _safe_int,
     convert_to_standard,
     merge_gap_fill,
 )
@@ -205,8 +206,62 @@ class TestConvertToStandard:
         _, rollcalls, _ = convert_to_standard([record], "test", {})
         assert rollcalls[0].vote_url == "https://kanfocus.com/test"
 
+    def test_deduplicates_by_vote_id(self):
+        """Records with the same vote_num/year/chamber are deduplicated."""
+        r1 = _make_record(vote_num=1, year=2011, chamber="S", bill_number="SB 1")
+        r2 = _make_record(vote_num=1, year=2011, chamber="S", bill_number="SB 99")
+        votes, rollcalls, _ = convert_to_standard([r1, r2], "test", {})
+        assert len(rollcalls) == 1
+        assert rollcalls[0].bill_number == "SB 1"  # first occurrence kept
+
+    def test_different_vote_ids_preserved(self):
+        """Records with different vote_num/year/chamber are all preserved."""
+        r1 = _make_record(vote_num=1, year=2011, chamber="S")
+        r2 = _make_record(vote_num=2, year=2011, chamber="S")
+        r3 = _make_record(vote_num=1, year=2011, chamber="H")
+        _, rollcalls, _ = convert_to_standard([r1, r2, r3], "test", {})
+        assert len(rollcalls) == 3
+
+    def test_tally_mismatch_warns(self):
+        """Warns when parsed legislator count doesn't match tally."""
+        leg = _make_legislator()
+        record = _make_record(legislators=(leg,))
+        # Record has yea=38, nay=0, present=0, nv=1 = 39 expected, but only 1 legislator
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            convert_to_standard([record], "test", {})
+            tally_warnings = [x for x in w if "Tally mismatch" in str(x.message)]
+            assert len(tally_warnings) == 1
+
 
 # ── _parse_bool() ─────────────────────────────────────────────────────────
+
+
+class TestSafeInt:
+    """Convert CSV field values to int safely."""
+
+    def test_normal_int(self):
+        assert _safe_int("38") == 38
+
+    def test_zero(self):
+        assert _safe_int("0") == 0
+
+    def test_empty_string(self):
+        assert _safe_int("") == 0
+
+    def test_none(self):
+        assert _safe_int(None) == 0
+
+    def test_non_numeric(self):
+        assert _safe_int("invalid") == 0
+
+    def test_whitespace(self):
+        assert _safe_int(" ") == 0
+
+    def test_int_passthrough(self):
+        assert _safe_int(42) == 42
 
 
 class TestParseBool:
@@ -277,7 +332,6 @@ class TestGapFillDedup:
         self._write_csv(tmp_path / "test_legislators.csv", self._leg_header(), [])
 
         # New kf_ rollcall for same bill+chamber+date — should be skipped
-        leg = _make_legislator()
         record = _make_record(bill_number="SB 13", chamber="S", date="02/03/2011")
         new_votes, new_rollcalls, new_legs = convert_to_standard([record], "test", {})
 

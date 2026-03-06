@@ -273,6 +273,17 @@ class TestParseMetadata:
         meta = _parse_metadata(EMPTY_PAGE_TEXT)
         assert meta is None
 
+    def test_empty_result_not_all_members(self):
+        """Result field left empty by KanFocus does not bleed into 'All Members' header."""
+        text = (
+            "Vote #: 35 Date: 01/24/2001 Bill Number: SB 15 "
+            "Question: On final action Result:\n\n\n\n\nAll Members\nRepublicans\n"
+            "For 40 100% 30 100%"
+        )
+        meta = _parse_metadata(text)
+        assert meta is not None
+        assert meta["result"] == ""
+
 
 # ── _parse_counts() ───────────────────────────────────────────────────────
 

@@ -7,6 +7,7 @@ so the analysis pipeline works unchanged. Reuses ``save_csvs()`` from
 
 import csv
 import re
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -88,6 +89,14 @@ def _chamber_name(chamber: str) -> str:
     return "Senate" if chamber == "S" else "House"
 
 
+def _safe_int(value: str | int) -> int:
+    """Convert a CSV field to int, defaulting to 0 on empty or malformed values."""
+    try:
+        return int(value) if value else 0
+    except ValueError, TypeError:
+        return 0
+
+
 def convert_to_standard(
     records: list[KanFocusVoteRecord],
     session_label: str,
@@ -101,12 +110,32 @@ def convert_to_standard(
     all_rollcalls: list[RollCall] = []
     legislators: dict[str, dict] = {}
 
+    seen_vote_ids: set[str] = set()
+
     for record in records:
         vote_id = generate_vote_id(record.vote_num, record.year, record.chamber)
+
+        # Deduplicate by vote_id (safety net — should never trigger with correct upstream)
+        if vote_id in seen_vote_ids:
+            continue
+        seen_vote_ids.add(vote_id)
+
         vote_datetime, vote_date = _convert_date(record.date)
         chamber_name = _chamber_name(record.chamber)
         vote_type, motion_result = _classify_vote_type(record.question)
         passed = _derive_passed(record.result)
+
+        # Warn if tally counts don't match parsed legislator list
+        n_legislators = len(record.legislators)
+        expected_total = (
+            record.yea_count + record.nay_count + record.present_count + record.not_voting_count
+        )
+        if n_legislators > 0 and n_legislators != expected_total:
+            warnings.warn(
+                f"Tally mismatch for {vote_id}: "
+                f"expected {expected_total} legislators, parsed {n_legislators}",
+                stacklevel=2,
+            )
 
         rollcall = RollCall(
             session=session_label,
@@ -235,12 +264,14 @@ def merge_gap_fill(
                             short_title=row.get("short_title", ""),
                             sponsor=row.get("sponsor", ""),
                             sponsor_slugs=row.get("sponsor_slugs", ""),
-                            yea_count=int(row.get("yea_count", 0) or 0),
-                            nay_count=int(row.get("nay_count", 0) or 0),
-                            present_passing_count=int(row.get("present_passing_count", 0) or 0),
-                            absent_not_voting_count=int(row.get("absent_not_voting_count", 0) or 0),
-                            not_voting_count=int(row.get("not_voting_count", 0) or 0),
-                            total_votes=int(row.get("total_votes", 0) or 0),
+                            yea_count=_safe_int(row.get("yea_count", 0)),
+                            nay_count=_safe_int(row.get("nay_count", 0)),
+                            present_passing_count=_safe_int(row.get("present_passing_count", 0)),
+                            absent_not_voting_count=_safe_int(
+                                row.get("absent_not_voting_count", 0)
+                            ),
+                            not_voting_count=_safe_int(row.get("not_voting_count", 0)),
+                            total_votes=_safe_int(row.get("total_votes", 0)),
                             passed=_parse_bool(row.get("passed", "")),
                         )
                     )

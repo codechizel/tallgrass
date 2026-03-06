@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-06 (party-aware IRT anchors; 83rd KanFocus loaded; pending 83rd pipeline + duplicate bug)
+**Last updated:** 2026-03-06 (KanFocus duplicate bug investigated + 3 defensive fixes; pending 83rd pipeline)
 
 ---
 
@@ -643,7 +643,7 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 | Item | Command | Context |
 |------|---------|---------|
 | **Run 83rd pipeline** | `just pipeline 2009-10` | KanFocus data downloaded + DB-loaded (1,180 rollcalls, 66,575 votes, 170 legislators). Needs full 27-phase analysis. |
-| **Investigate KanFocus scraper duplicate output** | — | 83rd KanFocus CSV had 4 duplicate rollcalls + 279 duplicate votes + 1 malformed truncated line. Root cause likely in `src/tallgrass/kanfocus/output.py`. Data was cleaned manually for DB load but scraper should be fixed to prevent recurrence. |
+| ~~**Investigate KanFocus scraper duplicate output**~~ | — | **Resolved.** Deep dive confirmed the original duplicates were an operational issue (write interruption), not a reproducible code bug. A clean re-run from cache produces 1,186 rollcalls with 0 duplicates. Three defensive improvements shipped: (1) rollcall dedup by `vote_id` in `save_csvs()`, (2) early dedup + tally-mismatch warning in `convert_to_standard()`, (3) parser fix for `Result:` regex bleeding into "All Members" table header (8 affected records across 5 bienniums). 7 new tests. |
 
 ---
 

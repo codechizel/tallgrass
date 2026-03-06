@@ -163,7 +163,11 @@ class KanFocusFetcher:
         """
         cache_file = self._cache_path(url)
         if cache_file.exists():
-            return cache_file.read_text(encoding="utf-8")
+            try:
+                return cache_file.read_text(encoding="utf-8")
+            except OSError, UnicodeDecodeError:
+                # Corrupted cache file — delete and re-fetch
+                cache_file.unlink(missing_ok=True)
 
         for attempt in range(MAX_RETRIES):
             try:

@@ -264,3 +264,64 @@ class TestSaveCsvs:
             row = next(csv.DictReader(f))
             assert row["party"] == ""
             assert row["full_name"] == ""
+
+    def test_deduplicates_votes_by_slug_vote_id(self, tmp_path):
+        """Duplicate (legislator_slug, vote_id) pairs are removed, keeping first."""
+        v1 = _make_vote("sen_doe_john_1", "Yea")
+        v2 = _make_vote("sen_doe_john_1", "Nay")  # same slug+vote_id, different vote
+        save_csvs(
+            output_dir=tmp_path,
+            output_name="test",
+            individual_votes=[v1, v2],
+            rollcalls=[],
+            legislators={},
+        )
+        with open(tmp_path / "test_votes.csv") as f:
+            rows = list(csv.DictReader(f))
+            assert len(rows) == 1
+            assert rows[0]["vote"] == "Yea"  # first occurrence kept
+
+    def test_deduplicates_rollcalls_by_vote_id(self, tmp_path):
+        """Duplicate vote_id rollcalls are removed, keeping first."""
+        rc1 = _make_rollcall("rc_dup")
+        rc2 = RollCall(
+            session="s",
+            bill_number="SB 99",
+            bill_title="",
+            vote_id="rc_dup",  # same vote_id
+            vote_url="u",
+            vote_datetime="dt",
+            vote_date="d",
+            chamber="Senate",
+            motion="different motion",
+            vote_type="",
+            result="Failed",
+            short_title="",
+            sponsor="",
+            passed=False,
+        )
+        save_csvs(
+            output_dir=tmp_path,
+            output_name="test",
+            individual_votes=[],
+            rollcalls=[rc1, rc2],
+            legislators={},
+        )
+        with open(tmp_path / "test_rollcalls.csv") as f:
+            rows = list(csv.DictReader(f))
+            assert len(rows) == 1
+            assert rows[0]["bill_number"] == "SB 1"  # first occurrence kept
+
+    def test_unique_rollcalls_preserved(self, tmp_path):
+        """Rollcalls with different vote_ids are all preserved."""
+        rcs = [_make_rollcall(f"rc_{i}") for i in range(5)]
+        save_csvs(
+            output_dir=tmp_path,
+            output_name="test",
+            individual_votes=[],
+            rollcalls=rcs,
+            legislators={},
+        )
+        with open(tmp_path / "test_rollcalls.csv") as f:
+            rows = list(csv.DictReader(f))
+            assert len(rows) == 5

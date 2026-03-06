@@ -45,6 +45,7 @@ What are the trade-offs?
 | [0093](0093-bertopic-stopword-filtering.md) | BERTopic stopword filtering for c-TF-IDF topic labels |
 | [0097](0097-kanfocus-cross-validation.md) | KanFocus cross-validation diagnostic (KF vs JE data integrity) |
 | [0098](0098-crossval-multi-motion-and-slug-fixes.md) | Cross-validation fixes (tally-based multi-motion matching, slug resolution) |
+| [0102](0102-kanfocus-defensive-dedup-and-parser-fix.md) | KanFocus defensive deduplication and parser fix |
 
 ### Dimensionality Reduction
 
@@ -267,6 +268,7 @@ What are the trade-offs?
 | [0099](0099-analysis-pipeline-db-integration.md) | Analysis pipeline database integration (DB5: psycopg3 + Polars, CSV fallback, --csv flag) | Accepted | 2026-03-04 |
 | [0100](0100-report-symlink-and-pipeline-resilience.md) | Report symlink stability and pipeline resilience (DB credentials, graceful skip, concrete symlinks) | Accepted | 2026-03-05 |
 | [0101](0101-party-aware-irt-anchor-selection.md) | Party-aware IRT anchor selection (supermajority sign flip fix, dimension collapse analysis) | Accepted | 2026-03-06 |
+| [0102](0102-kanfocus-defensive-dedup-and-parser-fix.md) | KanFocus defensive deduplication and parser fix (rollcall dedup, regex bleed, cache recovery) | Accepted | 2026-03-06 |
 
 ## Creating a New ADR
 

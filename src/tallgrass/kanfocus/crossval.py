@@ -20,7 +20,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tallgrass.kanfocus.output import convert_to_standard
+from tallgrass.kanfocus.output import _safe_int, convert_to_standard
 from tallgrass.kanfocus.parser import parse_vote_page
 from tallgrass.kanfocus.session import (
     biennium_streams,
@@ -228,12 +228,12 @@ def load_je_data(data_dir: Path, output_name: str) -> tuple[list[RollCall], list
                         short_title=row.get("short_title", ""),
                         sponsor=row.get("sponsor", ""),
                         sponsor_slugs=row.get("sponsor_slugs", ""),
-                        yea_count=int(row.get("yea_count", 0) or 0),
-                        nay_count=int(row.get("nay_count", 0) or 0),
-                        present_passing_count=int(row.get("present_passing_count", 0) or 0),
-                        absent_not_voting_count=int(row.get("absent_not_voting_count", 0) or 0),
-                        not_voting_count=int(row.get("not_voting_count", 0) or 0),
-                        total_votes=int(row.get("total_votes", 0) or 0),
+                        yea_count=_safe_int(row.get("yea_count", 0)),
+                        nay_count=_safe_int(row.get("nay_count", 0)),
+                        present_passing_count=_safe_int(row.get("present_passing_count", 0)),
+                        absent_not_voting_count=_safe_int(row.get("absent_not_voting_count", 0)),
+                        not_voting_count=_safe_int(row.get("not_voting_count", 0)),
+                        total_votes=_safe_int(row.get("total_votes", 0)),
                         passed=_parse_bool(row.get("passed", "")),
                     )
                 )

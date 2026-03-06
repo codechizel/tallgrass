@@ -8,8 +8,8 @@ paths:
 ## Commands
 
 ```bash
-just test                    # run all tests (~2726)
-just test-scraper            # scraper tests only (-m scraper, ~628)
+just test                    # run all tests (~2765)
+just test-scraper            # scraper tests only (-m scraper, ~643)
 just test-fast               # skip slow tests (-m "not slow")
 just test-web                # Django/database tests only (-m web, requires PostgreSQL)
 just check                   # full check (lint + typecheck + tests)
@@ -46,7 +46,7 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_models.py` — dataclass construction and immutability, VoteLink.is_odt (~8 tests)
 - `tests/test_odt_parser.py` — ODT vote parsing: XML, metadata, body text, name resolution (~47 tests)
 - `tests/test_scraper_http.py` — HTTP layer: _get() retries, error classification, cache, _fetch_many() waves, rate limiting, KLISS API (~43 tests)
-- `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip (~10 tests)
+- `tests/test_output.py` — CSV export: filenames, headers, row counts, roundtrip, vote/rollcall dedup (~13 tests)
 - `tests/test_cli.py` — argument parsing with monkeypatched scraper (~17 tests)
 - `tests/test_merge_special.py` — special session merge: parent_session property, CSV merge, idempotency, column alignment, legislator dedup, CLI flag (~21 tests)
 - `tests/test_roster.py` — OpenStates roster sync: slug extraction, YAML parsing, slug→ocd_id lookup, cache load/save, same-name disambiguation (~22 tests)
@@ -56,10 +56,10 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 ## KanFocus Test Files
 
 - `tests/test_kanfocus_session.py` — session ID mapping (14 bienniums), URL construction, vote_id generation, biennium streams (~27 tests)
-- `tests/test_kanfocus_parser.py` — vote tally page parsing: metadata, counts, legislator extraction, category mapping, empty page detection (~40 tests)
+- `tests/test_kanfocus_parser.py` — vote tally page parsing: metadata, counts, legislator extraction, category mapping, empty page detection, regex bleed guard (~48 tests)
 - `tests/test_kanfocus_slugs.py` — slug generation: standard names, suffixes, nicknames, multi-word, hyphen normalization, cross-reference matching (nickname aliases, chamber validation), CSV loading (~36 tests)
-- `tests/test_kanfocus_output.py` — output conversion: date format, passed derivation, vote_type classification, standard format conversion (~27 tests)
-- `tests/test_kanfocus_fetcher.py` — HTTP caching, vote enumeration, consecutive-empty threshold, rate limiting defaults (~9 tests)
+- `tests/test_kanfocus_output.py` — output conversion: date format, passed derivation, vote_type classification, standard format conversion, dedup, safe_int (~42 tests)
+- `tests/test_kanfocus_fetcher.py` — HTTP caching, vote enumeration, consecutive-empty threshold, rate limiting defaults, cache corruption recovery (~10 tests)
 - `tests/test_kanfocus_crossval.py` — cross-validation: bill number normalization, rollcall matching (multi-motion tally-based), tally comparison, individual vote comparison (ANV/NV compat, name + last-name fallback), report formatting (~40 tests)
 
 ## Bill Text Test Files

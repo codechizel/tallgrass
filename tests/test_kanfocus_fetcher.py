@@ -102,6 +102,31 @@ class TestFetcherCaching:
 
         assert len(list(tmp_path.iterdir())) == 0
 
+    @patch("tallgrass.kanfocus.fetcher.requests.Session")
+    def test_corrupted_cache_re_fetches(self, mock_session_cls, tmp_path: Path):
+        """Corrupted cache file is deleted and page is re-fetched."""
+        mock_session = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.text = VALID_PAGE
+        mock_resp.raise_for_status = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session_cls.return_value = mock_session
+
+        fetcher = KanFocusFetcher(cache_dir=tmp_path, delay=0)
+        fetcher.http = mock_session
+
+        # Write invalid bytes as cache file
+        import hashlib
+
+        url = "https://kanfocus.com/corrupted"
+        url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+        cache_file = tmp_path / f"{url_hash}.html"
+        cache_file.write_bytes(b"\x80\x81\x82\x83")  # invalid UTF-8
+
+        result = fetcher.fetch_page(url)
+        assert result == VALID_PAGE
+        assert mock_session.get.call_count == 1  # re-fetched from network
+
 
 # ── Vote Enumeration ──────────────────────────────────────────────────────
 

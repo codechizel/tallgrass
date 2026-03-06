@@ -43,15 +43,26 @@ def save_csvs(
             writer.writerow(asdict(iv))
     print(f"  {votes_file} ({len(deduped_votes)} rows)")
 
-    # Roll call summaries
+    # Roll call summaries (deduplicate by vote_id — safety net against upstream bugs)
     rollcalls_file = output_dir / f"{output_name}_rollcalls.csv"
+    seen_rc_ids: set[str] = set()
+    deduped_rollcalls: list[RollCall] = []
+    for rc in rollcalls:
+        if rc.vote_id not in seen_rc_ids:
+            seen_rc_ids.add(rc.vote_id)
+            deduped_rollcalls.append(rc)
+    if len(deduped_rollcalls) < len(rollcalls):
+        print(
+            f"  Deduplicated rollcalls: {len(rollcalls)} → {len(deduped_rollcalls)}"
+            f" ({len(rollcalls) - len(deduped_rollcalls)} duplicates removed)"
+        )
     with open(rollcalls_file, "w", newline="", encoding="utf-8") as f:
         fieldnames = [fld.name for fld in fields(RollCall)]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        for rc in rollcalls:
+        for rc in deduped_rollcalls:
             writer.writerow(asdict(rc))
-    print(f"  {rollcalls_file} ({len(rollcalls)} rows)")
+    print(f"  {rollcalls_file} ({len(deduped_rollcalls)} rows)")
 
     # Legislators
     legislators_file = output_dir / f"{output_name}_legislators.csv"

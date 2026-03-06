@@ -134,12 +134,17 @@ def _parse_metadata(text: str) -> dict[str, str] | None:
     if not vote_match or not date_match:
         return None
 
+    result = result_match.group(1).strip() if result_match else ""
+    # Guard against regex bleeding: "All Members" is a table header, not a result
+    if result == "All Members":
+        result = ""
+
     return {
         "vote_num_str": vote_match.group(1),
         "date": date_match.group(1).strip(),
         "bill_number": bill_match.group(1).strip() if bill_match else "",
         "question": question_match.group(1).strip() if question_match else "",
-        "result": result_match.group(1).strip() if result_match else "",
+        "result": result,
     }
 
 
