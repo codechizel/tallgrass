@@ -101,6 +101,7 @@ def _normalize_session(session: str) -> str:
         "2023-24"  -> "90th_2023-2024"
         "2024s"    -> "2024s"  (special sessions pass through)
         "2025_26"  -> "91st_2025-2026"
+        "2001"     -> "79th_2001-2002"
     """
     # Normalize underscores to hyphens first
     session = session.replace("_", "-")
@@ -114,6 +115,16 @@ def _normalize_session(session: str) -> str:
             from session import KSSession  # type: ignore[no-redef]
         start = int(m.group(1))
         ks = KSSession.from_year(start)
+        return ks.output_name
+
+    # Match bare year "YYYY" (not special session "YYYYs")
+    m = re.match(r"^(\d{4})$", session)
+    if m:
+        try:
+            from tallgrass.session import KSSession
+        except ImportError:
+            from session import KSSession  # type: ignore[no-redef]
+        ks = KSSession.from_year(int(m.group(1)))
         return ks.output_name
 
     return session
@@ -530,9 +541,7 @@ def _load_recovered_votes(data_dir: Path) -> set[tuple[str, str]]:
     if kf.is_empty():
         return set()
 
-    return set(
-        kf.select("bill_number", "vote_date").iter_rows()
-    )
+    return set(kf.select("bill_number", "vote_date").iter_rows())
 
 
 def _vote_date_from_url(url: str) -> str | None:

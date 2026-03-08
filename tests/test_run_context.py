@@ -99,9 +99,10 @@ class TestNormalizeSession:
         """Underscore in biennium format is normalized to dash."""
         assert _normalize_session("91st_2025-2026") == "91st-2025-2026"
 
-    def test_plain_year_passthrough(self):
-        """Bare year with no separator passes through."""
-        assert _normalize_session("2025") == "2025"
+    def test_bare_year_resolves_to_biennium(self):
+        """Bare year resolves to full biennium name."""
+        assert _normalize_session("2025") == "91st_2025-2026"
+        assert _normalize_session("2001") == "79th_2001-2002"
 
 
 # ── _next_run_label() ────────────────────────────────────────────────────────
