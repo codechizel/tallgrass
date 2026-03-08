@@ -673,7 +673,12 @@ def compare_models(
     for name, idata in model_idatas.items():
         loo_results[name] = compute_loo(idata)
 
-    comparison = az.compare(loo_results)
+    try:
+        comparison = az.compare(loo_results)
+    except ValueError:
+        # Models have different observation counts (different vote filtering).
+        # Fall back to individual LOO without cross-model comparison.
+        comparison = None
     return comparison, loo_results
 
 

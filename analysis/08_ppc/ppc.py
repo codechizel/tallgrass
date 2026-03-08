@@ -562,7 +562,10 @@ def process_chamber(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 loo_comparison, loo_individual = compare_models(loo_models)
-            print(f"\n{loo_comparison}")
+            if loo_comparison is not None:
+                print(f"\n{loo_comparison}")
+            else:
+                print("  (Skipped cross-model comparison — observation counts differ)")
         else:
             # Single model — just compute LOO
             loo_individual = {}

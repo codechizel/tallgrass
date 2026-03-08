@@ -1357,10 +1357,13 @@ def print_descriptive_stats(rollcalls: pl.DataFrame) -> None:
     # Passage rate — expect high overall (most bills that reach a floor vote pass)
     has_result = rollcalls.filter(pl.col("passed").is_not_null())
     passed_count = has_result.filter(pl.col("passed") == True).height  # noqa: E712
-    print(
-        f"\n  Passage rate (overall): {passed_count}/{has_result.height}"
-        f" ({100 * passed_count / has_result.height:.1f}%)"
-    )
+    if has_result.height > 0:
+        print(
+            f"\n  Passage rate (overall): {passed_count}/{has_result.height}"
+            f" ({100 * passed_count / has_result.height:.1f}%)"
+        )
+    else:
+        print("\n  Passage rate (overall): no rollcalls with passed field")
 
     print("\n  Passage rate by chamber:")
     for chamber in ["House", "Senate"]:

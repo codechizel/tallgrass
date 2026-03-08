@@ -375,7 +375,9 @@ def _deduplicate_with_district(
 
     has_district = "district" in multi.columns and ext_district_col in multi.columns
     if has_district:
-        district_matched = multi.filter(pl.col("district") == pl.col(ext_district_col))
+        district_matched = multi.filter(
+            pl.col("district").cast(pl.Utf8) == pl.col(ext_district_col).cast(pl.Utf8)
+        )
         district_matched = district_matched.unique(subset=["normalized_name"])
     else:
         district_matched = pl.DataFrame()
