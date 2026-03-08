@@ -647,9 +647,9 @@ See `docs/method-evaluation.md` for detailed rationale on each rejection.
 
 ---
 
-## IRT Sign Flip Fix (Supermajority Chambers)
+## ~~IRT Sign Flip Fix (Supermajority Chambers)~~ — Done (Phase 05)
 
-**Status:** Documented, code fix pending.
+**Completed 2026-03-07.** `validate_sign()` in Phase 05 flat IRT.
 
 PCA-based anchor selection produces sign flips in supermajority chambers where a rebel faction within the majority party votes with the minority. The horseshoe effect folds far-right rebels onto the same end of the latent dimension as Democrats, and `orient_pc1()` + `select_anchors()` lock in the wrong polarity. The model's shape is correct — only the sign is wrong.
 
