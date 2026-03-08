@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import arviz as az
 import xarray as xr
 from analysis.irt import (
+    CONTESTED_VOTE_THRESHOLD,
     HOLDOUT_FRACTION,
     HOLDOUT_SEED,
     MAX_DIVERGENCES,
@@ -39,6 +40,7 @@ from analysis.irt import (
     prepare_irt_data,
     select_anchors,
     unmerge_bridging_legislators,
+    validate_sign,
 )
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -1582,3 +1584,265 @@ class TestEquateChambers:
         result = equate_chambers(**equating_data)
         assert "correlations" in result
         assert "House" in result["correlations"]
+
+
+# ── validate_sign tests ──────────────────────────────────────────────────────
+
+
+class TestValidateSign:
+    """Test post-hoc sign validation using cross-party contested vote agreement."""
+
+    @pytest.fixture
+    def correctly_signed_idata(self) -> tuple[az.InferenceData, pl.DataFrame, pl.DataFrame, dict]:
+        """Synthetic IRT output where sign is correct.
+
+        10 Rs and 5 Ds. Ideal points: Rs positive, Ds negative.
+        Vote matrix: contested votes where moderate Rs agree with Ds.
+        """
+        n_r, n_d = 10, 5
+        n_legs = n_r + n_d
+        n_votes = 40
+        rng = np.random.default_rng(42)
+
+        slugs = [f"sen_r{i}_1" for i in range(n_r)] + [f"sen_d{i}_1" for i in range(n_d)]
+        parties = ["Republican"] * n_r + ["Democrat"] * n_d
+
+        # Ideal points: Rs from +0.5 to +2.5, Ds from -2.5 to -0.5
+        xi_true = np.concatenate(
+            [
+                np.linspace(0.5, 2.5, n_r),  # R: moderate to conservative
+                np.linspace(-2.5, -0.5, n_d),  # D: liberal to moderate
+            ]
+        )
+
+        # Generate votes based on ideal points (correct sign)
+        vote_matrix = np.full((n_legs, n_votes), np.nan)
+        alphas = rng.normal(0, 0.5, n_votes)  # centered for contested splits
+        for j in range(n_votes):
+            p = 1 / (1 + np.exp(-(xi_true - alphas[j])))
+            vote_matrix[:, j] = (rng.random(n_legs) < p).astype(float)
+
+        # Build polars matrix
+        matrix_data: dict = {"legislator_slug": slugs}
+        vote_ids = [f"v{j}" for j in range(n_votes)]
+        for j, vid in enumerate(vote_ids):
+            matrix_data[vid] = vote_matrix[:, j].tolist()
+        matrix = pl.DataFrame(matrix_data)
+
+        legislators = pl.DataFrame(
+            {
+                "legislator_slug": slugs,
+                "full_name": [f"R{i}" for i in range(n_r)] + [f"D{i}" for i in range(n_d)],
+                "party": parties,
+                "district": list(range(1, n_legs + 1)),
+                "chamber": ["Senate"] * n_legs,
+            }
+        )
+
+        # Build fake idata with correct sign
+        xi_posterior = xi_true[np.newaxis, np.newaxis, :] + rng.normal(0, 0.1, (2, 100, n_legs))
+        beta_posterior = rng.normal(1, 0.3, (2, 100, n_votes))
+        xi_free_posterior = xi_posterior[:, :, :n_legs]  # simplified
+
+        idata = az.InferenceData(
+            posterior=xr.Dataset(
+                {
+                    "xi": xr.DataArray(xi_posterior, dims=["chain", "draw", "legislator"]),
+                    "xi_free": xr.DataArray(
+                        xi_free_posterior, dims=["chain", "draw", "xi_free_dim_0"]
+                    ),
+                    "beta": xr.DataArray(beta_posterior, dims=["chain", "draw", "vote"]),
+                }
+            )
+        )
+
+        data = {"leg_slugs": slugs, "vote_ids": vote_ids}
+        return idata, matrix, legislators, data
+
+    @pytest.fixture
+    def flipped_idata(self) -> tuple[az.InferenceData, pl.DataFrame, pl.DataFrame, dict]:
+        """Synthetic IRT output where sign is FLIPPED.
+
+        Simulates horseshoe effect: extreme Rs placed at negative end.
+        Vote matrix uses true ideology, but ideal points are negated.
+        """
+        n_r, n_d = 10, 5
+        n_legs = n_r + n_d
+        n_votes = 40
+        rng = np.random.default_rng(42)
+
+        slugs = [f"sen_r{i}_1" for i in range(n_r)] + [f"sen_d{i}_1" for i in range(n_d)]
+        parties = ["Republican"] * n_r + ["Democrat"] * n_d
+
+        # True ideology: Rs positive, Ds negative
+        xi_true = np.concatenate(
+            [
+                np.linspace(0.5, 2.5, n_r),
+                np.linspace(-2.5, -0.5, n_d),
+            ]
+        )
+
+        # Generate votes from true ideology — center alphas to create contested votes
+        vote_matrix = np.full((n_legs, n_votes), np.nan)
+        alphas = rng.normal(0, 0.5, n_votes)  # centered near 0 for more contested splits
+        for j in range(n_votes):
+            p = 1 / (1 + np.exp(-(xi_true - alphas[j])))
+            vote_matrix[:, j] = (rng.random(n_legs) < p).astype(float)
+
+        matrix_data: dict = {"legislator_slug": slugs}
+        vote_ids = [f"v{j}" for j in range(n_votes)]
+        for j, vid in enumerate(vote_ids):
+            matrix_data[vid] = vote_matrix[:, j].tolist()
+        matrix = pl.DataFrame(matrix_data)
+
+        legislators = pl.DataFrame(
+            {
+                "legislator_slug": slugs,
+                "full_name": [f"R{i}" for i in range(n_r)] + [f"D{i}" for i in range(n_d)],
+                "party": parties,
+                "district": list(range(1, n_legs + 1)),
+                "chamber": ["Senate"] * n_legs,
+            }
+        )
+
+        # Build fake idata with FLIPPED sign (negate ideal points)
+        xi_flipped = -xi_true
+        xi_posterior = xi_flipped[np.newaxis, np.newaxis, :] + rng.normal(0, 0.1, (2, 100, n_legs))
+        beta_posterior = rng.normal(-1, 0.3, (2, 100, n_votes))  # also flipped
+        xi_free_posterior = xi_posterior[:, :, :n_legs]
+
+        idata = az.InferenceData(
+            posterior=xr.Dataset(
+                {
+                    "xi": xr.DataArray(xi_posterior, dims=["chain", "draw", "legislator"]),
+                    "xi_free": xr.DataArray(
+                        xi_free_posterior, dims=["chain", "draw", "xi_free_dim_0"]
+                    ),
+                    "beta": xr.DataArray(beta_posterior, dims=["chain", "draw", "vote"]),
+                }
+            )
+        )
+
+        data = {"leg_slugs": slugs, "vote_ids": vote_ids}
+        return idata, matrix, legislators, data
+
+    def test_correct_sign_not_flipped(
+        self,
+        correctly_signed_idata: tuple,
+    ) -> None:
+        """Correctly signed ideal points should not be flipped."""
+        idata, matrix, legislators, data = correctly_signed_idata
+        xi_before = idata.posterior["xi"].mean(dim=["chain", "draw"]).values.copy()
+        result_idata, was_flipped = validate_sign(
+            idata,
+            matrix,
+            legislators,
+            data,
+            "Senate",
+        )
+        xi_after = result_idata.posterior["xi"].mean(dim=["chain", "draw"]).values
+        assert not was_flipped
+        np.testing.assert_array_almost_equal(xi_before, xi_after)
+
+    def test_flipped_sign_detected_and_corrected(
+        self,
+        flipped_idata: tuple,
+    ) -> None:
+        """Flipped ideal points should be detected and negated."""
+        idata, matrix, legislators, data = flipped_idata
+        xi_before = idata.posterior["xi"].mean(dim=["chain", "draw"]).values.copy()
+        result_idata, was_flipped = validate_sign(
+            idata,
+            matrix,
+            legislators,
+            data,
+            "Senate",
+        )
+        xi_after = result_idata.posterior["xi"].mean(dim=["chain", "draw"]).values
+        assert was_flipped
+        # After flip, xi should be negated
+        np.testing.assert_array_almost_equal(xi_after, -xi_before, decimal=5)
+
+    def test_beta_also_negated_on_flip(
+        self,
+        flipped_idata: tuple,
+    ) -> None:
+        """Beta posteriors should also be negated when sign is flipped."""
+        idata, matrix, legislators, data = flipped_idata
+        beta_before = idata.posterior["beta"].mean(dim=["chain", "draw"]).values.copy()
+        result_idata, was_flipped = validate_sign(
+            idata,
+            matrix,
+            legislators,
+            data,
+            "Senate",
+        )
+        beta_after = result_idata.posterior["beta"].mean(dim=["chain", "draw"]).values
+        assert was_flipped
+        np.testing.assert_array_almost_equal(beta_after, -beta_before, decimal=5)
+
+    def test_skips_with_too_few_legislators(self, legislators: pl.DataFrame) -> None:
+        """Should skip when one party has fewer than 3 legislators."""
+        # Only 3 Rs and 3 Ds in base fixture — need < 3 of one
+        small_legs = legislators.head(4)  # 3 R + 1 D
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": small_legs["legislator_slug"].to_list(),
+                "v1": [1, 1, 0, 0],
+            }
+        )
+        idata = az.InferenceData(
+            posterior=xr.Dataset(
+                {
+                    "xi": xr.DataArray(np.zeros((1, 10, 4)), dims=["chain", "draw", "legislator"]),
+                }
+            )
+        )
+        data = {"leg_slugs": small_legs["legislator_slug"].to_list()}
+        result_idata, was_flipped = validate_sign(
+            idata,
+            matrix,
+            small_legs,
+            data,
+            "Senate",
+        )
+        assert not was_flipped
+
+    def test_skips_with_too_few_contested_votes(self) -> None:
+        """Should skip when fewer than 10 contested votes."""
+        n_r, n_d = 5, 5
+        slugs = [f"sen_r{i}_1" for i in range(n_r)] + [f"sen_d{i}_1" for i in range(n_d)]
+        # 3 votes, all party-line (not contested)
+        matrix = pl.DataFrame(
+            {
+                "legislator_slug": slugs,
+                "v1": [1] * n_r + [0] * n_d,
+                "v2": [1] * n_r + [0] * n_d,
+                "v3": [1] * n_r + [0] * n_d,
+            }
+        )
+        legislators = pl.DataFrame(
+            {
+                "legislator_slug": slugs,
+                "full_name": slugs,
+                "party": ["Republican"] * n_r + ["Democrat"] * n_d,
+                "district": list(range(1, n_r + n_d + 1)),
+                "chamber": ["Senate"] * (n_r + n_d),
+            }
+        )
+        idata = az.InferenceData(
+            posterior=xr.Dataset(
+                {
+                    "xi": xr.DataArray(
+                        np.zeros((1, 10, n_r + n_d)), dims=["chain", "draw", "legislator"]
+                    ),
+                }
+            )
+        )
+        data = {"leg_slugs": slugs}
+        _, was_flipped = validate_sign(idata, matrix, legislators, data, "Senate")
+        assert not was_flipped
+
+    def test_contested_vote_threshold_constant(self) -> None:
+        """Contested vote threshold should be 10%."""
+        assert CONTESTED_VOTE_THRESHOLD == 0.10

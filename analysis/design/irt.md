@@ -91,7 +91,19 @@
 - Soft identification via N(0,1) prior + post-hoc sign correction — rejected because it's fragile with 2 chains
 - Three anchors (conservative, liberal, moderate at 0) — rejected as unnecessary for 1D; two anchors fix location, scale, and sign
 
-**Impact:** If PCA scores are wrong (e.g., the PC1 sign convention flipped incorrectly), the IRT anchors will be wrong. Validated by the PCA-IRT correlation check (r > 0.95 expected). In supermajority chambers, the first IRT dimension may capture establishment-vs-rebel rather than left-vs-right, even with correct anchors — this is a data feature (dimension collapse), not a model failure. See `docs/irt-sign-identification-deep-dive.md`.
+**Impact:** In supermajority chambers, the horseshoe effect can cause PCA-based anchor selection to pick the wrong reference legislator (e.g., a moderate establishment Republican instead of a true conservative), producing a sign flip where individual legislators appear on the wrong side of the dimension. A post-hoc `validate_sign()` step detects and corrects this by correlating cross-party contested vote agreement with ideal point magnitude. See `docs/irt-sign-identification-deep-dive.md`.
+
+### Post-hoc sign validation
+
+**Decision:** After MCMC, `validate_sign()` checks whether the recovered ideal points have the correct polarity by correlating cross-party contested vote agreement with ideal point magnitude. If the correlation indicates a sign flip, all xi and beta posteriors are negated, selecting the other equally valid posterior mode.
+
+**Why:** PCA-based anchor selection picks the "most party-typical" Republican as the conservative anchor. In supermajority chambers with a rebel faction, the horseshoe effect causes PCA PC1 to capture establishment-vs-rebel rather than left-vs-right. The "most party-typical" R becomes the most establishment-aligned moderate, not the most ideologically conservative. This produces a sign flip: ultra-conservative rebels appear at the liberal end.
+
+**Algorithm:** (1) Identify contested votes where both parties split (≥10% threshold per side per party). (2) For each Republican, compute agreement rate with the Democrat majority position on contested votes. (3) Spearman-correlate agreement with xi. Correct sign → negative correlation (moderates agree more). Flipped → positive (extremes agree more). (4) If positive with p < 0.10, negate xi, xi_free, and beta.
+
+**Guard rails:** Skips when fewer than 3 legislators per party, fewer than 10 contested votes, or fewer than 5 Republicans with valid agreement data.
+
+**Impact:** Fixes the 79th Senate Huelskamp placement (xi = -3.26 → +3.26). Does not affect correctly-signed sessions (the correlation is negative, so no flip occurs). See `docs/irt-sign-identification-deep-dive.md`.
 
 ### PCA-informed chain initialization (default: on)
 

@@ -198,6 +198,7 @@ MIN_VOTES = 20  # Minimum substantive votes per legislator
 HOLDOUT_FRACTION = 0.20  # Random 20% of observed cells
 HOLDOUT_SEED = 42
 MIN_PARTICIPATION_FOR_ANCHOR = 0.50  # Anchors must have >= 50% participation
+CONTESTED_VOTE_THRESHOLD = 0.10  # Both parties must have ≥10% on each side
 
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
@@ -373,8 +374,12 @@ def build_joint_vote_matrix(
 
     # Identify bridging legislators (same person with both rep_ and sen_ slugs)
     # Match by name from legislators table
-    house_legs = legislators.filter(pl.col("chamber") == "House").select("legislator_slug", "full_name")
-    senate_legs = legislators.filter(pl.col("chamber") == "Senate").select("legislator_slug", "full_name")
+    house_legs = legislators.filter(pl.col("chamber") == "House").select(
+        "legislator_slug", "full_name"
+    )
+    senate_legs = legislators.filter(pl.col("chamber") == "Senate").select(
+        "legislator_slug", "full_name"
+    )
     bridging: list[dict] = []
     for h_row in house_legs.iter_rows(named=True):
         match = senate_legs.filter(pl.col("full_name") == h_row["full_name"])
@@ -921,6 +926,166 @@ def select_anchors(
     print(f"  Liberal anchor:      {lib_name} ({lib_slug}), PC1={lib_pc1:+.3f}")
 
     return cons_idx, cons_slug, lib_idx, lib_slug
+
+
+# ── Sign Validation ──────────────────────────────────────────────────────────
+
+
+def validate_sign(
+    idata: az.InferenceData,
+    matrix: pl.DataFrame,
+    legislators: pl.DataFrame,
+    data: dict,
+    chamber: str,
+) -> tuple[az.InferenceData, bool]:
+    """Post-hoc sign validation using cross-party contested vote agreement.
+
+    Detects and corrects sign flips caused by the horseshoe effect in
+    supermajority chambers. See docs/irt-sign-identification-deep-dive.md.
+
+    Algorithm:
+      1. Identify contested votes: roll calls where both R and D members
+         split (≥ CONTESTED_VOTE_THRESHOLD on each side within each party).
+      2. For each legislator, compute agreement rate with the opposite party's
+         median voter on contested votes.
+      3. Correlate agreement rate with ideal point distance from center.
+         Correct sign: moderates (near center) agree more → negative correlation.
+         Flipped sign: extremes agree more → positive correlation.
+      4. If flipped, negate xi and beta posteriors.
+
+    Returns (possibly-corrected idata, was_flipped).
+    """
+    slug_col = "legislator_slug"
+    vote_cols = [c for c in matrix.columns if c != slug_col]
+    slugs = matrix[slug_col].to_list()
+
+    # Build slug → party lookup
+    party_map = dict(
+        zip(
+            legislators["legislator_slug"].to_list(),
+            legislators["party"].to_list(),
+        )
+    )
+
+    # Only proceed if we have both R and D legislators
+    slug_parties = [party_map.get(s, "Unknown") for s in slugs]
+    r_slugs = [s for s, p in zip(slugs, slug_parties) if p == "Republican"]
+    d_slugs = [s for s, p in zip(slugs, slug_parties) if p == "Democrat"]
+
+    if len(r_slugs) < 3 or len(d_slugs) < 3:
+        print("  Sign validation: skipped (need ≥3 legislators per party)")
+        return idata, False
+
+    # Build numpy vote matrix (legislators × votes), NaN for absent
+    vote_array = np.full((len(slugs), len(vote_cols)), np.nan)
+    for i, row in enumerate(matrix.iter_rows(named=True)):
+        for j, vc in enumerate(vote_cols):
+            if row[vc] is not None:
+                vote_array[i, j] = float(row[vc])
+
+    slug_to_idx = {s: i for i, s in enumerate(slugs)}
+    r_indices = np.array([slug_to_idx[s] for s in r_slugs])
+    d_indices = np.array([slug_to_idx[s] for s in d_slugs])
+
+    # Identify contested votes: both parties have ≥ threshold on each side
+    contested_mask = np.zeros(len(vote_cols), dtype=bool)
+    for j in range(len(vote_cols)):
+        r_votes = vote_array[r_indices, j]
+        d_votes = vote_array[d_indices, j]
+        r_valid = r_votes[~np.isnan(r_votes)]
+        d_valid = d_votes[~np.isnan(d_votes)]
+        if len(r_valid) < 3 or len(d_valid) < 3:
+            continue
+        r_yea_frac = r_valid.mean()
+        d_yea_frac = d_valid.mean()
+        threshold = CONTESTED_VOTE_THRESHOLD
+        r_contested = threshold <= r_yea_frac <= (1 - threshold)
+        d_contested = threshold <= d_yea_frac <= (1 - threshold)
+        if r_contested and d_contested:
+            contested_mask[j] = True
+
+    n_contested = contested_mask.sum()
+    print(f"  Sign validation: {n_contested} contested votes (of {len(vote_cols)})")
+
+    if n_contested < 10:
+        print("  Sign validation: skipped (fewer than 10 contested votes)")
+        return idata, False
+
+    # Compute cross-party agreement on contested votes
+    # For each legislator, what fraction of contested votes match the opposite
+    # party's majority position?
+    contested_votes = vote_array[:, contested_mask]
+
+    # Compute opposite party majority vote on each contested roll call
+    r_majority = np.nanmean(contested_votes[r_indices], axis=0) >= 0.5  # True = Yea majority
+    d_majority = np.nanmean(contested_votes[d_indices], axis=0) >= 0.5
+
+    agreement_rates = np.full(len(slugs), np.nan)
+    for i, slug in enumerate(slugs):
+        party = party_map.get(slug, "Unknown")
+        if party == "Republican":
+            opposite_majority = d_majority.astype(float)
+        elif party == "Democrat":
+            opposite_majority = r_majority.astype(float)
+        else:
+            continue  # skip Independents
+
+        leg_votes = contested_votes[i]
+        valid = ~np.isnan(leg_votes)
+        if valid.sum() < 5:
+            continue
+        agrees = (leg_votes[valid] == opposite_majority[valid]).mean()
+        agreement_rates[i] = agrees
+
+    # Get ideal points
+    xi_mean = idata.posterior["xi"].mean(dim=["chain", "draw"]).values
+
+    # Correlate: for legislators with valid agreement rates, compute
+    # Spearman correlation between |xi - center| and agreement rate.
+    # Center = midpoint between party means.
+    valid_mask = ~np.isnan(agreement_rates)
+    if valid_mask.sum() < 10:
+        print("  Sign validation: skipped (fewer than 10 legislators with agreement data)")
+        return idata, False
+
+    # Use signed xi (not absolute), correlate with agreement.
+    # If correctly signed: high xi = conservative R → low agreement with D.
+    # So correlation should be NEGATIVE for Rs (high xi = low cross-party agreement).
+    # We compute: for Rs, correlation between xi and agreement-with-D.
+    # Correct sign → negative. Flipped → positive.
+    r_valid_mask = np.array(
+        [valid_mask[i] and slug_parties[i] == "Republican" for i in range(len(slugs))]
+    )
+
+    if r_valid_mask.sum() < 5:
+        print("  Sign validation: skipped (fewer than 5 Republicans with agreement data)")
+        return idata, False
+
+    r_xi = xi_mean[r_valid_mask]
+    r_agree = agreement_rates[r_valid_mask]
+
+    corr, pval = stats.spearmanr(r_xi, r_agree)
+    print(f"  Sign validation: R xi vs D-agreement Spearman r = {corr:+.3f} (p = {pval:.3f})")
+
+    # Positive correlation means: higher xi (supposedly more conservative) → higher
+    # agreement with Democrats. That's a sign flip.
+    if corr > 0 and pval < 0.10:
+        print("  Sign validation: SIGN FLIP DETECTED — negating xi and beta posteriors")
+
+        # Negate xi and beta in the posterior
+        idata.posterior["xi"] = -idata.posterior["xi"]
+        idata.posterior["xi_free"] = -idata.posterior["xi_free"]
+        idata.posterior["beta"] = -idata.posterior["beta"]
+
+        # Report the diagnostic
+        r_mean_before = xi_mean[r_valid_mask].mean()
+        print(f"    R mean before flip: {r_mean_before:+.3f}")
+        print(f"    R mean after flip:  {-r_mean_before:+.3f}")
+
+        return idata, True
+
+    print("  Sign validation: sign is correct (no flip needed)")
+    return idata, False
 
 
 # ── Phase 3: Build and Sample IRT Model ──────────────────────────────────────
@@ -2798,8 +2963,7 @@ def main() -> None:
         # Check if any chamber has legislators after filtering
         if house_matrix.height == 0 and senate_matrix.height == 0:
             print(
-                "Phase 04 (IRT): skipping — 0 legislators after filtering "
-                "(too few votes for IRT)"
+                "Phase 04 (IRT): skipping — 0 legislators after filtering (too few votes for IRT)"
             )
             return
 
@@ -2888,6 +3052,18 @@ def main() -> None:
             # ── Phase 4: Convergence diagnostics ──
             diagnostics = check_convergence(idata, chamber)
 
+            # ── Sign validation ──
+            print_header(f"SIGN VALIDATION — {chamber}")
+            idata, sign_flipped = validate_sign(
+                idata,
+                matrix,
+                legislators,
+                data,
+                chamber,
+            )
+            if sign_flipped:
+                diagnostics["sign_flipped"] = True
+
             # ── Phase 5: Extract posteriors ──
             print_header(f"PHASE 5: EXTRACT POSTERIORS — {chamber}")
             ideal_points = extract_ideal_points(idata, data, legislators)
@@ -2911,9 +3087,17 @@ def main() -> None:
 
             # Save parquets
             ideal_points.write_parquet(ctx.data_dir / f"ideal_points_{chamber.lower()}.parquet")
-            ctx.export_csv(ideal_points, f"ideal_points_{chamber.lower()}.csv", f"IRT ideal point estimates for {chamber} members")
+            ctx.export_csv(
+                ideal_points,
+                f"ideal_points_{chamber.lower()}.csv",
+                f"IRT ideal point estimates for {chamber} members",
+            )
             bill_params.write_parquet(ctx.data_dir / f"bill_params_{chamber.lower()}.parquet")
-            ctx.export_csv(bill_params, f"bill_params_{chamber.lower()}.csv", f"IRT bill parameters (difficulty + discrimination) for {chamber}")
+            ctx.export_csv(
+                bill_params,
+                f"bill_params_{chamber.lower()}.csv",
+                f"IRT bill parameters (difficulty + discrimination) for {chamber}",
+            )
             print(f"  Saved: ideal_points_{chamber.lower()}.parquet")
             print(f"  Saved: bill_params_{chamber.lower()}.parquet")
 
@@ -3047,7 +3231,11 @@ def main() -> None:
             print_header("JOINT MODEL — PHASE J3: SAVE OUTPUTS")
             eq_ip = joint_equating["equated_ideal_points"]
             eq_ip.write_parquet(ctx.data_dir / "ideal_points_joint_equated.parquet")
-            ctx.export_csv(eq_ip, "ideal_points_joint_equated.csv", "Joint-equated ideal points (cross-chamber)")
+            ctx.export_csv(
+                eq_ip,
+                "ideal_points_joint_equated.csv",
+                "Joint-equated ideal points (cross-chamber)",
+            )
             print("  Saved: ideal_points_joint_equated.parquet")
 
             results["Joint"] = {
