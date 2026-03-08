@@ -26,18 +26,25 @@ from analysis.irt import (
     HOLDOUT_FRACTION,
     HOLDOUT_SEED,
     MAX_DIVERGENCES,
+    MIN_CONTESTED_FOR_AGREEMENT,
+    MIN_CONTESTED_VOTES_PER_LEG,
     PARADOX_YEA_GAP,
     RHAT_THRESHOLD,
+    SUPERMAJORITY_THRESHOLD,
+    IdentificationStrategy,
     _detect_forest_highlights,
     build_irt_graph,
     build_joint_vote_matrix,
     check_convergence,
+    compute_cross_party_agreement,
+    detect_supermajority,
     equate_chambers,
     extract_bill_parameters,
     extract_ideal_points,
     filter_vote_matrix_for_sensitivity,
     find_paradox_legislator,
     prepare_irt_data,
+    select_identification_strategy,
     select_anchors,
     unmerge_bridging_legislators,
     validate_sign,
@@ -195,27 +202,37 @@ class TestPrepareIrtData:
 
 
 class TestSelectAnchors:
-    """Test PCA-based anchor selection."""
+    """Test anchor selection (agreement-based primary, PCA fallback).
 
-    def test_conservative_anchor_is_highest_pc1(
+    Run: uv run pytest tests/test_irt.py::TestSelectAnchors -v
+    """
+
+    def test_pca_fallback_conservative_anchor(
         self, pca_scores: pl.DataFrame, senate_matrix: pl.DataFrame
     ) -> None:
-        """Conservative anchor should be the legislator with highest PC1."""
-        cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(pca_scores, senate_matrix, "Senate")
-        assert cons_slug == "sen_a_a_1"  # A has PC1=6.0 (highest)
+        """PCA fallback: conservative anchor should be highest PC1 Republican."""
+        # No legislators passed → PCA fallback
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, senate_matrix, "Senate"
+        )
+        assert cons_slug == "sen_a_a_1"  # A has PC1=6.0 (highest R)
 
-    def test_liberal_anchor_is_lowest_pc1(
+    def test_pca_fallback_liberal_anchor(
         self, pca_scores: pl.DataFrame, senate_matrix: pl.DataFrame
     ) -> None:
-        """Liberal anchor should be the legislator with lowest PC1."""
-        cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(pca_scores, senate_matrix, "Senate")
-        assert lib_slug == "sen_f_f_1"  # F has PC1=-6.0 (lowest)
+        """PCA fallback: liberal anchor should be lowest PC1 Democrat."""
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, senate_matrix, "Senate"
+        )
+        assert lib_slug == "sen_f_f_1"  # F has PC1=-6.0 (lowest D)
 
     def test_anchor_indices_are_valid(
         self, pca_scores: pl.DataFrame, senate_matrix: pl.DataFrame
     ) -> None:
         """Anchor indices should correspond to slug positions in the matrix."""
-        cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(pca_scores, senate_matrix, "Senate")
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, senate_matrix, "Senate"
+        )
         slugs = senate_matrix["legislator_slug"].to_list()
         assert slugs[cons_idx] == cons_slug
         assert slugs[lib_idx] == lib_slug
@@ -224,7 +241,7 @@ class TestSelectAnchors:
         self, pca_scores: pl.DataFrame, senate_matrix: pl.DataFrame
     ) -> None:
         """Conservative and liberal anchors must be different legislators."""
-        cons_idx, _, lib_idx, _ = select_anchors(pca_scores, senate_matrix, "Senate")
+        cons_idx, _, lib_idx, _, _ = select_anchors(pca_scores, senate_matrix, "Senate")
         assert cons_idx != lib_idx
 
     def test_low_participation_excluded(
@@ -254,9 +271,234 @@ class TestSelectAnchors:
                 "v5": [None, 1, 1, 0, 0, 0],
             }
         )
-        cons_idx, cons_slug, _, _ = select_anchors(pca_scores, matrix, "Senate")
+        cons_idx, cons_slug, _, _, _ = select_anchors(pca_scores, matrix, "Senate")
         # A has 1/5 = 20% < 50%, so B (PC1=5.5) should be the anchor
         assert cons_slug == "sen_b_b_1"
+
+    def test_falls_back_to_pca_with_few_contested_votes(
+        self,
+        pca_scores: pl.DataFrame,
+        senate_matrix: pl.DataFrame,
+        legislators: pl.DataFrame,
+    ) -> None:
+        """With too few contested votes, should fall back to PCA anchors."""
+        # The 5-vote fixture won't have ≥10 contested votes → PCA fallback
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, senate_matrix, "Senate", legislators=legislators
+        )
+        assert cons_slug == "sen_a_a_1"  # PCA fallback: highest PC1 R
+        assert lib_slug == "sen_f_f_1"  # PCA fallback: lowest PC1 D
+
+
+class TestComputeCrossPartyAgreement:
+    """Test cross-party contested vote agreement computation.
+
+    Run: uv run pytest tests/test_irt.py::TestComputeCrossPartyAgreement -v
+    """
+
+    @pytest.fixture
+    def agreement_data(self) -> tuple[pl.DataFrame, pl.DataFrame]:
+        """Synthetic data with clear partisan structure and contested votes.
+
+        10 Rs + 5 Ds, 40 votes. Rs have ideal points from +0.5 to +2.5,
+        Ds from -2.5 to -0.5. Moderate Rs should have higher D-agreement.
+        """
+        n_r, n_d = 10, 5
+        n_legs = n_r + n_d
+        n_votes = 40
+        rng = np.random.default_rng(42)
+
+        slugs = [f"sen_r{i}_1" for i in range(n_r)] + [f"sen_d{i}_1" for i in range(n_d)]
+        parties = ["Republican"] * n_r + ["Democrat"] * n_d
+
+        xi_true = np.concatenate([
+            np.linspace(0.5, 2.5, n_r),
+            np.linspace(-2.5, -0.5, n_d),
+        ])
+
+        vote_matrix = np.full((n_legs, n_votes), np.nan)
+        alphas = rng.normal(0, 0.5, n_votes)
+        for j in range(n_votes):
+            p = 1 / (1 + np.exp(-(xi_true - alphas[j])))
+            vote_matrix[:, j] = (rng.random(n_legs) < p).astype(float)
+
+        matrix_data: dict = {"legislator_slug": slugs}
+        for j in range(n_votes):
+            matrix_data[f"v{j}"] = vote_matrix[:, j].tolist()
+        matrix = pl.DataFrame(matrix_data)
+
+        legislators = pl.DataFrame({
+            "legislator_slug": slugs,
+            "full_name": [f"R{i}" for i in range(n_r)] + [f"D{i}" for i in range(n_d)],
+            "party": parties,
+            "district": list(range(1, n_legs + 1)),
+            "chamber": ["Senate"] * n_legs,
+        })
+
+        return matrix, legislators
+
+    def test_returns_agreement_rates(self, agreement_data: tuple) -> None:
+        """Should return non-empty agreement rates for both parties."""
+        matrix, legislators = agreement_data
+        rates, n_contested = compute_cross_party_agreement(matrix, legislators)
+        assert len(rates) > 0
+        assert n_contested >= MIN_CONTESTED_FOR_AGREEMENT
+
+    def test_agreement_rates_in_range(self, agreement_data: tuple) -> None:
+        """Agreement rates should be between 0 and 1."""
+        matrix, legislators = agreement_data
+        rates, _ = compute_cross_party_agreement(matrix, legislators)
+        for rate in rates.values():
+            assert 0.0 <= rate <= 1.0
+
+    def test_moderates_have_higher_agreement(self, agreement_data: tuple) -> None:
+        """Moderate Rs (lower index) should have higher D-agreement than extreme Rs."""
+        matrix, legislators = agreement_data
+        rates, _ = compute_cross_party_agreement(matrix, legislators)
+        # r0 is most moderate R (xi=0.5), r9 is most extreme (xi=2.5)
+        r0_rate = rates.get("sen_r0_1")
+        r9_rate = rates.get("sen_r9_1")
+        if r0_rate is not None and r9_rate is not None:
+            assert r0_rate > r9_rate, (
+                f"Moderate R0 ({r0_rate:.3f}) should agree with Ds more than extreme R9 "
+                f"({r9_rate:.3f})"
+            )
+
+    def test_empty_with_too_few_parties(self) -> None:
+        """Should return empty when one party has < 3 legislators."""
+        slugs = ["sen_r0_1", "sen_r1_1", "sen_r2_1", "sen_d0_1", "sen_d1_1"]
+        matrix = pl.DataFrame({
+            "legislator_slug": slugs,
+            "v1": [1, 1, 1, 0, 0],
+        })
+        legislators = pl.DataFrame({
+            "legislator_slug": slugs,
+            "full_name": slugs,
+            "party": ["Republican"] * 3 + ["Democrat"] * 2,
+            "district": list(range(1, 6)),
+            "chamber": ["Senate"] * 5,
+        })
+        rates, _ = compute_cross_party_agreement(matrix, legislators)
+        assert rates == {}
+
+    def test_constants(self) -> None:
+        """Agreement constants should have expected values."""
+        assert MIN_CONTESTED_FOR_AGREEMENT == 10
+        assert MIN_CONTESTED_VOTES_PER_LEG == 5
+
+
+class TestSelectAnchorsAgreement:
+    """Test agreement-based anchor selection (primary method).
+
+    Run: uv run pytest tests/test_irt.py::TestSelectAnchorsAgreement -v
+    """
+
+    @pytest.fixture
+    def supermajority_data(self) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+        """Simulate a supermajority chamber where PCA horseshoe creates bad anchors.
+
+        15 Rs + 5 Ds, 40 votes. Rs span from moderate (xi=0.2) to extreme
+        conservative (xi=3.0). Ds from -3.0 to -0.2. PCA scores deliberately
+        inverted for the most extreme R (horseshoe effect): the most extreme R
+        has the highest PCA PC1, but the most MODERATE R also has high PC1
+        (establishment-aligned). The agreement-based method should pick the
+        genuine extreme, not the PCA artifact.
+        """
+        n_r, n_d = 15, 5
+        n_legs = n_r + n_d
+        n_votes = 40
+        rng = np.random.default_rng(42)
+
+        r_slugs = [f"sen_r{i}_1" for i in range(n_r)]
+        d_slugs = [f"sen_d{i}_1" for i in range(n_d)]
+        slugs = r_slugs + d_slugs
+        parties = ["Republican"] * n_r + ["Democrat"] * n_d
+
+        # True ideology: r0 most moderate, r14 most conservative
+        xi_true = np.concatenate([
+            np.linspace(0.2, 3.0, n_r),
+            np.linspace(-3.0, -0.2, n_d),
+        ])
+
+        # Generate votes based on true ideology
+        vote_matrix = np.full((n_legs, n_votes), np.nan)
+        alphas = rng.normal(0, 0.5, n_votes)
+        for j in range(n_votes):
+            p = 1 / (1 + np.exp(-(xi_true - alphas[j])))
+            vote_matrix[:, j] = (rng.random(n_legs) < p).astype(float)
+
+        matrix_data: dict = {"legislator_slug": slugs}
+        for j in range(n_votes):
+            matrix_data[f"v{j}"] = vote_matrix[:, j].tolist()
+        matrix = pl.DataFrame(matrix_data)
+
+        # PCA scores: horseshoe effect — most moderate R (r0) gets highest PC1
+        # (establishment-aligned), most extreme R (r14) gets mid-range PC1
+        pca_scores = pl.DataFrame({
+            "legislator_slug": slugs,
+            "full_name": [f"R{i}" for i in range(n_r)] + [f"D{i}" for i in range(n_d)],
+            "party": parties,
+            "PC1": (
+                list(np.linspace(8.0, 2.0, n_r))  # r0=8.0 (highest), r14=2.0
+                + list(np.linspace(-6.0, -2.0, n_d))
+            ),
+            "PC2": [0.0] * n_legs,
+        })
+
+        legislators = pl.DataFrame({
+            "legislator_slug": slugs,
+            "full_name": [f"R{i}" for i in range(n_r)] + [f"D{i}" for i in range(n_d)],
+            "party": parties,
+            "district": list(range(1, n_legs + 1)),
+            "chamber": ["Senate"] * n_legs,
+        })
+
+        return matrix, pca_scores, legislators
+
+    def test_agreement_picks_genuine_extreme_r(self, supermajority_data: tuple) -> None:
+        """Agreement-based selection should pick the most partisan R, not PCA extreme."""
+        matrix, pca_scores, legislators = supermajority_data
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, matrix, "Senate", legislators=legislators
+        )
+        # PCA would pick r0 (PC1=8.0, most moderate). Agreement should pick
+        # an extreme R (high index) since they have lowest D-agreement.
+        cons_r_idx = int(cons_slug.split("_")[1][1:])  # extract number from "sen_rN_1"
+        assert cons_r_idx >= 7, (
+            f"Expected agreement to pick an extreme R (index ≥7), got r{cons_r_idx} "
+            f"({cons_slug})"
+        )
+
+    def test_agreement_picks_genuine_extreme_d(self, supermajority_data: tuple) -> None:
+        """Agreement-based selection should pick the most partisan D."""
+        matrix, pca_scores, legislators = supermajority_data
+        _, _, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, matrix, "Senate", legislators=legislators
+        )
+        # Most extreme D should be d0 (xi=-3.0, lowest R-agreement)
+        lib_d_idx = int(lib_slug.split("_")[1][1:])
+        assert lib_d_idx <= 2, (
+            f"Expected agreement to pick an extreme D (index ≤2), got d{lib_d_idx} "
+            f"({lib_slug})"
+        )
+
+    def test_pca_fallback_when_no_legislators(self, supermajority_data: tuple) -> None:
+        """Without legislators kwarg, should fall back to PCA."""
+        matrix, pca_scores, _ = supermajority_data
+        cons_idx, cons_slug, _, _, _ = select_anchors(pca_scores, matrix, "Senate")
+        # PCA picks r0 (highest PC1=8.0, the moderate — horseshoe artifact)
+        assert cons_slug == "sen_r0_1"
+
+    def test_agreement_anchor_indices_valid(self, supermajority_data: tuple) -> None:
+        """Agreement-based anchor indices should match slug positions."""
+        matrix, pca_scores, legislators = supermajority_data
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
+            pca_scores, matrix, "Senate", legislators=legislators
+        )
+        slugs = matrix["legislator_slug"].to_list()
+        assert slugs[cons_idx] == cons_slug
+        assert slugs[lib_idx] == lib_slug
+        assert cons_idx != lib_idx
 
 
 # ── build_irt_graph tests ─────────────────────────────────────────────────────
@@ -1846,3 +2088,356 @@ class TestValidateSign:
     def test_contested_vote_threshold_constant(self) -> None:
         """Contested vote threshold should be 10%."""
         assert CONTESTED_VOTE_THRESHOLD == 0.10
+
+
+# -- Identification Strategy Tests -------------------------------------------
+
+
+class TestIdentificationStrategy:
+    """Test IdentificationStrategy enumeration and constants.
+
+    Run: uv run pytest tests/test_irt.py::TestIdentificationStrategy -v
+    """
+
+    def test_all_strategies_list_completeness(self) -> None:
+        """ALL_STRATEGIES should contain exactly 7 strategies (not AUTO)."""
+        IS = IdentificationStrategy
+        assert len(IS.ALL_STRATEGIES) == 7
+        assert IS.AUTO not in IS.ALL_STRATEGIES
+
+    def test_all_strategies_have_descriptions(self) -> None:
+        """Every strategy (including AUTO) should have a description."""
+        IS = IdentificationStrategy
+        for s in IS.ALL_STRATEGIES + [IS.AUTO]:
+            assert s in IS.DESCRIPTIONS, f"Missing description for {s}"
+            assert len(IS.DESCRIPTIONS[s]) > 10
+
+    def test_all_strategies_have_references(self) -> None:
+        """Every strategy should have a literature reference."""
+        IS = IdentificationStrategy
+        for s in IS.ALL_STRATEGIES:
+            assert s in IS.REFERENCES, f"Missing reference for {s}"
+            assert len(IS.REFERENCES[s]) > 5
+
+    def test_strategy_string_values_match_cli(self) -> None:
+        """Strategy string values should be valid CLI choices."""
+        IS = IdentificationStrategy
+        expected_cli = {
+            "anchor-pca", "anchor-agreement", "sort-constraint",
+            "positive-beta", "hierarchical-prior", "unconstrained",
+            "external-prior",
+        }
+        assert set(IS.ALL_STRATEGIES) == expected_cli
+
+    def test_auto_is_separate(self) -> None:
+        """AUTO should not be in ALL_STRATEGIES but should exist."""
+        IS = IdentificationStrategy
+        assert IS.AUTO == "auto"
+        assert IS.AUTO not in IS.ALL_STRATEGIES
+
+
+class TestDetectSupermajority:
+    """Test supermajority detection logic.
+
+    Run: uv run pytest tests/test_irt.py::TestDetectSupermajority -v
+    """
+
+    def test_balanced_chamber(self) -> None:
+        """50/50 split should not be supermajority."""
+        legs = pl.DataFrame({
+            "legislator_slug": [f"s{i}" for i in range(10)],
+            "party": ["Republican"] * 5 + ["Democrat"] * 5,
+            "chamber": ["Senate"] * 10,
+        })
+        is_super, frac = detect_supermajority(legs, "Senate")
+        assert not is_super
+        assert frac == pytest.approx(0.5)
+
+    def test_supermajority_detected(self) -> None:
+        """75% R should trigger supermajority."""
+        legs = pl.DataFrame({
+            "legislator_slug": [f"s{i}" for i in range(20)],
+            "party": ["Republican"] * 15 + ["Democrat"] * 5,
+            "chamber": ["Senate"] * 20,
+        })
+        is_super, frac = detect_supermajority(legs, "Senate")
+        assert is_super
+        assert frac == pytest.approx(0.75)
+
+    def test_exactly_at_threshold(self) -> None:
+        """Exactly 70% should trigger supermajority."""
+        legs = pl.DataFrame({
+            "legislator_slug": [f"s{i}" for i in range(10)],
+            "party": ["Republican"] * 7 + ["Democrat"] * 3,
+            "chamber": ["Senate"] * 10,
+        })
+        is_super, frac = detect_supermajority(legs, "Senate")
+        assert is_super
+        assert frac == pytest.approx(0.7)
+
+    def test_just_below_threshold(self) -> None:
+        """69% should NOT trigger supermajority."""
+        # 69/100 = 0.69
+        n_r, n_d = 69, 31
+        legs = pl.DataFrame({
+            "legislator_slug": [f"s{i}" for i in range(100)],
+            "party": ["Republican"] * n_r + ["Democrat"] * n_d,
+            "chamber": ["Senate"] * 100,
+        })
+        is_super, frac = detect_supermajority(legs, "Senate")
+        assert not is_super
+        assert frac == pytest.approx(0.69)
+
+    def test_empty_chamber(self) -> None:
+        """Empty chamber should return False, 0.0."""
+        legs = pl.DataFrame({
+            "legislator_slug": pl.Series([], dtype=pl.Utf8),
+            "party": pl.Series([], dtype=pl.Utf8),
+            "chamber": pl.Series([], dtype=pl.Utf8),
+        })
+        is_super, frac = detect_supermajority(legs, "Senate")
+        assert not is_super
+        assert frac == 0.0
+
+    def test_wrong_chamber_filtered(self) -> None:
+        """Should only consider legislators from the specified chamber."""
+        legs = pl.DataFrame({
+            "legislator_slug": [f"s{i}" for i in range(10)],
+            "party": ["Republican"] * 8 + ["Republican", "Democrat"],
+            "chamber": ["House"] * 8 + ["Senate"] * 2,
+        })
+        is_super, frac = detect_supermajority(legs, "Senate")
+        # 2 Senate legislators, 1 R + 1 D → 50%
+        assert not is_super
+
+    def test_threshold_constant(self) -> None:
+        """SUPERMAJORITY_THRESHOLD should be 0.70."""
+        assert SUPERMAJORITY_THRESHOLD == 0.70
+
+
+class TestSelectIdentificationStrategy:
+    """Test auto-detection logic for identification strategy selection.
+
+    Run: uv run pytest tests/test_irt.py::TestSelectIdentificationStrategy -v
+    """
+
+    def _make_chamber_data(
+        self, n_r: int, n_d: int, n_contested: int = 20
+    ) -> tuple[pl.DataFrame, pl.DataFrame]:
+        """Create legislators and vote matrix for strategy selection tests."""
+        n = n_r + n_d
+        slugs = [f"sen_r{i}_1" for i in range(n_r)] + [f"sen_d{i}_1" for i in range(n_d)]
+        parties = ["Republican"] * n_r + ["Democrat"] * n_d
+
+        legs = pl.DataFrame({
+            "legislator_slug": slugs,
+            "full_name": slugs,
+            "party": parties,
+            "district": list(range(1, n + 1)),
+            "chamber": ["Senate"] * n,
+        })
+
+        # Generate vote matrix with contested votes
+        rng = np.random.default_rng(42)
+        xi_true = np.concatenate([
+            np.linspace(0.5, 2.0, n_r),
+            np.linspace(-2.0, -0.5, n_d),
+        ])
+        matrix_data: dict = {"legislator_slug": slugs}
+        for j in range(max(n_contested + 5, 30)):
+            alpha = rng.normal(0, 0.3)
+            p = 1 / (1 + np.exp(-(xi_true - alpha)))
+            votes = (rng.random(n) < p).astype(float)
+            matrix_data[f"v{j}"] = votes.tolist()
+        return legs, pl.DataFrame(matrix_data)
+
+    def test_auto_balanced_selects_pca(self) -> None:
+        """Balanced chamber should auto-select anchor-pca."""
+        legs, matrix = self._make_chamber_data(n_r=20, n_d=20)
+        strategy, rationale = select_identification_strategy(
+            "auto", legs, matrix, "Senate",
+        )
+        assert strategy == IdentificationStrategy.ANCHOR_PCA
+        assert "SELECTED" in rationale[strategy]
+
+    def test_auto_supermajority_selects_agreement(self) -> None:
+        """Supermajority with contested votes should auto-select anchor-agreement."""
+        legs, matrix = self._make_chamber_data(n_r=30, n_d=10, n_contested=30)
+        strategy, rationale = select_identification_strategy(
+            "auto", legs, matrix, "Senate",
+        )
+        assert strategy == IdentificationStrategy.ANCHOR_AGREEMENT
+        assert "SELECTED" in rationale[strategy]
+
+    def test_auto_external_scores_selects_external(self) -> None:
+        """External scores available should auto-select external-prior."""
+        legs, matrix = self._make_chamber_data(n_r=20, n_d=20)
+        strategy, rationale = select_identification_strategy(
+            "auto", legs, matrix, "Senate", external_scores_available=True,
+        )
+        assert strategy == IdentificationStrategy.EXTERNAL_PRIOR
+
+    def test_user_override(self) -> None:
+        """Explicit strategy should override auto-detection."""
+        legs, matrix = self._make_chamber_data(n_r=20, n_d=20)
+        strategy, rationale = select_identification_strategy(
+            "sort-constraint", legs, matrix, "Senate",
+        )
+        assert strategy == IdentificationStrategy.SORT_CONSTRAINT
+        assert "user override" in rationale[strategy]
+
+    def test_rationale_covers_all_strategies(self) -> None:
+        """Rationale dict should have an entry for every strategy."""
+        legs, matrix = self._make_chamber_data(n_r=20, n_d=20)
+        _, rationale = select_identification_strategy(
+            "auto", legs, matrix, "Senate",
+        )
+        for s in IdentificationStrategy.ALL_STRATEGIES:
+            assert s in rationale, f"Missing rationale for {s}"
+
+    def test_exactly_one_selected(self) -> None:
+        """Exactly one strategy should be marked SELECTED in the rationale."""
+        legs, matrix = self._make_chamber_data(n_r=20, n_d=20)
+        _, rationale = select_identification_strategy(
+            "auto", legs, matrix, "Senate",
+        )
+        selected_count = sum(1 for v in rationale.values() if v.startswith("SELECTED"))
+        assert selected_count == 1
+
+    def test_non_selected_prefixed(self) -> None:
+        """Non-selected strategies should be prefixed with 'Not selected.'."""
+        legs, matrix = self._make_chamber_data(n_r=20, n_d=20)
+        strategy, rationale = select_identification_strategy(
+            "auto", legs, matrix, "Senate",
+        )
+        for s, desc in rationale.items():
+            if s != strategy:
+                assert desc.startswith("Not selected."), f"Strategy {s}: {desc}"
+
+
+class TestBuildIrtGraphStrategies:
+    """Test that build_irt_graph() produces valid PyMC models for each strategy.
+
+    Run: uv run pytest tests/test_irt.py::TestBuildIrtGraphStrategies -v
+    """
+
+    @pytest.fixture
+    def irt_data(self) -> dict:
+        """Minimal IRT data dict for graph construction."""
+        n_leg, n_votes = 10, 20
+        rng = np.random.default_rng(42)
+        n_obs = n_leg * n_votes
+        return {
+            "leg_idx": np.repeat(np.arange(n_leg), n_votes),
+            "vote_idx": np.tile(np.arange(n_votes), n_leg),
+            "y": rng.integers(0, 2, size=n_obs).astype(np.float64),
+            "n_legislators": n_leg,
+            "n_votes": n_votes,
+            "n_obs": n_obs,
+            "leg_slugs": [f"s{i}" for i in range(n_leg)],
+            "vote_ids": [f"v{j}" for j in range(n_votes)],
+        }
+
+    def test_anchor_pca_model(self, irt_data: dict) -> None:
+        """Anchor-PCA strategy should build a model with anchored xi."""
+        anchors = [(0, 1.0), (9, -1.0)]
+        model = build_irt_graph(
+            irt_data, anchors, strategy=IdentificationStrategy.ANCHOR_PCA,
+        )
+        assert "xi" in model.named_vars
+        assert "xi_free" in model.named_vars
+        assert "alpha" in model.named_vars
+        assert "beta" in model.named_vars
+        # xi_free has n_leg - n_anchors shape
+        assert model.named_vars["xi_free"].shape.eval().item() == 8
+
+    def test_anchor_agreement_model(self, irt_data: dict) -> None:
+        """Anchor-agreement should produce the same graph structure as anchor-pca."""
+        anchors = [(2, 1.0), (7, -1.0)]
+        model = build_irt_graph(
+            irt_data, anchors, strategy=IdentificationStrategy.ANCHOR_AGREEMENT,
+        )
+        assert "xi_free" in model.named_vars
+        assert model.named_vars["xi_free"].shape.eval().item() == 8
+
+    def test_sort_constraint_model(self, irt_data: dict) -> None:
+        """Sort-constraint should have party_order potential and all-free xi."""
+        party_indices = {"Republican": [0, 1, 2, 3, 4], "Democrat": [5, 6, 7, 8, 9]}
+        model = build_irt_graph(
+            irt_data, [], strategy=IdentificationStrategy.SORT_CONSTRAINT,
+            party_indices=party_indices,
+        )
+        assert "xi_free" in model.named_vars
+        assert model.named_vars["xi_free"].shape.eval().item() == 10
+        # Check that the Potential exists
+        potential_names = [p.name for p in model.potentials]
+        assert "party_order" in potential_names
+
+    def test_positive_beta_model(self, irt_data: dict) -> None:
+        """Positive-beta should use HalfNormal for beta."""
+        import pymc as pm
+
+        model = build_irt_graph(
+            irt_data, [], strategy=IdentificationStrategy.POSITIVE_BETA,
+        )
+        beta_rv = model.named_vars["beta"]
+        # HalfNormal is a distribution — check that it's bounded positive
+        assert "beta" in model.named_vars
+        # xi_free should be fully free (no anchors)
+        assert model.named_vars["xi_free"].shape.eval().item() == 10
+
+    def test_hierarchical_prior_model(self, irt_data: dict) -> None:
+        """Hierarchical-prior should set party-aware mu for xi_free."""
+        party_indices = {"Republican": [0, 1, 2, 3, 4], "Democrat": [5, 6, 7, 8, 9]}
+        model = build_irt_graph(
+            irt_data, [], strategy=IdentificationStrategy.HIERARCHICAL_PRIOR,
+            party_indices=party_indices,
+        )
+        assert "xi_free" in model.named_vars
+        assert model.named_vars["xi_free"].shape.eval().item() == 10
+        # No potential for sort constraint
+        potential_names = [p.name for p in model.potentials]
+        assert "party_order" not in potential_names
+
+    def test_unconstrained_model(self, irt_data: dict) -> None:
+        """Unconstrained should have all-free xi with no potentials."""
+        model = build_irt_graph(
+            irt_data, [], strategy=IdentificationStrategy.UNCONSTRAINED,
+        )
+        assert "xi_free" in model.named_vars
+        assert model.named_vars["xi_free"].shape.eval().item() == 10
+        potential_names = [p.name for p in model.potentials]
+        assert "party_order" not in potential_names
+
+    def test_external_prior_model(self, irt_data: dict) -> None:
+        """External-prior should use provided prior means."""
+        priors = np.linspace(1.0, -1.0, 10)
+        model = build_irt_graph(
+            irt_data, [], strategy=IdentificationStrategy.EXTERNAL_PRIOR,
+            external_priors=priors,
+        )
+        assert "xi_free" in model.named_vars
+        assert model.named_vars["xi_free"].shape.eval().item() == 10
+
+    def test_external_prior_defaults_to_zero(self, irt_data: dict) -> None:
+        """External-prior with None priors should default to zero means."""
+        model = build_irt_graph(
+            irt_data, [], strategy=IdentificationStrategy.EXTERNAL_PRIOR,
+            external_priors=None,
+        )
+        assert "xi_free" in model.named_vars
+
+    def test_all_strategies_build_successfully(self, irt_data: dict) -> None:
+        """Every strategy should produce a valid PyMC model without error."""
+        party_indices = {"Republican": [0, 1, 2, 3, 4], "Democrat": [5, 6, 7, 8, 9]}
+        anchors = [(0, 1.0), (9, -1.0)]
+        priors = np.linspace(1.0, -1.0, 10)
+
+        for strategy in IdentificationStrategy.ALL_STRATEGIES:
+            a = anchors if strategy.startswith("anchor") else []
+            pi = party_indices if strategy in ("sort-constraint", "hierarchical-prior") else None
+            ep = priors if strategy == "external-prior" else None
+            model = build_irt_graph(irt_data, a, strategy=strategy, party_indices=pi,
+                                    external_priors=ep)
+            assert "xi" in model.named_vars, f"Strategy {strategy} missing xi"
+            assert "obs" in model.named_vars, f"Strategy {strategy} missing obs"

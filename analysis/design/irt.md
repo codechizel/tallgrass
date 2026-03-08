@@ -105,6 +105,22 @@
 
 **Impact:** Fixes the 79th Senate Huelskamp placement (xi = -3.26 → +3.26). Does not affect correctly-signed sessions (the correlation is negative, so no flip occurs). See `docs/irt-sign-identification-deep-dive.md`.
 
+### Identification strategy system (7 strategies, auto-detection)
+
+**Decision:** Rather than a single identification method, the model supports seven strategies with auto-detection via `--identification auto` (default). See ADR-0103 and `docs/irt-identification-strategies.md` for the full catalog, literature references, and auto-detection logic.
+
+| Strategy | Method | Auto-selected when |
+|----------|--------|--------------------|
+| anchor-pca | Hard anchors from PCA PC1 party extremes | Balanced chamber, no external scores |
+| anchor-agreement | Hard anchors from cross-party contested vote agreement | Supermajority + sufficient contested votes |
+| sort-constraint | `pm.Potential`: D mean < R mean | Supermajority + insufficient contested votes |
+| positive-beta | `beta ~ HalfNormal(1)` | Never (manual only; silences D-Yea bills) |
+| hierarchical-prior | `xi ~ Normal(±0.5, 1)` by party | Never (manual only) |
+| unconstrained | No constraints; post-hoc sign correction | Never (diagnostic only) |
+| external-prior | `xi ~ Normal(sm_score, 0.5)` | External scores available |
+
+All strategies pass through `validate_sign()` as a post-hoc safety net. Every run prints a rationale table showing why the selected strategy was chosen and why alternatives were passed over.
+
 ### PCA-informed chain initialization (default: on)
 
 **Decision:** Initialize MCMC chains with standardized PCA PC1 scores (mean-0, sd-1) as starting values for the free ideal point parameters (`xi_free`). On by default; disable with `--no-pca-init`.

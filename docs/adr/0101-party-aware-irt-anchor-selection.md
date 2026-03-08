@@ -58,3 +58,7 @@ This ensures anchors come from opposite parties and represent the ideological ma
 **Impact:** Fixes the 79th Senate Huelskamp placement (xi=-3.26 → +3.26). Does not fire on correctly-signed sessions. 6 new tests. See `docs/irt-sign-identification-deep-dive.md`.
 
 **Note:** This fix applies only to Phase 05 flat IRT. The hierarchical model (Phase 07) uses a sort constraint (D mean < R mean) that correctly identifies global sign but cannot prevent individual-level horseshoe placement — that is a dimension collapse issue that negation cannot fix.
+
+## Superseded by Identification Strategy System (2026-03-07 addendum)
+
+Party-aware PCA anchor selection is now one of seven identification strategies in ADR-0103. The `anchor-pca` strategy retains this exact behavior. In supermajority chambers, auto-detection now selects `anchor-agreement` (cross-party contested vote agreement) instead, which picks genuine ideological extremes rather than PCA artifacts. The `validate_sign()` safety net remains as a post-hoc check for all strategies. See `docs/irt-identification-strategies.md` for the complete catalog.

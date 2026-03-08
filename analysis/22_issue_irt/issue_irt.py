@@ -281,7 +281,7 @@ def _run_topic_irt(
     # Anchor selection — try full model's PCA first, fallback to per-topic PCA
     try:
         if pca_scores is not None:
-            cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(
+            cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
                 pca_scores, topic_matrix, chamber
             )
         else:
@@ -301,7 +301,7 @@ def _run_topic_irt(
                 .otherwise(pl.col("full_name"))
                 .alias("full_name")
             )
-            cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(
+            cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
                 topic_pca_with_names, topic_matrix, chamber
             )
     except Exception as e:

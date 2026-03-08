@@ -199,8 +199,113 @@ HOLDOUT_FRACTION = 0.20  # Random 20% of observed cells
 HOLDOUT_SEED = 42
 MIN_PARTICIPATION_FOR_ANCHOR = 0.50  # Anchors must have >= 50% participation
 CONTESTED_VOTE_THRESHOLD = 0.10  # Both parties must have ≥10% on each side
+MIN_CONTESTED_FOR_AGREEMENT = 10  # Need ≥10 contested votes for agreement-based anchors
+MIN_CONTESTED_VOTES_PER_LEG = 5  # Legislator needs ≥5 contested votes for valid agreement
+SUPERMAJORITY_THRESHOLD = 0.70  # One party holds ≥70% of seats → supermajority
 
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
+
+# ── Identification Strategies ────────────────────────────────────────────────
+# Canonical term from the IRT literature (Clinton-Jackman-Rivers 2004, Morucci
+# et al. 2024). Each strategy solves the reflection invariance problem (negating
+# all xi and beta yields an identical likelihood) differently.
+
+
+class IdentificationStrategy:
+    """Enumeration of IRT identification strategies.
+
+    Each strategy resolves sign/location/scale invariance differently. The auto
+    selector picks the best one for the data; the CLI flag overrides.
+    """
+
+    # ── Anchor-based strategies ──
+    ANCHOR_PCA = "anchor-pca"
+    """Hard anchors at xi=±1 selected by party-aware PCA PC1 extremes.
+    Standard method (Clinton-Jackman-Rivers 2004). Works well for balanced
+    chambers. In supermajority chambers, horseshoe effect distorts PC1 extremes.
+    """
+
+    ANCHOR_AGREEMENT = "anchor-agreement"
+    """Hard anchors at xi=±1 selected by cross-party contested vote agreement.
+    Picks the most partisan legislator from each party (lowest agreement with
+    opposite party on contested votes). Robust to the horseshoe effect.
+    """
+
+    # ── Constraint-based strategies (no individual anchors) ──
+    SORT_CONSTRAINT = "sort-constraint"
+    """Ordering constraint: Democrat mean < Republican mean via pm.Potential.
+    No individual legislators are pinned. All legislators are free parameters.
+    Same approach as the hierarchical model (Phase 07). Sign identified by
+    the party ordering; scale by the Normal(0,1) prior.
+    """
+
+    POSITIVE_BETA = "positive-beta"
+    """Positive discrimination constraint: beta ~ HalfNormal(1). Forces all
+    discrimination parameters to be positive, eliminating reflection invariance.
+    Standard in educational testing. Limitation: silences D-Yea bills (where
+    the liberal position is Yea → requires negative beta). ADR-0047.
+    """
+
+    HIERARCHICAL_PRIOR = "hierarchical-prior"
+    """Party-informed prior: xi ~ Normal(+0.5, 1) for Republicans,
+    Normal(-0.5, 1) for Democrats. No hard constraints — prior provides soft
+    identification. Inspired by Bafumi-Gelman-Park-Kaplan (2005).
+    """
+
+    # ── Post-hoc only strategies ──
+    UNCONSTRAINED = "unconstrained"
+    """No identification constraints during MCMC. Post-hoc sign correction
+    via party means + validate_sign(). Fastest to implement, relies entirely
+    on post-hoc correction. Risk: chains may not mix well in the unidentified
+    multimodal posterior.
+    """
+
+    # ── External data strategies ──
+    EXTERNAL_PRIOR = "external-prior"
+    """Informative prior from Shor-McCarty scores: xi ~ Normal(sm_score, 0.5).
+    Requires Phase 17 external validation data. Solves sign, location, and
+    scale simultaneously by anchoring to an external measurement system.
+    Shor & McCarty (2011), Bonica & Woodruff (2015).
+    """
+
+    AUTO = "auto"
+    """Auto-detect: select strategy based on chamber composition and data
+    availability. Supermajority → agreement anchors. Balanced → PCA anchors.
+    External scores available → external prior.
+    """
+
+    ALL_STRATEGIES = [
+        ANCHOR_PCA,
+        ANCHOR_AGREEMENT,
+        SORT_CONSTRAINT,
+        POSITIVE_BETA,
+        HIERARCHICAL_PRIOR,
+        UNCONSTRAINED,
+        EXTERNAL_PRIOR,
+    ]
+
+    # Short human-readable descriptions for the report
+    DESCRIPTIONS: dict[str, str] = {
+        ANCHOR_PCA: "Hard anchors (PCA PC1 extremes, party-aware)",
+        ANCHOR_AGREEMENT: "Hard anchors (cross-party contested vote agreement)",
+        SORT_CONSTRAINT: "Sort constraint (D mean < R mean, no individual anchors)",
+        POSITIVE_BETA: "Positive discrimination (HalfNormal beta, no anchors)",
+        HIERARCHICAL_PRIOR: "Party-informed prior (soft identification, no anchors)",
+        UNCONSTRAINED: "Unconstrained (post-hoc sign correction only)",
+        EXTERNAL_PRIOR: "External score prior (Shor-McCarty informative prior)",
+        AUTO: "Auto-detect (selects best strategy for chamber composition)",
+    }
+
+    # Literature references for each strategy
+    REFERENCES: dict[str, str] = {
+        ANCHOR_PCA: "Clinton, Jackman & Rivers (2004)",
+        ANCHOR_AGREEMENT: "Tallgrass project (2026); extends CJR 2004",
+        SORT_CONSTRAINT: "Factor analysis ordering; cf. Geweke & Zhou (1996)",
+        POSITIVE_BETA: "Stan User's Guide §1.11; educational IRT convention",
+        HIERARCHICAL_PRIOR: "Bafumi, Gelman, Park & Kaplan (2005)",
+        UNCONSTRAINED: "pscl postProcess(); Jackman (2000)",
+        EXTERNAL_PRIOR: "Shor & McCarty (2011); Bonica & Woodruff (2015)",
+    }
 
 # Joint model defaults
 JOINT_TARGET_ACCEPT = 0.95
@@ -261,6 +366,21 @@ def parse_args() -> argparse.Namespace:
         help="Disable PCA-informed chain initialization (on by default)",
     )
     parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
+    parser.add_argument(
+        "--identification",
+        default="auto",
+        choices=[
+            "auto",
+            "anchor-pca",
+            "anchor-agreement",
+            "sort-constraint",
+            "positive-beta",
+            "hierarchical-prior",
+            "unconstrained",
+            "external-prior",
+        ],
+        help="Identification strategy (default: auto-detect from chamber composition)",
+    )
     return parser.parse_args()
 
 
@@ -857,22 +977,236 @@ def prepare_irt_data(
     }
 
 
+# ── Identification Strategy Selection ────────────────────────────────────────
+
+
+def detect_supermajority(
+    legislators: pl.DataFrame,
+    chamber: str,
+) -> tuple[bool, float]:
+    """Check if chamber has a supermajority (one party ≥ SUPERMAJORITY_THRESHOLD).
+
+    Returns (is_supermajority, majority_fraction).
+    """
+    chamber_legs = legislators.filter(pl.col("chamber") == chamber)
+    if chamber_legs.height == 0:
+        return False, 0.0
+    party_counts = chamber_legs.group_by("party").len()
+    total = chamber_legs.height
+    max_fraction = float(party_counts["len"].max()) / total
+    return max_fraction >= SUPERMAJORITY_THRESHOLD, max_fraction
+
+
+def select_identification_strategy(
+    requested: str,
+    legislators: pl.DataFrame,
+    matrix: pl.DataFrame,
+    chamber: str,
+    external_scores_available: bool = False,
+) -> tuple[str, dict[str, str]]:
+    """Select the identification strategy for this chamber.
+
+    When requested="auto", selects based on chamber composition:
+    - External scores available → external-prior
+    - Supermajority chamber → anchor-agreement
+    - Balanced chamber → anchor-pca
+
+    Returns (selected_strategy, rationale_dict). The rationale_dict maps each
+    strategy to a short explanation of why it was or wasn't selected, for the
+    HTML report.
+    """
+    IS = IdentificationStrategy
+
+    # Build rationale for every strategy
+    is_super, majority_frac = detect_supermajority(legislators, chamber)
+
+    # Count parties
+    chamber_legs = legislators.filter(pl.col("chamber") == chamber)
+    slug_col = "legislator_slug"
+    in_matrix = set(matrix[slug_col].to_list())
+    matrix_legs = chamber_legs.filter(pl.col("legislator_slug").is_in(in_matrix))
+    n_r = matrix_legs.filter(pl.col("party") == "Republican").height
+    n_d = matrix_legs.filter(pl.col("party") == "Democrat").height
+    both_parties = n_r >= 3 and n_d >= 3
+
+    # Check contested votes for agreement feasibility
+    agree_rates, n_contested = compute_cross_party_agreement(matrix, legislators)
+    agreement_feasible = n_contested >= MIN_CONTESTED_FOR_AGREEMENT and len(agree_rates) >= 6
+
+    rationale: dict[str, str] = {}
+
+    # Evaluate each strategy's suitability
+    rationale[IS.ANCHOR_PCA] = (
+        "Standard method. "
+        + ("Risk: supermajority horseshoe effect may distort PCA extremes."
+           if is_super else "Suitable for this balanced chamber.")
+    )
+
+    rationale[IS.ANCHOR_AGREEMENT] = (
+        f"{n_contested} contested votes, {len(agree_rates)} legislators with agreement data. "
+        + ("Sufficient for agreement-based anchors." if agreement_feasible
+           else "Insufficient contested votes — not feasible.")
+    )
+
+    rationale[IS.SORT_CONSTRAINT] = (
+        "No individual anchors — all legislators are free parameters. "
+        + ("Both parties present." if both_parties
+           else "Requires both parties — not feasible for single-party chamber.")
+    )
+
+    rationale[IS.POSITIVE_BETA] = (
+        "Forces all discrimination positive. Limitation: silences D-Yea bills "
+        "(~12.5% of roll calls in typical Kansas sessions). ADR-0047."
+    )
+
+    rationale[IS.HIERARCHICAL_PRIOR] = (
+        "Soft identification via party-informed priors. "
+        + ("Both parties present." if both_parties
+           else "Requires both parties — not feasible.")
+    )
+
+    rationale[IS.UNCONSTRAINED] = (
+        "No identification during MCMC. Relies entirely on post-hoc sign correction. "
+        "Risk: poor chain mixing in multimodal posterior."
+    )
+
+    rationale[IS.EXTERNAL_PRIOR] = (
+        "Shor-McCarty scores as informative priors. "
+        + ("Scores available for this biennium." if external_scores_available
+           else "No external scores available — not feasible.")
+    )
+
+    # If not auto, return the requested strategy
+    if requested != IS.AUTO:
+        rationale[requested] = "SELECTED (user override). " + rationale[requested]
+        for s in IS.ALL_STRATEGIES:
+            if s != requested:
+                rationale[s] = "Not selected. " + rationale[s]
+        return requested, rationale
+
+    # Auto-detection logic
+    selected = IS.ANCHOR_PCA  # default
+
+    if external_scores_available:
+        selected = IS.EXTERNAL_PRIOR
+    elif is_super and agreement_feasible:
+        selected = IS.ANCHOR_AGREEMENT
+    elif is_super and not agreement_feasible:
+        # Supermajority but not enough contested votes — sort constraint is safer
+        selected = IS.SORT_CONSTRAINT if both_parties else IS.ANCHOR_PCA
+    # else: balanced chamber → PCA anchors (default)
+
+    for s in IS.ALL_STRATEGIES:
+        prefix = "SELECTED (auto). " if s == selected else "Not selected. "
+        rationale[s] = prefix + rationale[s]
+
+    return selected, rationale
+
+
+def compute_cross_party_agreement(
+    matrix: pl.DataFrame,
+    legislators: pl.DataFrame,
+) -> tuple[dict[str, float], int]:
+    """Compute cross-party contested vote agreement for each legislator.
+
+    For each legislator, measures what fraction of contested votes (where both
+    parties split ≥ CONTESTED_VOTE_THRESHOLD) they agree with the opposite
+    party's majority position.
+
+    Returns (slug→agreement_rate dict, n_contested_votes).
+    """
+    slug_col = "legislator_slug"
+    vote_cols = [c for c in matrix.columns if c != slug_col]
+    slugs = matrix[slug_col].to_list()
+
+    party_map = dict(
+        zip(
+            legislators["legislator_slug"].to_list(),
+            legislators["party"].to_list(),
+        )
+    )
+
+    slug_parties = [party_map.get(s, "Unknown") for s in slugs]
+    r_indices = np.array([i for i, p in enumerate(slug_parties) if p == "Republican"])
+    d_indices = np.array([i for i, p in enumerate(slug_parties) if p == "Democrat"])
+
+    if len(r_indices) < 3 or len(d_indices) < 3:
+        return {}, 0
+
+    # Build numpy vote matrix (legislators × votes), NaN for absent
+    vote_array = np.full((len(slugs), len(vote_cols)), np.nan)
+    for i, row in enumerate(matrix.iter_rows(named=True)):
+        for j, vc in enumerate(vote_cols):
+            if row[vc] is not None:
+                vote_array[i, j] = float(row[vc])
+
+    # Identify contested votes
+    contested_mask = np.zeros(len(vote_cols), dtype=bool)
+    for j in range(len(vote_cols)):
+        r_votes = vote_array[r_indices, j]
+        d_votes = vote_array[d_indices, j]
+        r_valid = r_votes[~np.isnan(r_votes)]
+        d_valid = d_votes[~np.isnan(d_votes)]
+        if len(r_valid) < 3 or len(d_valid) < 3:
+            continue
+        r_yea_frac = r_valid.mean()
+        d_yea_frac = d_valid.mean()
+        threshold = CONTESTED_VOTE_THRESHOLD
+        r_contested = threshold <= r_yea_frac <= (1 - threshold)
+        d_contested = threshold <= d_yea_frac <= (1 - threshold)
+        if r_contested and d_contested:
+            contested_mask[j] = True
+
+    n_contested = int(contested_mask.sum())
+    if n_contested < MIN_CONTESTED_FOR_AGREEMENT:
+        return {}, n_contested
+
+    contested_votes = vote_array[:, contested_mask]
+    r_majority = np.nanmean(contested_votes[r_indices], axis=0) >= 0.5
+    d_majority = np.nanmean(contested_votes[d_indices], axis=0) >= 0.5
+
+    agreement_rates: dict[str, float] = {}
+    for i, slug in enumerate(slugs):
+        party = party_map.get(slug, "Unknown")
+        if party == "Republican":
+            opposite_majority = d_majority.astype(float)
+        elif party == "Democrat":
+            opposite_majority = r_majority.astype(float)
+        else:
+            continue
+
+        leg_votes = contested_votes[i]
+        valid = ~np.isnan(leg_votes)
+        if valid.sum() < MIN_CONTESTED_VOTES_PER_LEG:
+            continue
+        agreement_rates[slug] = float((leg_votes[valid] == opposite_majority[valid]).mean())
+
+    return agreement_rates, n_contested
+
+
 def select_anchors(
     pca_scores: pl.DataFrame,
     matrix: pl.DataFrame,
     chamber: str,
-) -> tuple[int, str, int, str]:
-    """Select conservative and liberal anchors using party-aware PC1 extremes.
+    legislators: pl.DataFrame | None = None,
+) -> tuple[int, str, int, str, dict[str, float] | None]:
+    """Select conservative and liberal anchors for IRT identification.
 
-    Convention: PCA orient_pc1() ensures Republican mean > Democrat mean on PC1.
-    We pick the most extreme Republican (highest PC1) as conservative anchor and
-    the most extreme Democrat (lowest PC1) as liberal anchor. This avoids sign
-    flip in supermajority chambers where intra-party variation dominates PC1 and
-    raw extremes may not correspond to ideological extremes.
+    Primary method: cross-party contested vote agreement. Picks the Republican
+    with the LOWEST agreement with Democrats (most partisan R) and the Democrat
+    with the LOWEST agreement with Republicans (most partisan D). This selects
+    genuine ideological extremes rather than PCA artifacts from the horseshoe
+    effect.
+
+    Fallback: party-aware PC1 extremes (when insufficient contested votes or
+    legislator metadata is unavailable).
 
     Guards: anchor must have >= 50% participation in the filtered matrix.
 
-    Returns (cons_idx, cons_slug, lib_idx, lib_slug).
+    Returns (cons_idx, cons_slug, lib_idx, lib_slug, agreement_rates_or_None).
+    The agreement_rates dict is returned when agreement-based selection was used,
+    None when PCA fallback was used. Callers can use agreement rates to build
+    ideology-aware chain initialization.
     """
     slug_col = "legislator_slug"
     vote_cols = [c for c in matrix.columns if c != slug_col]
@@ -886,7 +1220,75 @@ def select_anchors(
         n_present = sum(1 for v in vote_cols if row[v] is not None)
         participation[slug] = n_present / n_votes if n_votes > 0 else 0.0
 
-    # Filter PCA scores to legislators in the matrix with sufficient participation
+    eligible_slugs = {s for s, p in participation.items() if p >= MIN_PARTICIPATION_FOR_ANCHOR}
+
+    # Try agreement-based anchor selection first
+    if legislators is not None:
+        agreement_rates, n_contested = compute_cross_party_agreement(matrix, legislators)
+        if n_contested >= MIN_CONTESTED_FOR_AGREEMENT and len(agreement_rates) >= 6:
+            party_map = dict(
+                zip(
+                    legislators["legislator_slug"].to_list(),
+                    legislators["party"].to_list(),
+                )
+            )
+
+            # Filter to eligible (sufficient participation) legislators with agreement data
+            r_candidates = [
+                (slug, rate)
+                for slug, rate in agreement_rates.items()
+                if party_map.get(slug) == "Republican" and slug in eligible_slugs
+            ]
+            d_candidates = [
+                (slug, rate)
+                for slug, rate in agreement_rates.items()
+                if party_map.get(slug) == "Democrat" and slug in eligible_slugs
+            ]
+
+            if len(r_candidates) >= 3 and len(d_candidates) >= 3:
+                # Conservative anchor: R with LOWEST cross-party agreement (most partisan)
+                r_candidates.sort(key=lambda x: x[1])
+                cons_slug = r_candidates[0][0]
+                cons_agree = r_candidates[0][1]
+
+                # Liberal anchor: D with LOWEST cross-party agreement (most partisan)
+                d_candidates.sort(key=lambda x: x[1])
+                lib_slug = d_candidates[0][0]
+                lib_agree = d_candidates[0][1]
+
+                cons_idx = slugs.index(cons_slug)
+                lib_idx = slugs.index(lib_slug)
+
+                # Look up names from PCA scores or legislators
+                name_map = dict(
+                    zip(
+                        pca_scores["legislator_slug"].to_list(),
+                        pca_scores["full_name"].to_list(),
+                    )
+                )
+                cons_name = name_map.get(cons_slug, cons_slug)
+                lib_name = name_map.get(lib_slug, lib_slug)
+
+                print(f"  Anchor method: cross-party contested vote agreement")
+                print(f"    {n_contested} contested votes, "
+                      f"{len(r_candidates)} R / {len(d_candidates)} D candidates")
+                print(f"  Conservative anchor: {cons_name} ({cons_slug}), "
+                      f"D-agreement={cons_agree:.1%}")
+                print(f"  Liberal anchor:      {lib_name} ({lib_slug}), "
+                      f"R-agreement={lib_agree:.1%}")
+
+                return cons_idx, cons_slug, lib_idx, lib_slug, agreement_rates
+
+            print("  Agreement-based anchors: insufficient candidates per party, "
+                  "falling back to PCA")
+        elif n_contested < MIN_CONTESTED_FOR_AGREEMENT:
+            print(f"  Agreement-based anchors: only {n_contested} contested votes "
+                  f"(need {MIN_CONTESTED_FOR_AGREEMENT}), falling back to PCA")
+        else:
+            print(f"  Agreement-based anchors: only {len(agreement_rates)} legislators "
+                  f"with data (need 6), falling back to PCA")
+
+    # Fallback: party-aware PCA PC1 extremes
     eligible = (
         pca_scores.filter(pl.col("legislator_slug").is_in(slugs))
         .with_columns(
@@ -895,8 +1297,6 @@ def select_anchors(
         .filter(pl.col("participation") >= MIN_PARTICIPATION_FOR_ANCHOR)
     )
 
-    # Party-aware anchor selection: most extreme R (highest PC1) and most extreme D
-    # (lowest PC1). Falls back to raw PC1 extremes if a party is missing.
     republicans = eligible.filter(pl.col("party") == "Republican").sort("PC1", descending=True)
     democrats = eligible.filter(pl.col("party") == "Democrat").sort("PC1", descending=False)
 
@@ -909,7 +1309,6 @@ def select_anchors(
         lib_name = democrats["full_name"][0]
         lib_pc1 = democrats["PC1"][0]
     else:
-        # Fallback: raw PC1 extremes (single-party chamber or missing party data)
         sorted_scores = eligible.sort("PC1", descending=True)
         cons_slug = sorted_scores["legislator_slug"][0]
         cons_name = sorted_scores["full_name"][0]
@@ -922,10 +1321,11 @@ def select_anchors(
     cons_idx = slugs.index(cons_slug)
     lib_idx = slugs.index(lib_slug)
 
+    print(f"  Anchor method: PCA PC1 extremes (party-aware)")
     print(f"  Conservative anchor: {cons_name} ({cons_slug}), PC1={cons_pc1:+.3f}")
     print(f"  Liberal anchor:      {lib_name} ({lib_slug}), PC1={lib_pc1:+.3f}")
 
-    return cons_idx, cons_slug, lib_idx, lib_slug
+    return cons_idx, cons_slug, lib_idx, lib_slug, None
 
 
 # ── Sign Validation ──────────────────────────────────────────────────────────
@@ -944,22 +1344,30 @@ def validate_sign(
     supermajority chambers. See docs/irt-sign-identification-deep-dive.md.
 
     Algorithm:
-      1. Identify contested votes: roll calls where both R and D members
-         split (≥ CONTESTED_VOTE_THRESHOLD on each side within each party).
-      2. For each legislator, compute agreement rate with the opposite party's
-         median voter on contested votes.
-      3. Correlate agreement rate with ideal point distance from center.
-         Correct sign: moderates (near center) agree more → negative correlation.
-         Flipped sign: extremes agree more → positive correlation.
-      4. If flipped, negate xi and beta posteriors.
+      1. Compute cross-party agreement via compute_cross_party_agreement().
+      2. Correlate Republican ideal points with their D-agreement rate.
+         Correct sign: negative correlation (moderates agree more with opposite party).
+         Flipped sign: positive correlation (extremes agree more).
+      3. If flipped (r > 0, p < 0.10), negate xi and beta posteriors.
 
     Returns (possibly-corrected idata, was_flipped).
     """
-    slug_col = "legislator_slug"
-    vote_cols = [c for c in matrix.columns if c != slug_col]
-    slugs = matrix[slug_col].to_list()
+    slugs = data["leg_slugs"]
 
-    # Build slug → party lookup
+    agreement_rates, n_contested = compute_cross_party_agreement(matrix, legislators)
+    print(f"  Sign validation: {n_contested} contested votes "
+          f"(of {len(matrix.columns) - 1})")
+
+    if n_contested < MIN_CONTESTED_FOR_AGREEMENT:
+        print(f"  Sign validation: skipped (fewer than {MIN_CONTESTED_FOR_AGREEMENT} "
+              f"contested votes)")
+        return idata, False
+
+    if len(agreement_rates) < 10:
+        print("  Sign validation: skipped (fewer than 10 legislators with agreement data)")
+        return idata, False
+
+    # Build party lookup for filtering
     party_map = dict(
         zip(
             legislators["legislator_slug"].to_list(),
@@ -967,118 +1375,33 @@ def validate_sign(
         )
     )
 
-    # Only proceed if we have both R and D legislators
-    slug_parties = [party_map.get(s, "Unknown") for s in slugs]
-    r_slugs = [s for s, p in zip(slugs, slug_parties) if p == "Republican"]
-    d_slugs = [s for s, p in zip(slugs, slug_parties) if p == "Democrat"]
-
-    if len(r_slugs) < 3 or len(d_slugs) < 3:
-        print("  Sign validation: skipped (need ≥3 legislators per party)")
-        return idata, False
-
-    # Build numpy vote matrix (legislators × votes), NaN for absent
-    vote_array = np.full((len(slugs), len(vote_cols)), np.nan)
-    for i, row in enumerate(matrix.iter_rows(named=True)):
-        for j, vc in enumerate(vote_cols):
-            if row[vc] is not None:
-                vote_array[i, j] = float(row[vc])
-
-    slug_to_idx = {s: i for i, s in enumerate(slugs)}
-    r_indices = np.array([slug_to_idx[s] for s in r_slugs])
-    d_indices = np.array([slug_to_idx[s] for s in d_slugs])
-
-    # Identify contested votes: both parties have ≥ threshold on each side
-    contested_mask = np.zeros(len(vote_cols), dtype=bool)
-    for j in range(len(vote_cols)):
-        r_votes = vote_array[r_indices, j]
-        d_votes = vote_array[d_indices, j]
-        r_valid = r_votes[~np.isnan(r_votes)]
-        d_valid = d_votes[~np.isnan(d_votes)]
-        if len(r_valid) < 3 or len(d_valid) < 3:
-            continue
-        r_yea_frac = r_valid.mean()
-        d_yea_frac = d_valid.mean()
-        threshold = CONTESTED_VOTE_THRESHOLD
-        r_contested = threshold <= r_yea_frac <= (1 - threshold)
-        d_contested = threshold <= d_yea_frac <= (1 - threshold)
-        if r_contested and d_contested:
-            contested_mask[j] = True
-
-    n_contested = contested_mask.sum()
-    print(f"  Sign validation: {n_contested} contested votes (of {len(vote_cols)})")
-
-    if n_contested < 10:
-        print("  Sign validation: skipped (fewer than 10 contested votes)")
-        return idata, False
-
-    # Compute cross-party agreement on contested votes
-    # For each legislator, what fraction of contested votes match the opposite
-    # party's majority position?
-    contested_votes = vote_array[:, contested_mask]
-
-    # Compute opposite party majority vote on each contested roll call
-    r_majority = np.nanmean(contested_votes[r_indices], axis=0) >= 0.5  # True = Yea majority
-    d_majority = np.nanmean(contested_votes[d_indices], axis=0) >= 0.5
-
-    agreement_rates = np.full(len(slugs), np.nan)
-    for i, slug in enumerate(slugs):
-        party = party_map.get(slug, "Unknown")
-        if party == "Republican":
-            opposite_majority = d_majority.astype(float)
-        elif party == "Democrat":
-            opposite_majority = r_majority.astype(float)
-        else:
-            continue  # skip Independents
-
-        leg_votes = contested_votes[i]
-        valid = ~np.isnan(leg_votes)
-        if valid.sum() < 5:
-            continue
-        agrees = (leg_votes[valid] == opposite_majority[valid]).mean()
-        agreement_rates[i] = agrees
-
     # Get ideal points
     xi_mean = idata.posterior["xi"].mean(dim=["chain", "draw"]).values
 
-    # Correlate: for legislators with valid agreement rates, compute
-    # Spearman correlation between |xi - center| and agreement rate.
-    # Center = midpoint between party means.
-    valid_mask = ~np.isnan(agreement_rates)
-    if valid_mask.sum() < 10:
-        print("  Sign validation: skipped (fewer than 10 legislators with agreement data)")
-        return idata, False
+    # Correlate R xi with R D-agreement. Correct sign → negative.
+    slug_to_idx = {s: i for i, s in enumerate(slugs)}
+    r_xi_vals = []
+    r_agree_vals = []
+    for slug, rate in agreement_rates.items():
+        if party_map.get(slug) == "Republican" and slug in slug_to_idx:
+            r_xi_vals.append(xi_mean[slug_to_idx[slug]])
+            r_agree_vals.append(rate)
 
-    # Use signed xi (not absolute), correlate with agreement.
-    # If correctly signed: high xi = conservative R → low agreement with D.
-    # So correlation should be NEGATIVE for Rs (high xi = low cross-party agreement).
-    # We compute: for Rs, correlation between xi and agreement-with-D.
-    # Correct sign → negative. Flipped → positive.
-    r_valid_mask = np.array(
-        [valid_mask[i] and slug_parties[i] == "Republican" for i in range(len(slugs))]
-    )
-
-    if r_valid_mask.sum() < 5:
+    if len(r_xi_vals) < 5:
         print("  Sign validation: skipped (fewer than 5 Republicans with agreement data)")
         return idata, False
 
-    r_xi = xi_mean[r_valid_mask]
-    r_agree = agreement_rates[r_valid_mask]
-
-    corr, pval = stats.spearmanr(r_xi, r_agree)
+    corr, pval = stats.spearmanr(r_xi_vals, r_agree_vals)
     print(f"  Sign validation: R xi vs D-agreement Spearman r = {corr:+.3f} (p = {pval:.3f})")
 
-    # Positive correlation means: higher xi (supposedly more conservative) → higher
-    # agreement with Democrats. That's a sign flip.
     if corr > 0 and pval < 0.10:
         print("  Sign validation: SIGN FLIP DETECTED — negating xi and beta posteriors")
 
-        # Negate xi and beta in the posterior
         idata.posterior["xi"] = -idata.posterior["xi"]
         idata.posterior["xi_free"] = -idata.posterior["xi_free"]
         idata.posterior["beta"] = -idata.posterior["beta"]
 
-        # Report the diagnostic
-        r_mean_before = xi_mean[r_valid_mask].mean()
+        r_mean_before = np.mean(r_xi_vals)
         print(f"    R mean before flip: {r_mean_before:+.3f}")
         print(f"    R mean after flip:  {-r_mean_before:+.3f}")
 
@@ -1094,18 +1417,34 @@ def validate_sign(
 def build_irt_graph(
     data: dict,
     anchors: list[tuple[int, float]],
+    strategy: str = IdentificationStrategy.ANCHOR_PCA,
+    party_indices: dict[str, list[int]] | None = None,
+    external_priors: np.ndarray | None = None,
 ) -> pm.Model:
-    """Build 2PL IRT model graph with anchor constraints (no sampling).
+    """Build 2PL IRT model graph with configurable identification strategy.
 
-    Model structure:
-        xi_free ~ Normal(0, 1) for non-anchor legislators
-        xi = anchors inserted at fixed positions + xi_free elsewhere
+    The strategy parameter controls how the model resolves reflection invariance.
+    See IdentificationStrategy for the full catalog with literature references.
+
+    Model structure (varies by strategy):
+        xi ~ [depends on strategy] for legislator ideal points
         alpha ~ Normal(0, 5)  -- bill difficulty
-        beta ~ Normal(0, 1)   -- bill discrimination
+        beta ~ Normal(0, 1) or HalfNormal(1)  -- bill discrimination
         P(Yea) = logit^-1(beta * xi - alpha)
+
+    Args:
+        data: IRT data dict from prepare_irt_data().
+        anchors: List of (index, value) pairs for anchor-based strategies.
+            Empty list for constraint-based and unconstrained strategies.
+        strategy: IdentificationStrategy constant.
+        party_indices: {"Republican": [idx, ...], "Democrat": [idx, ...]} for
+            sort-constraint and hierarchical-prior strategies.
+        external_priors: Per-legislator prior means (shape n_leg) for
+            external-prior strategy. Typically from Shor-McCarty scores.
 
     Returns the PyMC model for use with nutpie or pm.sample().
     """
+    IS = IdentificationStrategy
     leg_idx = data["leg_idx"]
     vote_idx = data["vote_idx"]
     y = data["y"]
@@ -1120,28 +1459,73 @@ def build_irt_graph(
         "obs_id": np.arange(data["n_obs"]),
     }
 
+    use_positive_beta = strategy == IS.POSITIVE_BETA
+
     with pm.Model(coords=coords) as model:
-        # --- Legislator ideal points with anchors ---
-        xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg - n_anchors)
+        # --- Legislator ideal points (strategy-dependent) ---
+        if strategy in (IS.ANCHOR_PCA, IS.ANCHOR_AGREEMENT):
+            # Hard anchor strategies: fix anchor legislators at ±1
+            xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg - n_anchors)
+            xi_raw = pt.zeros(n_leg)
+            for anchor_idx, anchor_val in anchors:
+                xi_raw = pt.set_subtensor(xi_raw[anchor_idx], anchor_val)
+            free_positions = [i for i in range(n_leg) if i not in anchor_indices]
+            for k, pos in enumerate(free_positions):
+                xi_raw = pt.set_subtensor(xi_raw[pos], xi_free[k])
+            xi = pm.Deterministic("xi", xi_raw, dims="legislator")
 
-        # Build full xi vector with anchors inserted at correct positions
-        xi_raw = pt.zeros(n_leg)
-        for anchor_idx, anchor_val in anchors:
-            xi_raw = pt.set_subtensor(xi_raw[anchor_idx], anchor_val)
+        elif strategy == IS.HIERARCHICAL_PRIOR:
+            # Party-informed soft prior: R → Normal(+0.5, 1), D → Normal(-0.5, 1)
+            prior_mu = np.zeros(n_leg)
+            if party_indices:
+                for idx in party_indices.get("Republican", []):
+                    prior_mu[idx] = 0.5
+                for idx in party_indices.get("Democrat", []):
+                    prior_mu[idx] = -0.5
+            xi_free = pm.Normal(
+                "xi_free", mu=prior_mu, sigma=1, shape=n_leg
+            )
+            xi = pm.Deterministic("xi", xi_free, dims="legislator")
 
-        # Fill free positions
-        free_positions = [i for i in range(n_leg) if i not in anchor_indices]
-        for k, pos in enumerate(free_positions):
-            xi_raw = pt.set_subtensor(xi_raw[pos], xi_free[k])
+        elif strategy == IS.EXTERNAL_PRIOR:
+            # Informative prior from external scores (e.g., Shor-McCarty)
+            if external_priors is None:
+                external_priors = np.zeros(n_leg)
+            xi_free = pm.Normal(
+                "xi_free", mu=external_priors, sigma=0.5, shape=n_leg
+            )
+            xi = pm.Deterministic("xi", xi_free, dims="legislator")
 
-        xi = pm.Deterministic("xi", xi_raw, dims="legislator")
+        else:
+            # Sort constraint, positive beta, or unconstrained:
+            # all legislators are free parameters
+            xi_free = pm.Normal("xi_free", mu=0, sigma=1, shape=n_leg)
+            xi = pm.Deterministic("xi", xi_free, dims="legislator")
+
+        # --- Sort constraint (soft penalty) ---
+        if strategy == IS.SORT_CONSTRAINT and party_indices:
+            r_indices = party_indices.get("Republican", [])
+            d_indices = party_indices.get("Democrat", [])
+            if r_indices and d_indices:
+                r_mean = xi[r_indices].mean()
+                d_mean = xi[d_indices].mean()
+                # Large negative penalty when D mean >= R mean
+                pm.Potential(
+                    "party_order",
+                    pt.switch(r_mean > d_mean, 0.0, -1e6),
+                )
 
         # --- Roll call parameters ---
         alpha = pm.Normal("alpha", mu=0, sigma=5, shape=n_votes, dims="vote")
-        # Normal(0,1): unconstrained discrimination. Anchors provide sign identification,
-        # so positive constraint is unnecessary. Negative beta = liberal position is Yea.
-        # See analysis/design/beta_prior_investigation.md for full rationale.
-        beta = pm.Normal("beta", mu=0, sigma=1, shape=n_votes, dims="vote")
+
+        if use_positive_beta:
+            # Positive discrimination: forces sign identification via beta > 0.
+            # Trade-off: silences D-Yea bills where beta should be negative.
+            beta = pm.HalfNormal("beta", sigma=1, shape=n_votes, dims="vote")
+        else:
+            # Unconstrained: allows negative beta (liberal-Yea bills).
+            # Sign from anchors/constraints/post-hoc correction.
+            beta = pm.Normal("beta", mu=0, sigma=1, shape=n_votes, dims="vote")
 
         # --- Likelihood ---
         eta = beta[vote_idx] * xi[leg_idx] - alpha[vote_idx]
@@ -1158,24 +1542,29 @@ def build_and_sample(
     n_chains: int,
     target_accept: float = TARGET_ACCEPT,
     xi_initvals: np.ndarray | None = None,
+    strategy: str = IdentificationStrategy.ANCHOR_PCA,
+    party_indices: dict[str, list[int]] | None = None,
+    external_priors: np.ndarray | None = None,
 ) -> tuple[az.InferenceData, float]:
-    """Build 2PL IRT model with anchor constraints and sample with nutpie.
+    """Build 2PL IRT model and sample with nutpie.
 
-    Builds the model graph via build_irt_graph(), then compiles and samples
-    with nutpie's Rust NUTS sampler (ADR-0053).
+    Builds the model graph via build_irt_graph() with the specified
+    identification strategy, then compiles and samples with nutpie's
+    Rust NUTS sampler (ADR-0053).
 
     Args:
         data: IRT data dict from prepare_irt_data().
-        anchors: List of (legislator_index, fixed_value) pairs. Typically 2 for
-            per-chamber models [(cons_idx, +1.0), (lib_idx, -1.0)] or 4 for the
-            joint model (one conservative + one liberal from each chamber).
+        anchors: List of (legislator_index, fixed_value) pairs. Empty for
+            constraint-based strategies.
         n_samples: MCMC posterior draws per chain.
         n_tune: MCMC tuning steps (discarded).
         n_chains: Number of independent MCMC chains.
         target_accept: Accepted for API compatibility but ignored.
             nutpie uses adaptive dual averaging.
-        xi_initvals: Optional initial xi values for free parameters (from PCA).
-            If provided, all chains start near these values.
+        xi_initvals: Optional initial xi values for free parameters.
+        strategy: IdentificationStrategy constant.
+        party_indices: Party membership indices for constraint strategies.
+        external_priors: Per-legislator prior means for external-prior strategy.
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -1184,16 +1573,21 @@ def build_and_sample(
             f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"
         )
 
-    model = build_irt_graph(data, anchors)
+    model = build_irt_graph(
+        data, anchors,
+        strategy=strategy,
+        party_indices=party_indices,
+        external_priors=external_priors,
+    )
     n_anchors = len(anchors)
 
     # --- Compile with nutpie ---
     compile_kwargs: dict = {}
     if xi_initvals is not None:
-        # PCA init for xi_free; jitter all OTHER RVs.
+        # Strategy-informed init for xi_free; jitter all OTHER RVs.
         compile_kwargs["initial_points"] = {"xi_free": xi_initvals}
         compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name != "xi_free"}
-        print(f"  PCA-informed initvals: {len(xi_initvals)} free parameters")
+        print(f"  Informed initvals: {len(xi_initvals)} free parameters")
         jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
         print(f"  jitter_rvs: {jittered} (xi_free excluded)")
 
@@ -2801,7 +3195,7 @@ def run_sensitivity(
 
         # Select anchors
         pca_scores = pca_scores_dict[chamber]
-        cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(
+        cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(
             pca_scores,
             sens_matrix,
             chamber,
@@ -2997,6 +3391,9 @@ def main() -> None:
         ppc_results: dict[str, dict] = {}
         validation_results: dict[str, dict] = {}
         pca_scores_dict = {"House": pca_house, "Senate": pca_senate}
+        strategy_results: dict[str, dict] = {}
+
+        IS = IdentificationStrategy
 
         for chamber, matrix, pca_scores in chamber_configs:
             if matrix.height < 5:
@@ -3007,38 +3404,122 @@ def main() -> None:
             print_header(f"PHASE 2: PREPARE IRT DATA — {chamber}")
             data = prepare_irt_data(matrix, chamber)
 
-            # Select anchors from PCA extremes
-            print("\n  Selecting anchors from PCA PC1 extremes:")
-            cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(
-                pca_scores,
+            # ── Select identification strategy ──
+            print_header(f"IDENTIFICATION STRATEGY — {chamber}")
+            strategy, rationale = select_identification_strategy(
+                args.identification,
+                legislators,
                 matrix,
                 chamber,
             )
+            print(f"  Strategy: {IS.DESCRIPTIONS[strategy]}")
+            print(f"  Reference: {IS.REFERENCES.get(strategy, 'N/A')}")
+            print()
+            for s in IS.ALL_STRATEGIES:
+                marker = "→" if s == strategy else " "
+                print(f"  {marker} {IS.DESCRIPTIONS[s]}")
+                print(f"      {rationale[s]}")
+            print()
+
+            strategy_results[chamber] = {
+                "selected": strategy,
+                "description": IS.DESCRIPTIONS[strategy],
+                "reference": IS.REFERENCES.get(strategy, ""),
+                "rationale": rationale,
+            }
+
+            # ── Build party indices (for constraint-based strategies) ──
+            party_map = dict(
+                zip(
+                    legislators["legislator_slug"].to_list(),
+                    legislators["party"].to_list(),
+                )
+            )
+            party_indices: dict[str, list[int]] = {"Republican": [], "Democrat": []}
+            for i, slug in enumerate(data["leg_slugs"]):
+                party = party_map.get(slug, "Unknown")
+                if party in party_indices:
+                    party_indices[party].append(i)
+
+            # ── Select anchors (for anchor-based strategies) ──
+            chamber_anchors: list[tuple[int, float]] = []
+            agree_rates: dict[str, float] | None = None
+
+            if strategy in (IS.ANCHOR_PCA, IS.ANCHOR_AGREEMENT):
+                print("  Selecting anchors:")
+                cons_idx, cons_slug, lib_idx, lib_slug, agree_rates = select_anchors(
+                    pca_scores,
+                    matrix,
+                    chamber,
+                    legislators=legislators if strategy == IS.ANCHOR_AGREEMENT else None,
+                )
+                chamber_anchors = [(cons_idx, 1.0), (lib_idx, -1.0)]
 
             # ── Phase 3: Build and sample ──
             print_header(f"PHASE 3: MCMC SAMPLING — {chamber}")
-            chamber_anchors = [(cons_idx, 1.0), (lib_idx, -1.0)]
 
-            # PCA-informed chain initialization (default: on)
-            # Prevents reflection mode-splitting by starting chains near the
-            # correct orientation. See results/experimental_lab/irt-convergence/.
+            # Build chain initialization based on strategy
             xi_init = None
             if not args.no_pca_init:
-                anchor_set = {cons_idx, lib_idx}
+                anchor_set = {idx for idx, _ in chamber_anchors}
+                n_free = data["n_legislators"] - len(chamber_anchors)
                 free_pos = [i for i in range(data["n_legislators"]) if i not in anchor_set]
-                slug_order = {s: i for i, s in enumerate(data["leg_slugs"])}
-                pc1_vals = (
-                    pca_scores.filter(pl.col("legislator_slug").is_in(data["leg_slugs"]))
-                    .sort(pl.col("legislator_slug").replace_strict(slug_order))["PC1"]
-                    .to_numpy()
-                )
-                # Standardize to mean-0, sd-1 (the xi prior)
-                pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
-                xi_init = pc1_std[free_pos].astype(np.float64)
-                print(
-                    f"  PCA init: {len(xi_init)} free params, "
-                    f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
-                )
+
+                if strategy == IS.ANCHOR_AGREEMENT and agree_rates is not None:
+                    # Agreement-based init
+                    init_vals = np.zeros(data["n_legislators"])
+                    for i, slug in enumerate(data["leg_slugs"]):
+                        party = party_map.get(slug, "Unknown")
+                        rate = agree_rates.get(slug)
+                        if rate is not None:
+                            if party == "Republican":
+                                init_vals[i] = 1.0 - 2.0 * rate
+                            elif party == "Democrat":
+                                init_vals[i] = -(1.0 - 2.0 * rate)
+                        else:
+                            init_vals[i] = 0.5 if party == "Republican" else -0.5
+                    init_std = (init_vals - init_vals.mean()) / (init_vals.std() + 1e-8)
+                    xi_init = init_std[free_pos].astype(np.float64)
+                    print(
+                        f"  Agreement-based init: {len(xi_init)} free params, "
+                        f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                    )
+
+                elif strategy in (IS.HIERARCHICAL_PRIOR, IS.SORT_CONSTRAINT,
+                                  IS.POSITIVE_BETA, IS.UNCONSTRAINED):
+                    # Party-based init for non-anchor strategies
+                    init_vals = np.zeros(data["n_legislators"])
+                    for i, slug in enumerate(data["leg_slugs"]):
+                        party = party_map.get(slug, "Unknown")
+                        init_vals[i] = 0.5 if party == "Republican" else -0.5
+                    init_std = (init_vals - init_vals.mean()) / (init_vals.std() + 1e-8)
+                    xi_init = init_std.astype(np.float64)  # all free, no anchors
+                    print(
+                        f"  Party-based init: {len(xi_init)} free params, "
+                        f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                    )
+
+                elif strategy == IS.EXTERNAL_PRIOR:
+                    # External scores provide both prior AND init
+                    # (init is handled by the prior mu, no separate init needed)
+                    pass
+
+                else:
+                    # PCA-informed init (standard for anchor-pca)
+                    slug_order = {s: i for i, s in enumerate(data["leg_slugs"])}
+                    pc1_vals = (
+                        pca_scores.filter(
+                            pl.col("legislator_slug").is_in(data["leg_slugs"])
+                        )
+                        .sort(pl.col("legislator_slug").replace_strict(slug_order))["PC1"]
+                        .to_numpy()
+                    )
+                    pc1_std = (pc1_vals - pc1_vals.mean()) / (pc1_vals.std() + 1e-8)
+                    xi_init = pc1_std[free_pos].astype(np.float64)
+                    print(
+                        f"  PCA init: {len(xi_init)} free params, "
+                        f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                    )
 
             idata, sampling_time = build_and_sample(
                 data,
@@ -3047,12 +3528,28 @@ def main() -> None:
                 args.n_tune,
                 args.n_chains,
                 xi_initvals=xi_init,
+                strategy=strategy,
+                party_indices=party_indices,
             )
 
             # ── Phase 4: Convergence diagnostics ──
             diagnostics = check_convergence(idata, chamber)
 
-            # ── Sign validation ──
+            # ── Post-hoc sign correction ──
+            # For non-anchor strategies, check party means first
+            if strategy not in (IS.ANCHOR_PCA, IS.ANCHOR_AGREEMENT):
+                xi_mean = idata.posterior["xi"].mean(dim=["chain", "draw"]).values
+                r_xi = [xi_mean[i] for i in party_indices.get("Republican", [])]
+                d_xi = [xi_mean[i] for i in party_indices.get("Democrat", [])]
+                if r_xi and d_xi and np.mean(r_xi) < np.mean(d_xi):
+                    print(f"\n  Party-mean sign correction: R mean ({np.mean(r_xi):+.3f}) < "
+                          f"D mean ({np.mean(d_xi):+.3f}) — flipping")
+                    idata.posterior["xi"] = -idata.posterior["xi"]
+                    idata.posterior["xi_free"] = -idata.posterior["xi_free"]
+                    if strategy != IS.POSITIVE_BETA:
+                        idata.posterior["beta"] = -idata.posterior["beta"]
+
+            # ── Sign validation (safety net for all strategies) ──
             print_header(f"SIGN VALIDATION — {chamber}")
             idata, sign_flipped = validate_sign(
                 idata,

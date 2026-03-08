@@ -643,7 +643,7 @@ def main() -> None:
 
     # ── Select 1D anchors (for reference) ──
     print(f"\n--- 1D Anchor selection ({chamber}) ---")
-    cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(pca_scores, matrix, chamber)
+    cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(pca_scores, matrix, chamber)
     anchors_1d = [(cons_idx, 1.0), (lib_idx, -1.0)]
 
     # ── Build 2D PCA initialization ──

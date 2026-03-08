@@ -438,7 +438,7 @@ def main() -> None:
 
     print("\n--- Preparing IRT data ---")
     data = prepare_irt_data(house_matrix, "House")
-    cons_idx, cons_slug, lib_idx, lib_slug = select_anchors(pca_house, house_matrix, "House")
+    cons_idx, cons_slug, lib_idx, lib_slug, _ = select_anchors(pca_house, house_matrix, "House")
 
     # Build PCA-based xi map for bill direction classification
     pca_xi = {row["legislator_slug"]: row["PC1"] for row in pca_house.iter_rows(named=True)}

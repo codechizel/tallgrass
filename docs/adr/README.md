@@ -81,6 +81,7 @@ What are the trade-offs?
 | [0070](0070-dynamic-irt-convergence-and-identification.md) | Dynamic IRT convergence and identification |
 | [0074](0074-convergence-resolution.md) | Resolve 3 systematic MCMC convergence failures |
 | [0101](0101-party-aware-irt-anchor-selection.md) | Party-aware IRT anchor selection (supermajority sign flip fix) |
+| [0103](0103-irt-identification-strategy-system.md) | IRT identification strategy system (7 strategies, auto-detection) |
 
 ### Classical Analysis
 
@@ -269,6 +270,7 @@ What are the trade-offs?
 | [0100](0100-report-symlink-and-pipeline-resilience.md) | Report symlink stability and pipeline resilience (DB credentials, graceful skip, concrete symlinks) | Accepted | 2026-03-05 |
 | [0101](0101-party-aware-irt-anchor-selection.md) | Party-aware IRT anchor selection (supermajority sign flip fix, dimension collapse analysis) | Accepted | 2026-03-06 |
 | [0102](0102-kanfocus-defensive-dedup-and-parser-fix.md) | KanFocus defensive deduplication and parser fix (rollcall dedup, regex bleed, cache recovery) | Accepted | 2026-03-06 |
+| [0103](0103-irt-identification-strategy-system.md) | IRT identification strategy system (7 strategies, auto-detection, `--identification` CLI flag) | Accepted | 2026-03-07 |
 
 ## Creating a New ADR
 
