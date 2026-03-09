@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-09 (2D IRT interactive Plotly plots; horseshoe effect experiments; doc cross-references)
+**Last updated:** 2026-03-09 (horseshoe remediation roadmap; interactive Plotly plots; experiment results)
 
 ---
 
@@ -674,6 +674,103 @@ PCA-based anchor selection produces sign flips in supermajority chambers where a
 - ADR-0103: IRT identification strategy system (7 strategies, auto-detection)
 - ADR-0104: IRT robustness flags (`--horseshoe-diagnostic`, `--contested-only`, `--promote-2d`)
 - Empirical analysis: [`docs/79th-horseshoe-robustness-analysis.md`](79th-horseshoe-robustness-analysis.md) — 79th horseshoe confirmed (Senate: 30% Dems wrong side, 88% overlap; House r=0.41 contested-only)
+
+---
+
+## Horseshoe Remediation
+
+The horseshoe effect is a geometric dimension-reduction artifact in 1D IRT: when a supermajority chamber has two near-equal ideological dimensions (left–right and establishment–rebel), compressing to 1D folds far-right rebels onto the same end as Democrats. Both groups vote Nay on establishment bills, and the 1D model cannot distinguish "Nay because liberal" from "Nay because contrarian." The 79th Kansas Senate (2001–02) is the canonical case — Tim Huelskamp (ultra-conservative, later Freedom Caucus) lands past every Democrat on the 1D scale.
+
+Three experiments (2026-03-08) established what works and what doesn't:
+- **Regularized horseshoe prior:** RULED OUT. Inverted the House dimension (r = -0.9999 vs baseline), failed Senate convergence. The horseshoe effect is geometric, not a vote-weighting problem.
+- **Smooth L1 approximation in PyMC:** Directionally promising (0% wrong side in House, r = 0.812 vs 1D) but computationally impractical with NUTS — 2,000 divergences, 3.3 hours, ESS of 3.
+- **Supermajority audit:** Only 3/28 chambers trigger horseshoe detection (79th, 80th, 82nd Senates), but 5 sessions show problematic 1D-2D disagreement (79th, 80th, 81st, 83rd, 88th Senates). The identification strategy system (anchor-agreement) handles post-2011 sessions well.
+
+Full analysis: `docs/horseshoe-effect-and-solutions.md`. Experiment logs: `results/experimental_lab/2026-03-08_*/experiment.md`.
+
+### H1. Auto-Promote 2D When Horseshoe Detected
+
+**Effort:** Low. **Impact:** High — the single most practical improvement for affected sessions.
+
+Currently, when `detect_horseshoe()` triggers, the pipeline reports a warning but still outputs 1D scores as the canonical result. A user who doesn't run `--horseshoe-diagnostic` gets misleading rankings with no indication anything is wrong. The 2D model (Phase 04b) correctly unfolds the horseshoe — Huelskamp goes from PC1 = -31 (most liberal) to Dim 1 = +1.4 (most conservative) — but it's opt-in.
+
+**What to build:** When `detect_horseshoe()` fires, automatically substitute 2D Dim 1 rankings as the primary ideal points for that chamber. This is a policy change + a small code change in `main()`: run Phase 04b if not already available, then swap the canonical output. The `--promote-2d` flag already does the cross-reference; this makes it the default behavior for flagged sessions.
+
+**Open question:** Should this also auto-trigger for the 5 sessions with 1D-2D disagreement that don't formally trigger horseshoe detection (81st, 83rd, 88th Senates)? May need a softer threshold or a separate "1D-2D disagreement" flag.
+
+**Prerequisites:** Phase 04b (2D IRT) must produce usable results for the affected sessions. The 79th has poor 2D convergence (R-hat up to 1.96) — this may require H3 first.
+
+**Documentation:** ADR-0104 (robustness flags), `docs/horseshoe-effect-and-solutions.md` (approach #1), experiment: `results/experimental_lab/2026-03-08_supermajority-auto-promote/`.
+
+### H2. Contested-Only Default for Supermajority Sessions
+
+**Effort:** Low. **Impact:** Moderate — reduces noise from uninformative near-unanimous votes.
+
+In supermajority chambers, many votes are near-unanimous (establishment wins easily). These votes carry almost no ideological information but still influence the model. The `--contested-only` flag strips them, keeping only votes where both parties split at least 10% per side. This should reduce the horseshoe effect by removing the intra-party rebel dynamics that confuse the 1D axis.
+
+**What to build:** Run the contested-only refit across all supermajority sessions (≥70% single-party) and compare against the full-vote model. If contested-only consistently produces better party separation (lower wrong-side fraction, lower overlap), make it the default vote set for supermajority sessions. This is Run 3 of the auto-promote experiment, which is still pending.
+
+**Open question:** How many contested votes remain after filtering? The `MIN_CONTESTED_FOR_REFIT` threshold is 50 — some early-2000s sessions with smaller chambers may not have enough. If filtering is too aggressive, the model loses statistical power.
+
+**Prerequisites:** None — the `--contested-only` infrastructure already exists.
+
+**Documentation:** ADR-0104 (robustness flags), `docs/horseshoe-effect-and-solutions.md` (approach #2), experiment: `results/experimental_lab/2026-03-08_supermajority-auto-promote/`.
+
+### H3. L1-Based Ideal Point Model via R Package Subprocess
+
+**Effort:** Medium. **Impact:** High — anchor-free 2D recovery, the theoretically cleanest solution.
+
+Shin, Lim & Park (2025, JASA) showed that replacing Euclidean distance with Manhattan distance in the spatial voting utility collapses infinite rotational invariance to just 8 discrete signed permutations. The model is essentially identified without external anchors — a qualitative improvement over PLT constraints. Our smooth L1 approximation in PyMC proved the direction is right (0% wrong side in House) but the non-differentiable geometry is incompatible with gradient-based NUTS sampling.
+
+**What to build:** Call the authors' R package (`issueirt`) as a subprocess, following the same pattern we use for W-NOMINATE in Phase 20 and CROPS/Bai-Perron in Phase 15. Export vote matrix to CSV, call R, import results. The package uses a multivariate slice sampler designed specifically for the L1 geometry. This avoids the curvature problem that killed our PyMC approach.
+
+**Open question:** The `issueirt` package is pre-1.0, GitHub-only (4 stars), with an rstan dependency. Maintenance risk is real. We should evaluate whether the package is stable enough for production use, or whether it's better suited as an experimental validation tool (like W-NOMINATE).
+
+**Prerequisites:** R installation with `issueirt` package. The subprocess pattern from Phase 20 (`analysis/20_wnominate/`) provides the template.
+
+**Documentation:** `docs/horseshoe-effect-and-solutions.md` (approach #3), experiment: `results/experimental_lab/2026-03-08_l1-ideal-point/`, Shin et al. (2025) JASA paper.
+
+### H4. External Anchoring with DIME/CFscores
+
+**Effort:** Medium. **Impact:** Moderate — grounds the dimension in external data, but coverage is partial.
+
+DIME/CFscores (Bonica 2014) provide campaign-finance-derived ideology scores for state legislators. We already have DIME data loaded (Phase 22, external validation). Using these scores as informative priors on a subset of legislators could anchor the ideological dimension without relying on the model's internal geometry — the external data "tells" the model which direction is conservative, even when the voting pattern is ambiguous.
+
+**What to build:** A new identification strategy (`external-prior`) that sets `xi ~ Normal(dime_score, sigma)` for legislators with DIME matches, and `xi ~ Normal(0, 1)` for the rest. The `--identification external-prior` flag would select this strategy. Requires mapping DIME scores to our legislator roster (the name matcher from Phase 22 already does this).
+
+**Open question:** DIME coverage for Kansas state legislators is incomplete — not all legislators have campaign finance records in the database. For the 79th (2001–02), coverage may be especially sparse. If too few legislators have external anchors, the model falls back to internal identification. Also, DIME scores reflect donor ideology, not voting ideology — the two are correlated but not identical.
+
+**Prerequisites:** Phase 22 (DIME external validation) data. ADR-0103 identification strategy system (already supports `external-prior` as a registered strategy name).
+
+**Documentation:** `docs/horseshoe-effect-and-solutions.md` (approach #4), ADR-0103 (identification strategies).
+
+### H5. Cross-Session Borrowing for Horseshoe Sessions
+
+**Effort:** High. **Impact:** High — stabilizes estimates for poorly identified sessions by borrowing from adjacent bienniums.
+
+Legislators who serve across multiple bienniums provide natural bridges between sessions. A legislator whose ideology is well-identified in the 80th (where the horseshoe is moderate) can anchor their 79th estimate (where the horseshoe is severe). Dynamic IRT (Phase 27) already estimates cross-session ideal points, but it doesn't specifically target horseshoe remediation.
+
+**What to build:** Extend the dynamic IRT informative prior mechanism (ADR-0070) to explicitly transfer identification from clean sessions to horseshoe sessions. For a legislator serving in both the 78th (clean) and 79th (horseshoe), the 78th estimate constrains the 79th — preventing the model from folding them to the wrong end. This could be implemented as a two-pass approach: first estimate all clean sessions, then use those posteriors as priors for horseshoe sessions.
+
+**Open question:** How many legislators bridge the affected sessions? If turnover is high between the 78th and 79th, there may not be enough bridges. Also, this assumes ideology is stable across bienniums, which may not hold during realignment periods (and the early 2000s in Kansas were a period of conservative movement consolidation).
+
+**Prerequisites:** Phase 27 (dynamic IRT) infrastructure. Requires solving the 79th's 2D convergence issues (H1/H3) or accepting that cross-session borrowing operates on the 1D model with transferred priors.
+
+**Documentation:** `docs/horseshoe-effect-and-solutions.md` (approach #6), Phase 27 (dynamic IRT).
+
+### Implementation Order
+
+```
+H1 (auto-promote 2D) ──→ H2 (contested-only default)
+                                    │
+H3 (L1 via R package) ─────────────┤
+                                    │
+H4 (DIME anchoring) ───────────────┤
+                                    │
+H5 (cross-session) ────────────────┘
+```
+
+H1 and H2 are independent, low-effort, and address the immediate user experience. H3 provides the theoretically cleanest fix for sessions where even 2D convergence is poor. H4 and H5 are independent paths that can be pursued as needed. All five items inform each other — results from H1/H2 will clarify whether H3-H5 are necessary.
 
 ---
 
