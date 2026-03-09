@@ -465,28 +465,48 @@ ESS as low as 5). The projected Dim 1 scores are directionally correct but have
 wide uncertainty. Approaches A–C attempt to get the 1D model — which converges
 cleanly — to recover the right dimension directly.
 
-#### Which Combination Works Best?
+#### Experimental Results (2026-03-09)
 
-This is an empirical question. The recommended experiment:
+We tested all four mechanisms on both the Senate (horseshoe case) and House
+(no horseshoe) of the 79th biennium. Full results:
+`results/experimental_lab/2026-03-09_pc2-targeted-irt/`.
 
-1. **Baseline:** Standard 1D IRT (current production — locks onto PC1)
-2. **PC2 init only:** Change initialization to PC2, keep Normal(0,1) prior
-3. **PC2 prior (sigma=1.0):** Informative prior from PC2, PC2 initialization
-4. **PC2 prior (sigma=0.5):** Tighter informative prior
-5. **PC2-filtered votes:** Keep only PC2-dominant bills, standard prior
-6. **Combined:** PC2 prior + PC2-filtered votes
-7. **Ground truth:** 2D IRT Dim 1 (despite convergence issues, this is the reference)
+**Senate** (ground truth r(PC2) = 0.949, 0% D wrong side):
 
-Success metric: correlation with PC2 (should be high), correlation with PC1
-(should be low), Democrat wrong-side fraction (should be 0%), and correlation
-with the 2D Dim 1 scores. If the prior-nudged 1D model agrees with the 2D
-model's ideology dimension but converges cleanly (R-hat < 1.01, ESS > 400),
-it's the practical winner.
+| Variant | r(PC2) | D wrong | R-hat | ESS | Verdict |
+|---------|--------|---------|-------|-----|---------|
+| baseline | 0.079 | 80% | 1.017 | 263 | Locked on PC1 |
+| pc2_init | 0.080 | 80% | 1.005 | 288 | Init alone does nothing |
+| pc2_prior (σ=1.0) | −0.054 | 20% | 1.020 | 243 | Flips sign, stays on PC1 |
+| pc2_prior (σ=0.5) | 0.042 | 20% | 1.005 | 529 | Same — prior can't redirect |
+| **pc2_filtered** | **0.815** | **0%** | 1.012 | 425 | Finds ideology axis |
+| **combined** | **0.842** | **0%** | **1.004** | **704** | **Best: ideology + convergence** |
 
-The implementation is low-effort: Approaches A and B require changes to the
-identification strategy selection, not the model itself. Approach C requires a
-new vote filter function following the `filter_contested_votes()` pattern.
-The infrastructure for all three already exists in the codebase.
+**House** (no swapped dimensions — baseline works fine):
+
+| Variant | r(PC2) | D wrong | R-hat | ESS | Verdict |
+|---------|--------|---------|-------|-----|---------|
+| baseline | 0.117 | 0% | 1.006 | 307 | Correct — PC1 is ideology |
+| pc2_filtered | −0.905 | 29% | 1.007 | 174 | Redirects but hurts party separation |
+| combined | 0.904 | 73% | 1.009 | 229 | Damages what was working |
+
+**Three key findings:**
+
+1. **Vote filtering is the essential mechanism.** Initialization and informative
+   priors alone cannot overcome the data's pull toward PC1. The prior flips the
+   sign (correct R > D) but the dimension remains establishment-loyalty, not
+   ideology. Only when the vote matrix is restricted to PC2-dominant bills
+   (172/437 for Senate) does the model find the right axis.
+
+2. **Combined approach is the winner.** PC2 prior + filtered votes achieves the
+   highest r(PC2) = 0.842, the cleanest convergence (R-hat 1.004, ESS 704),
+   and zero Democrats on the wrong side. The prior adds value *on top of*
+   filtering — it improves convergence and nudges r(PC2) from 0.815 to 0.842.
+
+3. **Remediation must be chamber-specific.** The House does not have swapped
+   dimensions — its PC1 is already ideology. Applying PC2 targeting to the
+   House damages results. Any production implementation must be gated on
+   horseshoe detection: only chambers that fail the diagnostic get redirected.
 
 ## Summary
 
@@ -494,7 +514,7 @@ The infrastructure for all three already exists in the codebase.
 |----------|--------|-------------------|--------|
 | Auto-promote 2D | Low | Yes (sidesteps it) | **Recommended** |
 | Contested-only default | Low | Partially | Viable |
-| **PC2-targeted 1D IRT** | **Low** | **Yes (stays 1D)** | **New — experiment planned** |
+| **PC2-targeted 1D IRT** | **Low** | **Yes (stays 1D)** | **Confirmed — combined approach wins** |
 | L1-based model (Shin 2025) | High | Yes (fundamentally) | R package path viable |
 | External anchoring | Medium | Yes (when data exist) | Untested |
 | Regularized horseshoe prior | Medium | No | **Ruled out** |

@@ -688,21 +688,21 @@ Three experiments (2026-03-08) established what works and what doesn't:
 
 Full analysis: `docs/horseshoe-effect-and-solutions.md`. Experiment logs: `results/experimental_lab/2026-03-08_*/experiment.md`.
 
-### H0. PC2-Targeted 1D IRT (Dimension Nudging)
+### H0. PC2-Targeted 1D IRT (Dimension Nudging) — EXPERIMENT COMPLETE
 
 **Effort:** Low. **Impact:** High — recovers the correct ideology dimension while staying in the 1D framework.
 
-The 79th Senate's PCA reveals the dimensions are in the wrong order: PC1 (19.6% variance) is establishment-loyalty, PC2 (13.6%) is true left-right ideology. PC2 has perfect party separation (gap = 16.7 units) while PC1 has 9 Republicans on the Democrat side. The 1D IRT model initializes from PC1 and locks onto the wrong axis — its correlation with PC2 (ideology) is r = -0.068.
+**Result:** The combined approach (PC2 informative prior + PC2-filtered votes) is the clear winner for the Senate: r(PC2) = 0.842, zero Democrats on the wrong side, clean convergence (R-hat 1.004, ESS 704). Vote filtering is the essential mechanism — initialization and priors alone cannot overcome the data's pull toward PC1.
 
-**What to build:** Three complementary mechanisms to point the 1D model at PC2:
+**Critical finding: remediation must be chamber-specific.** The House does NOT have swapped dimensions — its PC1 is already ideology. Applying PC2 targeting to the House damages results (72.9% D wrong side). Production implementation must be gated on horseshoe detection.
 
-1. **Informative prior from PC2:** Use the `external-prior` strategy (already exists in ADR-0103) with standardized PC2 scores as `mu`. `xi ~ Normal(pc2_score, sigma)` where sigma ∈ {0.5, 1.0, 2.0} tested empirically. No new model code — just a new data path to the existing strategy.
-2. **PC2 initialization:** Change the PCA init line from `["PC1"]` to `["PC2"]` in the main loop. One-line edit.
-3. **PC2-filtered votes:** Keep only bills where `|PC2 loading| > |PC1 loading|` — votes that discriminate on ideology rather than establishment-loyalty. New filter function following `filter_contested_votes()` pattern.
+**What to build for production:**
 
-**Experiment plan:** 7-variant comparison (baseline, PC2 init only, PC2 prior at sigma=0.5/1.0, PC2-filtered, combined, 2D Dim 1 ground truth). Success: high correlation with PC2, 0% Democrat wrong-side, agreement with 2D Dim 1.
+1. **PC2-filtered vote selection:** New filter function `filter_pc2_dominant_votes()` following `filter_contested_votes()` pattern. Keep only bills where `|PC2 loading| > |PC1 loading|`.
+2. **PC2 informative prior:** Use the `external-prior` strategy (ADR-0103) with standardized PC2 scores. `xi ~ Normal(pc2_score, 1.0)`.
+3. **Horseshoe-gated trigger:** Only apply when `detect_horseshoe()` fires. Normal chambers continue with standard production IRT.
 
-**Open question:** Does the informative prior from PC2 dominate the data in small chambers (N=40)? Diagnostic: if posterior correlates >0.99 with the prior input, the data isn't adding anything. Also: does this approach generalize to the other 4 problematic sessions (80th, 81st, 83rd, 88th)?
+**Remaining question:** Does this generalize to the other 4 problematic sessions (80th, 81st, 83rd, 88th)?
 
 **Documentation:** `docs/horseshoe-effect-and-solutions.md` ("The Swapped Dimensions" section), experiment: `results/experimental_lab/2026-03-09_pc2-targeted-irt/`.
 
@@ -788,7 +788,7 @@ H0 (PC2-targeted 1D) ──→ H1 (auto-promote 2D) ──→ H2 (contested-only
                           H5 (cross-session) ─────────────────┘
 ```
 
-H0 is the first experiment — if PC2-targeted 1D IRT recovers the correct dimension with clean convergence, it may be the simplest production fix (no 2D model needed). H1 and H2 are the fallback if H0 doesn't generalize. H3-H5 are independent paths for sessions where even the targeted 1D model struggles.
+H0 experiment is complete — PC2-targeted 1D IRT recovers the correct dimension with clean convergence for the 79th Senate (r(PC2) = 0.842, R-hat 1.004, ESS 704). Next: implement in production (gated on horseshoe detection) and test on the other 4 problematic sessions. H1 and H2 remain as fallbacks. H3-H5 are independent paths for sessions where even the targeted 1D model struggles.
 
 ---
 
