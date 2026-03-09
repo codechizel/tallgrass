@@ -246,6 +246,14 @@ analysis.
 5. **Future work:** Automatic contested-fraction warnings in Phase 01 (EDA), pre-IRT
    horseshoe risk scoring, and promotion of 2D IRT results when 1D diagnostics fail.
 
+6. **Update (2026-03-09):** The `--horseshoe-remediate` flag now provides automatic
+   correction. When horseshoe is detected, the pipeline refits using PC2-filtered votes
+   and a PC2 informative prior (`xi ~ Normal(PC2, 1.0)`). On the 79th Senate, this
+   achieves r(PC2) = 0.842, zero Democrats on the wrong side, and clean convergence
+   (R-hat 1.004, ESS 704). The House — which has no swapped dimensions — is correctly
+   skipped. Use `just irt 2001-02 --horseshoe-remediate` to enable.
+   See `results/experimental_lab/2026-03-09_pc2-targeted-irt/experiment.md`.
+
 ## Appendix: Run Configuration
 
 All three runs used identical MCMC settings:
@@ -272,3 +280,4 @@ ESS > 400, 0 divergences, E-BFMI > 0.3).
 - `results/experimental_lab/2026-03-08_regularized-horseshoe/` — Experiment: regularized horseshoe prior on discrimination
 - `results/experimental_lab/2026-03-08_l1-ideal-point/` — Experiment: L1-based ideal point model (Shin et al. 2025)
 - `results/experimental_lab/2026-03-08_supermajority-auto-promote/` — Experiment: auto-promote 2D results for supermajority sessions
+- `results/experimental_lab/2026-03-09_pc2-targeted-irt/` — Experiment: PC2-targeted 1D IRT (validates `--horseshoe-remediate`)

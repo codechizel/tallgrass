@@ -129,6 +129,7 @@ All strategies pass through `validate_sign()` as a post-hoc safety net. Every ru
 |------|---------|---------|
 | `contested_only` | `--contested-only` | Re-fit IRT on cross-party contested votes only (strips intra-party rebel dynamics) |
 | `horseshoe_diagnostic` | `--horseshoe-diagnostic` | Compute 6 quantitative horseshoe metrics (Democrat wrong-side fraction, overlap, eigenvalue ratio) |
+| `horseshoe_remediate` | `--horseshoe-remediate` | Auto-refit with PC2-filtered votes + PC2 informative prior when horseshoe detected (implies `--horseshoe-diagnostic`) |
 | `promote_2d` | `--promote-2d` | Cross-reference 1D rankings with 2D IRT Dim 1 rankings; flag legislators with large rank shifts |
 
 **Why flags, not always-on:** Contested-only refit doubles MCMC runtime. 2D cross-reference requires Phase 04b results. Horseshoe diagnostic is cheap but adds report clutter for balanced chambers where it always passes. Making these opt-in keeps the default report focused.
@@ -277,3 +278,5 @@ See `docs/horseshoe-effect-and-solutions.md` for a general-audience explanation 
 See `docs/79th-horseshoe-robustness-analysis.md` for empirical validation of the robustness flags system (ADR-0104) on the 79th biennium, which exhibits clear horseshoe distortion.
 
 The identification strategy system (ADR-0103) auto-selects strategies designed to mitigate horseshoe effects in supermajority chambers via `anchor-agreement` or `sort-constraint` approaches.
+
+When identification strategies alone are insufficient (e.g., the 79th Senate where PCA dimensions are swapped), `--horseshoe-remediate` auto-refits using PC2-filtered votes and a PC2 informative prior. This redirects the 1D model from the establishment-loyalty axis (PC1) to the ideology axis (PC2). The remediation is gated on `detect_horseshoe()` — only chambers that fail the diagnostic are refitted. See `results/experimental_lab/2026-03-09_pc2-targeted-irt/experiment.md` for the validation experiment.

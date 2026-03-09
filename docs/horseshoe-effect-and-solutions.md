@@ -508,6 +508,27 @@ We tested all four mechanisms on both the Senate (horseshoe case) and House
    House damages results. Any production implementation must be gated on
    horseshoe detection: only chambers that fail the diagnostic get redirected.
 
+#### Production Implementation: `--horseshoe-remediate`
+
+The combined approach is now available as the `--horseshoe-remediate` CLI flag
+(ADR-0104). When enabled, the IRT pipeline automatically:
+
+1. Runs `detect_horseshoe()` on each chamber (implies `--horseshoe-diagnostic`)
+2. If horseshoe detected: loads PCA per-bill loadings from Phase 02
+3. Filters votes to PC2-dominant bills via `filter_pc2_dominant_votes()`
+   (keeps only bills where |PC2 loading| > |PC1 loading|)
+4. Builds a PC2 informative prior: `xi ~ Normal(PC2_score, 1.0)`
+5. Refits the 1D IRT with the `external-prior` strategy
+6. Reports whether the horseshoe was resolved
+
+If no horseshoe is detected, the chamber uses standard IRT unchanged. This
+means the flag is safe to enable globally — it only fires for affected
+chambers.
+
+```bash
+just irt 2001-02 --horseshoe-remediate   # remediate the 79th biennium
+```
+
 ## Summary
 
 | Approach | Effort | Fixes Horseshoe? | Status |

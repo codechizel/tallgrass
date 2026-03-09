@@ -76,6 +76,8 @@ For these chambers, Tallgrass auto-selects a different strategy: `anchor-agreeme
 
 Tallgrass implements seven identification strategies in total, including constraint-based approaches that avoid anchoring on any individual legislator. The `--identification` CLI flag overrides auto-detection. See `docs/irt-identification-strategies.md` for the complete catalog with literature references and auto-detection logic.
 
+When identification strategies alone cannot fix the horseshoe distortion (as in the 79th Senate where PCA dimensions are swapped), the `--horseshoe-remediate` flag automatically detects the problem and refits using PC2-filtered votes with a PC2 informative prior. See `docs/horseshoe-effect-and-solutions.md` for the full explanation.
+
 ### Why not just use party labels?
 
 A reasonable question: if we already know who is a Democrat and who is a Republican, why not just label the scale using party? Because the model's power comes from measuring *within-party* variation. In the Kansas House, where Republicans hold a supermajority (~72% of seats), the interesting question isn't "are Democrats more liberal than Republicans?" (of course they are). It's "which Republicans vote more like moderates?" and "how much ideological variation exists within the majority?" Anchoring to two extreme legislators, rather than to parties, preserves this granularity.
