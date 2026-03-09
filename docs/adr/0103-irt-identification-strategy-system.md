@@ -78,3 +78,8 @@ just irt --identification sort-constraint  # manual override
 - `docs/irt-identification-strategies.md` — Comprehensive article covering all strategies, literature, and CLI usage
 
 **Related ADRs:** ADR-0006 (IRT implementation, Decision 2 expanded), ADR-0101 (party-aware anchors, now one of seven strategies), ADR-0047 (positive-beta trade-off, now a named strategy), ADR-0104 (robustness flags — runtime diagnostics for horseshoe detection, contested-only refit, 2D cross-reference).
+
+**Related documentation:**
+- `docs/horseshoe-effect-and-solutions.md` — General-audience explanation of the horseshoe effect and six approaches to addressing it
+- `docs/79th-horseshoe-robustness-analysis.md` — Empirical validation on the 79th biennium (canonical supermajority case)
+- `docs/irt-identification-strategies.md` — Comprehensive article covering all seven strategies

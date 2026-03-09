@@ -263,3 +263,12 @@ All three runs used identical MCMC settings:
 
 Convergence passed all checks for both chambers across all three runs (R-hat < 1.01,
 ESS > 400, 0 divergences, E-BFMI > 0.3).
+
+## Related
+
+- `docs/horseshoe-effect-and-solutions.md` — General-audience explanation of the horseshoe effect and six approaches to addressing it
+- `docs/adr/0104-irt-robustness-flags.md` — ADR for the robustness flags system used in this analysis
+- `docs/adr/0103-irt-identification-strategy-system.md` — ADR for the identification strategy system (anchor-agreement used here)
+- `results/experimental_lab/2026-03-08_regularized-horseshoe/` — Experiment: regularized horseshoe prior on discrimination
+- `results/experimental_lab/2026-03-08_l1-ideal-point/` — Experiment: L1-based ideal point model (Shin et al. 2025)
+- `results/experimental_lab/2026-03-08_supermajority-auto-promote/` — Experiment: auto-promote 2D results for supermajority sessions

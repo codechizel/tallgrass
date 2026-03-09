@@ -269,3 +269,11 @@ For each bill_number appearing in both chambers' filtered matrices:
 - House equated vs per-chamber: r = 1.0 (unchanged by construction)
 - Senate equated vs per-chamber: r = 1.0 (linear transformation preserves rank order)
 - Bridging legislator positions should be consistent across chambers after equating
+
+## Horseshoe Effect and Supermajority Diagnostics
+
+See `docs/horseshoe-effect-and-solutions.md` for a general-audience explanation of the horseshoe effect in supermajority chambers and six approaches to addressing it.
+
+See `docs/79th-horseshoe-robustness-analysis.md` for empirical validation of the robustness flags system (ADR-0104) on the 79th biennium, which exhibits clear horseshoe distortion.
+
+The identification strategy system (ADR-0103) auto-selects strategies designed to mitigate horseshoe effects in supermajority chambers via `anchor-agreement` or `sort-constraint` approaches.

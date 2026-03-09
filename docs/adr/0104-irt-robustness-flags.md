@@ -75,3 +75,9 @@ just irt --promote-2d --irt-2d-dir /path/to/2d     # explicit 2D results path
 **Not addressed:**
 - Automatic horseshoe correction (e.g., auto-switching to 2D when horseshoe is detected) — intentionally left manual. The user should review diagnostics and decide whether to re-run with different settings.
 - Multi-dimensional IRT as a production replacement for 1D — remains experimental (Phase 04b)
+
+**Related documentation:**
+- `docs/horseshoe-effect-and-solutions.md` — General-audience explanation of the horseshoe effect and six approaches to addressing it
+- `docs/79th-horseshoe-robustness-analysis.md` — Empirical validation of all three robustness flags on the 79th biennium
+- `docs/irt-identification-strategies.md` — Identification strategy system documentation
+- `results/experimental_lab/2026-03-08_supermajority-auto-promote/` — Experiment testing auto-promotion of 2D results when horseshoe is detected

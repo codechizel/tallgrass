@@ -229,6 +229,7 @@ These strategies are either inapplicable to 1D flat IRT, redundant with implemen
 
 - `analysis/design/irt.md` — IRT design document (priors, MCMC settings, convergence diagnostics)
 - `docs/irt-sign-identification-deep-dive.md` — Deep dive on the sign flip problem
+- `docs/horseshoe-effect-and-solutions.md` — General-audience explanation of the horseshoe effect and six approaches (L1 models, regularized horseshoe, 2D promotion, contested-vote filtering, external anchoring, cross-session borrowing)
 - `docs/79th-horseshoe-robustness-analysis.md` — Empirical robustness analysis of the 79th (horseshoe diagnostic, contested-only refit, 2D cross-reference)
 - `docs/adr/0006-irt-anchor-selection.md` — Original anchor selection ADR
 - `docs/adr/0047-positive-beta-tradeoff.md` — Positive beta trade-off analysis

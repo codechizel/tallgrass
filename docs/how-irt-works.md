@@ -150,4 +150,6 @@ When we report that the per-chamber models have zero divergences, it means the s
 - IRT field survey: `docs/irt-field-survey.md` (identification problem, Python ecosystem gap)
 - Joint model deep dive: `docs/joint-model-deep-dive.md` (concurrent calibration failure, reparameterized beta experiments)
 - Hierarchical convergence: `docs/hierarchical-convergence-improvement.md` (funnel theory, improvement plan)
+- Horseshoe effect and solutions: `docs/horseshoe-effect-and-solutions.md` (supermajority distortion, six approaches)
+- 79th horseshoe robustness analysis: `docs/79th-horseshoe-robustness-analysis.md` (diagnostic validation)
 - ADR-0055: Reparameterized LogNormal beta and IRT scale linking
