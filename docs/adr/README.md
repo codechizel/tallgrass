@@ -144,6 +144,7 @@ What are the trade-offs?
 | [0038](0038-python-314-modernization.md) | Python 3.14 modernization |
 | [0040](0040-rename-to-tallgrass.md) | Rename package to Tallgrass |
 | [0048](0048-experiment-framework.md) | Experiment framework |
+| [0105](0105-experiment-lab-cleanup.md) | Experiment lab cleanup |
 | [0050](0050-numbered-results-directories.md) | Numbered results directories |
 | [0052](0052-run-grouped-results-directories.md) | Run-grouped results directories |
 | [0056](0056-auto-generate-run-id.md) | Auto-generate run_id for biennium sessions |
@@ -273,6 +274,7 @@ What are the trade-offs?
 | [0102](0102-kanfocus-defensive-dedup-and-parser-fix.md) | KanFocus defensive deduplication and parser fix (rollcall dedup, regex bleed, cache recovery) | Accepted | 2026-03-06 |
 | [0103](0103-irt-identification-strategy-system.md) | IRT identification strategy system (7 strategies, auto-detection, `--identification` CLI flag) | Accepted | 2026-03-07 |
 | [0104](0104-irt-robustness-flags.md) | IRT robustness flags (horseshoe diagnostic, contested-only refit, 2D cross-reference) | Accepted | 2026-03-08 |
+| [0105](0105-experiment-lab-cleanup.md) | Experiment lab cleanup (dead code, nutpie migration, platform safety) | Accepted | 2026-03-09 |
 
 ## Creating a New ADR
 

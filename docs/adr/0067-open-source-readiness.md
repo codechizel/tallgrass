@@ -41,7 +41,7 @@ Systematic open-source readiness pass covering:
 - Removed empty `tallgrass/` directory (IDE artifact)
 - Renamed ADR-0030 to consistent naming (`0030-*` not `adr-0030-*`)
 - Removed redundant `from __future__ import annotations` from 9 files
-- Removed duplicated `_fmt_elapsed()` — imports `_format_elapsed` from `run_context`
+- Removed duplicated `_fmt_elapsed()` in scraper — imports `_format_elapsed` from `run_context`. (Note: the `experiment_runner.py` copy was missed and fixed in ADR-0105.)
 - Applied `ruff format` across all files
 - Added `.env` to `.gitignore`
 

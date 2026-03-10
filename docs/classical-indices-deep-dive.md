@@ -239,7 +239,6 @@ analysis/
   external_validation.py  # Phase 14
   external_validation_report.py
   external_validation_data.py
-  irt_beta_experiment.py  # experimental
   design/                 # 17 design docs
 ```
 

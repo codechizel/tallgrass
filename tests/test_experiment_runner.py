@@ -1,8 +1,8 @@
 """Tests for experiment runner infrastructure.
 
-Verifies ExperimentConfig defaults and immutability, compute_pca_initvals()
-with synthetic data, and _format_elapsed() formatting. The run_experiment()
-orchestrator is not unit-tested here (it requires MCMC sampling).
+Verifies ExperimentConfig defaults and immutability, and compute_pca_initvals()
+with synthetic data. The run_experiment() orchestrator is not unit-tested here
+(it requires MCMC sampling).
 
 Run: uv run pytest tests/test_experiment_runner.py -v
 """
@@ -23,7 +23,6 @@ from analysis.experiment_runner import (
     ExperimentConfig,
     compute_pca_initvals,
 )
-from analysis.run_context import _format_elapsed
 
 # ── ExperimentConfig ────────────────────────────────────────────────────────
 
@@ -160,31 +159,3 @@ class TestComputePcaInitvals:
         data = {"leg_slugs": ["rep_a", "rep_c"]}
         result = compute_pca_initvals(pca_scores, data)
         assert result.shape == (2,)
-
-
-# ── _format_elapsed ────────────────────────────────────────────────────────────
-
-
-class TestFmtElapsed:
-    """Elapsed time formatting."""
-
-    def test_seconds(self):
-        assert _format_elapsed(30.5) == "30.5s"
-
-    def test_minutes(self):
-        assert _format_elapsed(125) == "2m 5s"
-
-    def test_hours(self):
-        assert _format_elapsed(3725) == "1h 2m 5s"
-
-    def test_zero(self):
-        assert _format_elapsed(0) == "0.0s"
-
-    def test_under_minute(self):
-        assert _format_elapsed(59.9) == "59.9s"
-
-    def test_exactly_one_minute(self):
-        assert _format_elapsed(60) == "1m 0s"
-
-    def test_exactly_one_hour(self):
-        assert _format_elapsed(3600) == "1h 0m 0s"

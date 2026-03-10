@@ -51,7 +51,7 @@ Two production constants are defined: `PRODUCTION_BETA = BetaPriorSpec("normal",
 - Standardized output format enables cross-variant comparison
 
 **Negative:**
-- Structural variants (2D IRT, 1PL Rasch) that change model topology still need standalone scripts — `BetaPriorSpec` only handles prior variants
+- Structural variants (2D IRT, PC2-targeted IRT) that change model topology or ideal-point priors still need standalone scripts — `BetaPriorSpec` only handles beta-prior variants. Standalone scripts should still use `PlatformCheck` and `ExperimentLifecycle` directly for platform safety and process management (see ADR-0105).
 - `setproctitle` adds a dev dependency (~20 KB wheel)
 
 **Dependencies added:** `setproctitle>=1.3`
@@ -63,4 +63,5 @@ Two production constants are defined: `PRODUCTION_BETA = BetaPriorSpec("normal",
 - [ADR-0045](0045-4-chain-hierarchical-irt.md) — 4-chain with adapt_diag
 - [ADR-0047](0047-positive-beta-constraint-experiment.md) — Positive beta experiment (motivation)
 - [ADR-0055](0055-reparameterized-beta-and-irt-linking.md) — Reparameterized LogNormal and IRT linking (uses BetaPriorSpec)
+- [ADR-0105](0105-experiment-lab-cleanup.md) — Experiment lab cleanup (removes dead code, fixes drift)
 - [Experiment Framework Deep Dive](../experiment-framework-deep-dive.md) — Full ecosystem survey and design rationale

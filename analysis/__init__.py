@@ -118,7 +118,6 @@ _MODULE_MAP: dict[str, str] = {
     "dynamic_irt": "27_dynamic_irt",
     "dynamic_irt_data": "27_dynamic_irt",
     "dynamic_irt_report": "27_dynamic_irt",
-    "irt_beta_experiment": "experimental",
 }
 
 

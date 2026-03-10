@@ -31,7 +31,7 @@ The `TEMPLATE.md` provides excellent documentation structure, but there's no cod
 - How to compare results across variants in a standardized way
 - How to promote a successful experiment to production
 
-Each experiment reinvents this scaffolding. The beta-prior experiment (`irt_beta_experiment.py`) uses relaxed convergence thresholds (`RHAT_THRESHOLD = 1.05` vs production's `1.01`) — a reasonable choice for exploration, but one that's invisible unless you read the source.
+Each experiment reinvents this scaffolding. The beta-prior experiment (now deleted; see ADR-0105) used relaxed convergence thresholds (`RHAT_THRESHOLD = 1.05` vs production's `1.01`) — a reasonable choice for exploration, but one that was invisible unless you read the source.
 
 ## Ecosystem Survey
 
@@ -123,7 +123,6 @@ analysis/
     experiment_runner.py         ← NEW: shared experiment infrastructure
     experimental/
         irt_2d_experiment.py     ← structural variants (different model topology)
-        irt_beta_experiment.py   ← prior variants (parameterizable)
 
 results/experimental_lab/
     TEMPLATE.md

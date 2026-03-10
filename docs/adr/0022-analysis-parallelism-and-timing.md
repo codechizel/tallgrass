@@ -15,7 +15,7 @@ Same-day re-runs also had a clobbering problem: the second run would overwrite t
 
 ### 1. Parallel MCMC chain sampling
 
-Added `cores=n_chains` to all `pm.sample()` calls in `irt.py`, `hierarchical.py`, and `irt_beta_experiment.py`.
+Added `cores=n_chains` to all `pm.sample()` calls in `irt.py` and `hierarchical.py`. (Also applied to `irt_beta_experiment.py`, which was later deleted in ADR-0105.)
 
 **Safety:** PyMC uses multiprocessing (not threading) for parallel chains. Each chain runs in its own OS process with its own memory space. Per-chain seeds are derived deterministically from `random_seed + chain_index`. Results are mathematically identical to sequential execution — the posterior samples are independent by construction.
 

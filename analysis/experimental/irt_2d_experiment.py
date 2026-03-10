@@ -33,6 +33,7 @@ matplotlib.use("Agg")
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
+import nutpie
 import polars as pl
 import pymc as pm
 import pytensor.tensor as pt
@@ -118,7 +119,7 @@ def build_2d_irt_model(
         "dim": ["dim1", "dim2"],
     }
 
-    with pm.Model(coords=coords):
+    with pm.Model(coords=coords) as model:
         # ── Legislator ideal points: (n_leg, 2) ──
         xi = pm.Normal("xi", mu=0, sigma=1, shape=(n_leg, 2), dims=("legislator", "dim"))
 
@@ -149,31 +150,35 @@ def build_2d_irt_model(
         eta = pt.sum(beta[vote_idx] * xi[leg_idx], axis=1) - alpha[vote_idx]
         pm.Bernoulli("obs", logit_p=eta, observed=y, dims="obs_id")
 
-        # ── Sample ──
-        print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
-        print(f"  target_accept={target_accept}, seed={RANDOM_SEED}")
-        print(f"  Parameters: xi ({n_leg}x2), alpha ({n_votes}), beta ({n_votes}x2 PLT)")
-        print(f"  Total free params: ~{n_leg * 2 + n_votes + n_votes + (n_votes - 1)}")
+    # ── Compile with nutpie ──
+    compile_kwargs: dict = {}
+    if xi_initvals_2d is not None:
+        compile_kwargs["initial_points"] = {"xi": xi_initvals_2d}
+        compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name != "xi"}
+        print(f"  PCA-informed 2D initvals: ({xi_initvals_2d.shape})")
+        jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
+        print(f"  jitter_rvs: {jittered} (xi excluded)")
 
-        sample_kwargs: dict = {}
-        if xi_initvals_2d is not None:
-            sample_kwargs["initvals"] = {"xi": xi_initvals_2d}
-            sample_kwargs["init"] = "adapt_diag"
-            print(f"  PCA-informed 2D initvals: ({xi_initvals_2d.shape})")
-            print("  init='adapt_diag' (no jitter — PCA initvals provide orientation)")
+    print("  Compiling model with nutpie...")
+    compiled = nutpie.compile_pymc_model(model, **compile_kwargs)
 
-        t0 = time.time()
-        idata = pm.sample(
-            draws=n_samples,
-            tune=n_tune,
-            chains=n_chains,
-            cores=n_chains,
-            target_accept=target_accept,
-            random_seed=RANDOM_SEED,
-            progressbar=True,
-            **sample_kwargs,
-        )
-        sampling_time = time.time() - t0
+    # ── Sample ──
+    print(f"  Sampling: {n_samples} draws, {n_tune} tune, {n_chains} chains")
+    print(f"  seed={RANDOM_SEED}, sampler=nutpie (Rust NUTS)")
+    print(f"  Parameters: xi ({n_leg}x2), alpha ({n_votes}), beta ({n_votes}x2 PLT)")
+    print(f"  Total free params: ~{n_leg * 2 + n_votes + n_votes + (n_votes - 1)}")
+
+    t0 = time.time()
+    idata = nutpie.sample(
+        compiled,
+        draws=n_samples,
+        tune=n_tune,
+        chains=n_chains,
+        seed=RANDOM_SEED,
+        progress_bar=True,
+        store_divergences=True,
+    )
+    sampling_time = time.time() - t0
 
     print(f"  Sampling complete in {sampling_time:.1f}s ({sampling_time / 60:.1f} min)")
     return idata, sampling_time

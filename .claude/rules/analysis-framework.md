@@ -104,6 +104,8 @@ Four components eliminate code duplication in MCMC experiments (ADR-0048):
 
 All hierarchical experiments produce full production HTML reports via `build_hierarchical_report()` (18-22 sections).
 
+Standalone structural experiments (2D IRT, PC2-targeted IRT) bypass `run_experiment()` but should still use `PlatformCheck` and `ExperimentLifecycle` directly for platform safety and process management (ADR-0105). See `docs/experiment-lab-code-review.md` for the full code review.
+
 ## Concurrency (MCMC)
 
 - **MCMC (all models)**: nutpie Rust NUTS sampler — single process, Rust threads for parallel chains (ADR-0051, ADR-0053). Graph-building functions (`build_per_chamber_graph()`, `build_joint_graph()`, `build_irt_graph()`) return PyMC models without sampling. Sampling functions compile with `nutpie.compile_pymc_model()` and sample with `nutpie.sample()`. PCA-informed init via `initial_points`; `jitter_rvs` excludes the PCA-initialized variable.

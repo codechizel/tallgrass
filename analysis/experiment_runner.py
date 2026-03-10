@@ -35,89 +35,39 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-try:
-    from analysis.model_spec import PRODUCTION_BETA, BetaPriorSpec
-except ModuleNotFoundError:
-    from model_spec import PRODUCTION_BETA, BetaPriorSpec  # type: ignore[no-redef]
-
-try:
-    from analysis.experiment_monitor import ExperimentLifecycle, PlatformCheck
-except ModuleNotFoundError:
-    from experiment_monitor import ExperimentLifecycle, PlatformCheck  # type: ignore[no-redef]
-
-try:
-    from analysis.hierarchical import (
-        build_joint_model,
-        build_per_chamber_model,
-        check_hierarchical_convergence,
-        compute_flat_hier_correlation,
-        compute_variance_decomposition,
-        extract_group_params,
-        extract_hierarchical_ideal_points,
-        fix_joint_sign_convention,
-        plot_dispersion,
-        plot_icc,
-        plot_joint_party_spread,
-        plot_party_posteriors,
-        plot_shrinkage_scatter,
-        prepare_hierarchical_data,
-        print_header,
-    )
-except ModuleNotFoundError:
-    from hierarchical import (  # type: ignore[no-redef]
-        build_joint_model,
-        build_per_chamber_model,
-        check_hierarchical_convergence,
-        compute_flat_hier_correlation,
-        compute_variance_decomposition,
-        extract_group_params,
-        extract_hierarchical_ideal_points,
-        fix_joint_sign_convention,
-        plot_dispersion,
-        plot_icc,
-        plot_joint_party_spread,
-        plot_party_posteriors,
-        plot_shrinkage_scatter,
-        prepare_hierarchical_data,
-        print_header,
-    )
-
-try:
-    from analysis.hierarchical_report import build_hierarchical_report
-except ModuleNotFoundError:
-    from hierarchical_report import build_hierarchical_report  # type: ignore[no-redef]
-
-try:
-    from analysis.irt import (
-        RANDOM_SEED,
-        load_eda_matrices,
-        load_metadata,
-        load_pca_scores,
-        plot_forest,
-    )
-except ModuleNotFoundError:
-    from irt import (  # type: ignore[no-redef]
-        RANDOM_SEED,
-        load_eda_matrices,
-        load_metadata,
-        load_pca_scores,
-        plot_forest,
-    )
-
-try:
-    from analysis.report import ReportBuilder
-except ModuleNotFoundError:
-    from report import ReportBuilder  # type: ignore[no-redef]
-
-
-# ── Constants ────────────────────────────────────────────────────────────────
-
-# Import production defaults from hierarchical.py
-HIER_N_SAMPLES = 2000
-HIER_N_TUNE = 1500
-HIER_N_CHAINS = 4
-HIER_TARGET_ACCEPT = 0.95
-
+from analysis.experiment_monitor import ExperimentLifecycle, PlatformCheck
+from analysis.hierarchical import (
+    HIER_N_CHAINS,
+    HIER_N_SAMPLES,
+    HIER_N_TUNE,
+    HIER_TARGET_ACCEPT,
+    build_joint_model,
+    build_per_chamber_model,
+    check_hierarchical_convergence,
+    compute_flat_hier_correlation,
+    compute_variance_decomposition,
+    extract_group_params,
+    extract_hierarchical_ideal_points,
+    fix_joint_sign_convention,
+    plot_dispersion,
+    plot_icc,
+    plot_joint_party_spread,
+    plot_party_posteriors,
+    plot_shrinkage_scatter,
+    prepare_hierarchical_data,
+    print_header,
+)
+from analysis.hierarchical_report import build_hierarchical_report
+from analysis.irt import (
+    RANDOM_SEED,
+    load_eda_matrices,
+    load_metadata,
+    load_pca_scores,
+    plot_forest,
+)
+from analysis.model_spec import PRODUCTION_BETA, BetaPriorSpec
+from analysis.report import ReportBuilder
+from analysis.run_context import _format_elapsed
 
 # ── ExperimentConfig ────────────────────────────────────────────────────────
 
@@ -332,17 +282,6 @@ def _run_joint(
 # ── Main Runner ──────────────────────────────────────────────────────────────
 
 
-def _fmt_elapsed(seconds: float) -> str:
-    """Format elapsed time for report headers."""
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    minutes, secs = divmod(int(seconds), 60)
-    if minutes < 60:
-        return f"{minutes}m {secs}s"
-    hours, mins = divmod(minutes, 60)
-    return f"{hours}h {mins}m {secs}s"
-
-
 def run_experiment(config: ExperimentConfig, output_base: Path) -> dict:
     """Run a complete hierarchical IRT experiment with platform guardrails.
 
@@ -451,7 +390,7 @@ def run_experiment(config: ExperimentConfig, output_base: Path) -> dict:
             ),
             session=config.session,
             git_hash="experiment",
-            elapsed_display=_fmt_elapsed(elapsed),
+            elapsed_display=_format_elapsed(elapsed),
         )
         plots_dir = out_dir / "plots"
         build_hierarchical_report(
@@ -539,7 +478,7 @@ def run_experiment(config: ExperimentConfig, output_base: Path) -> dict:
             json.dump(metrics, f, indent=2, default=str)
 
         print(f"\n{'=' * 80}")
-        print(f"  DONE — {config.name} in {_fmt_elapsed(elapsed)}")
+        print(f"  DONE — {config.name} in {_format_elapsed(elapsed)}")
         print(f"  Metrics: {metrics_path}")
         print(f"  Report: {report_path}")
         print(f"{'=' * 80}")
