@@ -154,6 +154,14 @@ All strategies pass through `validate_sign()` as a post-hoc safety net. Every ru
 
 **Impact:** Eliminates all 5 convergence failures. No known downsides when PC1 cleanly separates the ideological dimension (true for all Kansas sessions, with PCA-IRT r > 0.93 when converged).
 
+### Init strategy override (`--init-strategy`)
+
+**Decision:** Accept `--init-strategy {auto,irt-informed,pca-informed,2d-dim1}` to override the default PCA-informed initialization. Uses the shared `analysis/init_strategy.py` module (ADR-0107).
+
+**Why:** For sessions where the 1D model collapses ideology and establishment into one dimension (e.g., 79th Kansas Senate), the 2D IRT model's Dim 1 correctly isolates ideology. Re-running the 1D model with `--init-strategy 2d-dim1` nudges chains toward the ideology-only solution, producing meaningful ideal points where PCA-informed init fails.
+
+**Workflow:** Run the pipeline normally → inspect 2D results → if 1D results look collapsed, re-run with `just irt --init-strategy 2d-dim1`. Auto never selects `2d-dim1` — it's an explicit user choice for iterative refinement.
+
 ### Native missing data handling
 
 **Decision:** Absences are handled by simply excluding those (legislator, vote) pairs from the likelihood. No imputation.

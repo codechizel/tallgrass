@@ -29,10 +29,11 @@ class InitStrategy:
     # ── Strategy constants (kebab-case, matches CLI choices) ──
     IRT_INFORMED = "irt-informed"
     PCA_INFORMED = "pca-informed"
+    IRT_2D_DIM1 = "2d-dim1"
     AUTO = "auto"
 
     # Registry (excludes AUTO — same pattern as IdentificationStrategy)
-    ALL_STRATEGIES = [IRT_INFORMED, PCA_INFORMED]
+    ALL_STRATEGIES = [IRT_INFORMED, PCA_INFORMED, IRT_2D_DIM1]
 
     DESCRIPTIONS: dict[str, str] = {
         IRT_INFORMED: (
@@ -45,11 +46,17 @@ class InitStrategy:
             "Fast and always available when Phase 02 has run, but less precise "
             "than converged IRT estimates."
         ),
+        IRT_2D_DIM1: (
+            "2D IRT Dimension 1 (xi_dim1_mean) — ideology axis from the 2D model. "
+            "Use for iterative refinement: run the pipeline normally, then re-run "
+            "the 1D model with 2D Dim 1 to separate ideology from establishment."
+        ),
     }
 
     REFERENCES: dict[str, str] = {
         IRT_INFORMED: "Phase 05 canonical 1D Bayesian IRT (ADR-0103)",
         PCA_INFORMED: "Phase 02 PCA on binary vote matrix",
+        IRT_2D_DIM1: "Phase 06 experimental 2D IRT (ADR-0054)",
     }
 
     # Django-ready choices tuple: (db_value, display_label)
@@ -57,6 +64,7 @@ class InitStrategy:
         (AUTO, "Auto (prefer IRT, fall back to PCA)"),
         (IRT_INFORMED, "1D IRT ideal points"),
         (PCA_INFORMED, "PCA PC1 scores"),
+        (IRT_2D_DIM1, "2D IRT Dimension 1 (ideology)"),
     ]
 
 
@@ -65,6 +73,7 @@ def resolve_init_source(
     slugs: list[str],
     irt_scores: pl.DataFrame | None = None,
     pca_scores: pl.DataFrame | None = None,
+    irt_2d_scores: pl.DataFrame | None = None,
     pca_column: str = "PC1",
 ) -> tuple[np.ndarray, str, str]:
     """Resolve initialization values for IRT ideal points.
@@ -73,10 +82,13 @@ def resolve_init_source(
     and standardizes to zero-mean unit-variance (appropriate for Normal(0,1) priors).
 
     Args:
-        strategy: One of InitStrategy constants ("auto", "irt-informed", "pca-informed").
+        strategy: One of InitStrategy constants ("auto", "irt-informed",
+            "pca-informed", "2d-dim1").
         slugs: Legislator slugs in model order.
         irt_scores: 1D IRT ideal points DataFrame (columns: legislator_slug, xi_mean).
         pca_scores: PCA scores DataFrame (columns: legislator_slug, PC1, PC2, ...).
+        irt_2d_scores: 2D IRT ideal points DataFrame
+            (columns: legislator_slug, xi_dim1_mean).
         pca_column: Which PCA column to use (default "PC1"; use "PC2" for Dim 2).
 
     Returns:
@@ -108,8 +120,7 @@ def resolve_init_source(
                 "Run `just irt` first or use --init-strategy pca-informed."
             )
         score_map = {
-            row["legislator_slug"]: row["xi_mean"]
-            for row in irt_scores.iter_rows(named=True)
+            row["legislator_slug"]: row["xi_mean"] for row in irt_scores.iter_rows(named=True)
         }
         vals = np.array([score_map.get(s, 0.0) for s in slugs])
         matched = sum(1 for s in slugs if s in score_map)
@@ -122,17 +133,29 @@ def resolve_init_source(
                 "Run `just pca` first or use --init-strategy irt-informed."
             )
         score_map = {
-            row["legislator_slug"]: row[pca_column]
-            for row in pca_scores.iter_rows(named=True)
+            row["legislator_slug"]: row[pca_column] for row in pca_scores.iter_rows(named=True)
         }
         vals = np.array([score_map.get(s, 0.0) for s in slugs])
         matched = sum(1 for s in slugs if s in score_map)
         source = f"PCA {pca_column} ({matched}/{len(slugs)} matched)"
 
+    elif strategy == IS.IRT_2D_DIM1:
+        if irt_2d_scores is None:
+            raise ValueError(
+                "2d-dim1 strategy requires 2D IRT results (Phase 06). "
+                "Run `just irt-2d` first or use --init-strategy pca-informed."
+            )
+        score_map = {
+            row["legislator_slug"]: row["xi_dim1_mean"]
+            for row in irt_2d_scores.iter_rows(named=True)
+        }
+        vals = np.array([score_map.get(s, 0.0) for s in slugs])
+        matched = sum(1 for s in slugs if s in score_map)
+        source = f"2D IRT Dim 1 ({matched}/{len(slugs)} matched)"
+
     else:
         raise ValueError(
-            f"Unknown init strategy: {strategy!r}. "
-            f"Valid: {IS.ALL_STRATEGIES + [IS.AUTO]}"
+            f"Unknown init strategy: {strategy!r}. Valid: {IS.ALL_STRATEGIES + [IS.AUTO]}"
         )
 
     # ── Standardize to unit scale (matches Normal(0,1) prior) ──
@@ -148,6 +171,7 @@ def build_init_rationale(
     pca_available: bool,
     selected: str,
     auto: bool = False,
+    irt_2d_available: bool = False,
 ) -> dict[str, str]:
     """Build rationale dict explaining why each strategy was/wasn't selected.
 
@@ -159,6 +183,7 @@ def build_init_rationale(
         pca_available: Whether PCA results exist.
         selected: The strategy that was actually chosen.
         auto: Whether auto-detection was used.
+        irt_2d_available: Whether 2D IRT results exist.
 
     Returns:
         Dict mapping strategy name → rationale string.
@@ -188,6 +213,17 @@ def build_init_rationale(
             "PCA results not found. Run Phase 02 first to enable this strategy."
         )
 
+    # 2D Dim 1 rationale
+    if irt_2d_available:
+        rationale[IS.IRT_2D_DIM1] = (
+            "2D IRT Dim 1 available. Ideology axis from the 2D model separates "
+            "ideology from establishment — use for iterative refinement."
+        )
+    else:
+        rationale[IS.IRT_2D_DIM1] = (
+            "2D IRT results not found. Run Phase 06 first to enable this strategy."
+        )
+
     # Mark selected/not-selected
     prefix_type = "auto" if auto else "user override"
     for s in IS.ALL_STRATEGIES:
@@ -197,6 +233,22 @@ def build_init_rationale(
             rationale[s] = "Not selected. " + rationale[s]
 
     return rationale
+
+
+def load_2d_scores(irt_2d_data_dir: Path | str, chamber: str) -> pl.DataFrame | None:
+    """Load 2D IRT ideal points for a chamber from Phase 06 output.
+
+    Args:
+        irt_2d_data_dir: Path to the 2D IRT data directory (e.g., .../06_irt_2d/data/).
+        chamber: "house" or "senate" (lowercase).
+
+    Returns:
+        DataFrame with legislator_slug and xi_dim1_mean columns, or None if not found.
+    """
+    path = Path(irt_2d_data_dir) / f"ideal_points_2d_{chamber}.parquet"
+    if not path.exists():
+        return None
+    return pl.read_parquet(path)
 
 
 def load_irt_scores(irt_data_dir: Path | str, chamber: str) -> pl.DataFrame | None:

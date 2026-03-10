@@ -20,9 +20,15 @@ def _make_pca_scores(slugs: list[str], pc1: list[float], pc2: list[float]) -> pl
     return pl.DataFrame({"legislator_slug": slugs, "PC1": pc1, "PC2": pc2})
 
 
+def _make_2d_scores(slugs: list[str], dim1: list[float]) -> pl.DataFrame:
+    """Build a minimal 2D IRT ideal points DataFrame."""
+    return pl.DataFrame({"legislator_slug": slugs, "xi_dim1_mean": dim1})
+
+
 SLUGS = ["sen_a", "sen_b", "sen_c", "sen_d"]
 IRT_SCORES = _make_irt_scores(SLUGS, [2.0, 1.0, -1.0, -2.0])
 PCA_SCORES = _make_pca_scores(SLUGS, [5.0, 2.5, -2.5, -5.0], [1.0, -1.0, 0.5, -0.5])
+IRT_2D_SCORES = _make_2d_scores(SLUGS, [1.5, 0.5, -0.5, -1.5])
 
 
 # ── InitStrategy constants ────────────────────────────────────────────────────
@@ -227,6 +233,85 @@ class TestResolveInitSource:
         )
         # Should not raise; values should be unchanged (all same)
         assert vals.shape == (4,)
+
+
+# ── 2d-dim1 strategy ─────────────────────────────────────────────────────────
+
+
+class TestResolve2dDim1:
+    """Test the 2d-dim1 strategy for iterative refinement."""
+
+    def test_2d_dim1_returns_standardized(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        vals, strategy, source = resolve_init_source(
+            strategy="2d-dim1", slugs=SLUGS, irt_2d_scores=IRT_2D_SCORES
+        )
+        assert vals.shape == (4,)
+        assert strategy == "2d-dim1"
+        assert "2D IRT Dim 1" in source
+        assert abs(vals.mean()) < 1e-10
+        assert abs(vals.std() - 1.0) < 1e-10
+
+    def test_2d_dim1_raises_without_data(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        with pytest.raises(ValueError, match="2d-dim1.*requires"):
+            resolve_init_source(strategy="2d-dim1", slugs=SLUGS, irt_2d_scores=None)
+
+    def test_2d_dim1_preserves_order(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        vals_fwd, _, _ = resolve_init_source(
+            strategy="2d-dim1", slugs=SLUGS, irt_2d_scores=IRT_2D_SCORES
+        )
+        vals_rev, _, _ = resolve_init_source(
+            strategy="2d-dim1", slugs=list(reversed(SLUGS)), irt_2d_scores=IRT_2D_SCORES
+        )
+        np.testing.assert_array_almost_equal(vals_fwd, vals_rev[::-1])
+
+    def test_2d_dim1_match_count(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        _, _, source = resolve_init_source(
+            strategy="2d-dim1", slugs=SLUGS, irt_2d_scores=IRT_2D_SCORES
+        )
+        assert "4/4 matched" in source
+
+    def test_auto_does_not_select_2d_dim1(self) -> None:
+        """Auto should never select 2d-dim1 — it's an explicit user choice."""
+        from analysis.init_strategy import resolve_init_source
+
+        _, strategy, _ = resolve_init_source(
+            strategy="auto",
+            slugs=SLUGS,
+            irt_scores=None,
+            pca_scores=PCA_SCORES,
+            irt_2d_scores=IRT_2D_SCORES,
+        )
+        assert strategy != "2d-dim1"
+
+
+# ── load_2d_scores ────────────────────────────────────────────────────────────
+
+
+class TestLoad2dScores:
+    """Test 2D IRT score loading utility."""
+
+    def test_returns_none_for_missing(self, tmp_path) -> None:
+        from analysis.init_strategy import load_2d_scores
+
+        result = load_2d_scores(tmp_path, "senate")
+        assert result is None
+
+    def test_loads_parquet(self, tmp_path) -> None:
+        from analysis.init_strategy import load_2d_scores
+
+        IRT_2D_SCORES.write_parquet(tmp_path / "ideal_points_2d_senate.parquet")
+        result = load_2d_scores(tmp_path, "senate")
+        assert result is not None
+        assert result.height == 4
+        assert "xi_dim1_mean" in result.columns
 
 
 # ── build_init_rationale ──────────────────────────────────────────────────────

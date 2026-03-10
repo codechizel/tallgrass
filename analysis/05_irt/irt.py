@@ -55,6 +55,11 @@ try:
 except ModuleNotFoundError:
     from irt_report import build_irt_report  # type: ignore[no-redef]
 
+try:
+    from analysis.init_strategy import load_2d_scores, resolve_init_source
+except ModuleNotFoundError:
+    from init_strategy import load_2d_scores, resolve_init_source  # type: ignore[no-redef]
+
 # ── Primer ───────────────────────────────────────────────────────────────────
 # Written to results/<session>/irt/README.md by RunContext on each run.
 
@@ -451,6 +456,16 @@ def parse_args() -> argparse.Namespace:
         "--no-pca-init",
         action="store_true",
         help="Disable PCA-informed chain initialization (on by default)",
+    )
+    parser.add_argument(
+        "--init-strategy",
+        default=None,
+        choices=["auto", "irt-informed", "pca-informed", "2d-dim1"],
+        help=(
+            "Override chain initialization source. "
+            "2d-dim1 uses 2D IRT Dim 1 (ideology axis) for iterative refinement. "
+            "Default: uses strategy-specific init (PCA, agreement, or party-based)."
+        ),
     )
     parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     parser.add_argument(
@@ -3809,9 +3824,10 @@ def main() -> None:
         else:
             print("\n  Robustness flags: none enabled")
 
-        # Resolve 2D IRT directory if --promote-2d is enabled
+        # Resolve 2D IRT directory (for --promote-2d or --init-strategy 2d-dim1)
+        need_2d = args.promote_2d or args.init_strategy == "2d-dim1"
         irt_2d_dir: Path | None = None
-        if args.promote_2d:
+        if need_2d:
             if args.irt_2d_dir:
                 irt_2d_dir = Path(args.irt_2d_dir)
             else:
@@ -3823,8 +3839,18 @@ def main() -> None:
                         None,
                     )
                 except FileNotFoundError:
-                    print("  WARNING: --promote-2d enabled but Phase 06 results not found")
+                    print("  WARNING: Phase 06 (2D IRT) results not found")
                     irt_2d_dir = None
+
+        # Load 2D scores for init strategy
+        irt_2d_scores: dict[str, pl.DataFrame | None] = {}
+        if irt_2d_dir is not None and args.init_strategy == "2d-dim1":
+            for ch in ("house", "senate"):
+                irt_2d_scores[ch] = load_2d_scores(irt_2d_dir / "data", ch)
+                if irt_2d_scores[ch] is not None:
+                    print(f"  2D IRT Dim 1 loaded: {ch} ({irt_2d_scores[ch].height} rows)")
+                else:
+                    print(f"  2D IRT Dim 1 not found: {ch}")
 
         IS = IdentificationStrategy
 
@@ -3901,10 +3927,25 @@ def main() -> None:
 
             # Build chain initialization based on strategy
             xi_init = None
-            if not args.no_pca_init:
-                anchor_set = {idx for idx, _ in chamber_anchors}
-                free_pos = [i for i in range(data["n_legislators"]) if i not in anchor_set]
+            anchor_set = {idx for idx, _ in chamber_anchors}
+            free_pos = [i for i in range(data["n_legislators"]) if i not in anchor_set]
 
+            # --init-strategy override: replaces default init with shared module
+            if args.init_strategy == "2d-dim1":
+                ch_lower = chamber.lower()
+                init_vals, _, init_src = resolve_init_source(
+                    strategy="2d-dim1",
+                    slugs=data["leg_slugs"],
+                    irt_2d_scores=irt_2d_scores.get(ch_lower),
+                )
+                xi_init = init_vals[free_pos].astype(np.float64)
+                print(
+                    f"  2D Dim 1 init: {init_src}, "
+                    f"{len(xi_init)} free params, "
+                    f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                )
+
+            elif not args.no_pca_init:
                 if strategy == IS.ANCHOR_AGREEMENT and agree_rates is not None:
                     # Agreement-based init
                     init_vals = np.zeros(data["n_legislators"])

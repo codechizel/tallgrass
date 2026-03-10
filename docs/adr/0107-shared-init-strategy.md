@@ -25,6 +25,7 @@ Implement `analysis/init_strategy.py` — a shared module following the `Identif
 |----------|-----------|--------|-------------|
 | IRT-informed | `irt-informed` | 1D IRT xi_mean (Phase 05) | Best for ideology dimension — converged posterior means |
 | PCA-informed | `pca-informed` | PCA PC1/PC2 (Phase 02) | Fallback when IRT unavailable, or for Dim 2 (PC2) |
+| 2D Dim 1 | `2d-dim1` | 2D IRT xi_dim1_mean (Phase 06) | Iterative refinement — re-run 1D with 2D ideology axis |
 | Auto | `auto` | Prefer IRT, fall back to PCA | Default — robust across sessions |
 
 ### API
@@ -33,10 +34,11 @@ Implement `analysis/init_strategy.py` — a shared module following the `Identif
 from analysis.init_strategy import InitStrategy, resolve_init_source
 
 vals, strategy, source = resolve_init_source(
-    strategy="auto",           # or "irt-informed", "pca-informed"
+    strategy="auto",           # or "irt-informed", "pca-informed", "2d-dim1"
     slugs=data["leg_slugs"],   # model's legislator ordering
     irt_scores=irt_df,         # 1D IRT ideal points (or None)
     pca_scores=pca_df,         # PCA scores (or None)
+    irt_2d_scores=irt_2d_df,   # 2D IRT ideal points (or None)
     pca_column="PC1",          # "PC1" for ideology, "PC2" for secondary
 )
 ```
@@ -45,7 +47,7 @@ Returns `(standardized_values, resolved_strategy, source_label)`. Values are zer
 
 ### CLI
 
-Both Phase 06 and Phase 07 accept `--init-strategy {auto,irt-informed,pca-informed}` (default: `auto`).
+Phases 05, 06, and 07 accept `--init-strategy {auto,irt-informed,pca-informed,2d-dim1}`. Phase 05 uses `2d-dim1` for iterative refinement: run the pipeline normally, then re-run 1D IRT with `--init-strategy 2d-dim1` to separate ideology from establishment in sessions where the 1D model collapses them.
 
 ### Django-ready
 
@@ -62,6 +64,7 @@ Both Phase 06 and Phase 07 accept `--init-strategy {auto,irt-informed,pca-inform
 
 **Trade-offs:**
 - Adds a dependency ordering: Phase 05 must run before Phase 06 for IRT-informed init (auto handles this gracefully by falling back to PCA)
+- `2d-dim1` creates a reverse dependency (Phase 05 ← Phase 06) — intentionally never auto-selected, only for explicit iterative refinement
 - Phase 27 (Dynamic IRT) uses a different pattern (informative prior, not initial points) — not yet migrated
 
-**Testing:** 27 tests covering constants, resolution, auto-detection, error cases, rationale generation, and file loading.
+**Testing:** 34 tests covering constants, resolution, auto-detection, 2d-dim1 strategy, error cases, rationale generation, and file loading.
