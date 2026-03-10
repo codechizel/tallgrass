@@ -3,7 +3,7 @@ Kansas Legislature — 2D Bayesian IRT Ideal Point Estimation (Phase 4b, EXPERIM
 
 EXPERIMENTAL: This phase uses a multidimensional 2-Parameter Logistic (M2PL) IRT model
 with Positive Lower Triangular (PLT) identification to estimate 2D ideal points. It
-resolves the Tyson paradox by separating ideology (Dim 1) from contrarianism (Dim 2).
+resolves the Tyson paradox by separating ideology (Dim 1) from establishment loyalty (Dim 2).
 
 Convergence caveats: Dim 2 has known convergence challenges (R-hat up to 1.05, ESS ~200)
 due to weak signal (~11% variance). Relaxed thresholds are used. Dim 2 credible intervals
@@ -81,13 +81,13 @@ IRT_2D_PRIMER = """\
 
 The 2D IRT model extends the canonical 1D baseline by estimating two-dimensional
 ideal points for each legislator. Dimension 1 captures ideology (liberal-conservative),
-while Dimension 2 captures secondary patterns such as contrarianism — legislators
-who vote against their own party on routine bills.
+while Dimension 2 captures secondary patterns such as establishment loyalty — the
+degree to which legislators align with party leadership on routine bills.
 
 This phase was developed to resolve the "Tyson paradox": Senator Caryn Tyson appears
 as the most conservative legislator by 1D IRT, yet votes Nay on routine bills that
 nearly all Republicans support. The 2D model reveals this as a real multidimensional
-pattern (high on Dim 1 ideology, extreme on Dim 2 contrarianism), not a model artifact.
+pattern (high on Dim 1 ideology, extreme on Dim 2 establishment loyalty), not a model artifact.
 
 ## EXPERIMENTAL STATUS
 
@@ -139,7 +139,7 @@ Post-hoc Dim 1 sign check: Republican mean must be positive.
 - **Dim 1** (x-axis): Ideology. Positive = conservative, negative = liberal.
   Should correlate strongly (r > 0.90) with 1D IRT and PCA PC1.
 - **Dim 2** (y-axis): Secondary pattern. In the Senate, this captures
-  contrarianism. Interpretation varies by chamber and session.
+  establishment loyalty. Interpretation varies by chamber and session.
 - **Wide Dim 2 HDIs** are expected for most legislators — the second dimension
   has weak signal. Only legislators with narrow Dim 2 HDIs have reliable
   second-dimension estimates.
@@ -551,7 +551,7 @@ def plot_2d_scatter(ideal_2d: pl.DataFrame, chamber: str, output_dir: Path) -> N
             )
 
     ax.set_xlabel("Dimension 1 (Ideology: Liberal <- -> Conservative)", fontsize=11)
-    ax.set_ylabel("Dimension 2 (Contrarianism)", fontsize=11)
+    ax.set_ylabel("Dimension 2 (Establishment)", fontsize=11)
     ax.set_title(
         f"2D Bayesian IRT Ideal Points — Kansas {chamber} (EXPERIMENTAL)",
         fontsize=13,
@@ -676,7 +676,7 @@ def plot_2d_scatter_interactive(ideal_2d: pl.DataFrame, chamber: str, output_dir
     fig.update_layout(
         title=f"2D Bayesian IRT Ideal Points — Kansas {chamber} (EXPERIMENTAL)",
         xaxis_title="Dimension 1 (Ideology: Liberal ← → Conservative)",
-        yaxis_title="Dimension 2 (Contrarianism)",
+        yaxis_title="Dimension 2 (Establishment)",
         hovermode="closest",
         template="plotly_white",
         width=800,

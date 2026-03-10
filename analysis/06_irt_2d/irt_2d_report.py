@@ -281,12 +281,12 @@ def _add_scatter_figure(report: ReportBuilder, plots_dir: Path, chamber: str) ->
                 path,
                 caption=(
                     f"2D ideal points ({chamber}): Dim 1 (ideology) vs Dim 2 "
-                    "(contrarianism). Red = Republican, Blue = Democrat. "
+                    "(establishment). Red = Republican, Blue = Democrat. "
                     "Key legislators annotated."
                 ),
                 alt_text=(
                     f"Scatter plot of 2D IRT ideal points for {chamber}. "
-                    "Dim 1 separates parties; Dim 2 captures contrarian voting patterns."
+                    "Dim 1 separates parties; Dim 2 captures establishment loyalty."
                 ),
             )
         )
@@ -441,12 +441,13 @@ def _add_interpretation_guide(report: ReportBuilder) -> None:
                 "the 1D model.</p>"
                 "<p><strong>Dimension 2 (Secondary Pattern)</strong> captures "
                 "variation not explained by the primary ideological axis. In the "
-                "Kansas Senate (91st legislature), this captures "
-                "<strong>contrarianism</strong> &mdash; legislators who vote against "
-                "their own party on routine, low-discrimination bills. The clearest "
-                "example is Senator Caryn Tyson, who appears as the most conservative "
-                "legislator on Dim 1 but scores extreme on Dim 2 due to frequent "
-                "Nay votes on bills nearly all Republicans support.</p>"
+                "Kansas legislature, this captures "
+                "<strong>establishment loyalty</strong> &mdash; the degree to which "
+                "legislators align with party leadership on routine bills. "
+                "Positive Dim 2 = establishment-aligned; negative Dim 2 = insurgent. "
+                "The clearest example is Senator Caryn Tyson, who appears as the most "
+                "conservative legislator on Dim 1 but scores extreme negative on Dim 2 "
+                "due to frequent Nay votes on bills nearly all Republicans support.</p>"
                 "<p><strong>Wide Dim 2 HDIs</strong> are expected. For most "
                 "legislators, the second dimension has weak signal (~11% variance). "
                 "Only legislators with narrow Dim 2 HDIs have meaningfully "

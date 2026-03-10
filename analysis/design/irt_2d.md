@@ -70,6 +70,8 @@ Constrain the discrimination matrix to be lower triangular with positive diagona
 
 3. **Dim 1 sign fix:** Post-hoc verification that Republican mean on Dim 1 is positive. Same approach as 1D IRT and hierarchical IRT.
 
+4. **Dim 2 sign is PLT-determined, not post-hoc corrected.** The PLT constraint (`beta[1,1] > 0` via HalfNormal) determines the Dim 2 sign. In practice, positive Dim 2 corresponds to establishment loyalty (legislators who align with party leadership on routine bills), while negative Dim 2 corresponds to insurgent/contrarian behavior. This is the opposite of PCA PC2's convention (where contrarians are positive), but is a natural consequence of the PLT parameterization. No post-hoc flip is applied — the axis is labeled "Establishment" to match the PLT direction.
+
 ### Anchor Item Selection
 
 Item 0 (the rotation anchor, with `beta[0,1] = 0`) should be a bill that clearly loads only on the primary ideological dimension — a pure party-line vote. Selected as the bill with the highest absolute beta from the 1D IRT model (i.e., the most discriminating bill).
