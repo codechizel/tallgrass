@@ -323,6 +323,28 @@ The key insight from these experiments: concurrent calibration (one big MCMC) is
 
 ---
 
+## Addendum: Flat Pooled Joint IRT (March 2026)
+
+The hierarchical failures documented above are specific to the **3-level hierarchy** (global → chamber → party → legislator). A fundamentally different approach — a **flat** (non-hierarchical) 1D 2PL IRT on the pooled House+Senate vote matrix — succeeds with perfect convergence.
+
+The flat pooled experiment (`analysis/experimental/joint_irt_experiment.py`) was motivated by the 79th Kansas Senate (30R/10D), which fails per-chamber convergence across all identification strategies due to insufficient contested votes (117 out of 437). By pooling all 168 legislators into a single flat model on 888 votes (170 shared + chamber-specific), the 128 well-identified House legislators anchor the scale, and the Senate members gain identification from the shared bill linkage.
+
+**79th biennium results:**
+- R-hat 1.003, ESS 1012, 0 divergences (vs hierarchical: R-hat > 1.7, ESS < 10)
+- House ideal points: r = 0.998 vs per-chamber (virtually unchanged)
+- Senate ideal points: meaningful with tight HDIs (previously unconverged)
+- Block-sparse missing data handled natively by IRT likelihood
+
+**Why it works where the hierarchy fails:**
+1. No funnel geometry — flat model has no hierarchical variance parameters
+2. No `sigma_chamber` partial reflections — no chamber-level hyperparameters at all
+3. Full vote matrix (888 bills) provides far more information than the 71 shared-bills-only approach tried with the hierarchical model
+4. House's 128 legislators dominate scale identification, with anchors selected from House PCA extremes
+
+This does not invalidate the Stocking-Lord linking approach (which remains the production method). The flat pooled model is an experimental alternative that directly estimates cross-chamber ideal points rather than linking separate estimates post-hoc.
+
+---
+
 **Related documents:**
 - Joint model diagnosis: `docs/joint-hierarchical-irt-diagnosis.md` (bill-matching bug and fix)
 - Convergence improvement plan: `docs/hierarchical-convergence-improvement.md` (per-chamber + joint theory)
@@ -333,3 +355,4 @@ The key insight from these experiments: concurrent calibration (one big MCMC) is
 - PCA init experiment: `docs/hierarchical-pca-init-experiment.md`
 - Model specification: `analysis/07_hierarchical/model_spec.py`
 - IRT linking: `analysis/07_hierarchical/irt_linking.py` (Stocking-Lord, Haebara, Mean-Sigma, Mean-Mean)
+- **Flat pooled experiment: `analysis/experimental/joint_irt_experiment.py`**

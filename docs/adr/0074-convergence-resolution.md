@@ -39,3 +39,4 @@ Three changes to `analysis/27_dynamic_irt/dynamic_irt.py`:
 - Dynamic IRT Senate should now converge (prior correctly transfers sign information)
 - PPC phase 4c gracefully handles missing 2D IRT (already tested)
 - Stocking-Lord linking section in hierarchical report provides the cross-chamber comparison that the joint model was meant to deliver
+- **Update (March 2026):** A flat (non-hierarchical) pooled IRT experiment (`analysis/experimental/joint_irt_experiment.py`) achieves perfect convergence on the full House+Senate vote matrix, sidestepping the hierarchical funnel geometry entirely. The hierarchical model documented here remains off by default; the flat pooled approach is an experimental alternative. See `docs/joint-model-deep-dive.md` addendum.

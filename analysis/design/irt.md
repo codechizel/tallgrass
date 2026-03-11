@@ -222,14 +222,22 @@ All strategies pass through `validate_sign()` as a post-hoc safety net. Every ru
 
 Per-chamber IRT models estimate ideal points on separate, incomparable scales. A House xi=+2.0 and a Senate xi=+2.0 do not mean the same thing because the models are fitted independently with different bill sets, different anchors, and different posterior geometries. To place all legislators on a common scale for cross-chamber comparisons, test equating is needed.
 
-### Why Not a Joint MCMC Model?
+### Why Not a Hierarchical Joint MCMC Model?
 
-A full joint IRT model was attempted: all legislators in a single 2PL model with shared bills providing linked IRT parameters and bridging legislators contributing votes from both chambers. This did not converge (R-hat > 1.7, ESS < 10) despite:
-- Shared-bills-only matrix (71 bills, 95.5% observed)
-- 4 anchors (one conservative + one liberal from each chamber)
-- 4 chains with target_accept=0.95
+A hierarchical joint IRT model was attempted (Phase 07, `build_joint_graph()`): a 3-level hierarchy (global → chamber → party → legislator) with ~1,000 parameters. This failed convergence in all 8 bienniums (R-hat up to 2.56, ESS as low as 5). Root causes: Neal's funnel geometry in the 3-level hierarchy, partial reflections in `sigma_chamber`, and insufficient shared bills to identify the chamber-level hyperparameters. See ADR-0074 and `docs/joint-model-deep-dive.md`.
 
-The fundamental problem: 71 shared bills for 169 legislators (0.42 bills/legislator) is far too few for a joint MCMC IRT model. Many legislators vote identically on the shared bills, creating a degenerate posterior with insufficient information to distinguish 165 free ideal points.
+### Flat Pooled Joint IRT (Experimental)
+
+A **flat** (non-hierarchical) joint IRT model succeeds where the hierarchical model fails. The experiment (`analysis/experimental/joint_irt_experiment.py`) pools all legislators from both chambers into a single 1D 2PL IRT model on the full union of votes. For the 79th biennium (2001-02):
+
+- **168 legislators** on **888 votes** (451 House-only, 267 Senate-only, 170 shared)
+- Block-sparse missing data: Senate members have NaN on House-only votes and vice versa; IRT handles this natively by excluding missing observations from the likelihood
+- **Perfect convergence**: R-hat 1.003, ESS 1012, 0 divergences
+- The 128 House legislators anchor the ideology scale; 170 shared bills bridge the chambers
+- House ideal points virtually unchanged vs per-chamber model (r = 0.998)
+- Senate ideal points gain meaningful identification from the larger bill set
+
+The key insight: the hierarchical model's failure was about the 3-level hierarchy's funnel geometry, not about pooling chambers per se. A flat model sidesteps the funnel entirely. Anchors are selected from House PCA extremes (the larger, better-identified chamber). This is particularly valuable for supermajority chambers (e.g., 79th Senate: 30R/10D) where per-chamber models fail to converge.
 
 ### Test Equating Approach
 

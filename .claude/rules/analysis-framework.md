@@ -15,7 +15,7 @@ EDA → PCA → MCA → UMAP → IRT → 2D IRT → Hierarchical IRT → PPC →
 
 Cross-Session → Dynamic IRT
 
-Hierarchical IRT's joint cross-chamber model is off by default (`--run-joint` to enable); Stocking-Lord linking is the production cross-chamber alignment method (ADR-0074).
+Hierarchical IRT's joint cross-chamber model is off by default (`--run-joint` to enable); Stocking-Lord linking is the production cross-chamber alignment method (ADR-0074). A flat pooled alternative exists in `analysis/experimental/joint_irt_experiment.py`.
 
 ## Technology Preferences
 
@@ -104,7 +104,7 @@ Four components eliminate code duplication in MCMC experiments (ADR-0048):
 
 All hierarchical experiments produce full production HTML reports via `build_hierarchical_report()` (18-22 sections).
 
-Standalone structural experiments (2D IRT, PC2-targeted IRT) bypass `run_experiment()` but should still use `PlatformCheck` and `ExperimentLifecycle` directly for platform safety and process management (ADR-0105). See `docs/experiment-lab-code-review.md` for the full code review.
+Standalone structural experiments (2D IRT, PC2-targeted IRT, joint pooled IRT) bypass `run_experiment()` but should still use `PlatformCheck` and `ExperimentLifecycle` directly for platform safety and process management (ADR-0105). The joint pooled IRT experiment (`analysis/experimental/joint_irt_experiment.py`) pools House+Senate into a single flat 1D IRT — succeeds where the hierarchical joint model (Phase 07) fails. See `docs/experiment-lab-code-review.md` for the full code review.
 
 ## Concurrency (MCMC)
 
