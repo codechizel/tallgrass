@@ -35,7 +35,7 @@ Sampler: nutpie (Rust NUTS with adaptive dual averaging), consistent with all pr
 | Constant | Value | Justification |
 |----------|-------|---------------|
 | `N_SAMPLES` | 2000 | Same as 1D for comparability |
-| `N_TUNE` | 2000 | Doubled from 1D (1000). Harder posterior geometry needs longer adaptation. |
+| `N_TUNE` | 2000 (base) / 4000 (supermajority) | Doubled from 1D (1000). Auto-doubles again when majority party > 70% (ADR-0112). |
 | `N_CHAINS` | 4 | Following ADR-0045. PLT identification + PCA init should prevent mode-splitting. |
 | `RANDOM_SEED` | 42 | Consistency with 1D model. |
 
@@ -132,9 +132,66 @@ xi_init = np.column_stack([dim1_std, dim2_std])  # shape: (n_leg, 2)
 # Passed via nutpie initial_points={"xi": xi_init}, jitter_rvs excludes xi
 ```
 
+### Beta Initialization from PCA Loadings (ADR-0112)
+
+In addition to xi initialization, the beta (discrimination) parameters can be initialized from PCA component loadings:
+
+- `beta_col0` init: PCA PC1 loadings, scaled to unit variance
+- `beta_col1` init: PCA PC2 loadings, respecting PLT constraints (anchor 0 = 0, anchor 1 = positive)
+
+This reduces the number of randomly initialized parameters, helping the sampler find the correct mode faster — especially important for supermajority chambers where the posterior geometry is harder.
+
 ### Why Not Random Initialization
 
 The 1D IRT mode-splitting investigation (ADR-0023) showed that random initialization causes 5/16 convergence failures due to reflection invariance. With 8 modes instead of 2, the risk is much higher. Informed initialization places chains near the correct mode.
+
+## Supermajority Tuning (ADR-0112)
+
+The Kansas Senate consistently has 2D convergence difficulties due to small chamber size (~40 members) combined with supermajority composition. Three tuning adaptations address this:
+
+### Adaptive N_TUNE
+
+When the majority party exceeds 70% of the chamber, N_TUNE doubles from 2000 to 4000. Detected automatically at runtime from the party composition.
+
+| Party ratio | N_TUNE | Rationale |
+|-------------|--------|-----------|
+| ≤ 70% majority | 2000 | Standard — sufficient for balanced geometry |
+| > 70% majority | 4000 | Supermajority — near-degenerate geometry needs more adaptation |
+
+### Contested-Only Filtering
+
+The `--contested-only` flag filters to contested votes (minority > 2.5%) before fitting the 2D model, reducing the bill count by ~50%. For the 2D model, near-unanimous votes add parameters without ideological information.
+
+### Empirical Convergence Landscape (14 bienniums)
+
+| Session | House R-hat | Senate R-hat | Notes |
+|---------|------------|-------------|-------|
+| 78th | 1.62 | 1.46 | Both fail |
+| 79th | 1.82–2.35 | 1.96 | Worst; 75% R Senate |
+| 80th | 1.15–1.52 | 1.06 | Senate close to passing |
+| 81st | 1.02 | 1.59 | House good, Senate fails |
+| 82nd | 1.04 | 1.44 | House good, Senate fails |
+| 83rd | 1.02 | 1.02 | Both converge |
+| 84th | 1.02 | 1.04 | Both converge |
+| 85th | 1.71 | 1.03 | House fails, Senate good |
+| 86th | 1.04 | 1.06–1.94 | Varies |
+| 87th | 1.63 | 1.62 | Both fail |
+| 88th | 1.01 | 1.50 | House passes, Senate fails |
+| 89th | 1.10 | 1.09 | Both marginal |
+| 90th | 1.22 | 1.09 | Both marginal |
+| 91st | 1.07–1.20 | 1.26–2.13 | Varies |
+
+## Tiered Convergence Quality Gate (ADR-0110)
+
+Canonical routing uses a three-tier quality gate instead of a binary pass/fail:
+
+| Tier | R-hat | ESS | Extra Check | Action |
+|------|-------|-----|-------------|--------|
+| Converged | < 1.10 | > 100 | — | Use 2D Dim 1, full HDIs |
+| Point estimates credible | < 2.50 | any | Spearman ρ(Dim1, PC1) > 0.70 | Use 2D Dim 1; flag wide HDIs |
+| Failed | ≥ 2.50 | — | or ρ < 0.70 | Fall back to 1D |
+
+The rank correlation check validates that point estimates capture the primary ideological axis despite imperfect mixing. The 79th Senate (R-hat ~2.0) passes Tier 2 because the Dim 1 ordering is ecologically valid.
 
 ## Downstream Outputs
 

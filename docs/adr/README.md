@@ -85,6 +85,9 @@ What are the trade-offs?
 | [0104](0104-irt-robustness-flags.md) | IRT robustness flags (horseshoe diagnostic, contested-only refit, 2D cross-reference) |
 | [0108](0108-dim1-informative-prior.md) | Dimension 1 informative prior for ideology recovery (`--dim1-prior`) |
 | [0109](0109-canonical-ideal-points.md) | Canonical ideal point routing (auto-select 1D or 2D Dim 1 per chamber) |
+| [0110](0110-tiered-convergence-quality-gate.md) | Tiered convergence quality gate for canonical routing (3 tiers, rank correlation) |
+| [0111](0111-canonical-init-strategy-hierarchical.md) | Canonical init strategy for hierarchical IRT (`--init-strategy canonical`) |
+| [0112](0112-2d-irt-supermajority-tuning.md) | 2D IRT tuning for supermajority chambers (adaptive N_TUNE, beta init, contested-only) |
 
 ### Classical Analysis
 
@@ -283,6 +286,9 @@ What are the trade-offs?
 | [0107](0107-shared-init-strategy.md) | Shared MCMC initialization strategy (`--init-strategy`, IRT-informed/PCA-informed/auto, Django-ready) | Accepted | 2026-03-10 |
 | [0108](0108-dim1-informative-prior.md) | Dimension 1 informative prior for ideology recovery (`--dim1-prior`, 2D IRT Dim 1 as Bayesian prior) | Accepted | 2026-03-11 |
 | [0109](0109-canonical-ideal-points.md) | Canonical ideal point routing (auto-select 1D or 2D Dim 1 per chamber, DW-NOMINATE standard) | Accepted | 2026-03-11 |
+| [0110](0110-tiered-convergence-quality-gate.md) | Tiered convergence quality gate for canonical routing (3 tiers, Spearman rank correlation check) | Accepted | 2026-03-11 |
+| [0111](0111-canonical-init-strategy-hierarchical.md) | Canonical init strategy for hierarchical IRT (`--init-strategy canonical`, auto-detect) | Accepted | 2026-03-11 |
+| [0112](0112-2d-irt-supermajority-tuning.md) | 2D IRT tuning for supermajority chambers (adaptive N_TUNE, beta init from PCA, contested-only) | Accepted | 2026-03-11 |
 
 ## Creating a New ADR
 

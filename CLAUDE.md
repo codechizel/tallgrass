@@ -91,8 +91,8 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 ## Key Conventions
 
 - Scraper: concurrent fetch (ThreadPoolExecutor), sequential parse. Never mutate shared state during fetch.
-- MCMC: nutpie Rust NUTS sampler for all models (ADR-0051, ADR-0053). Init strategy: `--init-strategy {auto,irt-informed,pca-informed,2d-dim1}` (ADR-0107; Phase 06 defaults to `pca-informed` to avoid horseshoe contamination). IRT identification: `--identification {auto,anchor-pca,anchor-agreement,...}` (ADR-0103). Robustness flags: `--horseshoe-diagnostic`, `--horseshoe-remediate`, `--contested-only`, `--promote-2d`, `--dim1-prior` (ADR-0104, ADR-0108; research-only, superseded by canonical routing).
-- Canonical ideal points: for horseshoe-affected chambers, 2D Dim 1 is the canonical ideology score (following the DW-NOMINATE standard). See `docs/canonical-ideal-points.md`.
+- MCMC: nutpie Rust NUTS sampler for all models (ADR-0051, ADR-0053). Init strategy: `--init-strategy {auto,irt-informed,pca-informed,2d-dim1,canonical}` (ADR-0107, ADR-0111; Phase 06 defaults to `pca-informed`; Phase 07 `auto` prefers canonical routing output). IRT identification: `--identification {auto,anchor-pca,anchor-agreement,...}` (ADR-0103). Robustness flags: `--horseshoe-diagnostic`, `--horseshoe-remediate`, `--contested-only`, `--promote-2d`, `--dim1-prior` (ADR-0104, ADR-0108; research-only, superseded by canonical routing).
+- Canonical ideal points: tiered quality gate (ADR-0110) — Tier 1 (converged, R-hat < 1.10), Tier 2 (point estimates credible, R-hat < 2.50 + rank correlation > 0.70), Tier 3 (fall back to 1D). 2D IRT adaptive tuning for supermajority chambers (ADR-0112): N_TUNE doubles to 4000 when majority > 70%, beta init from PCA loadings, `--contested-only` flag.
 - Apple Silicon (M3 Pro): run bienniums sequentially; cap thread pools (`OMP_NUM_THREADS=6`).
 - PyTensor C compiler: requires `clang++`. Xcode updates can break it silently (~18x slower fallback).
 
@@ -112,6 +112,6 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 
 ## Documentation
 
-- ADRs: `docs/adr/README.md` (109 decisions)
+- ADRs: `docs/adr/README.md` (112 decisions)
 - Design docs: `analysis/design/README.md`
 - Deep dives: `docs/*.md` (search by topic name)

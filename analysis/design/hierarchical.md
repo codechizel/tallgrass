@@ -18,6 +18,8 @@
 
 6. **Flat IRT ideal points are available.** Shrinkage comparison requires the flat IRT phase to have been run first. The hierarchical phase reads from `05_irt/latest/data/ideal_points_{chamber}.parquet`.
 
+7. **Canonical init strategy (ADR-0111).** When Phase 06 has run and produced canonical routing output, the hierarchical model can use `--init-strategy canonical` (or `auto` detects it) to initialize from horseshoe-corrected scores. For horseshoe-affected chambers, this means 2D Dim 1 initialization; for balanced chambers, 1D IRT. This prevents horseshoe contamination from propagating into the hierarchical posterior.
+
 ## Parameters & Constants
 
 | Constant | Value | Justification |
