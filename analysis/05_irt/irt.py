@@ -221,6 +221,7 @@ HORSESHOE_DEM_WRONG_SIDE_FRAC = 0.20  # >20% of Democrats on conservative side �
 PROMOTE_2D_RANK_SHIFT = 10  # Flag legislators whose rank shifts >10 between 1D and 2D
 MIN_PC2_VOTES_FOR_REFIT = 50  # Need ≥50 PC2-dominant votes for meaningful remediation
 PC2_PRIOR_SIGMA = 1.0  # Width of the PC2 informative prior (experiment: sigma=1.0 best)
+DIM1_PRIOR_SIGMA_DEFAULT = 1.0  # Width of the Dim 1 informative prior (ADR-0108)
 
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 
@@ -247,14 +248,22 @@ class RobustnessFlags:
     HORSESHOE_DIAGNOSTIC = "horseshoe-diagnostic"
     HORSESHOE_REMEDIATE = "horseshoe-remediate"
     PROMOTE_2D = "promote-2d"
+    DIM1_PRIOR = "dim1-prior"
 
-    ALL_FLAGS = [CONTESTED_ONLY, HORSESHOE_DIAGNOSTIC, HORSESHOE_REMEDIATE, PROMOTE_2D]
+    ALL_FLAGS = [
+        CONTESTED_ONLY,
+        HORSESHOE_DIAGNOSTIC,
+        HORSESHOE_REMEDIATE,
+        PROMOTE_2D,
+        DIM1_PRIOR,
+    ]
 
     LABELS: dict[str, str] = {
         CONTESTED_ONLY: "Contested Votes Only",
         HORSESHOE_DIAGNOSTIC: "Horseshoe Diagnostic",
         HORSESHOE_REMEDIATE: "Horseshoe Remediation",
         PROMOTE_2D: "2D Cross-Reference",
+        DIM1_PRIOR: "Dim 1 Informative Prior",
     }
 
     DESCRIPTIONS: dict[str, str] = {
@@ -274,6 +283,11 @@ class RobustnessFlags:
             "Cross-reference 2D IRT results (Phase 06) and flag legislators "
             "whose rank shifts significantly between 1D and 2D models"
         ),
+        DIM1_PRIOR: (
+            "Use 2D IRT Dimension 1 as informative prior on ideal points "
+            "(xi ~ Normal(dim1, sigma)) to recover ideology in horseshoe-affected "
+            "chambers. Requires Phase 06 results. ADR-0108."
+        ),
     }
 
     @classmethod
@@ -284,6 +298,7 @@ class RobustnessFlags:
             cls.HORSESHOE_DIAGNOSTIC: getattr(args, "horseshoe_diagnostic", False),
             cls.HORSESHOE_REMEDIATE: getattr(args, "horseshoe_remediate", False),
             cls.PROMOTE_2D: getattr(args, "promote_2d", False),
+            cls.DIM1_PRIOR: getattr(args, "dim1_prior", False),
         }
         return [
             RobustnessFlag(
@@ -516,11 +531,27 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override 2D IRT results directory (for --promote-2d)",
     )
+    robustness.add_argument(
+        "--dim1-prior",
+        action="store_true",
+        help="Use 2D IRT Dimension 1 as informative prior for ideology recovery "
+        "(requires Phase 06 results; implies --promote-2d). ADR-0108.",
+    )
+    robustness.add_argument(
+        "--dim1-prior-sigma",
+        type=float,
+        default=DIM1_PRIOR_SIGMA_DEFAULT,
+        help="Width of the Dim 1 informative prior (default: %(default)s; "
+        "lower = stronger constraint)",
+    )
 
     parsed = parser.parse_args()
     # --horseshoe-remediate implies --horseshoe-diagnostic
     if parsed.horseshoe_remediate:
         parsed.horseshoe_diagnostic = True
+    # --dim1-prior implies --promote-2d (for automatic cross-referencing in report)
+    if parsed.dim1_prior:
+        parsed.promote_2d = True
     return parsed
 
 
@@ -3824,8 +3855,8 @@ def main() -> None:
         else:
             print("\n  Robustness flags: none enabled")
 
-        # Resolve 2D IRT directory (for --promote-2d or --init-strategy 2d-dim1)
-        need_2d = args.promote_2d or args.init_strategy == "2d-dim1"
+        # Resolve 2D IRT directory (for --promote-2d, --init-strategy 2d-dim1, or --dim1-prior)
+        need_2d = args.promote_2d or args.init_strategy == "2d-dim1" or args.dim1_prior
         irt_2d_dir: Path | None = None
         if need_2d:
             if args.irt_2d_dir:
@@ -3842,9 +3873,10 @@ def main() -> None:
                     print("  WARNING: Phase 06 (2D IRT) results not found")
                     irt_2d_dir = None
 
-        # Load 2D scores for init strategy
+        # Load 2D scores for init strategy or dim1-prior
         irt_2d_scores: dict[str, pl.DataFrame | None] = {}
-        if irt_2d_dir is not None and args.init_strategy == "2d-dim1":
+        need_2d_scores = args.init_strategy == "2d-dim1" or args.dim1_prior
+        if irt_2d_dir is not None and need_2d_scores:
             for ch in ("house", "senate"):
                 irt_2d_scores[ch] = load_2d_scores(irt_2d_dir / "data", ch)
                 if irt_2d_scores[ch] is not None:
@@ -4004,6 +4036,50 @@ def main() -> None:
                         f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
                     )
 
+            # ── Dim 1 prior override (ADR-0108) ──
+            # When --dim1-prior is active, switch to external-prior strategy
+            # using 2D IRT Dim 1 as the informative prior source.
+            dim1_external_priors: np.ndarray | None = None
+            dim1_prior_sigma = args.dim1_prior_sigma
+            if args.dim1_prior:
+                ch_lower = chamber.lower()
+                dim1_scores = irt_2d_scores.get(ch_lower)
+                if dim1_scores is None:
+                    print(
+                        f"  WARNING: 2D IRT results not found for {chamber} "
+                        "— dim1-prior unavailable, using standard strategy"
+                    )
+                else:
+                    # Build per-legislator prior means from 2D Dim 1
+                    dim1_map = {
+                        row["legislator_slug"]: row["xi_dim1_mean"]
+                        for row in dim1_scores.iter_rows(named=True)
+                    }
+                    dim1_raw = np.array([dim1_map.get(s, 0.0) for s in data["leg_slugs"]])
+                    dim1_std_val = dim1_raw.std()
+                    if dim1_std_val > 0:
+                        dim1_std = (dim1_raw - dim1_raw.mean()) / dim1_std_val
+                    else:
+                        dim1_std = dim1_raw
+
+                    matched_dim1 = sum(1 for s in data["leg_slugs"] if s in dim1_map)
+                    print(
+                        f"  Dim 1 prior: {matched_dim1}/{data['n_legislators']} matched, "
+                        f"sigma={dim1_prior_sigma}"
+                    )
+
+                    # Override: external-prior strategy with dim1 values
+                    strategy = IS.EXTERNAL_PRIOR
+                    chamber_anchors = []  # no hard anchors — prior identifies
+                    dim1_external_priors = dim1_std.astype(np.float64)
+
+                    # Also use as init (belt and suspenders)
+                    xi_init = dim1_std.astype(np.float64)
+                    print(
+                        f"  Dim 1 init: {len(xi_init)} params, "
+                        f"range [{xi_init.min():.2f}, {xi_init.max():.2f}]"
+                    )
+
             idata, sampling_time = build_and_sample(
                 data,
                 chamber_anchors,
@@ -4013,6 +4089,8 @@ def main() -> None:
                 xi_initvals=xi_init,
                 strategy=strategy,
                 party_indices=party_indices,
+                external_priors=dim1_external_priors,
+                external_prior_sigma=dim1_prior_sigma,
             )
 
             # ── Phase 4: Convergence diagnostics ──

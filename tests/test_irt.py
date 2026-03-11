@@ -23,6 +23,7 @@ import arviz as az
 import xarray as xr
 from analysis.irt import (
     CONTESTED_VOTE_THRESHOLD,
+    DIM1_PRIOR_SIGMA_DEFAULT,
     HOLDOUT_FRACTION,
     HOLDOUT_SEED,
     HORSESHOE_DEM_WRONG_SIDE_FRAC,
@@ -2552,9 +2553,10 @@ class TestRobustnessFlag:
             horseshoe_diagnostic=False,
             horseshoe_remediate=False,
             promote_2d=False,
+            dim1_prior=False,
         )
         flags = RobustnessFlags.build_flags(args)
-        assert len(flags) == 4
+        assert len(flags) == 5
         assert all(not f.enabled for f in flags)
 
     def test_build_flags_selective(self) -> None:
@@ -2566,6 +2568,7 @@ class TestRobustnessFlag:
             horseshoe_diagnostic=False,
             horseshoe_remediate=False,
             promote_2d=False,
+            dim1_prior=False,
         )
         flags = RobustnessFlags.build_flags(args)
         by_name = {f.name: f for f in flags}
@@ -2573,6 +2576,7 @@ class TestRobustnessFlag:
         assert by_name["horseshoe-diagnostic"].enabled is False
         assert by_name["horseshoe-remediate"].enabled is False
         assert by_name["promote-2d"].enabled is False
+        assert by_name["dim1-prior"].enabled is False
 
     def test_all_flags_have_labels_and_descriptions(self) -> None:
         """Every flag in the registry must have a label and description."""
@@ -2582,6 +2586,23 @@ class TestRobustnessFlag:
             assert len(RobustnessFlags.LABELS[name]) > 0
             assert len(RobustnessFlags.DESCRIPTIONS[name]) > 0
 
+    def test_dim1_prior_flag_enabled(self) -> None:
+        """Dim 1 prior flag should be enabled when set."""
+        import argparse
+
+        args = argparse.Namespace(
+            contested_only=False,
+            horseshoe_diagnostic=False,
+            horseshoe_remediate=False,
+            promote_2d=False,
+            dim1_prior=True,
+        )
+        flags = RobustnessFlags.build_flags(args)
+        by_name = {f.name: f for f in flags}
+        assert by_name["dim1-prior"].enabled is True
+        assert by_name["dim1-prior"].label == "Dim 1 Informative Prior"
+        assert "ADR-0108" in by_name["dim1-prior"].description
+
     def test_constants_exist(self) -> None:
         """Robustness flag constants should be defined."""
         assert MIN_CONTESTED_FOR_REFIT == 50
@@ -2589,6 +2610,7 @@ class TestRobustnessFlag:
         assert PROMOTE_2D_RANK_SHIFT == 10
         assert MIN_PC2_VOTES_FOR_REFIT == 50
         assert PC2_PRIOR_SIGMA == 1.0
+        assert DIM1_PRIOR_SIGMA_DEFAULT == 1.0
 
 
 class TestFilterContestedVotes:
