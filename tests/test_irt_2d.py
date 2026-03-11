@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import numpy as np
 from analysis.irt_2d import (  # noqa: E402
     ANNOTATE_SLUGS,
     ESS_THRESHOLD,
@@ -21,10 +22,13 @@ from analysis.irt_2d import (  # noqa: E402
     N_CHAINS,
     N_SAMPLES,
     N_TUNE,
+    N_TUNE_SUPERMAJORITY,
     RHAT_THRESHOLD,
+    SUPERMAJORITY_THRESHOLD,
     THOMPSON_SLUGS,
     TYSON_SLUGS,
     apply_dim1_sign_check,
+    compute_beta_init_from_pca,
     correlate_with_pca,
     parse_args,
     plot_dim1_forest,
@@ -216,3 +220,110 @@ class TestPlotDim1Forest:
     def test_creates_png_house(self, ideal_2d_positive, tmp_path):
         plot_dim1_forest(ideal_2d_positive, "House", tmp_path)
         assert (tmp_path / "dim1_forest_house.png").exists()
+
+
+# ── Supermajority Tuning Constants (ADR-0112) ────────────────────────────────
+
+
+class TestSupermajorityConstants:
+    """ADR-0112: constants for adaptive N_TUNE and supermajority detection."""
+
+    def test_n_tune_supermajority_doubled(self):
+        assert N_TUNE_SUPERMAJORITY == 2 * N_TUNE
+
+    def test_supermajority_threshold_fraction(self):
+        assert 0.5 < SUPERMAJORITY_THRESHOLD < 1.0
+        assert SUPERMAJORITY_THRESHOLD == 0.70
+
+
+# ── Contested-Only Flag ──────────────────────────────────────────────────────
+
+
+class TestContestedOnlyFlag:
+    """ADR-0112: --contested-only CLI flag."""
+
+    def test_contested_only_default_false(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["irt_2d.py"])
+        args = parse_args()
+        assert args.contested_only is False
+
+    def test_contested_only_flag(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["irt_2d.py", "--contested-only"])
+        args = parse_args()
+        assert args.contested_only is True
+
+    def test_csv_flag_default_false(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["irt_2d.py"])
+        args = parse_args()
+        assert args.csv is False
+
+
+# ── Beta Init from PCA Loadings (ADR-0112) ──────────────────────────────────
+
+
+@pytest.fixture
+def vote_matrix() -> pl.DataFrame:
+    """Small vote matrix for testing beta init from PCA."""
+    rng = np.random.default_rng(42)
+    n_legs, n_votes = 20, 10
+    # Create a matrix with clear structure: first 10 legs vote one way, rest opposite
+    data = {"legislator_slug": [f"leg_{i}" for i in range(n_legs)]}
+    for j in range(n_votes):
+        votes = np.zeros(n_legs)
+        # First group votes Yea, second group votes Nay (with noise)
+        votes[:10] = rng.binomial(1, 0.8, 10)
+        votes[10:] = rng.binomial(1, 0.2, 10)
+        data[f"vote_{j}"] = votes.tolist()
+    return pl.DataFrame(data)
+
+
+@pytest.fixture
+def irt_data_dict() -> dict:
+    """Minimal IRT data dict matching vote_matrix fixture."""
+    return {
+        "vote_ids": [f"vote_{j}" for j in range(10)],
+        "leg_slugs": [f"leg_{i}" for i in range(20)],
+        "n_votes": 10,
+        "n_legislators": 20,
+    }
+
+
+class TestComputeBetaInitFromPca:
+    """ADR-0112: beta init from PCA loadings."""
+
+    def test_returns_tuple(self, vote_matrix, irt_data_dict):
+        result = compute_beta_init_from_pca(vote_matrix, irt_data_dict)
+        assert result is not None
+        beta_col0, anchor_pos = result
+        assert isinstance(beta_col0, np.ndarray)
+        assert isinstance(anchor_pos, float)
+
+    def test_beta_col0_shape(self, vote_matrix, irt_data_dict):
+        beta_col0, _ = compute_beta_init_from_pca(vote_matrix, irt_data_dict)
+        assert beta_col0.shape == (irt_data_dict["n_votes"],)
+
+    def test_anchor_positive_is_positive(self, vote_matrix, irt_data_dict):
+        _, anchor_pos = compute_beta_init_from_pca(vote_matrix, irt_data_dict)
+        assert anchor_pos > 0
+
+    def test_beta_col0_nonzero(self, vote_matrix, irt_data_dict):
+        """PCA loadings should have nonzero values for a structured matrix."""
+        beta_col0, _ = compute_beta_init_from_pca(vote_matrix, irt_data_dict)
+        assert np.any(beta_col0 != 0)
+
+    def test_handles_missing_votes(self, irt_data_dict):
+        """Handles NaN in vote matrix (imputes with column mean)."""
+        data = {
+            "legislator_slug": [f"leg_{i}" for i in range(5)],
+            "vote_0": [1.0, 0.0, None, 1.0, 0.0],
+            "vote_1": [0.0, 1.0, 1.0, None, 0.0],
+            "vote_2": [1.0, 1.0, 0.0, 0.0, 1.0],
+        }
+        matrix = pl.DataFrame(data)
+        small_data = {
+            "vote_ids": ["vote_0", "vote_1", "vote_2"],
+            "n_votes": 3,
+            "n_legislators": 5,
+        }
+        result = compute_beta_init_from_pca(matrix, small_data)
+        assert result is not None

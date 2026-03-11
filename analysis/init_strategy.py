@@ -30,10 +30,11 @@ class InitStrategy:
     IRT_INFORMED = "irt-informed"
     PCA_INFORMED = "pca-informed"
     IRT_2D_DIM1 = "2d-dim1"
+    CANONICAL = "canonical"
     AUTO = "auto"
 
     # Registry (excludes AUTO — same pattern as IdentificationStrategy)
-    ALL_STRATEGIES = [IRT_INFORMED, PCA_INFORMED, IRT_2D_DIM1]
+    ALL_STRATEGIES = [IRT_INFORMED, PCA_INFORMED, IRT_2D_DIM1, CANONICAL]
 
     DESCRIPTIONS: dict[str, str] = {
         IRT_INFORMED: (
@@ -51,17 +52,24 @@ class InitStrategy:
             "Use for iterative refinement: run the pipeline normally, then re-run "
             "the 1D model with 2D Dim 1 to separate ideology from establishment."
         ),
+        CANONICAL: (
+            "Canonical routing output (ADR-0109/0111) — horseshoe-corrected ideal "
+            "points. For horseshoe-affected chambers, uses 2D Dim 1; for balanced "
+            "chambers, uses 1D IRT. Best for hierarchical model initialization."
+        ),
     }
 
     REFERENCES: dict[str, str] = {
         IRT_INFORMED: "Phase 05 canonical 1D Bayesian IRT (ADR-0103)",
         PCA_INFORMED: "Phase 02 PCA on binary vote matrix",
         IRT_2D_DIM1: "Phase 06 experimental 2D IRT (ADR-0054)",
+        CANONICAL: "Phase 06 canonical routing output (ADR-0109, ADR-0111)",
     }
 
     # Django-ready choices tuple: (db_value, display_label)
     CHOICES = [
-        (AUTO, "Auto (prefer IRT, fall back to PCA)"),
+        (AUTO, "Auto (prefer canonical, IRT, then PCA)"),
+        (CANONICAL, "Canonical routing output (horseshoe-corrected)"),
         (IRT_INFORMED, "1D IRT ideal points"),
         (PCA_INFORMED, "PCA PC1 scores"),
         (IRT_2D_DIM1, "2D IRT Dimension 1 (ideology)"),
@@ -74,6 +82,7 @@ def resolve_init_source(
     irt_scores: pl.DataFrame | None = None,
     pca_scores: pl.DataFrame | None = None,
     irt_2d_scores: pl.DataFrame | None = None,
+    canonical_scores: pl.DataFrame | None = None,
     pca_column: str = "PC1",
 ) -> tuple[np.ndarray, str, str]:
     """Resolve initialization values for IRT ideal points.
@@ -83,12 +92,14 @@ def resolve_init_source(
 
     Args:
         strategy: One of InitStrategy constants ("auto", "irt-informed",
-            "pca-informed", "2d-dim1").
+            "pca-informed", "2d-dim1", "canonical").
         slugs: Legislator slugs in model order.
         irt_scores: 1D IRT ideal points DataFrame (columns: legislator_slug, xi_mean).
         pca_scores: PCA scores DataFrame (columns: legislator_slug, PC1, PC2, ...).
         irt_2d_scores: 2D IRT ideal points DataFrame
             (columns: legislator_slug, xi_dim1_mean).
+        canonical_scores: Canonical routing output DataFrame
+            (columns: legislator_slug, xi_mean). From Phase 06 canonical_irt/.
         pca_column: Which PCA column to use (default "PC1"; use "PC2" for Dim 2).
 
     Returns:
@@ -105,7 +116,9 @@ def resolve_init_source(
 
     # ── Auto-detection ──
     if strategy == IS.AUTO:
-        if irt_scores is not None and pca_column == "PC1":
+        if canonical_scores is not None and pca_column == "PC1":
+            strategy = IS.CANONICAL
+        elif irt_scores is not None and pca_column == "PC1":
             strategy = IS.IRT_INFORMED
         elif pca_scores is not None:
             strategy = IS.PCA_INFORMED
@@ -113,7 +126,26 @@ def resolve_init_source(
             return np.zeros(len(slugs)), "none", "zeros (no upstream data available)"
 
     # ── Resolve values ──
-    if strategy == IS.IRT_INFORMED:
+    if strategy == IS.CANONICAL:
+        if canonical_scores is None:
+            raise ValueError(
+                "canonical strategy requires canonical routing output (Phase 06). "
+                "Run `just irt-2d` first or use --init-strategy irt-informed."
+            )
+        score_map = {
+            row["legislator_slug"]: row["xi_mean"]
+            for row in canonical_scores.iter_rows(named=True)
+        }
+        vals = np.array([score_map.get(s, 0.0) for s in slugs])
+        matched = sum(1 for s in slugs if s in score_map)
+        source_col = "source"
+        source_type = "canonical"
+        if source_col in canonical_scores.columns:
+            sources = canonical_scores[source_col].unique().to_list()
+            source_type = f"canonical ({'/'.join(sources)})"
+        source = f"{source_type} xi_mean ({matched}/{len(slugs)} matched)"
+
+    elif strategy == IS.IRT_INFORMED:
         if irt_scores is None:
             raise ValueError(
                 "irt-informed strategy requires 1D IRT results (Phase 05). "
@@ -172,6 +204,7 @@ def build_init_rationale(
     selected: str,
     auto: bool = False,
     irt_2d_available: bool = False,
+    canonical_available: bool = False,
 ) -> dict[str, str]:
     """Build rationale dict explaining why each strategy was/wasn't selected.
 
@@ -224,6 +257,18 @@ def build_init_rationale(
             "2D IRT results not found. Run Phase 06 first to enable this strategy."
         )
 
+    # Canonical rationale
+    if canonical_available:
+        rationale[IS.CANONICAL] = (
+            "Canonical routing output available. Horseshoe-corrected ideal points "
+            "(2D Dim 1 for supermajority chambers, 1D IRT for balanced chambers)."
+        )
+    else:
+        rationale[IS.CANONICAL] = (
+            "Canonical routing output not found. Run Phase 06 with canonical routing "
+            "to enable this strategy."
+        )
+
     # Mark selected/not-selected
     prefix_type = "auto" if auto else "user override"
     for s in IS.ALL_STRATEGIES:
@@ -233,6 +278,23 @@ def build_init_rationale(
             rationale[s] = "Not selected. " + rationale[s]
 
     return rationale
+
+
+def load_canonical_scores(canonical_dir: Path | str, chamber: str) -> pl.DataFrame | None:
+    """Load canonical routing ideal points for a chamber.
+
+    Args:
+        canonical_dir: Path to the canonical_irt directory
+            (e.g., .../06_irt_2d/canonical_irt/).
+        chamber: "house" or "senate" (lowercase).
+
+    Returns:
+        DataFrame with legislator_slug, xi_mean, and source columns, or None.
+    """
+    path = Path(canonical_dir) / f"canonical_ideal_points_{chamber}.parquet"
+    if not path.exists():
+        return None
+    return pl.read_parquet(path)
 
 
 def load_2d_scores(irt_2d_data_dir: Path | str, chamber: str) -> pl.DataFrame | None:

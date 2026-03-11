@@ -1,6 +1,7 @@
 """Tests for canonical ideal point routing.
 
-Covers horseshoe detection, 1D/2D loading, routing logic, and file output.
+Covers horseshoe detection, 1D/2D loading, tiered convergence quality gate
+(ADR-0110), routing logic, and file output.
 
 Run: uv run pytest tests/test_canonical_ideal_points.py -v
 """
@@ -19,10 +20,16 @@ from analysis.canonical_ideal_points import (  # noqa: E402
     DIM1_RHAT_THRESHOLD,
     HORSESHOE_DEM_WRONG_SIDE_FRAC,
     HORSESHOE_OVERLAP_FRAC,
+    TIER1_ESS_THRESHOLD,
+    TIER1_RHAT_THRESHOLD,
+    TIER2_RANK_CORR_THRESHOLD,
+    TIER2_RHAT_THRESHOLD,
+    assess_2d_convergence_tier,
     check_2d_convergence_quality,
     detect_horseshoe_from_ideal_points,
     load_1d_ideal_points,
     load_2d_dim1_ideal_points,
+    load_pca_scores,
     route_canonical_ideal_points,
     write_canonical_ideal_points,
 )
@@ -96,7 +103,7 @@ def ideal_2d_parquet(tmp_path) -> Path:
     )
     df.write_parquet(data_dir / "ideal_points_2d_senate.parquet")
 
-    # Convergence summary
+    # Convergence summary — Tier 1 (well converged)
     summary = {
         "chambers": {
             "Senate": {
@@ -107,6 +114,25 @@ def ideal_2d_parquet(tmp_path) -> Path:
     (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
 
     return tmp_path
+
+
+@pytest.fixture
+def pca_dir_fixture(tmp_path) -> Path:
+    """Create a mock PCA output directory with scores matching the 2D slugs."""
+    pca_base = tmp_path / "pca"
+    data_dir = pca_base / "data"
+    data_dir.mkdir(parents=True)
+
+    # PC1 strongly correlated with the 2D Dim 1 ordering
+    df = pl.DataFrame(
+        {
+            "legislator_slug": ["r1", "r2", "r3", "d1", "d2"],
+            "PC1": [1.4, 0.7, 0.4, -1.1, -0.9],
+            "PC2": [0.1, -0.1, 0.2, 0.0, 0.1],
+        }
+    )
+    df.write_parquet(data_dir / "pca_scores_senate.parquet")
+    return pca_base
 
 
 @pytest.fixture
@@ -201,10 +227,135 @@ class TestLoad2dDim1:
         assert result is None
 
 
-# ── check_2d_convergence_quality ──────────────────────────────────────────────
+# ── load_pca_scores ──────────────────────────────────────────────────────────
 
 
-class TestCheck2dConvergence:
+class TestLoadPcaScores:
+    def test_loads_existing(self, pca_dir_fixture):
+        df = load_pca_scores(pca_dir_fixture, "Senate")
+        assert df is not None
+        assert "legislator_slug" in df.columns
+        assert "PC1" in df.columns
+        assert df.height == 5
+
+    def test_returns_none_missing(self, tmp_path):
+        assert load_pca_scores(tmp_path, "Senate") is None
+
+
+# ── assess_2d_convergence_tier ───────────────────────────────────────────────
+
+
+class TestAssess2dConvergenceTier:
+    """Tiered convergence quality gate (ADR-0110)."""
+
+    def test_tier1_good_convergence(self, ideal_2d_parquet):
+        """R-hat < 1.10, ESS > 100 → Tier 1."""
+        result = assess_2d_convergence_tier(ideal_2d_parquet, "Senate")
+        assert result["tier"] == 1
+        assert result["usable"] is True
+        assert "converged" in result["reason"]
+
+    def test_tier2_with_rank_correlation(self, tmp_path, pca_dir_fixture):
+        """R-hat between 1.10 and 2.50, good rank correlation → Tier 2."""
+        data_dir = tmp_path / "2d" / "data"
+        data_dir.mkdir(parents=True)
+
+        # 2D ideal points correlated with PCA
+        ip_2d = pl.DataFrame(
+            {
+                "legislator_slug": ["r1", "r2", "r3", "d1", "d2"],
+                "xi_mean": [1.5, 0.8, 0.5, -1.2, -0.8],
+            }
+        )
+
+        summary = {
+            "chambers": {
+                "Senate": {"convergence": {"xi_rhat_max": 1.80, "xi_ess_min": 5.0}}
+            }
+        }
+        (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
+
+        result = assess_2d_convergence_tier(
+            tmp_path / "2d", "Senate", ip_2d=ip_2d, pca_dir=pca_dir_fixture,
+        )
+        assert result["tier"] == 2
+        assert result["usable"] is True
+        assert result["rank_corr"] is not None
+        assert result["rank_corr"] > TIER2_RANK_CORR_THRESHOLD
+
+    def test_tier3_rhat_too_high(self, tmp_path):
+        """R-hat ≥ 2.50 → Tier 3 regardless of correlation."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        summary = {
+            "chambers": {
+                "Senate": {"convergence": {"xi_rhat_max": 3.0, "xi_ess_min": 5.0}}
+            }
+        }
+        (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
+        result = assess_2d_convergence_tier(tmp_path, "Senate")
+        assert result["tier"] == 3
+        assert result["usable"] is False
+
+    def test_tier3_low_rank_correlation(self, tmp_path, pca_dir_fixture):
+        """R-hat < 2.50 but rank correlation < 0.70 → Tier 3."""
+        data_dir = tmp_path / "2d" / "data"
+        data_dir.mkdir(parents=True)
+
+        # 2D ideal points NOT correlated with PCA (random order)
+        ip_2d = pl.DataFrame(
+            {
+                "legislator_slug": ["r1", "r2", "r3", "d1", "d2"],
+                "xi_mean": [0.1, -0.3, 0.8, 0.5, -0.2],  # scrambled
+            }
+        )
+
+        summary = {
+            "chambers": {
+                "Senate": {"convergence": {"xi_rhat_max": 1.80, "xi_ess_min": 5.0}}
+            }
+        }
+        (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
+
+        result = assess_2d_convergence_tier(
+            tmp_path / "2d", "Senate", ip_2d=ip_2d, pca_dir=pca_dir_fixture,
+        )
+        assert result["tier"] == 3
+        assert result["usable"] is False
+
+    def test_tier3_no_pca(self, tmp_path):
+        """R-hat in Tier 2 range but no PCA available → Tier 3 (can't validate)."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        summary = {
+            "chambers": {
+                "Senate": {"convergence": {"xi_rhat_max": 1.50, "xi_ess_min": 5.0}}
+            }
+        }
+        (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
+
+        # No pca_dir provided
+        result = assess_2d_convergence_tier(tmp_path, "Senate")
+        assert result["tier"] == 3
+        assert result["usable"] is False
+
+    def test_missing_convergence_summary(self, tmp_path):
+        result = assess_2d_convergence_tier(tmp_path, "Senate")
+        assert result["tier"] == 3
+        assert result["usable"] is False
+
+    def test_returns_rhat_and_ess(self, ideal_2d_parquet):
+        result = assess_2d_convergence_tier(ideal_2d_parquet, "Senate")
+        assert result["xi_rhat"] == pytest.approx(1.01)
+        assert result["xi_ess"] == pytest.approx(500.0)
+
+
+# ── check_2d_convergence_quality (legacy wrapper) ───────────────────────────
+
+
+class TestCheck2dConvergenceLegacy:
+    """Legacy wrapper should return True for tier 1 (good convergence)."""
+
     def test_passes_good_convergence(self, ideal_2d_parquet):
         assert check_2d_convergence_quality(ideal_2d_parquet, "Senate") is True
 
@@ -213,18 +364,7 @@ class TestCheck2dConvergence:
         data_dir.mkdir()
         summary = {
             "chambers": {
-                "Senate": {"convergence": {"xi_rhat_max": 1.10, "xi_ess_min": 500.0}}
-            }
-        }
-        (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
-        assert check_2d_convergence_quality(tmp_path, "Senate") is False
-
-    def test_fails_low_ess(self, tmp_path):
-        data_dir = tmp_path / "data"
-        data_dir.mkdir()
-        summary = {
-            "chambers": {
-                "Senate": {"convergence": {"xi_rhat_max": 1.01, "xi_ess_min": 50.0}}
+                "Senate": {"convergence": {"xi_rhat_max": 3.0, "xi_ess_min": 500.0}}
             }
         }
         (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
@@ -244,13 +384,62 @@ class TestRouting:
         assert "source" in ip.columns
         assert ip["source"][0] == "1d_irt"
 
-    def test_horseshoe_uses_2d(self, horseshoe_1d_dir, ideal_2d_parquet):
+    def test_horseshoe_uses_2d_tier1(self, horseshoe_1d_dir, ideal_2d_parquet):
+        """Horseshoe detected + Tier 1 convergence → 2D Dim 1."""
         ip, source, meta = route_canonical_ideal_points(
             horseshoe_1d_dir, ideal_2d_parquet, "Senate"
         )
         assert source == "2d_dim1"
         assert ip["source"][0] == "2d_dim1"
         assert "xi_mean" in ip.columns
+        assert meta["convergence_tier"]["tier"] == 1
+
+    def test_horseshoe_uses_2d_tier2(self, horseshoe_1d_dir, tmp_path, pca_dir_fixture):
+        """Horseshoe detected + Tier 2 (rank corr OK) → 2D Dim 1."""
+        # Create a 2D dir with R-hat in Tier 2 range
+        data_dir = tmp_path / "2d_tier2" / "data"
+        data_dir.mkdir(parents=True)
+
+        df = pl.DataFrame(
+            {
+                "legislator_slug": ["r1", "r2", "r3", "r4", "r5", "d1", "d2"],
+                "full_name": ["R A", "R B", "R C", "R D", "R Rebel", "D A", "D B"],
+                "party": ["Republican"] * 5 + ["Democrat"] * 2,
+                "xi_dim1_mean": [1.5, 0.8, 0.5, 0.3, -0.2, -1.2, -0.8],
+                "xi_dim1_hdi_3%": [0.5, -0.2, -0.5, -0.7, -1.2, -2.2, -1.8],
+                "xi_dim1_hdi_97%": [2.5, 1.8, 1.5, 1.3, 0.8, -0.2, 0.2],
+                "xi_dim2_mean": [0.1] * 7,
+                "xi_dim2_hdi_3%": [-0.5] * 7,
+                "xi_dim2_hdi_97%": [0.5] * 7,
+            }
+        )
+        df.write_parquet(data_dir / "ideal_points_2d_senate.parquet")
+
+        # Also need PCA scores for these slugs
+        pca_data = tmp_path / "pca2" / "data"
+        pca_data.mkdir(parents=True)
+        pl.DataFrame(
+            {
+                "legislator_slug": ["r1", "r2", "r3", "r4", "r5", "d1", "d2"],
+                "PC1": [1.4, 0.7, 0.4, 0.2, -0.3, -1.1, -0.9],
+                "PC2": [0.0] * 7,
+            }
+        ).write_parquet(pca_data / "pca_scores_senate.parquet")
+
+        # Convergence: Tier 2 range (R-hat > 1.10 but < 2.50)
+        summary = {
+            "chambers": {
+                "Senate": {"convergence": {"xi_rhat_max": 1.80, "xi_ess_min": 5.0}}
+            }
+        }
+        (data_dir / "convergence_summary.json").write_text(json.dumps(summary))
+
+        ip, source, meta = route_canonical_ideal_points(
+            horseshoe_1d_dir, tmp_path / "2d_tier2", "Senate",
+            pca_dir=tmp_path / "pca2",
+        )
+        assert source == "2d_dim1"
+        assert meta["convergence_tier"]["tier"] == 2
 
     def test_horseshoe_fallback_no_2d(self, horseshoe_1d_dir, tmp_path):
         ip, source, meta = route_canonical_ideal_points(horseshoe_1d_dir, tmp_path, "Senate")
@@ -284,7 +473,7 @@ class TestWriteCanonical:
         assert (output_dir / "canonical_ideal_points_senate.parquet").exists()
         assert (output_dir / "routing_manifest.json").exists()
 
-    def test_manifest_contents(self, ideal_1d_dir, ideal_2d_parquet, tmp_path):
+    def test_manifest_has_tiered_thresholds(self, ideal_1d_dir, ideal_2d_parquet, tmp_path):
         output_dir = tmp_path / "canonical"
         write_canonical_ideal_points(
             ideal_1d_dir, ideal_2d_parquet, output_dir, chambers=["Senate"]
@@ -292,7 +481,9 @@ class TestWriteCanonical:
         manifest = json.loads((output_dir / "routing_manifest.json").read_text())
         assert "sources" in manifest
         assert "thresholds" in manifest
-        assert manifest["thresholds"]["horseshoe_dem_wrong_side_frac"] == HORSESHOE_DEM_WRONG_SIDE_FRAC
+        assert manifest["thresholds"]["tier1_rhat_threshold"] == TIER1_RHAT_THRESHOLD
+        assert manifest["thresholds"]["tier2_rhat_threshold"] == TIER2_RHAT_THRESHOLD
+        assert manifest["thresholds"]["tier2_rank_corr_threshold"] == TIER2_RANK_CORR_THRESHOLD
 
     def test_horseshoe_routes_to_2d(self, horseshoe_1d_dir, ideal_2d_parquet, tmp_path):
         output_dir = tmp_path / "canonical"
@@ -316,6 +507,13 @@ class TestConstants:
         assert HORSESHOE_DEM_WRONG_SIDE_FRAC == 0.20
         assert HORSESHOE_OVERLAP_FRAC == 0.30
 
-    def test_convergence_thresholds(self):
-        assert DIM1_RHAT_THRESHOLD == 1.05
-        assert DIM1_ESS_THRESHOLD == 200
+    def test_tiered_thresholds(self):
+        assert TIER1_RHAT_THRESHOLD == 1.10
+        assert TIER1_ESS_THRESHOLD == 100
+        assert TIER2_RHAT_THRESHOLD == 2.50
+        assert TIER2_RANK_CORR_THRESHOLD == 0.70
+
+    def test_legacy_aliases(self):
+        """Legacy DIM1_* constants should alias to Tier 1 thresholds."""
+        assert DIM1_RHAT_THRESHOLD == TIER1_RHAT_THRESHOLD
+        assert DIM1_ESS_THRESHOLD == TIER1_ESS_THRESHOLD

@@ -169,6 +169,8 @@ Post-hoc Dim 1 sign check: Republican mean must be positive.
 
 N_SAMPLES = 2000
 N_TUNE = 2000
+N_TUNE_SUPERMAJORITY = 4000  # ADR-0112: doubled for >70% majority
+SUPERMAJORITY_THRESHOLD = 0.70  # ADR-0112: auto-detect majority party fraction
 N_CHAINS = 4
 RANDOM_SEED = 42
 
@@ -211,6 +213,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-samples", type=int, default=N_SAMPLES)
     parser.add_argument("--n-tune", type=int, default=N_TUNE)
     parser.add_argument("--n-chains", type=int, default=N_CHAINS)
+    parser.add_argument(
+        "--contested-only",
+        action="store_true",
+        help="Filter to contested votes (minority > 2.5%%) before 2D IRT (ADR-0112)",
+    )
+    parser.add_argument("--csv", action="store_true", help="Force CSV-only mode (skip PostgreSQL)")
     return parser.parse_args()
 
 
@@ -271,9 +279,69 @@ def build_2d_irt_graph(data: dict) -> pm.Model:
     return model
 
 
+def compute_beta_init_from_pca(
+    matrix: pl.DataFrame,
+    data: dict,
+) -> tuple[np.ndarray, float] | None:
+    """Compute beta (discrimination) init values from PCA loadings on the vote matrix.
+
+    PCA eigenvectors on the bill dimension approximate the discrimination pattern:
+    PC1 loadings → beta_col0 (ideology), PC2 loadings → beta_col1 (secondary axis).
+    PLT constraints are enforced: beta_col1[0] = 0, beta_col1[1] > 0.
+
+    Args:
+        matrix: Vote matrix DataFrame (legislators x votes, with legislator_slug column).
+        data: IRT data dict from prepare_irt_data() (provides vote_ids ordering).
+
+    Returns:
+        (beta_col0_init, beta_anchor_positive_init) or None if PCA fails.
+        beta_col0_init: shape (n_votes,) — PC1 loadings for Dim 1 discrimination.
+        beta_anchor_positive_init: float — abs(PC2 loading) for the positive anchor.
+    """
+    vote_ids = data["vote_ids"]
+    vote_cols = [c for c in matrix.columns if c != "legislator_slug"]
+
+    # Build numeric matrix (legislators x votes), mean-impute NaN
+    mat = matrix.select(vote_cols).to_numpy().astype(np.float64)
+    col_means = np.nanmean(mat, axis=0)
+    nan_mask = np.isnan(mat)
+    mat[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
+
+    # Standardize columns
+    col_std = mat.std(axis=0)
+    col_std[col_std == 0] = 1.0
+    mat = (mat - mat.mean(axis=0)) / col_std
+
+    # PCA via SVD on the vote dimension
+    try:
+        _, s, vt = np.linalg.svd(mat, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+
+    # Loadings: rows of Vt correspond to principal components, columns to votes
+    pc1_loadings = vt[0]  # shape (n_cols,)
+    pc2_loadings = vt[1] if vt.shape[0] > 1 else np.zeros_like(pc1_loadings)
+
+    # Map loadings to the model's vote ordering
+    col_to_idx = {c: i for i, c in enumerate(vote_cols)}
+    beta_col0_init = np.array(
+        [pc1_loadings[col_to_idx[v]] if v in col_to_idx else 0.0 for v in vote_ids]
+    )
+    pc2_mapped = np.array(
+        [pc2_loadings[col_to_idx[v]] if v in col_to_idx else 0.0 for v in vote_ids]
+    )
+
+    # PLT constraint: beta_col1[1] must be > 0
+    # Use abs(pc2_loadings[1]) as the anchor positive init
+    beta_anchor_positive_init = max(abs(pc2_mapped[1]), 0.01)
+
+    return beta_col0_init, beta_anchor_positive_init
+
+
 def build_and_sample_2d(
     data: dict,
     xi_initvals_2d: np.ndarray | None = None,
+    beta_init: tuple[np.ndarray, float] | None = None,
     n_samples: int = N_SAMPLES,
     n_tune: int = N_TUNE,
     n_chains: int = N_CHAINS,
@@ -283,6 +351,9 @@ def build_and_sample_2d(
     Args:
         data: IRT data dict from prepare_irt_data().
         xi_initvals_2d: Optional (n_leg, 2) array of initial ideal points from PCA.
+        beta_init: Optional (beta_col0_init, beta_anchor_positive_init) from
+            compute_beta_init_from_pca(). Provides PCA-informed starting values
+            for discrimination parameters (ADR-0112).
         n_samples: MCMC posterior draws per chain.
         n_tune: MCMC tuning steps (discarded).
         n_chains: Number of independent MCMC chains.
@@ -296,13 +367,28 @@ def build_and_sample_2d(
 
     # --- Compile with nutpie ---
     compile_kwargs: dict = {}
+    initial_points: dict = {}
+    no_jitter_rvs: set[str] = set()
+
     if xi_initvals_2d is not None:
-        compile_kwargs["initial_points"] = {"xi": xi_initvals_2d}
-        # Jitter all RVs except xi (PCA-initialized)
-        compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name != "xi"}
+        initial_points["xi"] = xi_initvals_2d
+        no_jitter_rvs.add("xi")
         print(f"  PCA-informed 2D initvals: ({xi_initvals_2d.shape})")
+
+    if beta_init is not None:
+        beta_col0_init, beta_anchor_positive_init = beta_init
+        initial_points["beta_col0"] = beta_col0_init
+        initial_points["beta_anchor_positive"] = np.array(beta_anchor_positive_init)
+        no_jitter_rvs.update({"beta_col0", "beta_anchor_positive"})
+        lo, hi = beta_col0_init.min(), beta_col0_init.max()
+        print(f"  PCA-informed beta_col0 init: range [{lo:.3f}, {hi:.3f}]")
+        print(f"  PCA-informed beta_anchor_positive init: {beta_anchor_positive_init:.3f}")
+
+    if initial_points:
+        compile_kwargs["initial_points"] = initial_points
+        compile_kwargs["jitter_rvs"] = {rv for rv in model.free_RVs if rv.name not in no_jitter_rvs}
         jittered = [rv.name for rv in compile_kwargs["jitter_rvs"]]
-        print(f"  jitter_rvs: {jittered} (xi excluded)")
+        print(f"  jitter_rvs: {jittered} ({', '.join(no_jitter_rvs)} excluded)")
 
     print("  Compiling model with nutpie...")
     compiled = nutpie.compile_pymc_model(model, **compile_kwargs)
@@ -1022,6 +1108,34 @@ def main() -> None:
 
             chamber_lower = chamber.lower()
 
+            # ── Contested-only filtering (ADR-0112) ──
+            if args.contested_only:
+                n_votes_before = len(matrix.columns) - 1  # exclude legislator_slug
+                vote_cols = [c for c in matrix.columns if c != "legislator_slug"]
+                minority_fracs = []
+                for vc in vote_cols:
+                    col = matrix[vc].drop_nulls()
+                    if col.len() > 0:
+                        frac = float(col.mean())
+                        minority_fracs.append((vc, min(frac, 1 - frac)))
+                contested = [vc for vc, mf in minority_fracs if mf > 0.025]
+                matrix = matrix.select(["legislator_slug"] + contested)
+                print(f"  Contested-only filter: {n_votes_before} → {len(contested)} votes")
+
+            # ── Adaptive N_TUNE for supermajority (ADR-0112) ──
+            chamber_legs = legislators.filter(
+                pl.col("legislator_slug").is_in(matrix["legislator_slug"])
+            )
+            party_counts = chamber_legs.group_by("party").agg(pl.len().alias("count"))
+            max_party_frac = float(party_counts["count"].max()) / max(chamber_legs.height, 1)
+            effective_n_tune = args.n_tune
+            if max_party_frac > SUPERMAJORITY_THRESHOLD and args.n_tune == N_TUNE:
+                effective_n_tune = N_TUNE_SUPERMAJORITY
+                print(
+                    f"  Supermajority detected ({max_party_frac:.0%}) — "
+                    f"N_TUNE increased: {N_TUNE} → {N_TUNE_SUPERMAJORITY}"
+                )
+
             # ── Prepare IRT data ──
             print_header(f"PREPARE IRT DATA — {chamber}")
             data = prepare_irt_data(matrix, chamber)
@@ -1058,13 +1172,22 @@ def main() -> None:
             print(f"  Dim 1 range: [{dim1_std.min():.2f}, {dim1_std.max():.2f}]")
             print(f"  Dim 2 range: [{dim2_std.min():.2f}, {dim2_std.max():.2f}]")
 
+            # ── Beta init from PCA loadings (ADR-0112) ──
+            beta_init = compute_beta_init_from_pca(matrix, data)
+            if beta_init is not None:
+                lo, hi = beta_init[0].min(), beta_init[0].max()
+                print(f"  Beta init: PCA loadings (col0 range: [{lo:.3f}, {hi:.3f}])")
+            else:
+                print("  Beta init: default (PCA loadings computation failed)")
+
             # ── Build and sample 2D model ──
             print_header(f"MCMC SAMPLING — 2D IRT ({chamber})")
             idata, sampling_time = build_and_sample_2d(
                 data=data,
                 xi_initvals_2d=xi_initvals_2d,
+                beta_init=beta_init,
                 n_samples=args.n_samples,
-                n_tune=args.n_tune,
+                n_tune=effective_n_tune,
                 n_chains=args.n_chains,
             )
 
@@ -1167,6 +1290,7 @@ def main() -> None:
             irt_1d_dir=irt_dir,
             irt_2d_dir=ctx.run_dir,
             output_dir=canonical_dir,
+            pca_dir=pca_dir,
         )
 
         # ── Build HTML report ──

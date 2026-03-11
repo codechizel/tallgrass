@@ -281,8 +281,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--init-strategy",
         default="auto",
-        choices=["auto", "irt-informed", "pca-informed"],
-        help="xi_offset initialization source (default: auto — prefer IRT, fall back to PCA)",
+        choices=["auto", "irt-informed", "pca-informed", "canonical"],
+        help="xi_offset initialization source (default: auto — prefer canonical, IRT, PCA)",
     )
     parser.add_argument(
         "--dim1-prior",
@@ -1749,6 +1749,24 @@ def main() -> None:
             except FileNotFoundError:
                 print("  WARNING: Phase 06 (2D IRT) results not found — dim1-prior unavailable")
 
+        # ── Load canonical routing scores (ADR-0111) ──
+        canonical_scores: dict[str, pl.DataFrame | None] = {}
+        try:
+            irt_2d_dir_for_canonical = resolve_upstream_dir(
+                "06_irt_2d", results_root, args.run_id, None
+            )
+            from analysis.init_strategy import load_canonical_scores
+
+            canonical_dir = irt_2d_dir_for_canonical / "canonical_irt"
+            for ch in ("house", "senate"):
+                canonical_scores[ch] = load_canonical_scores(canonical_dir, ch)
+                if canonical_scores[ch] is not None:
+                    df = canonical_scores[ch]
+                    src = df["source"][0] if "source" in df.columns else "?"
+                    print(f"  Canonical scores loaded: {ch} ({df.height} rows, source={src})")
+        except (FileNotFoundError, ModuleNotFoundError):
+            pass  # Canonical scores not available — auto will fall back
+
         # ── Per-chamber models ──
         per_chamber_results: dict[str, dict] = {}
 
@@ -1774,6 +1792,7 @@ def main() -> None:
                 slugs=data["leg_slugs"],
                 irt_scores=flat_ip[ch],
                 pca_scores=pca_scores,
+                canonical_scores=canonical_scores.get(ch),
                 pca_column="PC1",
             )
             xi_init = xi_init_vals.astype(np.float64) if init_strat != "none" else None
@@ -1887,6 +1906,7 @@ def main() -> None:
                         slugs=chamber_data["leg_slugs"],
                         irt_scores=flat_ip[ch_key],
                         pca_scores=pca_scores,
+                        canonical_scores=canonical_scores.get(ch_key),
                         pca_column="PC1",
                     )
                     joint_init_parts.append(vals.astype(np.float64))

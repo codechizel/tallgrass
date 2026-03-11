@@ -104,13 +104,13 @@ Registered in `pyproject.toml`. Module-level `pytestmark` variables (not per-cla
 - `tests/test_ppc.py` — log-likelihood (1D/2D/hierarchical), PPC battery, item/person fit, Q3 local dependence, LOO-CV, Pareto k, data alignment (~60 tests)
 - `tests/test_wnominate.py` — vote matrix conversion, polarity selection, result parsing, sign alignment, three-way correlations, comparison table, eigenvalues (~25 tests)
 - `tests/test_lca.py` — vote matrix construction, class enumeration, BIC selection, Salsa effect detection, IRT cross-validation, ARI comparison, within-party LCA, discriminating bills, constants consistency (~37 tests)
-- `tests/test_irt_2d.py` — sign-flip logic, PCA correlation, convergence constants, init default, forest plot smoke tests (~19 tests)
-- `tests/test_canonical_ideal_points.py` — canonical routing: horseshoe detection, 1D/2D loading, convergence quality gates, routing logic, file output, constants (~23 tests)
+- `tests/test_irt_2d.py` — sign-flip logic, PCA correlation, convergence constants, init default, forest plot smoke tests, supermajority constants, contested-only flag, beta init from PCA loadings (~29 tests)
+- `tests/test_canonical_ideal_points.py` — canonical routing: horseshoe detection, 1D/2D/PCA loading, tiered convergence (Tier 1/2/3), legacy wrapper, routing logic, file output, constants (~33 tests)
 - `tests/test_bill_actions.py` — BillAction dataclass construction, CSV export (headers, committee join, roundtrip, row counts) (~17 tests)
 - `tests/test_bill_lifecycle.py` — bill lifecycle Sankey data: action categorization, stage transitions, died inference, chamber filtering, Sankey plot, constants (~31 tests)
 - `tests/test_model_legislation.py` — ALEC scraper (mocked HTML), OpenStates adapter (mocked API), cosine similarity, match classification, n-gram overlap, match summary, report builder, CLI args (~58 tests)
 - `tests/test_extract.py` — bespoke report extraction: section parsing, extraction by number/ID, multi-report composition, Plotly/DataTables CDN dedup, provenance, CSS extraction, slug generation, CLI list/extract/multi-report (~50 tests)
-- `tests/test_init_strategy.py` — shared MCMC initialization strategies: constants, resolution, auto-detection, IRT/PCA/2d-dim1 sources, error cases, rationale generation, file loading (~34 tests)
+- `tests/test_init_strategy.py` — shared MCMC initialization strategies: constants, resolution, auto-detection, IRT/PCA/2d-dim1/canonical sources, error cases, rationale generation, file loading (~42 tests)
 
 ## Integration & Structure Test Files
 

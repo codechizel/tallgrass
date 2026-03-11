@@ -25,10 +25,20 @@ def _make_2d_scores(slugs: list[str], dim1: list[float]) -> pl.DataFrame:
     return pl.DataFrame({"legislator_slug": slugs, "xi_dim1_mean": dim1})
 
 
+def _make_canonical_scores(slugs: list[str], values: list[float]) -> pl.DataFrame:
+    """Build a minimal canonical routing output DataFrame."""
+    return pl.DataFrame({
+        "legislator_slug": slugs,
+        "xi_mean": values,
+        "source": ["2d_dim1"] * len(slugs),
+    })
+
+
 SLUGS = ["sen_a", "sen_b", "sen_c", "sen_d"]
 IRT_SCORES = _make_irt_scores(SLUGS, [2.0, 1.0, -1.0, -2.0])
 PCA_SCORES = _make_pca_scores(SLUGS, [5.0, 2.5, -2.5, -5.0], [1.0, -1.0, 0.5, -0.5])
 IRT_2D_SCORES = _make_2d_scores(SLUGS, [1.5, 0.5, -0.5, -1.5])
+CANONICAL_SCORES = _make_canonical_scores(SLUGS, [1.8, 0.6, -0.6, -1.8])
 
 
 # ── InitStrategy constants ────────────────────────────────────────────────────
@@ -44,11 +54,10 @@ class TestInitStrategyConstants:
         assert IS.AUTO not in IS.ALL_STRATEGIES
         assert IS.AUTO == "auto"
 
-    def test_all_strategies_are_kebab_case(self) -> None:
+    def test_all_strategies_are_lowercase(self) -> None:
         from analysis.init_strategy import InitStrategy
 
         for s in InitStrategy.ALL_STRATEGIES:
-            assert "-" in s, f"Strategy {s!r} should be kebab-case"
             assert s == s.lower(), f"Strategy {s!r} should be lowercase"
 
     def test_descriptions_cover_all_strategies(self) -> None:
@@ -122,7 +131,7 @@ class TestResolveInitSource:
         assert "PC2" in source
         assert vals.shape == (4,)
 
-    def test_auto_prefers_irt(self) -> None:
+    def test_auto_prefers_irt_without_canonical(self) -> None:
         from analysis.init_strategy import resolve_init_source
 
         vals, strategy, source = resolve_init_source(
@@ -292,6 +301,73 @@ class TestResolve2dDim1:
         assert strategy != "2d-dim1"
 
 
+# ── canonical strategy (ADR-0111) ───────────────────────────────────────────
+
+
+class TestResolveCanonical:
+    """Test the canonical strategy for horseshoe-corrected initialization."""
+
+    def test_canonical_returns_standardized(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        vals, strategy, source = resolve_init_source(
+            strategy="canonical", slugs=SLUGS, canonical_scores=CANONICAL_SCORES
+        )
+        assert vals.shape == (4,)
+        assert strategy == "canonical"
+        assert "canonical" in source
+        assert abs(vals.mean()) < 1e-10
+        assert abs(vals.std() - 1.0) < 1e-10
+
+    def test_canonical_raises_without_data(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        with pytest.raises(ValueError, match="canonical.*requires"):
+            resolve_init_source(strategy="canonical", slugs=SLUGS, canonical_scores=None)
+
+    def test_canonical_includes_source_type(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        _, _, source = resolve_init_source(
+            strategy="canonical", slugs=SLUGS, canonical_scores=CANONICAL_SCORES
+        )
+        assert "2d_dim1" in source  # source column value
+
+    def test_canonical_match_count(self) -> None:
+        from analysis.init_strategy import resolve_init_source
+
+        _, _, source = resolve_init_source(
+            strategy="canonical", slugs=SLUGS, canonical_scores=CANONICAL_SCORES
+        )
+        assert "4/4 matched" in source
+
+    def test_auto_prefers_canonical_over_irt(self) -> None:
+        """Auto with canonical available should prefer canonical."""
+        from analysis.init_strategy import resolve_init_source
+
+        _, strategy, _ = resolve_init_source(
+            strategy="auto",
+            slugs=SLUGS,
+            irt_scores=IRT_SCORES,
+            pca_scores=PCA_SCORES,
+            canonical_scores=CANONICAL_SCORES,
+        )
+        assert strategy == "canonical"
+
+    def test_auto_falls_back_to_irt_without_canonical(self) -> None:
+        """Auto without canonical should fall back to IRT."""
+        from analysis.init_strategy import resolve_init_source
+
+        _, strategy, _ = resolve_init_source(
+            strategy="auto",
+            slugs=SLUGS,
+            irt_scores=IRT_SCORES,
+            pca_scores=PCA_SCORES,
+            canonical_scores=None,
+        )
+        assert strategy == "irt-informed"
+
+
 # ── load_2d_scores ────────────────────────────────────────────────────────────
 
 
@@ -354,6 +430,29 @@ class TestBuildInitRationale:
         )
         for s in InitStrategy.ALL_STRATEGIES:
             assert s in rationale
+
+
+# ── load_canonical_scores ────────────────────────────────────────────────────
+
+
+class TestLoadCanonicalScores:
+    """Test canonical routing score loading utility."""
+
+    def test_returns_none_for_missing(self, tmp_path) -> None:
+        from analysis.init_strategy import load_canonical_scores
+
+        result = load_canonical_scores(tmp_path, "senate")
+        assert result is None
+
+    def test_loads_parquet(self, tmp_path) -> None:
+        from analysis.init_strategy import load_canonical_scores
+
+        CANONICAL_SCORES.write_parquet(tmp_path / "canonical_ideal_points_senate.parquet")
+        result = load_canonical_scores(tmp_path, "senate")
+        assert result is not None
+        assert result.height == 4
+        assert "xi_mean" in result.columns
+        assert "source" in result.columns
 
 
 # ── load_irt_scores ───────────────────────────────────────────────────────────
