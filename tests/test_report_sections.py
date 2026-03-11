@@ -67,7 +67,7 @@ class TestInteractiveSection:
     def test_render_basic(self):
         section = InteractiveSection(id="plotly1", title="Scatter", html="<div>plotly chart</div>")
         html = section.render()
-        assert '<div class="interactive-container" id="plotly1">' in html
+        assert '<div class="interactive-container">' in html
         assert "<div>plotly chart</div>" in html
 
     def test_render_with_caption(self):
@@ -230,7 +230,7 @@ class TestReportBuilderInteractive:
         report = ReportBuilder(title="Test")
         report.add(InteractiveSection(id="plotly1", title="Scatter", html="<div>chart</div>"))
         html = report.render()
-        assert '<div class="interactive-container" id="plotly1">' in html
+        assert '<div class="interactive-container">' in html
 
 
 # ── CSS Styles ───────────────────────────────────────────────────────────────

@@ -298,7 +298,7 @@ class TestAccessibility:
             aria_label="Interactive scatter of ideal points.",
         )
         html = section.render()
-        assert '<div class="interactive-container" id="plot1" aria-label="Interactive scatter of ideal points.">' in html
+        assert '<div class="interactive-container" aria-label="Interactive scatter of ideal points.">' in html
 
 
 # ── make_gt() ────────────────────────────────────────────────────────────────

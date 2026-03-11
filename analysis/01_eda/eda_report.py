@@ -197,7 +197,7 @@ def _add_chamber_party_composition(report: ReportBuilder, legislators: pl.DataFr
         ]
         fig = make_hemicycle_chart(hemi_seats, f"{chamber} — Party Composition")
         hemi_html = fig.to_html(
-            include_plotlyjs="cdn", full_html=False, div_id=f"hemicycle-{chamber.lower()}"
+            include_plotlyjs="cdn", full_html=False, div_id=f"hemicycle-{chamber.lower()}-plot"
         )
         report.add(
             InteractiveSection(

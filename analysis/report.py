@@ -154,7 +154,7 @@ class InteractiveSection:
 
     def render(self) -> str:
         aria = f' aria-label="{self.aria_label}"' if self.aria_label else ""
-        parts = [f'<div class="interactive-container" id="{self.id}"{aria}>']
+        parts = [f'<div class="interactive-container"{aria}>']
         parts.append(self.html)
         if self.caption:
             parts.append(f'<p class="caption">{self.caption}</p>')
