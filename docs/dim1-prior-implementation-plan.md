@@ -247,7 +247,7 @@ Add `--dim1-prior` to the MCMC flags list:
 
 Add entry in `docs/adr/README.md` under the IRT section.
 
-### Step 5: Testing
+### Step 5: Testing — COMPLETE
 
 **5a. Unit tests**
 

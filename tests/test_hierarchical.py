@@ -356,6 +356,23 @@ class TestBuildHierarchicalModel:
         assert len(model.coords["legislator"]) == data["n_legislators"]
         assert len(model.coords["vote"]) == data["n_votes"]
 
+    def test_build_per_chamber_graph_dim1_prior_adds_potential(
+        self, house_matrix: pl.DataFrame, legislators: pl.DataFrame
+    ) -> None:
+        """dim1_prior param should add a Potential named 'dim1_prior' to the model."""
+        data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        dim1_vals = np.random.default_rng(42).standard_normal(data["n_legislators"])
+        model = build_per_chamber_graph(data, dim1_prior=dim1_vals, dim1_prior_sigma=0.5)
+        assert "dim1_prior" in model.named_vars
+
+    def test_build_per_chamber_graph_no_dim1_prior_by_default(
+        self, house_matrix: pl.DataFrame, legislators: pl.DataFrame
+    ) -> None:
+        """Without dim1_prior, no 'dim1_prior' Potential should exist."""
+        data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        model = build_per_chamber_graph(data)
+        assert "dim1_prior" not in model.named_vars
+
 
 # ── TestBuildJointGraph ─────────────────────────────────────────────────────
 
@@ -458,6 +475,36 @@ class TestBuildJointGraph:
         assert combined_data["n_senate"] == senate_data["n_legislators"]
         expected = house_data["n_legislators"] + senate_data["n_legislators"]
         assert combined_data["n_legislators"] == expected
+
+    def test_build_joint_graph_dim1_prior_adds_potential(
+        self,
+        house_matrix: pl.DataFrame,
+        legislators: pl.DataFrame,
+        senate_matrix: pl.DataFrame,
+        senate_legislators: pl.DataFrame,
+    ) -> None:
+        """dim1_prior param should add a Potential named 'dim1_prior' to the joint model."""
+        house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        senate_data = prepare_hierarchical_data(senate_matrix, senate_legislators, "Senate")
+        n_total = house_data["n_legislators"] + senate_data["n_legislators"]
+        dim1_vals = np.random.default_rng(42).standard_normal(n_total)
+        model, _ = build_joint_graph(
+            house_data, senate_data, dim1_prior=dim1_vals, dim1_prior_sigma=1.0
+        )
+        assert "dim1_prior" in model.named_vars
+
+    def test_build_joint_graph_no_dim1_prior_by_default(
+        self,
+        house_matrix: pl.DataFrame,
+        legislators: pl.DataFrame,
+        senate_matrix: pl.DataFrame,
+        senate_legislators: pl.DataFrame,
+    ) -> None:
+        """Without dim1_prior, no 'dim1_prior' Potential should exist in the joint model."""
+        house_data = prepare_hierarchical_data(house_matrix, legislators, "House")
+        senate_data = prepare_hierarchical_data(senate_matrix, senate_legislators, "Senate")
+        model, _ = build_joint_graph(house_data, senate_data)
+        assert "dim1_prior" not in model.named_vars
 
 
 # ── TestExtractHierarchicalResults ───────────────────────────────────────────
