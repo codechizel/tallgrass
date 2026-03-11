@@ -87,3 +87,4 @@ just irt --promote-2d --irt-2d-dir /path/to/2d     # explicit 2D results path
 - `docs/79th-horseshoe-robustness-analysis.md` — Empirical validation of all three robustness flags on the 79th biennium
 - `docs/irt-identification-strategies.md` — Identification strategy system documentation
 - `results/experimental_lab/2026-03-08_supermajority-auto-promote/` — Experiment testing auto-promotion of 2D results when horseshoe is detected
+- [ADR-0108](0108-dim1-informative-prior.md) — Extends this system with `--dim1-prior`: uses 2D IRT Dim 1 as informative prior (stronger than PC2 remediation, no vote filtering needed)

@@ -68,3 +68,5 @@ Phases 05, 06, and 07 accept `--init-strategy {auto,irt-informed,pca-informed,2d
 - Phase 27 (Dynamic IRT) uses a different pattern (informative prior, not initial points) — not yet migrated
 
 **Testing:** 34 tests covering constants, resolution, auto-detection, 2d-dim1 strategy, error cases, rationale generation, and file loading.
+
+**Related:** [ADR-0108](0108-dim1-informative-prior.md) extends this system — when `--init-strategy 2d-dim1` (initialization only) is insufficient for severe horseshoe cases, `--dim1-prior` (ADR-0108) uses the same 2D Dim 1 scores as **informative priors** on xi, constraining the posterior to the ideology dimension.

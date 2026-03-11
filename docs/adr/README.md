@@ -83,6 +83,7 @@ What are the trade-offs?
 | [0101](0101-party-aware-irt-anchor-selection.md) | Party-aware IRT anchor selection (supermajority sign flip fix) |
 | [0103](0103-irt-identification-strategy-system.md) | IRT identification strategy system (7 strategies, auto-detection) |
 | [0104](0104-irt-robustness-flags.md) | IRT robustness flags (horseshoe diagnostic, contested-only refit, 2D cross-reference) |
+| [0108](0108-dim1-informative-prior.md) | Dimension 1 informative prior for ideology recovery (`--dim1-prior`) |
 
 ### Classical Analysis
 
@@ -279,6 +280,7 @@ What are the trade-offs?
 | [0105](0105-experiment-lab-cleanup.md) | Experiment lab cleanup (dead code, nutpie migration, platform safety) | Accepted | 2026-03-09 |
 | [0106](0106-bespoke-report-extraction.md) | Bespoke multi-report section extraction (tallgrass-extract, multi-report composition, CDN dedup) | Accepted | 2026-03-10 |
 | [0107](0107-shared-init-strategy.md) | Shared MCMC initialization strategy (`--init-strategy`, IRT-informed/PCA-informed/auto, Django-ready) | Accepted | 2026-03-10 |
+| [0108](0108-dim1-informative-prior.md) | Dimension 1 informative prior for ideology recovery (`--dim1-prior`, 2D IRT Dim 1 as Bayesian prior) | Accepted | 2026-03-11 |
 
 ## Creating a New ADR
 

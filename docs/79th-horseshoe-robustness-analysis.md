@@ -281,3 +281,5 @@ ESS > 400, 0 divergences, E-BFMI > 0.3).
 - `results/experimental_lab/2026-03-08_l1-ideal-point/` — Experiment: L1-based ideal point model (Shin et al. 2025)
 - `results/experimental_lab/2026-03-08_supermajority-auto-promote/` — Experiment: auto-promote 2D results for supermajority sessions
 - `results/experimental_lab/2026-03-09_pc2-targeted-irt/` — Experiment: PC2-targeted 1D IRT (validates `--horseshoe-remediate`)
+- `docs/dim1-informative-prior.md` — Full article: using 2D IRT Dim 1 as informative prior (supersedes init-only approach)
+- `docs/adr/0108-dim1-informative-prior.md` — ADR for the `--dim1-prior` flag
