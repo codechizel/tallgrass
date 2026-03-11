@@ -23,7 +23,7 @@ models and adds a `pm.Potential` for hierarchical models.
 
 ## Step-by-Step
 
-### Step 1: Phase 05 — Flat IRT (`analysis/05_irt/irt.py`)
+### Step 1: Phase 05 — Flat IRT (`analysis/05_irt/irt.py`) — COMPLETE
 
 **1a. Add CLI flags**
 
@@ -137,7 +137,7 @@ section) that documents:
 - Match count (how many legislators had 2D Dim 1 scores)
 - Comparison with the standard model (if both were run)
 
-### Step 2: Phase 07 — Hierarchical IRT (`analysis/07_hierarchical/hierarchical.py`)
+### Step 2: Phase 07 — Hierarchical IRT (`analysis/07_hierarchical/hierarchical.py`) — COMPLETE
 
 **2a. Add CLI flags**
 
@@ -187,7 +187,7 @@ In the per-chamber loop, load 2D scores and pass to `build_per_chamber_graph()`.
 In the joint model section, concatenate 2D Dim 1 scores from both chambers and pass to
 `build_joint_graph()`.
 
-### Step 3: Experimental Joint IRT (`analysis/experimental/joint_irt_experiment.py`)
+### Step 3: Experimental Joint IRT (`analysis/experimental/joint_irt_experiment.py`) — COMPLETE
 
 **3a. Add CLI flags**
 
@@ -224,7 +224,7 @@ dim1_raw = np.array([dim1_map.get(s, 0.0) for s in joint_slugs])
 Same as Phase 05: switch to `EXTERNAL_PRIOR` strategy with dim1 values as priors, no hard
 anchors.
 
-### Step 4: Documentation
+### Step 4: Documentation — COMPLETE
 
 **4a. New ADR**
 

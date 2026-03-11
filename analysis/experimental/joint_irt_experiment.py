@@ -14,7 +14,8 @@ likelihood. Each legislator contributes data from the votes they actually cast.
 Usage:
     uv run python analysis/experimental/joint_irt_experiment.py [--session 2001-02]
         [--n-samples 2000] [--n-tune 2000] [--n-chains 4]
-        [--identification anchor-pca] [--csv]
+        [--identification anchor-pca] [--dim1-prior] [--dim1-prior-sigma 1.0]
+        [--csv]
 """
 
 import argparse
@@ -92,6 +93,8 @@ RANDOM_SEED = 42
 RHAT_THRESHOLD = 1.05
 ESS_THRESHOLD = 200
 MAX_DIVERGENCES = 50
+
+DIM1_PRIOR_SIGMA_DEFAULT = 1.0
 
 PARTY_COLORS = {"Republican": "#E81B23", "Democrat": "#0015BC", "Independent": "#999999"}
 CHAMBER_MARKERS = {"House": "o", "Senate": "s"}
@@ -523,8 +526,20 @@ def parse_args() -> argparse.Namespace:
             "positive-beta",
             "hierarchical-prior",
             "unconstrained",
+            "external-prior",
         ],
         help="Identification strategy (default: anchor-pca)",
+    )
+    parser.add_argument(
+        "--dim1-prior",
+        action="store_true",
+        help="Use 2D IRT Dim 1 as informative prior on xi (ADR-0108)",
+    )
+    parser.add_argument(
+        "--dim1-prior-sigma",
+        type=float,
+        default=DIM1_PRIOR_SIGMA_DEFAULT,
+        help=f"Sigma for dim1 informative prior (default: {DIM1_PRIOR_SIGMA_DEFAULT})",
     )
     parser.add_argument("--csv", action="store_true", help="Force CSV loading (skip database)")
     return parser.parse_args()
@@ -575,6 +590,8 @@ def main() -> None:
     print(f"  Session: {args.session}")
     print(f"  Samples: {args.n_samples}, Tune: {args.n_tune}, Chains: {args.n_chains}")
     print(f"  Identification: {args.identification}")
+    if args.dim1_prior:
+        print(f"  Dim1 Prior: ON (sigma={args.dim1_prior_sigma})")
     print(f"  Output: {output_dir}")
     print("=" * 80)
 
@@ -672,6 +689,7 @@ def main() -> None:
         "positive-beta": IdentificationStrategy.POSITIVE_BETA,
         "hierarchical-prior": IdentificationStrategy.HIERARCHICAL_PRIOR,
         "unconstrained": IdentificationStrategy.UNCONSTRAINED,
+        "external-prior": IdentificationStrategy.EXTERNAL_PRIOR,
     }
     strategy = strategy_map[args.identification]
 
@@ -697,6 +715,45 @@ def main() -> None:
             ],
         }
 
+    # ── Dim1 prior override (ADR-0108) ──
+    dim1_external_priors: np.ndarray | None = None
+    dim1_prior_sigma = args.dim1_prior_sigma
+    if args.dim1_prior:
+        print("\n--- Loading 2D IRT scores for dim1 prior ---")
+        irt_2d_dir = resolve_upstream_dir("06_irt_2d", results_root)
+        dim1_map: dict[str, float] = {}
+        for ch_label in ("house", "senate"):
+            parquet_path = irt_2d_dir / "data" / f"ideal_points_2d_{ch_label}.parquet"
+            if parquet_path.exists():
+                ch_df = pl.read_parquet(parquet_path)
+                for row in ch_df.iter_rows(named=True):
+                    dim1_map[row["legislator_slug"]] = row["xi_dim1_mean"]
+                print(f"  Loaded {ch_df.height} {ch_label} legislators from 2D IRT")
+            else:
+                print(f"  WARNING: 2D IRT not found at {parquet_path}")
+
+        if dim1_map:
+            dim1_raw = np.array([dim1_map.get(s, 0.0) for s in joint_slugs])
+            dim1_std_val = dim1_raw.std()
+            if dim1_std_val > 0:
+                dim1_std = (dim1_raw - dim1_raw.mean()) / dim1_std_val
+            else:
+                dim1_std = dim1_raw
+            dim1_external_priors = dim1_std.astype(np.float64)
+            # Override strategy and init values
+            strategy = IdentificationStrategy.EXTERNAL_PRIOR
+            anchors = []
+            xi_init = dim1_external_priors.copy()
+            matched = sum(1 for s in joint_slugs if s in dim1_map)
+            print(
+                f"  Dim1 prior: {matched}/{len(joint_slugs)} matched, "
+                f"sigma={dim1_prior_sigma}, range [{dim1_external_priors.min():.2f}, "
+                f"{dim1_external_priors.max():.2f}]"
+            )
+            print("  Strategy overridden to: external-prior")
+        else:
+            print("  WARNING: No 2D IRT scores found — dim1-prior unavailable")
+
     # ── Sample ──
     print("\n--- MCMC sampling (Joint) ---")
     with ExperimentLifecycle("joint-irt"):
@@ -709,6 +766,8 @@ def main() -> None:
             xi_initvals=xi_init,
             strategy=strategy,
             party_indices=party_indices,
+            external_priors=dim1_external_priors,
+            external_prior_sigma=dim1_prior_sigma,
         )
 
     # ── Convergence ──
@@ -822,6 +881,8 @@ def main() -> None:
     summary = {
         "session": args.session,
         "identification": args.identification,
+        "dim1_prior": args.dim1_prior,
+        "dim1_prior_sigma": args.dim1_prior_sigma if args.dim1_prior else None,
         "n_samples": args.n_samples,
         "n_tune": args.n_tune,
         "n_chains": args.n_chains,
