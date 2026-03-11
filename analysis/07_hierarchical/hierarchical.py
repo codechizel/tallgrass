@@ -274,7 +274,8 @@ def parse_args() -> argparse.Namespace:
         "--cores", type=int, default=None, help="CPU cores for sampling (default: n_chains)"
     )
     parser.add_argument(
-        "--run-joint", action="store_true",
+        "--run-joint",
+        action="store_true",
         help="Run joint cross-chamber model (off by default — ADR-0074)",
     )
     parser.add_argument(
@@ -283,6 +284,19 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "irt-informed", "pca-informed"],
         help="xi_offset initialization source (default: auto — prefer IRT, fall back to PCA)",
     )
+    parser.add_argument(
+        "--dim1-prior",
+        action="store_true",
+        help="Use 2D IRT Dimension 1 as informative prior on xi (ADR-0108). "
+        "Requires Phase 06 results.",
+    )
+    parser.add_argument(
+        "--dim1-prior-sigma",
+        type=float,
+        default=1.0,
+        help="Width of the Dim 1 informative prior (default: %(default)s)",
+    )
+    parser.add_argument("--csv", action="store_true", help="Force CSV-only mode (skip PostgreSQL)")
     return parser.parse_args()
 
 
@@ -353,12 +367,22 @@ def prepare_hierarchical_data(
 def build_per_chamber_graph(
     data: dict,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    dim1_prior: np.ndarray | None = None,
+    dim1_prior_sigma: float = 1.0,
 ) -> pm.Model:
     """Build 2-level hierarchical IRT model graph (no sampling).
 
     Model structure:
         mu_party (sorted) → xi (non-centered) → likelihood
         sigma_within (per party) controls within-party spread
+
+    Args:
+        data: Hierarchical data dict from prepare_hierarchical_data().
+        beta_prior: Specification for the bill discrimination prior.
+        dim1_prior: Optional per-legislator prior means from 2D IRT Dim 1
+            (shape: n_legislators). When provided, adds a pm.Potential that
+            pulls xi toward the ideology dimension (ADR-0108).
+        dim1_prior_sigma: Width of the Dim 1 informative prior (default 1.0).
 
     Returns the PyMC model for use with nutpie or pm.sample().
     """
@@ -411,6 +435,16 @@ def build_per_chamber_graph(
             dims="legislator",
         )
 
+        # --- Dim 1 informative prior (ADR-0108) ---
+        # Adds a soft observation that xi should be near the 2D IRT Dim 1 values.
+        # Equivalent to Normal(dim1_prior, dim1_prior_sigma) likelihood on xi.
+        if dim1_prior is not None:
+            pm.Potential(
+                "dim1_prior",
+                pm.logp(pm.Normal.dist(mu=dim1_prior, sigma=dim1_prior_sigma), xi),
+            )
+            print(f"  Dim 1 prior: sigma={dim1_prior_sigma}, {len(dim1_prior)} legislators")
+
         # --- Bill parameters ---
         alpha = pm.Normal("alpha", mu=0, sigma=5, shape=n_votes, dims="vote")
         beta = beta_prior.build(n_votes)
@@ -432,6 +466,8 @@ def build_per_chamber_model(
     target_accept: float = HIER_TARGET_ACCEPT,
     xi_offset_initvals: np.ndarray | None = None,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
+    dim1_prior: np.ndarray | None = None,
+    dim1_prior_sigma: float = 1.0,
 ) -> tuple[az.InferenceData, float]:
     """Build 2-level hierarchical IRT and sample with nutpie's Rust NUTS.
 
@@ -445,6 +481,9 @@ def build_per_chamber_model(
             reflection mode-splitting — see ADR-0044.
         beta_prior: Specification for the bill discrimination prior.
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
+        dim1_prior: Optional per-legislator prior means from 2D IRT Dim 1
+            (ADR-0108). Passed through to build_per_chamber_graph().
+        dim1_prior_sigma: Width of the Dim 1 informative prior.
 
     Returns (InferenceData, sampling_time_seconds).
     """
@@ -453,7 +492,9 @@ def build_per_chamber_model(
             f"  Note: target_accept={target_accept} ignored (nutpie uses adaptive dual averaging)"
         )
 
-    model = build_per_chamber_graph(data, beta_prior)
+    model = build_per_chamber_graph(
+        data, beta_prior, dim1_prior=dim1_prior, dim1_prior_sigma=dim1_prior_sigma
+    )
 
     # --- Compile with nutpie ---
     compile_kwargs: dict = {}
@@ -568,6 +609,8 @@ def build_joint_graph(
     rollcalls: pl.DataFrame | None = None,
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
     alpha_sigma: float = 5.0,
+    dim1_prior: np.ndarray | None = None,
+    dim1_prior_sigma: float = 1.0,
 ) -> tuple[pm.Model, dict]:
     """Build 3-level joint cross-chamber hierarchical IRT model graph (no sampling).
 
@@ -587,6 +630,9 @@ def build_joint_graph(
             Defaults to PRODUCTION_BETA (Normal(mu=0, sigma=1)).
         alpha_sigma: Standard deviation for the bill difficulty prior.
             Defaults to 5.0 (legacy). Joint model uses 2.0 for tighter regularization.
+        dim1_prior: Optional per-legislator prior means from 2D IRT Dim 1
+            (shape: n_house + n_senate, House first then Senate). ADR-0108.
+        dim1_prior_sigma: Width of the Dim 1 informative prior (default 1.0).
 
     Returns (pm.Model, combined_data_dict).
     """
@@ -739,6 +785,14 @@ def build_joint_graph(
             dims="legislator",
         )
 
+        # --- Dim 1 informative prior (ADR-0108) ---
+        if dim1_prior is not None:
+            pm.Potential(
+                "dim1_prior",
+                pm.logp(pm.Normal.dist(mu=dim1_prior, sigma=dim1_prior_sigma), xi),
+            )
+            print(f"  Dim 1 prior: sigma={dim1_prior_sigma}, {len(dim1_prior)} legislators")
+
         # --- Bill parameters ---
         alpha = pm.Normal("alpha", mu=0, sigma=alpha_sigma, shape=n_votes, dims="vote")
         beta = beta_prior.build(n_votes)
@@ -780,6 +834,8 @@ def build_joint_model(
     beta_prior: BetaPriorSpec = PRODUCTION_BETA,
     alpha_sigma: float = 5.0,
     xi_offset_initvals: np.ndarray | None = None,
+    dim1_prior: np.ndarray | None = None,
+    dim1_prior_sigma: float = 1.0,
 ) -> tuple[az.InferenceData, dict, float]:
     """Build 3-level joint cross-chamber hierarchical IRT and sample with nutpie.
 
@@ -793,6 +849,9 @@ def build_joint_model(
             Defaults to 5.0 (legacy). Joint model uses 2.0 for tighter regularization.
         xi_offset_initvals: Optional initial xi_offset values (from PCA).
             If provided, all chains start near these values.
+        dim1_prior: Optional per-legislator prior means from 2D IRT Dim 1
+            (ADR-0108). Passed through to build_joint_graph().
+        dim1_prior_sigma: Width of the Dim 1 informative prior.
 
     Returns (InferenceData, combined_data_dict, sampling_time_seconds).
     """
@@ -809,6 +868,8 @@ def build_joint_model(
         rollcalls=rollcalls,
         beta_prior=beta_prior,
         alpha_sigma=alpha_sigma,
+        dim1_prior=dim1_prior,
+        dim1_prior_sigma=dim1_prior_sigma,
     )
 
     # --- Compile with nutpie ---
@@ -1672,6 +1733,22 @@ def main() -> None:
                 flat_ip[ch] = None
                 print(f"  Flat IRT ({ch}): not found at {flat_path}")
 
+        # ── Load 2D IRT Dim 1 scores for --dim1-prior (ADR-0108) ──
+        dim1_scores: dict[str, pl.DataFrame | None] = {}
+        if args.dim1_prior:
+            try:
+                irt_2d_dir = resolve_upstream_dir("06_irt_2d", results_root, args.run_id, None)
+                from analysis.init_strategy import load_2d_scores
+
+                for ch in ("house", "senate"):
+                    dim1_scores[ch] = load_2d_scores(irt_2d_dir / "data", ch)
+                    if dim1_scores[ch] is not None:
+                        print(f"  2D IRT Dim 1 loaded: {ch} ({dim1_scores[ch].height} rows)")
+                    else:
+                        print(f"  2D IRT Dim 1 not found: {ch}")
+            except FileNotFoundError:
+                print("  WARNING: Phase 06 (2D IRT) results not found — dim1-prior unavailable")
+
         # ── Per-chamber models ──
         per_chamber_results: dict[str, dict] = {}
 
@@ -1702,6 +1779,26 @@ def main() -> None:
             xi_init = xi_init_vals.astype(np.float64) if init_strat != "none" else None
             print(f"  Init: {init_source} (strategy: {init_strat})")
 
+            # Build dim1 prior array for this chamber (ADR-0108)
+            ch_dim1_prior: np.ndarray | None = None
+            if args.dim1_prior and dim1_scores.get(ch) is not None:
+                d1_df = dim1_scores[ch]
+                dim1_map = {
+                    row["legislator_slug"]: row["xi_dim1_mean"]
+                    for row in d1_df.iter_rows(named=True)
+                }
+                dim1_raw = np.array([dim1_map.get(s, 0.0) for s in data["leg_slugs"]])
+                dim1_std_val = dim1_raw.std()
+                if dim1_std_val > 0:
+                    ch_dim1_prior = ((dim1_raw - dim1_raw.mean()) / dim1_std_val).astype(np.float64)
+                else:
+                    ch_dim1_prior = dim1_raw.astype(np.float64)
+                matched = sum(1 for s in data["leg_slugs"] if s in dim1_map)
+                print(
+                    f"  Dim 1 prior: {matched}/{data['n_legislators']} matched, "
+                    f"sigma={args.dim1_prior_sigma}"
+                )
+
             # Build and sample
             print_header(f"SAMPLING — {chamber}")
             idata, sampling_time = build_per_chamber_model(
@@ -1711,6 +1808,8 @@ def main() -> None:
                 n_chains=args.n_chains,
                 cores=args.cores,
                 xi_offset_initvals=xi_init,
+                dim1_prior=ch_dim1_prior,
+                dim1_prior_sigma=args.dim1_prior_sigma,
             )
 
             # Convergence
@@ -1798,6 +1897,35 @@ def main() -> None:
                     f"range [{joint_xi_init.min():.2f}, {joint_xi_init.max():.2f}]"
                 )
 
+                # Build joint dim1 prior (House first, Senate second)
+                joint_dim1_prior: np.ndarray | None = None
+                if args.dim1_prior:
+                    joint_dim1_parts = []
+                    for ch_label, ch_data, ch_key in [
+                        ("House", house_data, "house"),
+                        ("Senate", senate_data, "senate"),
+                    ]:
+                        d1_df = dim1_scores.get(ch_key)
+                        if d1_df is not None:
+                            dm = {
+                                r["legislator_slug"]: r["xi_dim1_mean"]
+                                for r in d1_df.iter_rows(named=True)
+                            }
+                            raw = np.array([dm.get(s, 0.0) for s in ch_data["leg_slugs"]])
+                            std_v = raw.std()
+                            if std_v > 0:
+                                raw = (raw - raw.mean()) / std_v
+                            joint_dim1_parts.append(raw.astype(np.float64))
+                        else:
+                            joint_dim1_parts.append(
+                                np.zeros(ch_data["n_legislators"], dtype=np.float64)
+                            )
+                    joint_dim1_prior = np.concatenate(joint_dim1_parts)
+                    print(
+                        f"  Joint dim1 prior: {len(joint_dim1_prior)} legislators, "
+                        f"sigma={args.dim1_prior_sigma}"
+                    )
+
                 joint_idata, combined_data, joint_time = build_joint_model(
                     house_data,
                     senate_data,
@@ -1809,6 +1937,8 @@ def main() -> None:
                     beta_prior=JOINT_BETA,
                     alpha_sigma=2.0,
                     xi_offset_initvals=joint_xi_init,
+                    dim1_prior=joint_dim1_prior,
+                    dim1_prior_sigma=args.dim1_prior_sigma,
                 )
 
                 joint_convergence = check_hierarchical_convergence(joint_idata, "Joint")
