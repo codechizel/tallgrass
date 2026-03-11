@@ -3,6 +3,7 @@
 **Date:** 2026-03-11
 **Context:** 79th Kansas Legislature (2001–2002), IRT Phases 05–07, joint IRT experiment
 **Related:** ADR-0103 (identification strategies), ADR-0104 (robustness flags), ADR-0107 (init strategies), `docs/79th-horseshoe-robustness-analysis.md`, `docs/horseshoe-effect-and-solutions.md`
+**Superseded by:** `docs/canonical-ideal-points.md` — After validating this approach, we concluded that using 2D Dim 1 directly as the canonical score (the DW-NOMINATE approach) is simpler, more principled, and avoids the circular dependency created by feeding 2D output back into a 1D model. The `--dim1-prior` flag remains available for research but is no longer the recommended production workflow.
 
 ## The Problem: Tim Huelskamp and the Limits of One Dimension
 

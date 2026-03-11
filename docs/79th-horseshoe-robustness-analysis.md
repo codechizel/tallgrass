@@ -274,6 +274,7 @@ ESS > 400, 0 divergences, E-BFMI > 0.3).
 
 ## Related
 
+- `docs/canonical-ideal-points.md` — **Resolution:** after this analysis, we concluded that the field-standard approach (2D Dim 1 as canonical ideology score) is the correct solution for horseshoe-affected chambers
 - `docs/horseshoe-effect-and-solutions.md` — General-audience explanation of the horseshoe effect and six approaches to addressing it
 - `docs/adr/0104-irt-robustness-flags.md` — ADR for the robustness flags system used in this analysis
 - `docs/adr/0103-irt-identification-strategy-system.md` — ADR for the identification strategy system (anchor-agreement used here)

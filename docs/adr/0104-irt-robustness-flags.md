@@ -76,8 +76,8 @@ just irt --promote-2d --irt-2d-dir /path/to/2d     # explicit 2D results path
 - Contested-only refit runs a full second MCMC (~5-10 min per chamber) when enabled
 - 2D cross-reference requires Phase 04b to have been run previously
 
-**Not addressed:**
-- Multi-dimensional IRT as a production replacement for 1D — remains experimental (Phase 04b). Interactive Plotly plots in Phase 04b now serve as visual horseshoe diagnostics (hover over Dim 1 vs PC1 to identify misplaced legislators).
+**Now addressed via canonical routing:**
+- Multi-dimensional IRT as a production replacement for 1D — resolved by **canonical ideal point routing**: 2D Dim 1 is the canonical ideology score for horseshoe-affected chambers, following the DW-NOMINATE standard. The robustness flags in this ADR (`--horseshoe-remediate`, `--dim1-prior`) are retained for research but superseded for production pipelines. See `docs/canonical-ideal-points.md`.
 
 **Previously not addressed, now implemented:**
 - Automatic horseshoe correction via `--horseshoe-remediate`. When horseshoe is detected, the flag auto-refits using PC2-filtered votes + PC2 informative prior. Experimentally validated on the 79th biennium: resolves the horseshoe in the Senate (r(PC2) = 0.842, 0% D wrong side, R-hat 1.004, ESS 704) while correctly skipping the House (which has no swapped dimensions). See `results/experimental_lab/2026-03-09_pc2-targeted-irt/`.

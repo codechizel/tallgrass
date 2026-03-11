@@ -91,7 +91,8 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 ## Key Conventions
 
 - Scraper: concurrent fetch (ThreadPoolExecutor), sequential parse. Never mutate shared state during fetch.
-- MCMC: nutpie Rust NUTS sampler for all models (ADR-0051, ADR-0053). Init strategy: `--init-strategy {auto,irt-informed,pca-informed,2d-dim1}` (ADR-0107). IRT identification: `--identification {auto,anchor-pca,anchor-agreement,...}` (ADR-0103). Robustness flags: `--horseshoe-diagnostic`, `--horseshoe-remediate`, `--contested-only`, `--promote-2d`, `--dim1-prior` (ADR-0104, ADR-0108).
+- MCMC: nutpie Rust NUTS sampler for all models (ADR-0051, ADR-0053). Init strategy: `--init-strategy {auto,irt-informed,pca-informed,2d-dim1}` (ADR-0107; Phase 06 defaults to `pca-informed` to avoid horseshoe contamination). IRT identification: `--identification {auto,anchor-pca,anchor-agreement,...}` (ADR-0103). Robustness flags: `--horseshoe-diagnostic`, `--horseshoe-remediate`, `--contested-only`, `--promote-2d`, `--dim1-prior` (ADR-0104, ADR-0108; research-only, superseded by canonical routing).
+- Canonical ideal points: for horseshoe-affected chambers, 2D Dim 1 is the canonical ideology score (following the DW-NOMINATE standard). See `docs/canonical-ideal-points.md`.
 - Apple Silicon (M3 Pro): run bienniums sequentially; cap thread pools (`OMP_NUM_THREADS=6`).
 - PyTensor C compiler: requires `clang++`. Xcode updates can break it silently (~18x slower fallback).
 

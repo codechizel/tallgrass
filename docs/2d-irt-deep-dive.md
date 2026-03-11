@@ -390,6 +390,7 @@ The pipeline phase (`analysis/06_irt_2d/`) also produces interactive Plotly vers
 
 ## Related
 
+- `docs/canonical-ideal-points.md` — **Canonical ideal points:** 2D Dim 1 is the production ideology score for horseshoe-affected chambers (DW-NOMINATE standard)
 - `docs/horseshoe-effect-and-solutions.md` — General-audience explanation of the horseshoe effect and experimental results
 - `analysis/design/irt_2d.md` — Design document (PLT identification, interactive plots, horseshoe diagnostic value)
 - `docs/adr/0046-2d-irt-experimental.md` — Original 2D IRT ADR

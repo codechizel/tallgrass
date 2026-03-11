@@ -584,8 +584,15 @@ Three experiments are planned to evaluate the most promising approaches:
 - Strachan, D. P., et al. (2024). Projective IRT for multidimensional
   assessment. *Multivariate Behavioral Research*.
 
+## Resolution: Canonical Ideal Points
+
+After extensive experimentation with 1D fixes (`--init-strategy 2d-dim1`, `--dim1-prior`, `--horseshoe-remediate`), we concluded that the field-standard solution is correct: **use 2D IRT Dimension 1 as the canonical ideology score** for horseshoe-affected chambers. This is exactly what DW-NOMINATE has done for 40 years — fit a 2D model and extract Dim 1. See `docs/canonical-ideal-points.md` for the full narrative of our journey through three failed approaches and the conclusion.
+
 ## Related
 
+- `docs/canonical-ideal-points.md` — **Definitive article:** from 1D fixes to 2D Dim 1 promotion
+- `docs/canonical-ideal-points-implementation-plan.md` — Implementation plan for canonical routing
+- `docs/dim1-informative-prior.md` — Dim 1 informative prior approach (superseded by canonical routing)
 - `docs/79th-horseshoe-robustness-analysis.md` — Empirical diagnostic results
 - `docs/adr/0104-irt-robustness-flags.md` — Robustness flags ADR
 - `docs/adr/0103-irt-identification-strategy-system.md` — Identification strategies ADR

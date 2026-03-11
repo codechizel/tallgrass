@@ -4,9 +4,13 @@
 **ADRs:** `docs/adr/0046-2d-irt-experimental.md`, `docs/adr/0054-2d-irt-pipeline-integration.md`
 **Deep dive:** `docs/2d-irt-deep-dive.md`
 
-## Status: Pipeline phase (experimental)
+## Status: Pipeline phase (canonical for horseshoe-affected chambers)
 
-The 2D IRT model is an experimental extension of the canonical 1D baseline, integrated as pipeline phase 04b. It runs **both chambers** (House and Senate) with RunContext integration. It does NOT replace the 1D model. The 1D model remains primary for all downstream analyses. Relaxed convergence thresholds are used (R-hat < 1.05, ESS > 200, divergences < 50).
+The 2D IRT model runs as pipeline Phase 06 for both chambers with RunContext integration. Relaxed convergence thresholds are used (R-hat < 1.05, ESS > 200, divergences < 50).
+
+**Canonical ideal point routing:** For horseshoe-affected chambers (detected via `detect_horseshoe()`), 2D Dim 1 is the canonical ideology score consumed by downstream phases. For balanced chambers, 1D IRT remains canonical. This follows the DW-NOMINATE standard — Dim 1 from a 2D model is the primary ideology score. See `docs/canonical-ideal-points.md`.
+
+**Init strategy regression (2026-03-11):** The `--init-strategy auto` default (ADR-0107) caused Phase 06 to use horseshoe-confounded 1D IRT scores for initialization, degrading the 2D model. Phase 06 now defaults to `pca-informed`. PCA is always safe for 2D initialization — PLT rotation handles dimension ordering regardless of PCA component order.
 
 ## Model Specification
 

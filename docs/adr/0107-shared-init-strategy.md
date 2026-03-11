@@ -70,3 +70,5 @@ Phases 05, 06, and 07 accept `--init-strategy {auto,irt-informed,pca-informed,2d
 **Testing:** 34 tests covering constants, resolution, auto-detection, 2d-dim1 strategy, error cases, rationale generation, and file loading.
 
 **Related:** [ADR-0108](0108-dim1-informative-prior.md) extends this system — when `--init-strategy 2d-dim1` (initialization only) is insufficient for severe horseshoe cases, `--dim1-prior` (ADR-0108) uses the same 2D Dim 1 scores as **informative priors** on xi, constraining the posterior to the ideology dimension.
+
+**Regression found:** The `auto` strategy introduced by this ADR caused a regression in Phase 06 (2D IRT). For horseshoe-affected chambers (e.g., 79th Senate), `auto` selects 1D IRT scores (r = -0.94 with PCA PC1), which poisons the 2D model's initialization. Phase 06 should default to `pca-informed`, not `auto`. See `docs/canonical-ideal-points.md` for the full analysis and resolution.

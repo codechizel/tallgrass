@@ -102,12 +102,19 @@ just hierarchical 2001-02 --dim1-prior --run-joint       # hierarchical joint
 
 4. **Automatic promotion** — auto-trigger when horseshoe is detected and 2D results exist. Rejected for now: researcher judgment about which dimension to recover should remain explicit.
 
+## Superseded
+
+While `--dim1-prior` works (Huelskamp moves to xi=+3.349), this approach is superseded by **canonical ideal point routing** (`docs/canonical-ideal-points.md`). The conclusion: if the prior must dominate the likelihood to produce correct results, the 1D model is contributing noise, not signal. The field-standard solution (DW-NOMINATE) is to use 2D Dim 1 directly. The `--dim1-prior` flag remains available for research.
+
+Additionally, the `--init-strategy auto` default introduced by ADR-0107 caused a regression in Phase 06: the horseshoe-confounded 1D IRT scores were used to initialize the 2D model, degrading the very Dim 1 scores this ADR depends on. See `docs/canonical-ideal-points.md` for the full narrative.
+
 ## Related
 
 - [ADR-0103](0103-irt-identification-strategy-system.md) — IRT identification strategy system (provides `external-prior` mechanism)
 - [ADR-0104](0104-irt-robustness-flags.md) — IRT robustness flags (provides `--horseshoe-remediate` pattern)
 - [ADR-0107](0107-shared-init-strategy.md) — Shared MCMC init strategy (provides `--init-strategy 2d-dim1`)
 - [ADR-0054](0054-2d-irt-pipeline-integration.md) — 2D IRT pipeline integration (upstream data source)
+- `docs/canonical-ideal-points.md` — **Superseding article:** from 1D fixes to 2D Dim 1 promotion
 - `docs/dim1-informative-prior.md` — Full article with methodology, evidence, and sensitivity analysis
 - `docs/dim1-prior-implementation-plan.md` — Step-by-step implementation plan
 - `docs/79th-horseshoe-robustness-analysis.md` — Empirical evidence motivating this decision
