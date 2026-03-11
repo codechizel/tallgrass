@@ -172,7 +172,8 @@ def _add_chamber_party_composition(report, plots_dir, metadata, legislators):
             for row in party_counts.iter_rows(named=True)
         ]
         fig = make_hemicycle_chart(seats, f"{chamber} — Party Composition")
-        html = fig.to_html(include_plotlyjs="cdn", div_id=f"hemicycle-{chamber.lower()}")
+        # div_id must differ from section id to avoid duplicate-ID collisions
+        html = fig.to_html(include_plotlyjs="cdn", div_id=f"hemicycle-{chamber.lower()}-plot")
         report.add(InteractiveSection(
             id=f"hemicycle-{chamber.lower()}",
             title=f"{chamber} Party Composition (Hemicycle)",

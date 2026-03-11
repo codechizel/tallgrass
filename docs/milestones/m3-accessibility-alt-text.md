@@ -80,7 +80,9 @@ Update `render()` to include the label on the container div:
 
 ```python
 aria = f' aria-label="{self.aria_label}"' if self.aria_label else ""
-parts.append(f'<div class="interactive-container" id="{self.id}"{aria}>')
+# Note: no id= on the container div — the section id lives on the outer <section>
+# element (set by the Jinja2 template) to avoid duplicate-ID collisions with Plotly div_ids.
+parts.append(f'<div class="interactive-container"{aria}>')
 ```
 
 ### Test Updates

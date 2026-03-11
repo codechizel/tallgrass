@@ -17,7 +17,7 @@ Three new frozen dataclass section types added to `analysis/report.py`:
 
 2. **`InteractiveTableSection`** — Stores pre-rendered ITables HTML. Uses `make_interactive_table()` helper (analogous to `make_gt()`). ITables v2.7+ with `connected=False` for fully self-contained offline mode. Replaces `make_gt()` for large legislator-level tables (>20 rows) where sort/search adds value.
 
-3. **`InteractiveSection`** — Stores raw HTML fragments (Plotly charts, PyVis network graphs). Renders inside `<div class="interactive-container">`.
+3. **`InteractiveSection`** — Stores raw HTML fragments (Plotly charts, PyVis network graphs). Renders inside `<div class="interactive-container">`. The section `id` is on the outer `<section>` element (set by the Jinja2 template), not on the container div — Plotly `div_id` must differ from the section `id` to avoid duplicate-ID collisions that prevent chart rendering.
 
 ### New Dependencies
 

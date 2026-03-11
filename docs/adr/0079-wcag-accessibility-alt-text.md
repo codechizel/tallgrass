@@ -20,7 +20,7 @@ Added accessibility fields to two frozen dataclasses in `analysis/report.py`:
 
 1. **`FigureSection`** gains `alt_text: str | None = None`. The `render()` method uses `self.alt_text or self.title` for the `<img alt="...">` attribute — backward-compatible fallback to title when alt_text is not set. Both `from_file()` and `from_figure()` classmethods pass through the new parameter.
 
-2. **`InteractiveSection`** gains `aria_label: str | None = None`. The `render()` method includes `aria-label="..."` on the container `<div>` when set, omits it when `None`.
+2. **`InteractiveSection`** gains `aria_label: str | None = None`. The `render()` method includes `aria-label="..."` on the container `<div>` when set, omits it when `None`. Note: the container `<div>` no longer carries `id=` — the section `id` lives on the outer `<section>` element (set by the Jinja2 template) to avoid duplicate-ID collisions with Plotly `div_id`s.
 
 Seven tests added in `tests/test_report.py::TestAccessibility` covering both override and fallback behavior.
 

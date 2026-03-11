@@ -175,10 +175,12 @@ Insert after the ridgeline section (or after `_add_trajectories()`) in `build_dy
 Already used across the codebase for Plotly, PyVis, and Folium output. Example from cross-session Sankey:
 
 ```python
+# IMPORTANT: div_id must differ from section id to avoid duplicate-ID collisions
+# that prevent Plotly charts from rendering (the <section> already has id="bloc-sankey").
 report.add(InteractiveSection(
     id="bloc-sankey",
     title="Voting Bloc Transitions",
-    html=fig.to_html(include_plotlyjs="cdn", div_id="bloc-sankey"),
+    html=fig.to_html(include_plotlyjs="cdn", div_id="bloc-sankey-plot"),
     caption="Sankey diagram of cluster membership changes...",
 ))
 ```
