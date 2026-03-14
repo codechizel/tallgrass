@@ -187,6 +187,13 @@ def create_district_maps(
 
     m = folium.Map(location=center, zoom_start=7, tiles="CartoDB positron")
 
+    # Lock map to Kansas bounds so users can't zoom out to the USA
+    sw = [bounds[1], bounds[0]]  # [min_lat, min_lon]
+    ne = [bounds[3], bounds[2]]  # [max_lat, max_lon]
+    m.fit_bounds([sw, ne])
+    m.options["maxBounds"] = [sw, ne]
+    m.options["minZoom"] = 6
+
     # Party layer
     party_group = folium.FeatureGroup(name="Party")
     _add_party_layer(party_group, geojson, district_data)
@@ -197,6 +204,11 @@ def create_district_maps(
         ideology_group = folium.FeatureGroup(name="Ideology", show=False)
         _add_ideology_layer(ideology_group, geojson, district_data)
         ideology_group.add_to(m)
+
+    # Name labels layer
+    labels_group = folium.FeatureGroup(name="Labels", show=True)
+    _add_name_labels(labels_group, geojson_path, district_data)
+    labels_group.add_to(m)
 
     folium.LayerControl().add_to(m)
     return m._repr_html_()
@@ -298,4 +310,49 @@ def _add_ideology_layer(
                 "fillOpacity": 0.7,
             },
             tooltip=tooltip,
+        ).add_to(group)
+
+
+def _add_name_labels(
+    group: object,
+    geojson_path: Path,
+    district_data: dict[int, dict],
+) -> None:
+    """Add legislator name labels at each district centroid."""
+    import folium
+    import geopandas as gpd
+
+    gdf = gpd.read_file(geojson_path)
+
+    for _, row in gdf.iterrows():
+        dist_field = row.get("SLDLST") or row.get("SLDUST") or row.get("district")
+        if dist_field is None:
+            continue
+        try:
+            dist = int(dist_field)
+        except ValueError, TypeError:
+            continue
+
+        info = district_data.get(dist, {})
+        name = info.get("full_name", "")
+        if not name:
+            continue
+
+        # Use representative_point for robust centroid (stays inside polygon)
+        centroid = row.geometry.representative_point()
+        last_name = name.split()[-1] if name else ""
+
+        folium.Marker(
+            location=[centroid.y, centroid.x],
+            icon=folium.DivIcon(
+                html=(
+                    f'<div style="font-size:8px;color:#333;'
+                    f"white-space:nowrap;font-weight:bold;"
+                    f"text-shadow:1px 1px 1px #fff,-1px -1px 1px #fff,"
+                    f'1px -1px 1px #fff,-1px 1px 1px #fff">'
+                    f"{last_name}</div>"
+                ),
+                icon_size=(0, 0),
+                icon_anchor=(0, 0),
+            ),
         ).add_to(group)
