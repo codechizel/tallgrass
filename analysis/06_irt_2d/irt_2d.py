@@ -690,7 +690,12 @@ def correlate_with_pca(
 # ── Plots ────────────────────────────────────────────────────────────────────
 
 
-def plot_2d_scatter(ideal_2d: pl.DataFrame, chamber: str, output_dir: Path) -> None:
+def plot_2d_scatter(
+    ideal_2d: pl.DataFrame,
+    chamber: str,
+    output_dir: Path,
+    init_label: str | None = None,
+) -> None:
     """2D scatter: Dim 1 vs Dim 2, party-colored, annotated."""
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -723,13 +728,12 @@ def plot_2d_scatter(ideal_2d: pl.DataFrame, chamber: str, output_dir: Path) -> N
                 arrowprops={"arrowstyle": "->", "color": "gray", "lw": 0.8},
             )
 
-    ax.set_xlabel("Dimension 1 (Ideology: Liberal <- -> Conservative)", fontsize=11)
-    ax.set_ylabel("Dimension 2 (Contrarian <- -> Establishment)", fontsize=11)
-    ax.set_title(
-        f"2D Bayesian IRT Ideal Points — Kansas {chamber} (EXPERIMENTAL)",
-        fontsize=13,
-        fontweight="bold",
-    )
+    ax.set_xlabel("Dimension 1 (Ideology: Liberal ← → Conservative)", fontsize=11)
+    ax.set_ylabel("Dimension 2 (Contrarian ← → Establishment)", fontsize=11)
+    title = f"2D Bayesian IRT Ideal Points — Kansas {chamber} (EXPERIMENTAL)"
+    if init_label:
+        title += f"\nInit: {init_label}"
+    ax.set_title(title, fontsize=13, fontweight="bold")
     ax.axhline(0, color="gray", linewidth=0.5, linestyle="--")
     ax.axvline(0, color="gray", linewidth=0.5, linestyle="--")
     ax.legend(loc="upper left")
@@ -809,7 +813,12 @@ def plot_dim2_vs_pc2(
 # ── Dim 1 Forest Plot ───────────────────────────────────────────────────────
 
 
-def plot_dim1_forest(ideal_2d: pl.DataFrame, chamber: str, output_dir: Path) -> None:
+def plot_dim1_forest(
+    ideal_2d: pl.DataFrame,
+    chamber: str,
+    output_dir: Path,
+    init_label: str | None = None,
+) -> None:
     """Forest plot: Dim 1 ideal points with 95% HDI bars, party-colored, sorted.
 
     This is the canonical ideology ranking from the 2D model — Dim 1 separated
@@ -879,10 +888,10 @@ def plot_dim1_forest(ideal_2d: pl.DataFrame, chamber: str, output_dir: Path) -> 
     ax.set_yticklabels(labels, fontsize=5.5)
     ax.axvline(0, color="gray", linestyle="--", alpha=0.3)
     ax.set_xlabel("Dim 1 Ideal Point (Liberal \u2190 \u2192 Conservative)")
-    ax.set_title(
-        f"{chamber} \u2014 Dim 1 Ideology Ranking (from 2D IRT)",
-        fontsize=12,
-    )
+    title = f"{chamber} \u2014 Dim 1 Ideology Ranking (from 2D IRT)"
+    if init_label:
+        title += f"\nInit: {init_label}"
+    ax.set_title(title, fontsize=12)
     legend_handles = [
         Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
         Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
@@ -1286,8 +1295,9 @@ def main() -> None:
             print(f"  Saved: idata_{chamber_lower}.nc")
 
             # ── Generate plots ──
-            plot_2d_scatter(ideal_2d, chamber, ctx.plots_dir)
-            plot_dim1_forest(ideal_2d, chamber, ctx.plots_dir)
+            init_label = f"Dim 1: {dim1_source}, Dim 2: {dim2_source}"
+            plot_2d_scatter(ideal_2d, chamber, ctx.plots_dir, init_label=init_label)
+            plot_dim1_forest(ideal_2d, chamber, ctx.plots_dir, init_label=dim1_source)
             plot_dim1_vs_pc1(ideal_2d, pca_scores, chamber, ctx.plots_dir)
             plot_dim2_vs_pc2(ideal_2d, pca_scores, chamber, ctx.plots_dir)
 

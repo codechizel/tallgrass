@@ -622,7 +622,12 @@ def apply_dim1_sign_check(
 # ── Plots ────────────────────────────────────────────────────────────────────
 
 
-def plot_2d_scatter(ideal_h2d: pl.DataFrame, chamber: str, output_dir: Path) -> None:
+def plot_2d_scatter(
+    ideal_h2d: pl.DataFrame,
+    chamber: str,
+    output_dir: Path,
+    init_label: str | None = None,
+) -> None:
     """2D scatter: Dim 1 vs Dim 2, party-colored."""
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -643,11 +648,10 @@ def plot_2d_scatter(ideal_h2d: pl.DataFrame, chamber: str, output_dir: Path) -> 
 
     ax.set_xlabel("Dimension 1 (Ideology: Liberal ← → Conservative)", fontsize=11)
     ax.set_ylabel("Dimension 2 (Secondary Axis)", fontsize=11)
-    ax.set_title(
-        f"Hierarchical 2D IRT Ideal Points — Kansas {chamber}",
-        fontsize=13,
-        fontweight="bold",
-    )
+    title = f"Hierarchical 2D IRT Ideal Points — Kansas {chamber}"
+    if init_label:
+        title += f"\nInit: {init_label}"
+    ax.set_title(title, fontsize=13, fontweight="bold")
     ax.axhline(0, color="gray", linewidth=0.5, linestyle="--")
     ax.axvline(0, color="gray", linewidth=0.5, linestyle="--")
     ax.legend(loc="upper left")
@@ -1028,7 +1032,8 @@ def main() -> None:
 
             # ── Plots ──
             print_header(f"PLOTS — {chamber}")
-            plot_2d_scatter(ideal_h2d, chamber, ctx.plots_dir)
+            h2d_init_label = f"Dim 1: {init_source}" if pca_scores is not None else None
+            plot_2d_scatter(ideal_h2d, chamber, ctx.plots_dir, init_label=h2d_init_label)
             plot_party_posteriors(idata, data, chamber, ctx.plots_dir)
             plot_shrinkage_vs_flat2d(ideal_h2d, flat_2d, chamber, ctx.plots_dir)
 
