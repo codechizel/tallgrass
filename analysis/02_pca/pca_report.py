@@ -52,6 +52,7 @@ def build_pca_report(
 
     for chamber, result in results.items():
         n_sig = result.get("n_significant", 2)
+        _add_axis_swap_warning(report, result, chamber)
         _add_pca_summary(report, result, chamber)
         _add_dimensionality_diagnostics(report, result, chamber)
         _add_scree_figure(report, plots_dir, chamber, result)
@@ -99,6 +100,32 @@ def build_pca_report(
 
 
 # ── Private section builders ─────────────────────────────────────────────────
+
+
+def _add_axis_swap_warning(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+) -> None:
+    """Inject a warning banner when PC2 separates parties better than PC1."""
+    pc_party_d = result.get("pc_party_d", {})
+    pc1_d = pc_party_d.get("PC1", 0.0)
+    pc2_d = pc_party_d.get("PC2", 0.0)
+
+    if pc2_d > pc1_d and pc2_d > 2.0:
+        html = (
+            '<div style="background:#fff3cd; border:1px solid #ffc107; '
+            'border-radius:6px; padding:12px 16px; margin:16px 0;">'
+            f"<strong>Axis Swap Detected ({chamber}):</strong> "
+            f"PC2 (d&nbsp;=&nbsp;{pc2_d:.1f}) separates parties more strongly "
+            f"than PC1 (d&nbsp;=&nbsp;{pc1_d:.1f}). "
+            "PC1 captures intra-majority-party factional variation rather than "
+            "the party divide. Downstream IRT initialization auto-detects this "
+            "and uses the best party-separating PC. "
+            "See <code>docs/pca-ideology-axis-instability.md</code> for details."
+            "</div>"
+        )
+        report.add(TextSection(f"{chamber} — Axis Swap Warning", html))
 
 
 def _add_pca_summary(

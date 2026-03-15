@@ -309,6 +309,11 @@ def fit_pca(
     return scores, loadings, pca, scaler
 
 
+def _build_slug_party_map(legislators: pl.DataFrame) -> dict[str, str]:
+    """Build slug → party lookup from legislators DataFrame."""
+    return dict(legislators.select("legislator_slug", "party").iter_rows())
+
+
 def orient_pc1(
     scores: np.ndarray,
     loadings: np.ndarray,
@@ -398,6 +403,36 @@ def run_pca_for_chamber(
     scores, loadings, pca, scaler = fit_pca(X, n_comp)
     scores, loadings = orient_pc1(scores, loadings, slugs, legislators)
 
+    # Party separation on each PC (Cohen's d)
+    # Detects axis instability: when PC2 separates parties better than PC1
+    slug_party = _build_slug_party_map(legislators)
+    pc_party_d: dict[str, float] = {}
+    for pc_i in range(min(n_comp, 2)):
+        pc_name = f"PC{pc_i + 1}"
+        r_scores = scores[
+            [i for i, s in enumerate(slugs) if slug_party.get(s) == "Republican"], pc_i
+        ]
+        d_scores = scores[[i for i, s in enumerate(slugs) if slug_party.get(s) == "Democrat"], pc_i]
+        if len(r_scores) > 0 and len(d_scores) > 0:
+            pooled_sd = np.sqrt((r_scores.std() ** 2 + d_scores.std() ** 2) / 2)
+            d_val = abs(r_scores.mean() - d_scores.mean()) / pooled_sd if pooled_sd > 0 else 0.0
+            pc_party_d[pc_name] = float(d_val)
+        else:
+            pc_party_d[pc_name] = 0.0
+
+    if "PC1" in pc_party_d and "PC2" in pc_party_d:
+        if pc_party_d["PC2"] > pc_party_d["PC1"] and pc_party_d["PC2"] > 2.0:
+            print(
+                f"\n  ⚠ AXIS SWAP: PC2 (d={pc_party_d['PC2']:.2f}) separates parties "
+                f"more than PC1 (d={pc_party_d['PC1']:.2f}). "
+                "PC1 captures intra-majority-party variation."
+            )
+        else:
+            print(
+                f"\n  Party separation: PC1 d={pc_party_d['PC1']:.2f}, "
+                f"PC2 d={pc_party_d['PC2']:.2f}"
+            )
+
     # Print explained variance
     ev = pca.explained_variance_ratio_
     cumulative = np.cumsum(ev)
@@ -461,6 +496,7 @@ def run_pca_for_chamber(
         "parallel_thresholds": pa_thresholds,
         "n_significant": n_significant,
         "reconstruction_error_df": recon_df,
+        "pc_party_d": pc_party_d,
     }
 
 
