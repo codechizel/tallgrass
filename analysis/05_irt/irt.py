@@ -4518,6 +4518,33 @@ def main() -> None:
             if chamber_robustness:
                 robustness_results[chamber] = chamber_robustness
 
+            # Party separation quality gate (R2)
+            # Detects wrong-axis estimation where IRT captures intra-party
+            # factionalism rather than ideology. See docs/pca-ideology-axis-instability.md
+            r_ip = ideal_points.filter(pl.col("party") == "Republican")
+            d_ip = ideal_points.filter(pl.col("party") == "Democrat")
+            if r_ip.height > 0 and d_ip.height > 0:
+                r_std = float(r_ip["xi_mean"].std())
+                d_std = float(d_ip["xi_mean"].std())
+                pooled = np.sqrt((r_std**2 + d_std**2) / 2)
+                party_sep_d = (
+                    abs(float(r_ip["xi_mean"].mean()) - float(d_ip["xi_mean"].mean())) / pooled
+                    if pooled > 0
+                    else 0.0
+                )
+            else:
+                party_sep_d = 0.0
+            axis_uncertain = party_sep_d < 1.5
+            diagnostics["party_separation_d"] = float(party_sep_d)
+            diagnostics["axis_uncertain"] = axis_uncertain
+            print(f"\n  Party separation (Cohen's d): {party_sep_d:.2f}")
+            if axis_uncertain:
+                print(
+                    f"  WARNING: Low party separation (d = {party_sep_d:.2f} < 1.5). "
+                    "The 1D IRT may be estimating intra-party factional variation "
+                    "rather than ideology. See docs/pca-ideology-axis-instability.md"
+                )
+
             # Store results for sensitivity comparison
             results[chamber] = {
                 "ideal_points": ideal_points,
@@ -4698,6 +4725,19 @@ def main() -> None:
         }
 
         save_filtering_manifest(manifest, ctx.run_dir)
+
+        # Write convergence_summary.json for canonical routing consumption
+        conv_summary: dict = {"chambers": {}}
+        for chamber, result in results.items():
+            if chamber == "Joint":
+                continue
+            conv_summary["chambers"][chamber] = {
+                "convergence": result["diagnostics"],
+            }
+        conv_path = ctx.data_dir / "convergence_summary.json"
+        with open(conv_path, "w") as f:
+            json.dump(conv_summary, f, indent=2, default=str)
+        print("  Saved: convergence_summary.json")
 
         # ── HTML report ──
         print_header("HTML REPORT")
