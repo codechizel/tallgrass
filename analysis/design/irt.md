@@ -8,6 +8,8 @@
 
 1. **Unidimensional ideology.** The 2PL model assumes a single latent dimension explains all voting behavior. Legislators who deviate on a second dimension (e.g., Tyson's contrarianism on routine bills) will have their 1D ideal point estimated as a compromise between their positions on both dimensions. This is by design for the canonical baseline. An experimental 2D IRT model (`analysis/experimental/irt_2d_experiment.py`) confirms the second dimension exists (Dim 2 vs PCA PC2 r=0.81) but is noisy for most legislators — only Tyson, Thompson, and Peck show meaningful Dim 2 signal. See `docs/2d-irt-deep-dive.md` and ADR-0046.
 
+   **Known limitation — wrong-axis estimation:** In 7/14 Kansas Senate sessions (78th-83rd, 88th), the 1D IRT captures the intra-Republican factional axis rather than the party axis (party d < 1.5 vs d > 4 in normal sessions). This happens when PCA PC1 captures within-R variance, and the IRT model's maximum-discrimination axis aligns with it. The model converges cleanly but measures the wrong latent dimension. See `docs/pca-ideology-axis-instability.md`.
+
 2. **Yea/Nay only.** The model's likelihood is Bernoulli (binary). "Present and Passing," absences, and non-votes are excluded entirely — they do not enter the likelihood. This is a strength: no imputation artifacts.
 
 3. **Missing at random (MAR).** Absences are assumed uninformative about ideology conditional on the observed votes. If legislators strategically avoid recorded votes on contentious bills, their ideal-point estimates may be too moderate (same concern as PCA, but IRT is less affected because it doesn't impute).

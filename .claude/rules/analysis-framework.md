@@ -115,6 +115,10 @@ Standalone structural experiments (2D IRT, PC2-targeted IRT, joint pooled IRT) b
 - **R (optional)**: Required for Phase 16 (W-NOMINATE/OC) and Phase 19 TSA enrichment. Not managed by uv. R CSV files use literal "NA" — always pass `null_values="NA"` to `pl.read_csv()` when reading R output (ADR-0073).
 - **StepMix / scikit-learn shim (Phase 10 LCA)**: StepMix 2.2.1 uses deprecated sklearn internals removed in scikit-learn 1.8. Monkey-patch in `analysis/10_lca/lca.py` (guarded, will no-op when StepMix fixes it).
 
+## Known Issues
+
+- **PCA axis instability in Senate sessions:** In 7/14 sessions (78th-83rd, 88th), PCA PC1 captures intra-Republican factionalism rather than the party divide. This propagates to 1D IRT (wrong-axis estimation), PCA-informed init, 2D IRT dimension labeling, and the Tier 2 quality gate (circular PCA dependency). Full analysis and 7 fix recommendations in `docs/pca-ideology-axis-instability.md`.
+
 ## Analytics Method Docs
 
 `Analytic_Methods/` has 29 documents (one per method). Naming: `NN_CAT_method_name.md`. Categories: DATA, EDA, IDX, DIM, BAY, CLU, NET, PRD, TSA.

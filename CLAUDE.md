@@ -93,6 +93,7 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 - Scraper: concurrent fetch (ThreadPoolExecutor), sequential parse. Never mutate shared state during fetch.
 - MCMC: nutpie Rust NUTS sampler for all models (ADR-0051, ADR-0053). Init strategy: `--init-strategy {auto,irt-informed,pca-informed,2d-dim1,canonical}` (ADR-0107, ADR-0111; Phase 06 defaults to `pca-informed`; Phase 07 `auto` prefers canonical routing output). IRT identification: `--identification {auto,anchor-pca,anchor-agreement,...}` (ADR-0103). Robustness flags: `--horseshoe-diagnostic`, `--horseshoe-remediate`, `--contested-only`, `--promote-2d`, `--dim1-prior` (ADR-0104, ADR-0108; research-only, superseded by canonical routing).
 - Canonical ideal points: tiered quality gate (ADR-0110) — Tier 1 (converged, R-hat < 1.10), Tier 2 (point estimates credible, R-hat < 2.50 + rank correlation > 0.70), Tier 3 (fall back to 1D). Routing preference: Hierarchical 2D Dim 1 (if converged) → Flat 2D Dim 1 → 1D IRT. 2D IRT adaptive tuning for supermajority chambers (ADR-0112): N_TUNE doubles to 4000 when majority > 70%, beta init from PCA loadings, `--contested-only` flag.
+- **Known issue — PCA axis instability:** In 7/14 Senate sessions (78th-83rd, 88th), PC1 captures intra-Republican factionalism rather than the party divide. The 1D IRT aligns with PC1, producing ideal points on the wrong latent dimension. See `docs/pca-ideology-axis-instability.md` for the full analysis and 7 prioritized fix recommendations.
 - Apple Silicon (M3 Pro): run bienniums sequentially; cap thread pools (`OMP_NUM_THREADS=6`).
 - PyTensor C compiler: requires `clang++`. Xcode updates can break it silently (~18x slower fallback).
 
@@ -112,6 +113,7 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 
 ## Documentation
 
-- ADRs: `docs/adr/README.md` (115 decisions)
+- ADRs: `docs/adr/README.md` (117 decisions)
 - Design docs: `analysis/design/README.md`
 - Deep dives: `docs/*.md` (search by topic name)
+- Known issue: `docs/pca-ideology-axis-instability.md` — PC1 ≠ ideology in 7/14 Senate sessions

@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-14 (pipeline reorder, Hierarchical 2D IRT)
+**Last updated:** 2026-03-15 (PCA axis instability deep dive, pipeline reorder, Hierarchical 2D IRT)
 
 ---
 
@@ -75,6 +75,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | — | Bespoke Report Extraction | 2026-03-10 | `tallgrass-extract` CLI tool: extract sections from one or more pipeline HTML reports into standalone, self-contained HTML files for presentations. Multi-report composition with per-section provenance, Plotly/DataTables CDN deduplication, CSS extraction from source reports. `just extract`. 50 tests. Design: `docs/bespoke-report-extraction.md`, ADR-0106. |
 | — | Pipeline Reordering | 2026-03-14 | Text-analysis (Phase 20) moved to position 4 (after MCA, before IRT — zero upstream deps, BERTopic needed by downstream phases). UMAP moved to position 9 (after PPC — needs IRT for validation overlay). ADR-0116. |
 | 7b | Hierarchical 2D IRT | 2026-03-14 | Party-pooled M2PL IRT combining 2D structure (Phase 06 PLT) with hierarchical partial pooling (Phase 07). Informative priors from both upstream phases. Canonical routing: H2D preferred over flat 2D when converged. 4-way PPC model comparison. `just hierarchical-2d`. Design: `analysis/design/hierarchical_2d.md`, ADR-0117. |
+| — | PCA Axis Instability Deep Dive | 2026-03-15 | Discovered PC1 ≠ ideology in 7/14 Senate sessions (78th-83rd, 88th). Intra-Republican factionalism dominates variance in supermajority chambers, causing PCA, IRT, and hierarchical models to estimate the wrong latent dimension. Cross-session bridge correlations drop to r ≈ 0 at axis-swap boundaries. Circular dependency in Tier 2 quality gate. 7 prioritized fix recommendations. Article: `docs/pca-ideology-axis-instability.md`. |
 
 ---
 
