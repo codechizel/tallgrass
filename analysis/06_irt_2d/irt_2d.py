@@ -582,6 +582,69 @@ def apply_dim1_sign_check(ideal_2d: pl.DataFrame) -> pl.DataFrame:
     return ideal_2d
 
 
+# ── Dimension swap detection ──────────────────────────────────────────────────
+
+
+def _party_d(df: pl.DataFrame, col: str) -> float:
+    """Cohen's d between R and D on a given column."""
+    r = df.filter(pl.col("party") == "Republican")[col]
+    d_vals = df.filter(pl.col("party") == "Democrat")[col]
+    if r.len() == 0 or d_vals.len() == 0:
+        return 0.0
+    pooled = np.sqrt((float(r.std()) ** 2 + float(d_vals.std()) ** 2) / 2)
+    return abs(float(r.mean()) - float(d_vals.mean())) / pooled if pooled > 0 else 0.0
+
+
+def check_and_fix_dimension_swap(
+    idata: az.InferenceData,
+    ideal_2d: pl.DataFrame,
+) -> tuple[az.InferenceData, pl.DataFrame, bool]:
+    """Check if Dim 2 separates parties better than Dim 1 and swap if so.
+
+    In supermajority Senate sessions (78th-83rd, 88th), PCA PC1 captures
+    intra-R factionalism, causing the 2D IRT to initialize with dimensions
+    swapped. This function detects and corrects the swap post-hoc.
+
+    See docs/pca-ideology-axis-instability.md (R7).
+    """
+    dim1_d = _party_d(ideal_2d, "xi_dim1_mean")
+    dim2_d = _party_d(ideal_2d, "xi_dim2_mean")
+
+    if dim2_d > dim1_d and dim2_d > 2.0:
+        print(
+            f"  DIMENSION SWAP DETECTED: Dim 2 (d={dim2_d:.2f}) separates "
+            f"parties better than Dim 1 (d={dim1_d:.2f}) — swapping"
+        )
+
+        # Swap in posterior idata
+        xi_post = idata.posterior["xi"].values  # (chain, draw, leg, 2)
+        xi_swapped = xi_post[:, :, :, ::-1].copy()
+        idata.posterior["xi"].values = xi_swapped
+
+        # Swap in DataFrame
+        ideal_2d = ideal_2d.rename(
+            {
+                "xi_dim1_mean": "_d2m",
+                "xi_dim1_hdi_3%": "_d2lo",
+                "xi_dim1_hdi_97%": "_d2hi",
+                "xi_dim2_mean": "xi_dim1_mean",
+                "xi_dim2_hdi_3%": "xi_dim1_hdi_3%",
+                "xi_dim2_hdi_97%": "xi_dim1_hdi_97%",
+            }
+        ).rename(
+            {
+                "_d2m": "xi_dim2_mean",
+                "_d2lo": "xi_dim2_hdi_3%",
+                "_d2hi": "xi_dim2_hdi_97%",
+            }
+        )
+
+        return idata, ideal_2d, True
+    else:
+        print(f"  Dimension order OK: Dim 1 (d={dim1_d:.2f}) ≥ Dim 2 (d={dim2_d:.2f})")
+        return idata, ideal_2d, False
+
+
 # ── Correlation checks ───────────────────────────────────────────────────────
 
 
@@ -1198,6 +1261,13 @@ def main() -> None:
             print_header(f"EXTRACT 2D IDEAL POINTS — {chamber}")
             ideal_2d = extract_2d_ideal_points(idata, data, legislators)
             ideal_2d = apply_dim1_sign_check(ideal_2d)
+
+            # ── Dimension swap check ──
+            idata, ideal_2d, dim_swapped = check_and_fix_dimension_swap(idata, ideal_2d)
+            if dim_swapped:
+                diag["dimension_swap_corrected"] = True
+                # Re-run sign check after swap
+                ideal_2d = apply_dim1_sign_check(ideal_2d)
 
             # ── Correlation checks ──
             print_header(f"CORRELATION CHECKS — {chamber}")

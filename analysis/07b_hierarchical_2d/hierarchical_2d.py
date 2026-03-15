@@ -972,6 +972,14 @@ def main() -> None:
             # Post-hoc sign check
             idata, ideal_h2d = apply_dim1_sign_check(idata, ideal_h2d)
 
+            # Dimension swap check (same as Phase 06, R7)
+            from analysis.irt_2d import check_and_fix_dimension_swap
+
+            idata, ideal_h2d, dim_swapped = check_and_fix_dimension_swap(idata, ideal_h2d)
+            if dim_swapped:
+                convergence["dimension_swap_corrected"] = True
+                idata, ideal_h2d = apply_dim1_sign_check(idata, ideal_h2d)
+
             group_params = extract_h2d_group_params(idata, data)
 
             # Print group params
