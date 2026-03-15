@@ -6,6 +6,11 @@ Used by Phase 06 (2D IRT), Phase 07 (Hierarchical IRT), and future models.
 Design follows the IdentificationStrategy pattern (ADR-0103): string constants,
 parallel metadata dicts, auto-detection with full rationale logging.
 
+Party-aware PC selection: when strategy is pca-informed, auto-detects which PC
+has the strongest party correlation and uses that instead of always PC1. This
+fixes the axis instability problem in supermajority Senate sessions where PC1
+captures intra-R factionalism. See docs/pca-ideology-axis-instability.md.
+
 Eventually exposed as a Django CharField(choices=...) for pipeline configuration.
 """
 
@@ -76,6 +81,66 @@ class InitStrategy:
     ]
 
 
+# Minimum party correlation to accept a PC swap (avoids swapping on noise)
+PC_SWAP_MIN_PARTY_CORR = 0.30
+
+
+def detect_ideology_pc(
+    pca_scores: pl.DataFrame,
+    candidates: list[str] | None = None,
+) -> tuple[str, float, dict[str, float]]:
+    """Detect which PC has the strongest party correlation.
+
+    Computes point-biserial correlation between each candidate PC and a binary
+    party indicator (Republican=1, Democrat=0). Returns the PC with the strongest
+    absolute correlation.
+
+    In supermajority Kansas Senate sessions (78th-83rd, 88th), PC1 captures
+    intra-Republican factionalism while PC2 captures the party divide. This
+    function detects the swap and returns the correct PC for ideology init.
+
+    Args:
+        pca_scores: DataFrame with legislator_slug, party, PC1, PC2, ... columns.
+        candidates: PC column names to check (default: ["PC1", "PC2"]).
+
+    Returns:
+        (best_pc, best_corr, all_corrs):
+        - best_pc: column name with strongest |correlation| with party
+        - best_corr: the correlation value (signed)
+        - all_corrs: dict mapping each candidate → correlation
+    """
+    if candidates is None:
+        candidates = ["PC1", "PC2"]
+
+    # Filter to R/D only (Independents excluded from correlation)
+    rd = pca_scores.filter(pl.col("party").is_in(["Republican", "Democrat"]))
+    if rd.height < 5:
+        return candidates[0], 0.0, {c: 0.0 for c in candidates}
+
+    # Binary indicator: Republican=1, Democrat=0
+    party_binary = (rd["party"] == "Republican").cast(pl.Float64).to_numpy()
+
+    all_corrs: dict[str, float] = {}
+    for pc in candidates:
+        if pc not in rd.columns:
+            all_corrs[pc] = 0.0
+            continue
+        pc_vals = rd[pc].to_numpy().astype(np.float64)
+        # Point-biserial correlation = Pearson correlation with binary variable
+        valid = ~np.isnan(pc_vals)
+        if valid.sum() < 5:
+            all_corrs[pc] = 0.0
+            continue
+        r = float(np.corrcoef(pc_vals[valid], party_binary[valid])[0, 1])
+        all_corrs[pc] = r
+
+    # Select the PC with strongest absolute correlation
+    best_pc = max(candidates, key=lambda c: abs(all_corrs.get(c, 0.0)))
+    best_corr = all_corrs.get(best_pc, 0.0)
+
+    return best_pc, best_corr, all_corrs
+
+
 def resolve_init_source(
     strategy: str,
     slugs: list[str],
@@ -133,8 +198,7 @@ def resolve_init_source(
                 "Run `just irt-2d` first or use --init-strategy irt-informed."
             )
         score_map = {
-            row["legislator_slug"]: row["xi_mean"]
-            for row in canonical_scores.iter_rows(named=True)
+            row["legislator_slug"]: row["xi_mean"] for row in canonical_scores.iter_rows(named=True)
         }
         vals = np.array([score_map.get(s, 0.0) for s in slugs])
         matched = sum(1 for s in slugs if s in score_map)
@@ -164,12 +228,32 @@ def resolve_init_source(
                 "pca-informed strategy requires PCA results (Phase 02). "
                 "Run `just pca` first or use --init-strategy irt-informed."
             )
+        # Auto-detect best PC for ideology when caller requests default PC1.
+        # When pca_column is explicitly set to something other than PC1 (e.g., "PC2"
+        # for 2D IRT Dim 2 init), respect the caller's choice.
+        actual_column = pca_column
+        if pca_column == "PC1" and "party" in pca_scores.columns:
+            best_pc, best_corr, all_corrs = detect_ideology_pc(pca_scores)
+            pc1_corr = all_corrs.get("PC1", 0.0)
+            if (
+                best_pc != "PC1"
+                and abs(best_corr) > PC_SWAP_MIN_PARTY_CORR
+                and abs(best_corr) > abs(pc1_corr)
+                and best_pc in pca_scores.columns
+            ):
+                actual_column = best_pc
+                print(
+                    f"  PC swap detected: {best_pc} has stronger party correlation "
+                    f"(r={best_corr:.3f}) than PC1 (r={pc1_corr:.3f}) — "
+                    f"using {best_pc} for ideology init"
+                )
         score_map = {
-            row["legislator_slug"]: row[pca_column] for row in pca_scores.iter_rows(named=True)
+            row["legislator_slug"]: row[actual_column] for row in pca_scores.iter_rows(named=True)
         }
         vals = np.array([score_map.get(s, 0.0) for s in slugs])
         matched = sum(1 for s in slugs if s in score_map)
-        source = f"PCA {pca_column} ({matched}/{len(slugs)} matched)"
+        pc_note = f" (swapped from {pca_column})" if actual_column != pca_column else ""
+        source = f"PCA {actual_column}{pc_note} ({matched}/{len(slugs)} matched)"
 
     elif strategy == IS.IRT_2D_DIM1:
         if irt_2d_scores is None:
