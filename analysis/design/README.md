@@ -17,6 +17,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 05. IRT | [irt.md](irt.md) | Priors, anchor selection, missing data handling |
 | 06. 2D IRT | [irt_2d.md](irt_2d.md) | 2D M2PL IRT with PLT identification. Relaxed convergence thresholds (ADR-0046, ADR-0054). |
 | 07. Hierarchical IRT | [hierarchical.md](hierarchical.md) | 2-level partial pooling, ordering constraint, non-centered parameterization, ICC, shrinkage vs flat |
+| 07b. Hierarchical 2D IRT | [hierarchical_2d.md](hierarchical_2d.md) | Party-pooled M2PL with PLT, informative priors from Phases 06+07, canonical routing preference |
 | 08. PPC + LOO-CV | [ppc.md](ppc.md) | Validation-only; manual log-likelihood, Q3 local dependence, PSIS-LOO model comparison, graceful degradation |
 | 09. Clustering | [clustering.md](clustering.md) | Three methods for robustness, party loyalty metric, Ward on Kappa, 3 dendrogram alternatives |
 | 10. LCA | [lca.md](lca.md) | Bernoulli mixture on binary votes, BIC model selection, Salsa effect detection, StepMix FIML |

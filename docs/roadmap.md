@@ -2,7 +2,7 @@
 
 What's been done, what's next, and what's on the horizon for the Tallgrass analytics pipeline.
 
-**Last updated:** 2026-03-12 (horseshoe resolution → canonical routing, KanFocus backfill complete)
+**Last updated:** 2026-03-14 (pipeline reorder, Hierarchical 2D IRT)
 
 ---
 
@@ -73,6 +73,8 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 18b | Text-Based Ideal Points (TBIP) | 2026-03-03 | Embedding-vote approach (not true TBIP due to ~92% committee sponsorship). Multiplies vote matrix by Phase 18 bill embeddings, PCA on legislator text profiles, PC1 = text-derived ideal point. Validates against IRT (flat + hierarchical). Standalone with `just tbip`; not in pipeline (requires BT1 + IRT results). Design: `analysis/design/tbip.md`, ADR-0086. |
 | 20 | Model Legislation Detection (BT5) | 2026-03-03 | ALEC template matching + cross-state diffusion (MO, OK, NE, CO via OpenStates API). Cosine similarity on BGE embeddings (same vector space as Phase 18) with three-tier classification (near-identical >= 0.95, strong >= 0.85, related >= 0.70). 5-gram overlap confirmation for strong matches. ALEC corpus: ~1,057 model policies scraped via `just alec`. 9-section HTML report. 58 tests. Design: `analysis/design/model_legislation.md`, ADR-0089. |
 | — | Bespoke Report Extraction | 2026-03-10 | `tallgrass-extract` CLI tool: extract sections from one or more pipeline HTML reports into standalone, self-contained HTML files for presentations. Multi-report composition with per-section provenance, Plotly/DataTables CDN deduplication, CSS extraction from source reports. `just extract`. 50 tests. Design: `docs/bespoke-report-extraction.md`, ADR-0106. |
+| — | Pipeline Reordering | 2026-03-14 | Text-analysis (Phase 20) moved to position 4 (after MCA, before IRT — zero upstream deps, BERTopic needed by downstream phases). UMAP moved to position 9 (after PPC — needs IRT for validation overlay). ADR-0116. |
+| 7b | Hierarchical 2D IRT | 2026-03-14 | Party-pooled M2PL IRT combining 2D structure (Phase 06 PLT) with hierarchical partial pooling (Phase 07). Informative priors from both upstream phases. Canonical routing: H2D preferred over flat 2D when converged. 4-way PPC model comparison. `just hierarchical-2d`. Design: `analysis/design/hierarchical_2d.md`, ADR-0117. |
 
 ---
 
