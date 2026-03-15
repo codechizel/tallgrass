@@ -75,17 +75,23 @@ First biennium's PCA PC1 scores initialize `xi_init`. Standardized and oriented 
 
 ## Post-Hoc Sign Correction (Safety Net)
 
-After sampling, each period's dynamic xi is correlated with the corresponding static IRT (Phase 04). If the Pearson r is negative, xi for that period is negated across all chains and draws.
+After sampling, each period's dynamic xi is correlated with the corresponding static IRT reference. If the Pearson r is negative, xi for that period is negated across all chains and draws.
+
+**Reference source (R5, ADR-0118):** Prefers canonical ideal points (from Phase 07b or Phase 06 canonical routing) over raw Phase 05 output. Canonical scores have already been validated for horseshoe and axis alignment via party-d quality gates. Falls back to Phase 05 when canonical output is unavailable.
 
 **Role:** With the informative `xi_init` prior (ADR-0070), the post-hoc correction should be a no-op. It is retained as a diagnostic safety net to detect and fix any residual sign flips.
 
-**When it triggers:** r < 0 with static IRT for a given period. This indicates the sampler found a sign-flipped mode despite the informative prior.
+**When it triggers:** r < 0 with the reference for a given period. This indicates the sampler found a sign-flipped mode despite the informative prior.
 
 **What it does:** `xi_post[:, :, t, :] *= -1` for the affected period. The corrected InferenceData is saved to NetCDF before any post-processing, so all downstream quantities (trajectories, decomposition, movers, tau extraction, correlation tables) use the corrected posterior.
 
 **Transparency:** Every correction is documented in the HTML report with named reference legislators (the 3 highest-|xi| matches showing dynamic vs static values). A dedicated Model Priors section displays all priors and tuning parameters.
 
 **Precedent:** Mirrors `fix_joint_sign_convention()` in hierarchical IRT (ADR-0042). Documented case: 87th House sign flip in run 260301.1 (r = -0.937 with static IRT) — resolved by informative prior in ADR-0070.
+
+### Per-Period Axis Uncertainty (R5, ADR-0118)
+
+After sign correction, per-period party-d (Cohen's d) is computed. Periods with d < 1.5 are flagged as axis-uncertain — the dynamic model may be estimating a different latent dimension for those bienniums (78th-83rd Kansas Senate). See `docs/pca-ideology-axis-instability.md`.
 
 ## Post-Processing
 

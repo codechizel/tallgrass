@@ -63,6 +63,11 @@ Phase 06 (Flat 2D IRT):
 - **Supermajority**: Doubled tuning (4000 steps) for >70% majority chambers
 - **Small groups**: Tighter sigma prior (HalfNormal(0.5)) for parties with <20 members
 
+## Quality Gates (ADR-0118)
+
+- **Minimum party separation (R4):** Soft `pm.Potential` penalty on Dim 1 when `mu_party_dim1[1] - mu_party_dim1[0] < 0.5`. Same guard as Phase 07.
+- **Dimension swap detection (R7):** After extraction, checks if Dim 2 separates parties better than Dim 1. Swaps columns if so, then re-runs sign check. Records `dimension_swap_corrected` in convergence summary.
+
 ## Downstream Implications
 
 - Canonical ideal point routing prefers H2D Dim 1 over flat 2D Dim 1 when converged

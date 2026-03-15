@@ -117,7 +117,7 @@ Standalone structural experiments (2D IRT, PC2-targeted IRT, joint pooled IRT) b
 
 ## Known Issues
 
-- **PCA axis instability in Senate sessions:** In 7/14 sessions (78th-83rd, 88th), PCA PC1 captures intra-Republican factionalism rather than the party divide. This propagates to 1D IRT (wrong-axis estimation), PCA-informed init, 2D IRT dimension labeling, and the Tier 2 quality gate (circular PCA dependency). Full analysis and 7 fix recommendations in `docs/pca-ideology-axis-instability.md`.
+- **PCA axis instability in Senate sessions (RESOLVED, ADR-0118):** In 7/14 sessions (78th-83rd, 88th), PCA PC1 captures intra-Republican factionalism rather than the party divide. Detected and corrected via 7 party-separation quality gates (R1-R7): party-aware PCA init, 1D IRT party-d gate, Tier 2 party-d check (replacing circular PCA correlation), hierarchical minimum-separation guard, 2D IRT dimension swap detection, dynamic IRT canonical reference + per-period party-d. Full analysis in `docs/pca-ideology-axis-instability.md`.
 
 ## Analytics Method Docs
 

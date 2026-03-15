@@ -133,7 +133,7 @@
 - **PCA-IRT correlation is a validation check.** Pearson r > 0.95 between IRT ideal points and PCA PC1 is expected. Lower correlation suggests IRT is capturing nonlinearities that PCA misses. The IRT report now uses a data-driven caption for the IRT-PCA scatter plot based on the actual r value (|r| > 0.95 → "High correlation", |r| > 0.85 → "Moderate", else → "Low — investigate horseshoe").
 - **Row-mean imputation is NOT used by IRT.** IRT handles missing data natively. The imputation artifacts that affect PCA (e.g., Miller's PC2 extreme) will not carry over to IRT.
 - **2D IRT initialization from PCA.** Phase 06 (2D IRT) uses PCA loadings for beta initialization when horseshoe is detected, avoiding contamination from 1D IRT estimates that may already be horseshoe-distorted (ADR-0112). PCA sensitivity r < 0.95 triggers a warning in the PCA report.
-- **PCA axis instability propagates to IRT.** When PC1 ≠ ideology (7/14 Senate sessions), PCA-informed init points the IRT sampler at the factional axis. The 1D IRT correlates ρ > 0.90 with PC1 in all sessions, meaning it locks onto whatever PC1 captures. In affected sessions, IRT party separation drops to Cohen's d < 1.5 (vs. d > 4 in normal sessions). See `docs/pca-ideology-axis-instability.md`.
+- **PCA axis instability (RESOLVED, R1 ADR-0118).** When PC1 ≠ ideology (7/14 Senate sessions), `detect_ideology_pc()` in `init_strategy.py` auto-swaps to the PC with the strongest party correlation (point-biserial |r| > 0.30). This prevents the IRT sampler from initializing on the factional axis. See `docs/pca-ideology-axis-instability.md`.
 
 ### For Clustering (Phase 5)
 - PCA scores (PC1-2 or more) can be used as clustering input features.

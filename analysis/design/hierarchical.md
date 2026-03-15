@@ -48,6 +48,10 @@
 
 **Trade-off:** Without anchors, the scale is determined only by the prior on `sigma_within` and the data. This is fine because we compare relative positions (ranks, party separation) rather than absolute scale values.
 
+### Minimum party separation guard (R4, ADR-0118)
+
+**Decision:** Add a soft `pm.Potential` penalty when `mu_party[1] - mu_party[0] < 0.5`. Prevents the party means from converging to near-zero separation in sessions where discrimination aligns with intra-party factionalism. After extraction, gap/sigma ratio is logged; warns when ratio < 1.0. See `docs/pca-ideology-axis-instability.md`.
+
 ### Non-centered parameterization
 
 **Decision:** Model `xi_offset ~ Normal(0, 1)` with `xi = mu_party[party_idx] + sigma_within[party_idx] * xi_offset`.

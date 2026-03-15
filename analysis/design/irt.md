@@ -300,3 +300,12 @@ The identification strategy system (ADR-0103) auto-selects strategies designed t
 When identification strategies alone are insufficient (e.g., the 79th Senate where PCA dimensions are swapped), `--horseshoe-remediate` auto-refits using PC2-filtered votes and a PC2 informative prior. This redirects the 1D model from the establishment-loyalty axis (PC1) to the ideology axis (PC2). The remediation is gated on `detect_horseshoe()` — only chambers that fail the diagnostic are refitted. See `results/experimental_lab/2026-03-09_pc2-targeted-irt/experiment.md` for the validation experiment.
 
 At the report level, 8 report builders accept `horseshoe_status` from `phase_utils.load_horseshoe_status()` and inject styled warning banners via `horseshoe_warning_html()` when distortion is detected (ADR-0114). The IRT report also adds a key finding when Republican mean < Democrat mean (party mean inversion), and uses data-driven IRT-PCA correlation captions instead of hardcoded text.
+
+### Party Separation Quality Gate (R2, ADR-0118)
+
+After extraction, the 1D IRT computes Cohen's d between Republican and Democrat mean ideal points and writes it to `convergence_summary.json` alongside standard convergence diagnostics:
+
+- `party_separation_d`: Cohen's d between party means
+- `axis_uncertain`: true when d < 1.5
+
+When `axis_uncertain` is true, the 1D IRT is likely measuring intra-party factionalism rather than ideology. Downstream consumers (canonical routing, synthesis, profiles) should treat such results with caution. The Tier 2 quality gate in canonical routing uses `party_separation_d` instead of PCA rank correlation to avoid circular dependency (R3). See `docs/pca-ideology-axis-instability.md`.

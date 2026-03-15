@@ -245,3 +245,7 @@ The 2D model retains its diagnostic value: Dim 2 captures the establishment-cont
 The 2D model also serves as the primary diagnostic for the horseshoe effect in supermajority chambers. When the 1D model conflates establishment-loyalty with ideology, the 2D Dim 1 vs PCA PC1 interactive plot makes the distortion directly visible — legislators whose PCA placement disagrees with their IRT placement are horseshoe victims. See `docs/horseshoe-effect-and-solutions.md` for the full explanation and experimental results.
 
 The `--promote-2d` robustness flag (ADR-0104) cross-references 1D rankings with 2D Dim 1 rankings. A supermajority audit across 28 chamber-sessions (78th–91st) found 5 sessions with problematic 1D-2D disagreement, all in the Kansas Senate (79th, 80th, 81st, 83rd, 88th).
+
+### Dimension Swap Detection (R7, ADR-0118)
+
+After extraction and sign check, the 2D model checks whether Dim 2 separates parties better than Dim 1 (Cohen's d). In supermajority sessions where PCA PC1 ≠ ideology, the PLT init may cause dimensions to be swapped. When `dim2_party_d > dim1_party_d` and `dim2_party_d > 2.0`, columns are automatically swapped in both the posterior idata and the ideal points DataFrame, with `dimension_swap_corrected: true` recorded in `convergence_summary.json`. A sign re-check follows the swap. See `docs/pca-ideology-axis-instability.md`.
