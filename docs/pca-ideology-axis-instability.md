@@ -318,6 +318,24 @@ The Kansas Senate's political structure changed fundamentally between 1999 and 2
 
 The pipeline's current defenses (horseshoe detection, sign checks, sort constraints) address symptoms but not the root cause. The root cause is that **no phase validates whether its estimated axis actually separates parties**. The seven recommendations above add party-separation checks at critical decision points, breaking the pipeline's implicit assumption that "maximum variance = ideology."
 
+---
+
+## Resolution (2026-03-15)
+
+All seven recommendations have been implemented in commits v2026.03.15.4 through v2026.03.15.10:
+
+| # | Fix | Commit |
+|---|-----|--------|
+| R1 | Party-aware PCA init (`detect_ideology_pc`) | v2026.03.15.4 |
+| R6 | PCA report axis-swap warning banner | v2026.03.15.5 |
+| R4 | Hierarchical minimum separation guard | v2026.03.15.6 |
+| R2 | 1D IRT party separation quality gate | v2026.03.15.7 |
+| R3 | Tier 2 quality gate — party-d replaces PCA correlation | v2026.03.15.8 |
+| R7 | 2D IRT dimension swap detection and correction | v2026.03.15.9 |
+| R5 | Dynamic IRT canonical reference + per-period party-d | v2026.03.15.10 |
+
+Architecture decision: ADR-0118 (party separation quality gates across pipeline).
+
 ### Key References
 
 - Bafumi, J., Gelman, A., Park, D. K., & Kaplan, N. (2005). Practical issues in implementing and understanding Bayesian ideal point estimation. *Political Analysis*, 13(2), 171-187.

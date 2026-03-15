@@ -90,6 +90,7 @@ What are the trade-offs?
 | [0111](0111-canonical-init-strategy-hierarchical.md) | Canonical init strategy for hierarchical IRT (`--init-strategy canonical`) |
 | [0112](0112-2d-irt-supermajority-tuning.md) | 2D IRT tuning for supermajority chambers (adaptive N_TUNE, beta init, contested-only) |
 | [0117](0117-hierarchical-2d-irt.md) | Hierarchical 2D IRT with PLT identification and party pooling (Phase 07b) |
+| [0118](0118-party-separation-quality-gates.md) | Party separation quality gates across pipeline (axis instability fix) |
 
 ### Classical Analysis
 
@@ -299,6 +300,7 @@ What are the trade-offs?
 | [0115](0115-pca-multidimensional-interpretation.md) | PCA multidimensional interpretation (scatter matrices, loading heatmaps, horseshoe diagnostic, auto-narrative) | Accepted | 2026-03-12 |
 | [0116](0116-pipeline-reordering.md) | Pipeline reordering (text-analysis to position 4, UMAP to position 9) | Accepted | 2026-03-14 |
 | [0117](0117-hierarchical-2d-irt.md) | Hierarchical 2D IRT with PLT identification and party pooling (Phase 07b) | Accepted | 2026-03-14 |
+| [0118](0118-party-separation-quality-gates.md) | Party separation quality gates across pipeline (7 fixes for PCA axis instability) | Accepted | 2026-03-15 |
 
 ## Creating a New ADR
 
