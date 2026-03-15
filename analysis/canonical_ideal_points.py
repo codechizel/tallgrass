@@ -32,7 +32,8 @@ TIER1_ESS_THRESHOLD = 100
 
 # Tier 2: point estimates credible — use 2D Dim 1 but flag wide HDIs
 TIER2_RHAT_THRESHOLD = 2.50
-TIER2_RANK_CORR_THRESHOLD = 0.70
+TIER2_RANK_CORR_THRESHOLD = 0.70  # legacy: kept for backward compat, no longer gates
+TIER2_PARTY_D_THRESHOLD = 1.5  # party separation (Cohen's d) for credible ideology estimate
 
 # Tier 3: failed — fall back to 1D (implicit: anything beyond Tier 2)
 
@@ -160,6 +161,29 @@ def load_pca_scores(pca_dir: Path, chamber: str) -> pl.DataFrame | None:
     return df.select("legislator_slug", pl.col(pc1_col).alias("PC1"))
 
 
+def _compute_party_separation(ip: pl.DataFrame) -> float:
+    """Compute Cohen's d between Republican and Democrat mean ideal points.
+
+    Uses the 'xi_mean' column and 'party' column. Returns 0.0 if either party
+    is missing. This breaks the circular PCA dependency in Tier 2 — validates
+    that the axis actually separates parties, regardless of which PCA component
+    it correlates with. See docs/pca-ideology-axis-instability.md (R3).
+    """
+    r = ip.filter(pl.col("party") == "Republican")
+    d = ip.filter(pl.col("party") == "Democrat")
+    if r.height == 0 or d.height == 0:
+        return 0.0
+
+    import numpy as np
+
+    r_vals = r["xi_mean"].to_numpy().astype(np.float64)
+    d_vals = d["xi_mean"].to_numpy().astype(np.float64)
+    pooled_sd = np.sqrt((r_vals.std() ** 2 + d_vals.std() ** 2) / 2)
+    if pooled_sd == 0:
+        return 0.0
+    return float(abs(r_vals.mean() - d_vals.mean()) / pooled_sd)
+
+
 def _compute_rank_correlation(ip_2d: pl.DataFrame, pca_scores: pl.DataFrame) -> float | None:
     """Compute Spearman rank correlation between 2D Dim 1 and PCA PC1.
 
@@ -225,8 +249,16 @@ def assess_2d_convergence_tier(
         print(f"  Tier 1 (converged): {chamber} R-hat={xi_rhat:.4f}, ESS={xi_ess:.0f}")
         return result
 
-    # Tier 2: point estimates credible (R-hat below catastrophic + rank correlation OK)
+    # Tier 2: point estimates credible (R-hat below catastrophic + party separation OK)
+    # Uses party separation (Cohen's d) instead of PCA rank correlation to avoid
+    # circular dependency when PCA PC1 ≠ ideology. See docs/pca-ideology-axis-instability.md.
     if xi_rhat < TIER2_RHAT_THRESHOLD:
+        party_d = None
+        if ip_2d is not None:
+            party_d = _compute_party_separation(ip_2d)
+            result["party_separation_d"] = party_d
+
+        # Also compute PCA rank correlation as secondary diagnostic (logged, not gating)
         rank_corr = None
         if ip_2d is not None and pca_dir is not None:
             pca_scores = load_pca_scores(pca_dir, chamber)
@@ -234,32 +266,28 @@ def assess_2d_convergence_tier(
                 rank_corr = _compute_rank_correlation(ip_2d, pca_scores)
                 result["rank_corr"] = rank_corr
 
-        if rank_corr is not None and rank_corr > TIER2_RANK_CORR_THRESHOLD:
+        if party_d is not None and party_d > TIER2_PARTY_D_THRESHOLD:
             result["tier"] = 2
             result["usable"] = True
+            corr_note = f", ρ(Dim1,PC1)={rank_corr:.3f}" if rank_corr is not None else ""
             result["reason"] = (
                 f"point estimates credible (R-hat={xi_rhat:.4f}, ESS={xi_ess:.0f}, "
-                f"ρ(Dim1,PC1)={rank_corr:.3f})"
+                f"party d={party_d:.2f}{corr_note})"
             )
             print(
                 f"  Tier 2 (point estimates credible): {chamber} "
-                f"R-hat={xi_rhat:.4f}, ρ={rank_corr:.3f}"
+                f"R-hat={xi_rhat:.4f}, party d={party_d:.2f}"
             )
             return result
-        elif rank_corr is not None:
+        elif party_d is not None:
             result["reason"] = (
-                f"rank correlation too low (R-hat={xi_rhat:.4f}, "
-                f"ρ={rank_corr:.3f} < {TIER2_RANK_CORR_THRESHOLD})"
-            )
-        elif pca_dir is None:
-            # No PCA available for correlation check — can't validate Tier 2
-            result["reason"] = (
-                f"PCA scores unavailable for rank correlation check "
-                f"(R-hat={xi_rhat:.4f}, ESS={xi_ess:.0f})"
+                f"party separation too low (R-hat={xi_rhat:.4f}, "
+                f"d={party_d:.2f} < {TIER2_PARTY_D_THRESHOLD})"
             )
         else:
             result["reason"] = (
-                f"PCA scores not found for {chamber} (R-hat={xi_rhat:.4f}, ESS={xi_ess:.0f})"
+                f"no ideal points available for party separation check "
+                f"(R-hat={xi_rhat:.4f}, ESS={xi_ess:.0f})"
             )
 
     else:

@@ -255,16 +255,17 @@ class TestAssess2dConvergenceTier:
         assert result["usable"] is True
         assert "converged" in result["reason"]
 
-    def test_tier2_with_rank_correlation(self, tmp_path, pca_dir_fixture):
-        """R-hat between 1.10 and 2.50, good rank correlation → Tier 2."""
+    def test_tier2_with_party_separation(self, tmp_path, pca_dir_fixture):
+        """R-hat between 1.10 and 2.50, good party separation → Tier 2."""
         data_dir = tmp_path / "2d" / "data"
         data_dir.mkdir(parents=True)
 
-        # 2D ideal points correlated with PCA
+        # 2D ideal points with clear party separation (d >> 1.5)
         ip_2d = pl.DataFrame(
             {
                 "legislator_slug": ["r1", "r2", "r3", "d1", "d2"],
                 "xi_mean": [1.5, 0.8, 0.5, -1.2, -0.8],
+                "party": ["Republican", "Republican", "Republican", "Democrat", "Democrat"],
             }
         )
 
@@ -280,8 +281,8 @@ class TestAssess2dConvergenceTier:
         )
         assert result["tier"] == 2
         assert result["usable"] is True
-        assert result["rank_corr"] is not None
-        assert result["rank_corr"] > TIER2_RANK_CORR_THRESHOLD
+        assert result["party_separation_d"] is not None
+        assert result["party_separation_d"] > 1.5
 
     def test_tier3_rhat_too_high(self, tmp_path):
         """R-hat ≥ 2.50 → Tier 3 regardless of correlation."""
@@ -297,16 +298,17 @@ class TestAssess2dConvergenceTier:
         assert result["tier"] == 3
         assert result["usable"] is False
 
-    def test_tier3_low_rank_correlation(self, tmp_path, pca_dir_fixture):
-        """R-hat < 2.50 but rank correlation < 0.70 → Tier 3."""
+    def test_tier3_low_party_separation(self, tmp_path, pca_dir_fixture):
+        """R-hat < 2.50 but party separation < 1.5 → Tier 3."""
         data_dir = tmp_path / "2d" / "data"
         data_dir.mkdir(parents=True)
 
-        # 2D ideal points NOT correlated with PCA (random order)
+        # 2D ideal points with NO party separation (scrambled)
         ip_2d = pl.DataFrame(
             {
                 "legislator_slug": ["r1", "r2", "r3", "d1", "d2"],
-                "xi_mean": [0.1, -0.3, 0.8, 0.5, -0.2],  # scrambled
+                "xi_mean": [0.1, -0.3, 0.8, 0.5, -0.2],  # no party pattern
+                "party": ["Republican", "Republican", "Republican", "Democrat", "Democrat"],
             }
         )
 
