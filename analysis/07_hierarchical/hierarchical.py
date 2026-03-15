@@ -422,6 +422,15 @@ def build_per_chamber_graph(
         mu_party_raw = pm.Normal("mu_party_raw", mu=0, sigma=2, shape=n_parties)
         mu_party = pm.Deterministic("mu_party", pt.sort(mu_party_raw), dims="party")
 
+        # Soft minimum-separation guard: penalize solutions where party means
+        # are < 0.5 apart. Prevents near-zero separation in sessions where the
+        # discrimination axis aligns with intra-R factionalism rather than the
+        # party divide. See docs/pca-ideology-axis-instability.md (R4).
+        pm.Potential(
+            "min_party_sep",
+            pt.switch(mu_party[1] - mu_party[0] > 0.5, 0.0, -100.0),
+        )
+
         # Per-party within-group standard deviation (adaptive for small groups)
         sigma_within = pm.HalfNormal(
             "sigma_within", sigma=sigma_scale, shape=n_parties, dims="party"
@@ -1764,7 +1773,7 @@ def main() -> None:
                     df = canonical_scores[ch]
                     src = df["source"][0] if "source" in df.columns else "?"
                     print(f"  Canonical scores loaded: {ch} ({df.height} rows, source={src})")
-        except (FileNotFoundError, ModuleNotFoundError):
+        except FileNotFoundError, ModuleNotFoundError:
             pass  # Canonical scores not available — auto will fall back
 
         # ── Per-chamber models ──
@@ -1847,7 +1856,7 @@ def main() -> None:
             if flat_ip[ch] is not None:
                 flat_corr = compute_flat_hier_correlation(ideal_points, flat_ip[ch], chamber)
 
-            # Print group params
+            # Print group params + party separation diagnostic
             print("\n  Group-level parameters:")
             for row in group_params.iter_rows(named=True):
                 print(
@@ -1855,6 +1864,21 @@ def main() -> None:
                     f"[{row['mu_hdi_2.5']:+.3f}, {row['mu_hdi_97.5']:+.3f}], "
                     f"sigma={row['sigma_within_mean']:.3f}"
                 )
+
+            # Party separation diagnostic (R4)
+            d_row = group_params.filter(pl.col("party") == "Democrat")
+            r_row = group_params.filter(pl.col("party") == "Republican")
+            if d_row.height > 0 and r_row.height > 0:
+                gap = float(r_row["mu_mean"][0]) - float(d_row["mu_mean"][0])
+                sigma_r = float(r_row["sigma_within_mean"][0])
+                ratio = gap / sigma_r if sigma_r > 0 else 0.0
+                print(f"  Party gap: {gap:.3f} ({ratio:.2f} sigma_within_R)")
+                if ratio < 1.0:
+                    print(
+                        f"  WARNING: Weak party separation ({ratio:.2f}σ). "
+                        "Model may be on wrong axis. "
+                        "See docs/pca-ideology-axis-instability.md"
+                    )
 
             # Save parquets + NetCDF
             ideal_points.write_parquet(ctx.data_dir / f"hierarchical_ideal_points_{ch}.parquet")

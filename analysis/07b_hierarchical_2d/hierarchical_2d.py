@@ -279,6 +279,12 @@ def build_hierarchical_2d_graph(
         )
         mu_party_dim1 = pm.Deterministic("mu_party_dim1", pt.sort(mu_party_dim1_raw), dims="party")
 
+        # Soft minimum-separation guard (same as Phase 07, R4)
+        pm.Potential(
+            "min_party_sep_dim1",
+            pt.switch(mu_party_dim1[1] - mu_party_dim1[0] > 0.5, 0.0, -100.0),
+        )
+
         # Dim 2: no ordering constraint (secondary axis)
         mu_party_dim2 = pm.Normal(
             "mu_party_dim2", mu=dim2_mu_prior, sigma=dim2_sigma_prior, shape=n_parties, dims="party"
