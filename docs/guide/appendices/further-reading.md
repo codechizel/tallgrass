@@ -2,6 +2,14 @@
 
 > *Papers, textbooks, and resources for readers who want to go deeper on the methods behind Tallgrass.*
 
+## Where to Start
+
+If you have **one evening**: Read Clinton, Jackman & Rivers (2004) for political IRT in action, then skim McElreath (2020) Chapter 13 for hierarchical models in plain English.
+
+If you have **one weekend**: Add Poole (2005) for historical context on DW-NOMINATE, and Lauderdale & Clark (2014) for multidimensional ideal points.
+
+If you want to **run your own analysis**: Start with the [Tallgrass GitHub repository](https://github.com/codechizel/tallgrass) installation guide, then read the PyMC documentation for Bayesian modeling basics.
+
 ---
 
 ## Item Response Theory

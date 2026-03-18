@@ -82,6 +82,8 @@ Raw CSVs
   Cross-biennium: 26 Cross-Session, 27 Dynamic IRT (after all single-biennium runs)
 ```
 
+If an upstream phase fails (convergence problems, missing data, R not installed), downstream phases that depend on it are automatically skipped. The pipeline continues with all remaining phases. Synthesis (Phase 24) adapts by omitting sections that depend on missing data — the table of contents will show fewer sections than usual, but the overall findings still stand. Check the run log (`run_log.txt` in each phase directory) for details on any skipped phases.
+
 ---
 
 ## Runtime Reference

@@ -60,6 +60,8 @@ Terms are listed alphabetically. Each definition includes the volume and chapter
 
 **Bridge-builder** — A legislator with high *network centrality* near the *cross-party midpoint* — structurally positioned to connect both parties. Vol. 9, Ch. 2.
 
+**Bridge coverage** — The number of legislators shared between two adjacent bienniums. Higher coverage produces more reliable *cross-session alignment*. Vol. 8, Ch. 3.
+
 **Bridge legislator** — A lawmaker who serves in multiple bienniums, linking *ideal point* scales across sessions in *dynamic IRT*. Vol. 8, Ch. 2.
 
 **Brier score** — A measure of probabilistic prediction accuracy. Lower is better. Brier = 0 means perfect calibration; Brier = 0.25 means random guessing on binary outcomes. Vol. 7, Ch. 1.
@@ -150,6 +152,8 @@ Terms are listed alphabetically. Each definition includes the volume and chapter
 
 **Feature importance** — A ranking of input variables by their contribution to a prediction model's accuracy. In Tallgrass, measured by *SHAP values*. Vol. 7, Ch. 1.
 
+**Feature leakage** — Using information in a predictive model that would not be available at prediction time, such as using vote counts (which exist only after the vote) to predict individual votes. Vol. 7, Ch. 1.
+
 **Freshmen cohort** — Legislators serving in their first biennium. Compared to returning members in the *conversion-replacement decomposition*. Vol. 8, Ch. 4.
 
 **Funnel geometry** — A problematic posterior shape in hierarchical models where the group-level variance and the individual offsets are tightly coupled. Solved by *non-centered parameterization*. Vol. 4, Ch. 5.
@@ -181,6 +185,8 @@ Terms are listed alphabetically. Each definition includes the volume and chapter
 **Inertia** — In *k-means clustering*, the sum of squared distances from each point to its cluster center. Lower is better. Vol. 6, Ch. 1.
 
 **Informative prior** — A *prior distribution* that encodes specific knowledge (e.g., the static IRT sign convention). Contrasts with vague priors. Vol. 8, Ch. 2.
+
+**Innovation (time series)** — The random, unpredictable component of change at each time step in a dynamic model. The "surprise" in a legislator's session-to-session ideology shift. Vol. 8, Ch. 2.
 
 **Intraclass Correlation Coefficient (ICC)** — A measure of how consistently a metric ranks the same legislators across two measurement occasions (e.g., two sessions). ICC > 0.75 is "good." Vol. 8, Ch. 3.
 
@@ -320,6 +326,8 @@ Terms are listed alphabetically. Each definition includes the volume and chapter
 
 **Shrinkage** — The phenomenon in *hierarchical models* and *empirical Bayes* where individual estimates are pulled toward the group mean. More data = less shrinkage. Vol. 4, Ch. 5.
 
+**Sign alignment** — The process of ensuring *ideal point* scores consistently place conservatives on the positive side and liberals on the negative side across different analysis methods and time periods. Vol. 8, Ch. 3.
+
 **Sign convention** — The assignment of positive values to conservative legislators and negative to liberal (or vice versa). Must be fixed externally because IRT has *reflection invariance*. Vol. 4, Ch. 3.
 
 **Silhouette score** — A measure of clustering quality: how similar each point is to its own cluster versus other clusters. Ranges from -1 (wrong cluster) to +1 (perfect fit). Vol. 6, Ch. 1.
@@ -339,6 +347,8 @@ Terms are listed alphabetically. Each definition includes the volume and chapter
 **TF-IDF (Term Frequency-Inverse Document Frequency)** — A text weighting scheme that measures how important a word is to a document relative to a corpus. Common words get low weight; distinctive words get high weight. Vol. 7, Ch. 2.
 
 **Tier (quality gate)** — One of three trust levels for IRT results: Tier 1 (fully converged), Tier 2 (point estimates credible), Tier 3 (fallback to simpler model). Vol. 5, Ch. 5.
+
+**Time series** — A sequence of measurements ordered by time, used to track how legislative behavior (party cohesion, ideology) changes within or across sessions. Vol. 8, Ch. 1.
 
 **Turnover decomposition** — Separating a party's ideological shift into *conversion effects* and *replacement effects*. Vol. 8, Ch. 4.
 
