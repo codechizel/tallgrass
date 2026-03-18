@@ -137,7 +137,7 @@ The **most partisan Republican** is the one who agrees *least* with Democrats on
 
 The **most partisan Democrat** is the one who agrees least with Republicans on contested votes. This legislator is a genuine ideological liberal.
 
-Anchoring on these two produces an axis where the party separation is **d = 6.17** on 2D Dim 1 — a clean ideology spectrum. The conservative Republican rebels are correctly placed at the conservative extreme, and Democrats are correctly placed at the liberal end.
+Anchoring on these two produces an axis where the party separation is **d = 6.17** on 2D Dim 1 — a clean ideology spectrum. For context, social scientists consider d = 0.2 small, d = 0.5 medium, and d = 0.8 large. A d above 3.0 means the two groups barely overlap at all. The conservative Republican rebels are correctly placed at the conservative extreme, and Democrats are correctly placed at the liberal end.
 
 The auto-detection system detects the 75% Republican supermajority and selects anchor-agreement automatically, without human intervention.
 

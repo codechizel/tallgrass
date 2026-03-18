@@ -22,7 +22,7 @@ where:
 - ξ (xi) = the legislator's ideal point (their position on the ideology spectrum)
 - β (beta) = the bill's discrimination (how sharply it separates liberals from conservatives)
 - α (alpha) = the bill's difficulty (how hard it is to pass)
-- logistic(x) = 1 / (1 + e^(−x)) — the function that converts any number into a probability between 0 and 1
+- logistic(x) = 1 / (1 + e^(−x)) — the function that converts any number into a probability between 0 and 1. The logistic function is shaped like a stretched S: large negative inputs give probabilities near 0 (almost certainly Nay), large positive inputs give probabilities near 1 (almost certainly Yea), and inputs near zero give probabilities near 0.5 (a coin flip). The number *e* (approximately 2.718) is a mathematical constant that gives the curve its smooth S-shape.
 
 **Worked example:**
 
@@ -272,7 +272,7 @@ Tallgrass uses **nutpie**, a state-of-the-art sampler written in Rust that imple
 
 ### Chains and Convergence
 
-To be confident we've found the right answer, we run **multiple independent chains** — separate hikers starting from different locations. If they all end up wandering around the same peaks, we trust the result. If they end up on different peaks, something went wrong.
+To be confident we've found the right answer, we run **multiple independent chains** — separate hikers starting from different locations. We run multiple chains because a single chain could get stuck in a local pocket and never discover the true peak. If multiple independent chains all converge to the same answer, we're confident they've found the right one. If they end up on different peaks, something went wrong.
 
 Tallgrass runs **2 chains** for the 1D model (4 for 2D and hierarchical models). The key convergence diagnostic is **R-hat** (pronounced "R-hat"):
 

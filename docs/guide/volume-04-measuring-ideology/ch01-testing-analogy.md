@@ -30,7 +30,7 @@ The leap to politics was first made by the political scientists **Simon Jackman*
 | Question discrimination | Bill discrimination |
 | The answer pattern reveals ability | The voting pattern reveals ideology |
 
-The word "latent" is key. In both cases, the thing we want to measure — ability, ideology — is **unobservable**. You can't stick a thermometer in someone's brain and read their IQ. You can't scan a legislator and read their ideology score. All you can observe are the *responses* — answers to questions, votes on bills. IRT works backward from the responses to infer the hidden trait.
+The word "latent" is key. In both cases, the thing we want to measure — ability, ideology — is **unobservable**. Height is observable — you can measure it with a ruler. Ideology is latent — you can't measure it directly. Instead, you observe behavior (how someone votes) and infer the underlying trait from the pattern, the same way a teacher infers a student's ability from their test answers. You can't stick a thermometer in someone's brain and read their IQ. You can't scan a legislator and read their ideology score. All you can observe are the *responses* — answers to questions, votes on bills. IRT works backward from the responses to infer the hidden trait.
 
 ### A Brief History
 

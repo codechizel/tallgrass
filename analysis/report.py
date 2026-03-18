@@ -134,7 +134,7 @@ class InteractiveTableSection:
     caption: str | None = None
 
     def render(self) -> str:
-        parts = [f'<div class="interactive-table-container" id="{self.id}">']
+        parts = [f'<div class="interactive-table-container" id="{self.id}-table">']
         parts.append(self.html)
         if self.caption:
             parts.append(f'<p class="caption">{self.caption}</p>')
@@ -412,6 +412,23 @@ def make_interactive_table(
     return "\n".join(html_parts)
 
 
+def _itables_offline_bundle() -> str:
+    """Return the itables offline JS/CSS bundle for self-contained HTML reports.
+
+    itables' to_html_datatable(connected=False) emits table init scripts that
+    await window._itables_X_Y_Z, but the bundle that defines that global is
+    only loaded by init_notebook_mode (Jupyter). For standalone HTML reports,
+    we inject the bundle directly into <head> via extra_head.
+    """
+    import os
+
+    import itables
+    from itables.javascript import generate_init_offline_itables_html
+
+    bundle_path = os.path.join(os.path.dirname(itables.__file__), "html", "dt_bundle.js")
+    return generate_init_offline_itables_html(bundle_path)
+
+
 def _scrolly_init_js() -> str:
     """Return inline JS for scrollytelling IntersectionObserver."""
     return """
@@ -495,7 +512,10 @@ class ReportBuilder:
         key_findings_html = self._key_findings.render() if self._key_findings else ""
 
         has_scrolly = any(isinstance(s, ScrollySection) for _, s in self._sections)
+        has_itables = any(isinstance(s, InteractiveTableSection) for _, s in self._sections)
         extra_head = ""
+        if has_itables:
+            extra_head += _itables_offline_bundle()
         if has_scrolly:
             extra_head += _scrolly_init_js()
 

@@ -28,7 +28,7 @@ If you photograph them from directly above, they all look like circles on the fl
 
 **PCA is like finding the perfect camera angle.** It looks at your high-dimensional data (500 votes) and finds the single direction — the single "angle" — along which the data varies the most. That direction becomes **PC1** (the first principal component). Then it finds the next-best direction, perpendicular to the first, and calls it **PC2**. And so on.
 
-The key insight: in legislative voting data, PC1 almost always captures the party divide. It's the single direction along which legislators differ the most — and that direction runs from liberal to conservative.
+Why does this work for legislatures? PCA finds the single direction along which voting patterns vary the most. In a legislature with two parties that vote very differently, the biggest source of variation is the party divide — so PC1 almost always captures the liberal-conservative spectrum. It's the single direction along which legislators differ the most, and that direction runs from liberal to conservative.
 
 ## How PCA Works (Step by Step)
 
@@ -92,7 +92,7 @@ A highly partisan vote (like a party-line tax bill) gets a large weight — it's
 
 ## Eigenvalues and the Scree Plot
 
-Each principal component comes with a number: its **eigenvalue**. The eigenvalue measures how much of the data's total variation that component captures. If the first eigenvalue is large and the rest are small, it means one dimension explains most of the data — the legislature is fundamentally one-dimensional (party is everything).
+Each principal component comes with a number: its **eigenvalue** — a measure of how much of the total variation in voting patterns that component captures. Think of it as a percentage: an eigenvalue of 3.4 out of a total of 6.0 means that component accounts for 57% of all the variation. If the first eigenvalue is large and the rest are small, it means one dimension explains most of the data — the legislature is fundamentally one-dimensional (party is everything).
 
 The standard way to visualize this is the **scree plot** — a bar chart of eigenvalues in descending order.
 
@@ -188,7 +188,7 @@ For each legislator, the pipeline measures how well PCA reconstructs their full 
 
 ## The Loadings: Which Bills Define Each Axis?
 
-Each principal component isn't just a score for legislators — it also has **loadings** for each roll call. A loading tells you how much a particular vote contributes to that component.
+Each principal component isn't just a score for legislators — it also has **loadings** for each roll call. A loading measures how much a particular bill contributes to a component. Bills with high loadings on PC1 are the ones that best separate liberals from conservatives — they're the most partisan votes.
 
 Bills with high PC1 loadings are the most partisan — they sharply separate Democrats from Republicans. Bills with loadings near zero are non-partisan (everyone voted the same way). Bills with high PC2 loadings capture within-party disagreements.
 

@@ -41,7 +41,7 @@ Here's the full range of Tallgrass data:
 
 A few things jump out from this table. First, Republicans have controlled both chambers for the entire period — and it's not close. The House has ranged from a comfortable majority (85-40) to a near-veto-proof supermajority (97-28). The Senate has been even more lopsided, with Republicans holding 29 to 31 of 40 seats in every session.
 
-This matters enormously for the statistical analysis. When one party holds 75% or more of the seats, the mathematics of ideology estimation become harder. We'll return to this problem — called the "horseshoe effect" — repeatedly throughout this guide.
+This matters enormously for the statistical analysis. When one party holds 75% or more of the seats, the biggest source of voting variation shifts from the party divide to fights *within* the majority party. Standard methods that assume "the main pattern is party vs. party" can be fooled, assigning their primary axis to intra-Republican factionalism instead of the liberal-conservative spectrum. The mathematics of ideology estimation become harder as a result. We'll return to this problem — called the "horseshoe effect" — repeatedly throughout this guide.
 
 ## How a Bill Becomes a Vote
 

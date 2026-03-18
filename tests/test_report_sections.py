@@ -36,7 +36,7 @@ class TestInteractiveTableSection:
     def test_render_basic(self):
         section = InteractiveTableSection(id="it1", title="Scores", html="<table>data</table>")
         html = section.render()
-        assert '<div class="interactive-table-container" id="it1">' in html
+        assert '<div class="interactive-table-container" id="it1-table">' in html
         assert "<table>data</table>" in html
         assert "</div>" in html
 
@@ -223,7 +223,7 @@ class TestReportBuilderInteractive:
         report = ReportBuilder(title="Test")
         report.add(InteractiveTableSection(id="it1", title="Scores", html="<table>data</table>"))
         html = report.render()
-        assert '<div class="interactive-table-container" id="it1">' in html
+        assert '<div class="interactive-table-container" id="it1-table">' in html
         assert '<a href="#it1">' in html
 
     def test_interactive_section_in_report(self):

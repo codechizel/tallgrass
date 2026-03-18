@@ -107,9 +107,9 @@ Sometimes one dimension isn't enough. In chambers with large supermajorities, th
 
 Flat IRT treats every legislator as independent. Hierarchical IRT recognizes that legislators come from parties, and party membership tells you something about where they'll land on the ideological spectrum. The model learns party-level averages and then adjusts each individual toward or away from their party mean based on their personal voting record.
 
-The effect is "partial pooling" — a legislator with few votes gets pulled strongly toward their party average (because we don't have much evidence to go on), while a veteran with hundreds of votes stands mostly on their own record. This is particularly valuable for new members and for small caucuses (like the 9-member Senate Democratic minority).
+The effect is "partial pooling" — a technique where individual estimates are pulled toward their group average, with the strength of the pull depending on how much data each individual has. A legislator with few votes gets pulled strongly toward their party average (because we don't have much evidence to go on), while a veteran with hundreds of votes stands mostly on their own record. This is particularly valuable for new members and for small caucuses (like the 9-member Senate Democratic minority).
 
-*Output: Hierarchical ideal points (with party-level shrinkage), intraclass correlation coefficient (how much party explains ideology), within-party variance estimates.*
+*Output: Hierarchical ideal points (with party-level "shrinkage" — the statistical term for this pull toward the group average), intraclass correlation coefficient (how much party explains ideology), within-party variance estimates.*
 
 **Phase 7b: Hierarchical 2D IRT**
 
@@ -129,7 +129,7 @@ A model that can't be checked is a model that can't be trusted. Four phases test
 
 The first check: can the model predict its own data? If we use the estimated ideal points and bill parameters to "replay" every vote, how often does the model get it right? (The answer: about 90-95% of the time, which is well above the 82% base rate.)
 
-The second check: model comparison. How does 1D IRT compare to 2D IRT compare to hierarchical IRT? LOO-CV (Leave-One-Out Cross-Validation) gives each model a score based on how well it predicts held-out observations. This is how we decide whether the extra complexity of 2D or hierarchical models is justified by the data.
+The second check: model comparison. How does 1D IRT compare to 2D IRT compare to hierarchical IRT? LOO-CV (Leave-One-Out Cross-Validation — hiding one vote at a time, predicting it from the rest, and measuring how often the model gets it right) gives each model a score based on how well it predicts held-out observations. This is how we decide whether the extra complexity of 2D or hierarchical models is justified by the data.
 
 **Phase 16: W-NOMINATE**
 

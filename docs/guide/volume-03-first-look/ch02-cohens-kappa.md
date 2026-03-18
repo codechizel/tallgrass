@@ -12,6 +12,14 @@ This is called **raw agreement**, and it's intuitive. If Representatives Adams a
 
 But as Chapter 1 explained, the Kansas Legislature has an 82% Yea base rate on contested votes. Two legislators who vote completely at random — flipping a coin weighted 82% toward Yea — would agree about 70% of the time by pure chance.
 
+Where does that 70% come from? Think of it like two people independently drawing marbles from a bowl that is 82% red (Yea) and 18% blue (Nay). Most of the time, both people will draw red — not because they're coordinating, but because there are so many more red marbles to draw. Specifically:
+
+- **Both draw red (both vote Yea):** 0.82 × 0.82 = 0.672 — this happens about 67% of the time.
+- **Both draw blue (both vote Nay):** 0.18 × 0.18 = 0.032 — this happens about 3% of the time.
+- **Total chance agreement:** 0.672 + 0.032 = **0.704, or about 70%.**
+
+The remaining 30% of the time they disagree — one draws red while the other draws blue. But notice how lopsided the agreement is: almost all of it (67 out of 70 percentage points) comes from the Yea side. When the bowl is this imbalanced, random agreement is high because both people are mostly doing the same thing — voting Yea — whether they share any ideology or not.
+
 So that 85% figure isn't as impressive as it sounds. It's only 15 percentage points above the chance baseline. The real question is: *how much do Adams and Baker agree beyond what we'd expect from two random legislators with the same voting tendencies?*
 
 This question was answered in 1960 by a psychologist named Jacob Cohen.

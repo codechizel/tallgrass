@@ -92,7 +92,7 @@ Before looking at results, we need to acknowledge a baseline problem. About 82% 
 
 This makes accuracy a terrible metric for this task. An accuracy of 90% sounds impressive until you realize it's only 8 percentage points better than a strategy that ignores every feature.
 
-That's why Tallgrass uses **AUC-ROC** (Area Under the Receiver Operating Characteristic Curve) as the primary metric. AUC measures something different: how well the model *ranks* Yea votes above Nay votes across all possible thresholds. A perfect model has AUC = 1.0. A coin flip has AUC = 0.5. And critically, AUC is not inflated by the 82% base rate.
+That's why Tallgrass uses **AUC-ROC** (Area Under the Receiver Operating Characteristic Curve) as the primary metric. AUC measures how well the model separates Yea votes from Nay votes. Imagine lining up all votes by the model's predicted probability of Yea, from lowest to highest. If every actual Nay vote appears before every actual Yea vote in that lineup, the separation is perfect: AUC = 1.0. If the lineup is completely scrambled (Yeas and Nays mixed randomly), AUC = 0.5. An AUC of 0.98 means the model almost perfectly ranks votes — only a handful of Yea votes are ranked lower than Nay votes. And critically, AUC is not inflated by the 82% base rate.
 
 ### Three Baselines
 

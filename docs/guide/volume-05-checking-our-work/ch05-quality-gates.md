@@ -56,7 +56,9 @@ An analogy: imagine sending four friends to explore a new city and find the best
 
 The threshold of 1.10 is a standard convention in Bayesian statistics — originally proposed by Andrew Gelman and Donald Rubin in 1992. It says: the between-chain variance should be no more than 10% larger than the within-chain variance. More conservative practitioners use 1.05 or even 1.01, but 1.10 has stood the test of time as a practical cutoff.
 
-**Effective Sample Size (ESS)** measures how many independent pieces of information the chains provide. MCMC chains are autocorrelated — each sample is similar to the previous one. ESS discounts for this autocorrelation to estimate the true information content. An ESS of 100 means the chains provide as much information as 100 completely independent samples, which is enough for reliable point estimates and credible intervals.
+To put the numbers in concrete terms: R-hat measures whether multiple independent estimation runs agree with each other. An R-hat of 1.00 means perfect agreement — all runs found the same answer. An R-hat of 1.01 means they agree within 1%. Above 1.10, the runs are giving noticeably different answers, and the estimates shouldn't be trusted without investigation.
+
+**Effective Sample Size (ESS)** measures how many independent pieces of information the chains provide. MCMC chains are autocorrelated — each sample is similar to the previous one. ESS discounts for this autocorrelation to estimate the true information content. Think of ESS as "how many independent data points is this estimate based on?" An ESS of 400 means the estimate is as reliable as if we had 400 independent measurements. An ESS of 100 — the Tier 1 threshold — means the chains provide enough independent information for reliable point estimates and credible intervals. Below 100, the estimate is too noisy to trust.
 
 **Tier 1 implication:** Use the model's ideal points with full confidence. Both point estimates (the means) and uncertainty (the credible intervals) are trustworthy.
 
