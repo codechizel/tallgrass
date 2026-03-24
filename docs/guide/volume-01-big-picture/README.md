@@ -4,7 +4,7 @@
 
 This volume introduces the Tallgrass project, the Kansas Legislature, and the central question that drives everything: can we measure where a lawmaker stands on the political spectrum — not from their speeches or campaign ads, but from the quiet, accumulated evidence of every vote they've ever cast?
 
-It covers the 27-year span of data (1999-2026), the basic structure of a roll call vote, and a roadmap of the 28-phase analysis pipeline. By the end, you'll understand what goes in, what comes out, and why each step exists.
+It covers the 27-year span of data (1999-2026), the basic structure of a roll call vote, and a roadmap of the 29-phase analysis pipeline. By the end, you'll understand what goes in, what comes out, and why each step exists.
 
 ---
 
@@ -20,7 +20,7 @@ It covers the 27-year span of data (1999-2026), the basic structure of a roll ca
    Roll calls are the gold standard of legislative data — but they have blind spots. What you can learn from a Yea-or-Nay record, and what remains hidden.
 
 4. **[The Pipeline: From Raw Votes to Insight](ch04-the-pipeline.md)**
-   A guided tour of the 28-phase analysis pipeline — from web scraping through Bayesian statistics to automated narrative reports.
+   A guided tour of the 29-phase analysis pipeline — from web scraping through Bayesian statistics to automated narrative reports.
 
 ---
 

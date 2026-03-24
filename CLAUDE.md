@@ -24,7 +24,7 @@ just lint                                    # → ruff check --fix + ruff forma
 just lint-check                              # → ruff check + ruff format --check
 just typecheck                               # → ty check src/ + ty check analysis/
 just check                                   # → lint-check + typecheck + test (quality gate)
-just test                                    # → uv run pytest tests/ -v (~2962 tests)
+just test                                    # → uv run pytest tests/ -v (~2980 tests)
 just test-scraper                            # → pytest -m scraper (~643 tests)
 just test-fast                               # → pytest -m "not slow" (skip integration)
 just test-web                                # → Django tests only (-m web, requires PostgreSQL)
@@ -103,7 +103,7 @@ Django project at `src/web/` for PostgreSQL-backed REST API at `/api/v1/`. See `
 | Rule file | Loads when editing | Content |
 |-----------|-------------------|---------|
 | `scraper-architecture.md` | `src/**/*.py` | Session coverage, retry strategy, ODT parsing, concurrency |
-| `analysis-framework.md` | `analysis/**/*.py` | 28-phase pipeline, report system, experiment framework, MCMC concurrency |
+| `analysis-framework.md` | `analysis/**/*.py` | 29-phase pipeline, report system, experiment framework, MCMC concurrency |
 | `analytic-workflow.md` | `analysis/**/*.py` | Methodology rules, validation, audience guidance |
 | `testing.md` | `tests/**/*.py` | Test inventory, markers, conventions |
 | `html-pitfalls.md` | `src/tallgrass/scraper.py`, `odt_parser.py`, `bills.py` | 10 hard-won HTML parsing lessons, session URL logic |

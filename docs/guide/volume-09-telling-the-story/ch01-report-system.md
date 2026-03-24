@@ -1,6 +1,6 @@
 # Chapter 1: The Report System: From Data to Narrative
 
-> *Twenty-eight analysis phases produce plots, tables, parquets, and CSVs. The report system turns them into something you can open in a browser and read.*
+> *Twenty-nine analysis phases produce plots, tables, parquets, and CSVs. The report system turns them into something you can open in a browser and read.*
 
 ---
 

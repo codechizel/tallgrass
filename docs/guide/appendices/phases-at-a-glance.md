@@ -1,6 +1,6 @@
 # Appendix C: Phases at a Glance
 
-> *The 28 analysis phases in pipeline execution order, with inputs, outputs, and the guide chapter that explains each one.*
+> *The 29 analysis phases in pipeline execution order, with inputs, outputs, and the guide chapter that explains each one.*
 
 ---
 
@@ -8,7 +8,7 @@
 
 The pipeline runs phases in a specific order (matching the dashboard sidebar). Each phase reads upstream output and produces its own. This table lists every phase with its key inputs, outputs, and the guide chapter where it's explained.
 
-**Run command:** `just pipeline 2025-26` runs phases 01-25 (plus 07b). `just cross-pipeline` runs phases 26-27.
+**Run command:** `just pipeline 2025-26` runs phases 01-25 (plus 07b). `just cross-pipeline` runs phases 26-28.
 
 ---
 
@@ -43,12 +43,13 @@ The pipeline runs phases in a specific order (matching the dashboard sidebar). E
 | 24 | **Synthesis** | Vol. 9, Ch. 2 | Upstream aggregation, notable detection | 10 upstream phases | Unified legislator DF, mavericks, bridges, paradoxes, narrative report |
 | 25 | **Profiles** | Vol. 9, Ch. 3 | Per-legislator deep dive | Synthesis from 24, raw votes, IRT bill params | Scorecards, defections, neighbors, surprising votes |
 
-## Cross-Biennium Phases (26-27)
+## Cross-Biennium Phases (26-28)
 
 | # | Phase | Guide | Method | Key Inputs | Key Outputs |
 |---|-------|-------|--------|------------|-------------|
 | 26 | **Cross-Session** | Vol. 8, Ch. 3-4 | Affine alignment, conversion-replacement decomposition | IRT from adjacent sessions | Aligned ideal points, top movers, KS tests, Sankey diagrams |
 | 27 | **Dynamic IRT** | Vol. 8, Ch. 2 | Dynamic state-space IRT (random walk, nutpie) | Vote matrices from all 8 bienniums | 15-year trajectories, tau estimates, polarization trend |
+| 28 | **Common Space** | Vol. 8, Ch. 5 | Simultaneous affine alignment (GLS 1999) | Canonical IRT from all sessions | Universal ideal points, linking coefficients, polarization trajectory |
 
 ---
 
@@ -79,7 +80,7 @@ Raw CSVs
 
   External: 16 W-NOMINATE, 17 Shor-McCarty, 18 DIME (validation, parallel)
 
-  Cross-biennium: 26 Cross-Session, 27 Dynamic IRT (after all single-biennium runs)
+  Cross-biennium: 26 Cross-Session, 27 Dynamic IRT, 28 Common Space (after all single-biennium runs)
 ```
 
 If an upstream phase fails (convergence problems, missing data, R not installed), downstream phases that depend on it are automatically skipped. The pipeline continues with all remaining phases. Synthesis (Phase 24) adapts by omitting sections that depend on missing data — the table of contents will show fewer sections than usual, but the overall findings still stand. Check the run log (`run_log.txt` in each phase directory) for details on any skipped phases.

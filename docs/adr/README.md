@@ -119,6 +119,7 @@ What are the trade-offs?
 | [0057](0057-time-series-analysis.md) | Time series analysis (rolling PCA drift + PELT changepoints) |
 | [0061](0061-tsa-r-enrichment.md) | TSA R enrichment (CROPS penalty selection + Bai-Perron CIs) |
 | [0058](0058-dynamic-ideal-points.md) | Dynamic ideal points (state-space IRT, Martin-Quinn) |
+| [0120](0120-common-space-ideal-points.md) | Common space ideal points (cross-temporal alignment, GLS 1999 approach) |
 
 ### Validation
 

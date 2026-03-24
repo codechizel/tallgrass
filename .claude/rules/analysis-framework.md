@@ -11,9 +11,9 @@ paths:
 
 EDA → PCA → MCA → Bill Text → IRT → 2D IRT → Hierarchical IRT → Hierarchical 2D IRT → PPC → UMAP → Clustering → LCA → Network → Bipartite → Indices → Beta-Binomial → Prediction → W-NOMINATE → External Validation → DIME → TSA → TBIP → Issue IRT → Model Legislation → Synthesis → Profiles
 
-**Cross-biennium** (`just cross-pipeline`): phases 26-27. Requires data from multiple bienniums.
+**Cross-biennium** (`just cross-pipeline`): phases 26-28. Requires data from multiple bienniums.
 
-Cross-Session → Dynamic IRT
+Cross-Session → Dynamic IRT → Common Space
 
 Hierarchical IRT's joint cross-chamber model is off by default (`--run-joint` to enable); Stocking-Lord linking is the production cross-chamber alignment method (ADR-0074). A flat pooled alternative exists in `analysis/experimental/joint_irt_experiment.py`.
 
@@ -46,6 +46,7 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 - `analysis/17_external_validation/external_validation_data.py` — SM parsing, name normalization, matching, correlations, outlier detection
 - `analysis/18_dime/external_validation_dime_data.py` — DIME parsing, name normalization, biennium filtering, CFscore matching
 - `analysis/27_dynamic_irt/dynamic_irt_data.py` — Global roster, cross-biennium vote stacking, bridge coverage, emIRT interface
+- `analysis/28_common_space/common_space_data.py` — Simultaneous affine alignment, bridge matrix, bootstrap uncertainty, quality gates, polarization trajectory
 - `analysis/24_synthesis/coalition_labeler.py` — Auto-named coalitions from clusters (party composition, IRT ideal points)
 - `analysis/phase_utils.py` — Cross-phase utilities: `load_horseshoe_status()` (reads `routing_manifest.json`), `horseshoe_warning_html()` (styled HTML banner), `drop_empty_optional_columns()` (prunes all-null columns for KanFocus data)
 
@@ -73,6 +74,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `tbip.md` — Text-based ideal points: embedding-vote approach, PCA on vote-weighted profiles, lower quality thresholds than Phase 14. ADR-0086.
 - `issue_irt.md` — Issue-specific ideal points: topic-stratified flat IRT, two taxonomies (BERTopic/CAP), relaxed convergence thresholds, anchor strategy. ADR-0087.
 - `model_legislation.md` — Model legislation detection: ALEC corpus matching, cross-state diffusion (MO/OK/NE/CO via OpenStates), cosine similarity thresholds, n-gram overlap. ADR-0089.
+- `common_space.md` — Common space ideal points: simultaneous affine alignment (GLS 1999), bridge coverage, bootstrap uncertainty, quality gates. Deep dive: `docs/common-space-ideal-points.md`. ADR-0120.
 
 ## Key Data Structures
 

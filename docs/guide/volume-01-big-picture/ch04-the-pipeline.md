@@ -1,6 +1,6 @@
 # Chapter 4: The Pipeline: From Raw Votes to Insight
 
-> *A guided tour of the 28-phase analysis pipeline — the assembly line that transforms a quarter-million web pages into statistical portraits of legislative ideology.*
+> *A guided tour of the 29-phase analysis pipeline — the assembly line that transforms a quarter-million web pages into statistical portraits of legislative ideology.*
 
 ---
 
@@ -10,7 +10,7 @@ Imagine an automobile factory. Raw steel arrives at one end. At each station alo
 
 The Tallgrass pipeline works the same way. Raw vote data enters at one end. At each phase, a specific statistical operation transforms the data: filter, compress, estimate, validate, cluster, predict, synthesize. Each phase consumes the output of earlier phases and produces input for later ones. At the end, a comprehensive HTML report rolls off the line — complete with ideology scores, coalition maps, interactive charts, and data-driven narrative text.
 
-The full pipeline has 28 phases, plus a data acquisition step that runs before the analysis begins. A single command kicks off the entire sequence:
+The full pipeline has 29 phases, plus a data acquisition step that runs before the analysis begins. A single command kicks off the entire sequence:
 
 ```
 just pipeline 2025-26
@@ -199,7 +199,7 @@ Run separate IRT models for each policy topic (education bills, tax bills, healt
 
 Compare Kansas bills to a corpus of 1,061 ALEC (American Legislative Exchange Council) model policies and to bills from neighboring states (Missouri, Oklahoma, Nebraska, Colorado). The method: cosine similarity on text embeddings, confirmed with n-gram overlap analysis. Matches above 85% similarity suggest direct textual borrowing.
 
-### Group 6: Temporal Analysis (Phases 19, 26-27)
+### Group 6: Temporal Analysis (Phases 19, 26-28)
 
 *"How has the legislature changed over time?"*
 
@@ -217,11 +217,15 @@ Put different sessions on the same scale. Since each biennium's IRT is estimated
 
 The most ambitious temporal model: a state-space IRT that tracks each legislator's ideal point across all bienniums simultaneously. Each legislator's ideology at time *t* is modeled as their ideology at time *t-1* plus a small random step. The model estimates how fast ideology can change (separately for each party) and produces smooth trajectories for every legislator who served across multiple sessions.
 
+**Phase 28: Common Space Ideal Points**
+
+Places every legislator from every biennium on a single ideological scale so that legislators who never served together can be directly compared. Uses simultaneous affine alignment: bridge legislators who served in multiple sessions anchor the transformation between each biennium's independent IRT scale and a common reference (the most recent session). Bootstrap resampling provides confidence intervals. Quality gates check party separation and sign consistency. Enables questions like "Was Tim Huelskamp in 2001 more conservative than any current legislator?" and "Has the Kansas Senate polarized over the last 25 years?"
+
 ### Group 7: Synthesis and Reporting (Phases 24-25)
 
 *"What does it all mean?"*
 
-Two phases turn 26 phases of statistics into readable documents.
+Two phases turn 27 phases of statistics into readable documents.
 
 **Phase 24: Synthesis**
 
@@ -263,7 +267,7 @@ The routing decision is made per chamber, per session. A session might use 2D fo
 
 At the end of the pipeline, each biennium has a results directory containing:
 
-- **28 HTML reports** — one per phase, with plots, tables, narrative text, and interactive elements
+- **29 HTML reports** — one per phase, with plots, tables, narrative text, and interactive elements
 - **A dashboard** — an index page linking to all phase reports
 - **Parquet data files** — the intermediate and final results in a format other tools can consume
 - **A routing manifest** — documenting which IRT model was selected as canonical for each chamber
@@ -310,7 +314,7 @@ The journey from raw HTML to a statistical portrait of a legislature is a long o
 
 ## Key Takeaway
 
-The Tallgrass pipeline is a 28-phase statistical assembly line that transforms raw vote data into ideology scores, coalition maps, and narrative reports. It runs in about 45 minutes per biennium, is fully reproducible, and includes an automatic quality gate system that flags unreliable results and falls back to simpler models when necessary. The pipeline prioritizes correctness over speed: no shortcuts, no glossing over problems, no false precision.
+The Tallgrass pipeline is a 29-phase statistical assembly line that transforms raw vote data into ideology scores, coalition maps, and narrative reports. It runs in about 45 minutes per biennium, is fully reproducible, and includes an automatic quality gate system that flags unreliable results and falls back to simpler models when necessary. The pipeline prioritizes correctness over speed: no shortcuts, no glossing over problems, no false precision.
 
 ---
 

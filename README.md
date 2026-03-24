@@ -55,7 +55,7 @@ Five CSV files per session in `data/kansas/{legislature}_{start}-{end}/`:
 
 ## Analysis Pipeline
 
-27 phases covering descriptive statistics, dimensionality reduction, Bayesian modeling, network analysis, prediction, bill text NLP, and cross-session validation.
+29 phases covering descriptive statistics, dimensionality reduction, Bayesian modeling, network analysis, prediction, bill text NLP, cross-session validation, and cross-temporal ideal point alignment.
 
 ```bash
 just pipeline 2025-26       # run all 25 single-biennium phases
