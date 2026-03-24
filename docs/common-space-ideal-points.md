@@ -86,34 +86,48 @@ Three legislators span the entire 28-year period: Barbara Ballard (D-House), Dav
 
 ## The Recommended Approach: Simultaneous Common Space Alignment
 
-### Why Not Sequential Chaining
+### Pairwise Chain Linking
 
-The naive approach — link 78th to 79th, 79th to 80th, and so on — accumulates error with each link. The 78th's scores would pass through 13 affine transformations before reaching the 91st's scale, with each transformation adding noise. By the early bienniums, the uncertainty would be substantial.
+The standard approach in both the test equating literature (Kolen & Brennan 2014, Battauz 2015/2023) and the legislative scaling literature (GLS 1999): estimate an affine transformation between each pair of adjacent bienniums using bridge legislators, then compose the chain to reach the reference scale.
 
-### Simultaneous Alignment
-
-Instead, estimate all 14 sessions' transformations at once in a single optimization. Fix the 91st Legislature as the reference scale (A = 1, B = 0). For each other biennium t, find the affine parameters (A_t, B_t) that minimize the discrepancy across *all* bridge pairs — not just adjacent ones.
-
-The objective function:
+For each adjacent pair (t, t+1), regress the later session's scores on the earlier session's scores for shared legislators:
 
 ```
-minimize sum over all bridge pairs (i, s, t):
-    (A_s * xi_s[i] + B_s  -  A_t * xi_t[i] - B_t)^2
-
-subject to: A_91st = 1, B_91st = 0
+xi_{t+1}[i] = A_{t→t+1} * xi_t[i] + B_{t→t+1}
 ```
 
-A legislator who served in the 78th, 80th, and 84th contributes six equations (three pairwise comparisons). The three 28-year veterans contribute direct constraints between the earliest and latest sessions, bypassing all intermediate links. The system has 26 unknowns (13 sessions × 2 parameters) with thousands of observations — massively over-determined and very stable.
+To map any session t to the reference (91st), compose the pairwise links:
 
-This is essentially the Groseclose, Levitt & Snyder (1999) approach applied to Bayesian IRT ideal points rather than ADA ratings.
+```
+A_total = A_{n-1→n} * A_{n-2→n-1} * ... * A_{t→t+1}
+B_total follows the chain recursion
+```
+
+Trimmed regression (excluding the 10% most extreme residuals) at each link prevents genuine movers from distorting the alignment.
+
+#### Why Not Simultaneous All-Pairs?
+
+The initial implementation attempted simultaneous alignment — estimating all 13 sessions' (A, B) at once by minimizing total squared error across *all* bridge pairs, not just adjacent ones. This produced degenerate solutions: A coefficients of 0.05-0.19 that compressed non-reference sessions to a narrow range near the reference mean. The solver found a trivial minimum by shrinking A toward zero, which satisfies distant bridge pairs (whose scores have the most noise) at the cost of destroying the scale.
+
+Pairwise chaining avoids this because each link is a well-conditioned 1D regression. Non-adjacent bridges (legislators who served in sessions 2+ apart) are used for validation — cross-checking the chain — rather than estimation.
 
 ### Input: Canonical Ideal Points
 
 The alignment operates on *canonical* ideal points — the horseshoe-corrected scores from the pipeline's routing system (ADR-0109). For Senate sessions with the horseshoe effect (primarily 78th-83rd and 88th), the canonical score is Hierarchical 2D Dim 1 rather than flat 1D IRT. For clean sessions, it's flat 1D. The hard work of per-biennium identification is already done; the common space phase just links the corrected scales.
 
-### Uncertainty: Bootstrap
+### Uncertainty: Delta Method Through the Chain
 
-Resample bridge legislators 1,000 times. For each resample, re-estimate all (A, B) pairs simultaneously. Each legislator's common-space score gets a 95% confidence interval that honestly reflects the chain distance from the reference. Legislators in the 78th will have wider intervals than those in the 91st — this is the correct behavior.
+Two independent sources of uncertainty, combined in quadrature via the delta method (Battauz 2015):
+
+1. **IRT estimation uncertainty** — the posterior SD from per-biennium MCMC, scaled by the chain's A coefficient: `sd_irt = |A_total| * xi_sd`
+
+2. **Alignment chain uncertainty** — bootstrap resampling (N=1000) at each pairwise link estimates Var(A), Var(B), and Cov(A,B). These are propagated through the chain composition via the multivariate delta method, producing total Var(A_total), Var(B_total), Cov(A_total, B_total) for each session.
+
+Combined: `Var(xi_common) = A²·Var(xi) + xi²·Var(A) + Var(B) + 2·xi·Cov(A,B)`
+
+For the reference session (91st), alignment uncertainty is zero — the total uncertainty is just the IRT posterior SD. For the 78th (13 links away), the chain uncertainty dominates. This is the honest answer: our confidence in cross-temporal comparisons decreases with temporal distance.
+
+A key property: **within-session comparisons are exact**. Two legislators in the same session share the same (A, B) transformation, so the linking error cancels. The comparison uncertainty reduces to the scaled IRT posterior uncertainty alone. Cross-session comparisons carry the full chain uncertainty.
 
 ### Cross-Chamber Unification
 
@@ -188,7 +202,10 @@ These are the questions that journalists, policymakers, and political scientists
 
 - Bailey, M. A. (2007). Comparable preference estimates across time and institutions for the Court, Congress, and Presidency. *American Journal of Political Science*, 51(3), 433-448.
 - Bateman, D. A., & Lapinski, J. S. (2016). Ideal points and American political development. *Studies in American Political Development*, 30(2), 147-171.
+- Battauz, M. (2015). equateIRT: An R package for IRT test equating. *Journal of Statistical Software*, 68(7), 1-22.
+- Battauz, M. (2023). A general framework for chain equating under the IRT paradigm. *Psychometrika*, 88(4), 1260-1287.
 - Clinton, J., Jackman, S., & Rivers, D. (2004). The statistical analysis of roll call data. *American Political Science Review*, 98(2), 355-370.
 - Groseclose, T., Levitt, S. D., & Snyder, J. M. (1999). Comparing interest group scores across time and chambers: Adjusted ADA scores for the U.S. Congress. *American Political Science Review*, 93(1), 33-50.
+- Kolen, M. J., & Brennan, R. L. (2014). *Test Equating, Scaling, and Linking* (3rd ed.). Springer.
 - Martin, A. D., & Quinn, K. M. (2002). Dynamic ideal point estimation via Markov chain Monte Carlo for the U.S. Supreme Court, 1953-1999. *Political Analysis*, 10(2), 134-153.
 - Shor, B., & McCarty, N. (2011). The ideological mapping of American legislatures. *American Political Science Review*, 105(3), 530-551.

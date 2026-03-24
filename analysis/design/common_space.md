@@ -61,44 +61,44 @@ For every pair of sessions (s, t), count shared legislators. Store as a symmetri
 
 For each chamber independently:
 
-**Decision variables:** For each non-reference session t, two parameters: A_t (scale) and B_t (shift). Reference session: A_ref = 1, B_ref = 0.
+**Method: Pairwise chain linking** (Battauz 2023, GLS 1999).
 
-**Objective:** Minimize the sum of squared discrepancies across all bridge pairs:
+For each pair of adjacent sessions (t, t+1), estimate an affine transformation using trimmed OLS on bridge legislators:
 
 ```
-L = sum over all (i, s, t) where legislator i served in both s and t:
-    w_{s,t} * (A_s * xi_s[i] + B_s  -  A_t * xi_t[i] - B_t)^2
+xi_{t+1}[i] = A_{t→t+1} * xi_t[i] + B_{t→t+1}   (for all bridge legislators i)
 ```
 
-Where w_{s,t} is a weight (default: 1.0; optionally inversely proportional to temporal distance to downweight long-range bridges that may have moved).
+Trimmed regression: fit, remove the TRIM_PCT% most extreme residuals, re-fit.
 
-**Solution:** This is a linear least-squares problem. Stack all bridge observations into a design matrix X and response vector y:
+**Chain composition:** To map session t to the reference (91st), compose the pairwise links:
 
-For each bridge observation (legislator i in sessions s and t):
 ```
-xi_s[i] * (column for A_s) + 1 * (column for B_s) - xi_t[i] * (column for A_t) - 1 * (column for B_t) = 0
+A_total = A_{n-1→n} * A_{n-2→n-1} * ... * A_{t→t+1}
+B_total follows the recursion: B_total = A_{k→k+1} * B_prev + B_{k→k+1}
 ```
 
-With reference session columns removed (A_ref = 1, B_ref = 0 substituted). Solve via `numpy.linalg.lstsq` or `scipy.optimize.least_squares`.
+**Why not simultaneous all-pairs?** The initial implementation used simultaneous least-squares on all bridge pairs. This produced degenerate A coefficients (0.05-0.19) that collapsed non-reference sessions to a narrow range. The solver minimized total error by shrinking A toward zero — mathematically valid but substantively wrong. Pairwise chaining avoids this because each link has a well-conditioned 1D regression. See ADR-0120 revision notes.
 
-**Trimmed regression:** After initial fit, compute residuals. Remove observations with |residual| in the top/bottom TRIM_PCT%. Re-fit on the trimmed set.
+Non-adjacent bridges (legislators who served in sessions 2+ apart) are used for **validation**, not estimation — they cross-check the chain.
 
 ### Step 5: Transform Scores
 
-Apply the fitted (A_t, B_t) to each legislator's canonical score:
+Apply the chained (A_total, B_total) to each legislator's canonical score:
 
 ```
-xi_common[i, t] = A_t * xi_canonical[i, t] + B_t
+xi_common[i, t] = A_total[t] * xi_canonical[i, t] + B_total[t]
 ```
 
-### Step 6: Bootstrap Uncertainty
+### Step 6: Uncertainty Propagation (Delta Method)
 
-Repeat Steps 4-5 with 1,000 bootstrap resamples of the bridge observations. For each resample:
-1. Sample bridge legislators with replacement (within each session pair)
-2. Re-estimate all (A, B) simultaneously
-3. Re-transform all scores
+Two independent sources combined in quadrature:
 
-Compute 2.5th and 97.5th percentiles of each legislator's common-space score across bootstrap iterations → 95% confidence interval.
+1. **IRT posterior uncertainty:** `sd_irt = |A_total| * xi_sd`
+2. **Chain alignment uncertainty:** Propagate Var(A), Var(B), Cov(A,B) through the chain via the delta method (Battauz 2015):
+   `Var(xi_common) = A²·Var(xi) + xi²·Var(A) + Var(B) + 2·xi·Cov(A,B)`
+
+Per-link bootstrap (N=1000) estimates Var(A), Var(B), Cov(A,B) at each step. Chain propagation multiplies the covariance matrices through the composition. Earlier sessions naturally get wider CIs — honest uncertainty that grows with chain length.
 
 ### Step 7: Quality Gates
 
