@@ -74,7 +74,7 @@ except ModuleNotFoundError:
 
 import polars as pl
 
-from tallgrass.session import STATE_DIR, KSSession
+from tallgrass.session import KSSession
 
 # ---------------------------------------------------------------------------
 # Primer (auto-rendered to README.md by RunContext)
@@ -276,7 +276,7 @@ def main() -> None:
         sessions = [s.strip() for s in args.sessions.split(",")]
     else:
         # Auto-discover from data directory
-        data_root = STATE_DIR / "kansas"
+        data_root = Path("data") / "kansas"
         sessions = sorted(
             [
                 d.name
@@ -314,7 +314,7 @@ def main() -> None:
     print()
 
     # Use cross-session results directory
-    results_base = STATE_DIR / "kansas" / "cross-session"
+    results_base = Path("results") / "kansas" / "cross-session"
     results_base.mkdir(parents=True, exist_ok=True)
 
     with RunContext(
