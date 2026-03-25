@@ -54,7 +54,7 @@ def build_ppc_report(
         _add_margins(report, plots_dir, ch_name)
 
         if not skip_q3 and ch_data.get("q3_results"):
-            _add_q3_summary(report, ch_data, ch_name)
+            _add_q3_summary(report, ch_data, ch_name, plots_dir)
 
     if not skip_loo:
         _add_loo_comparison(report, all_results, plots_dir, session)
@@ -325,9 +325,12 @@ def _add_q3_summary(
     report: ReportBuilder,
     ch_data: dict,
     chamber: str,
+    plots_dir: Path | None = None,
 ) -> None:
     ch = chamber.lower()
     q3_results = ch_data.get("q3_results", {})
+    # Derive data_dir from plots_dir (sibling)
+    data_dir = plots_dir.parent / "data" if plots_dir else None
     if not q3_results:
         return
 
@@ -358,6 +361,50 @@ def _add_q3_summary(
         "If 1D shows violations that 2D resolves, the second dimension is justified.",
     )
     report.add(TableSection(id=f"q3-{ch}", title=f"{chamber} — Q3 Local Dependence", html=html))
+
+    # Q3 heatmap figures (per model)
+    if not plots_dir:
+        return
+    for model_name in q3_results:
+        model_key = model_name.lower().replace(" ", "_")
+        heatmap_path = plots_dir / f"q3_heatmap_{model_key}_{ch}.png"
+        if heatmap_path.exists():
+            report.add(
+                FigureSection.from_file(
+                    id=f"q3-heatmap-{model_key}-{ch}",
+                    title=f"{chamber} — Q3 Heatmap ({model_name})",
+                    path=heatmap_path,
+                    alt_text=(
+                        f"Q3 residual correlation heatmap for {chamber} "
+                        f"({model_name}), yellow-to-red intensity"
+                    ),
+                )
+            )
+
+    # Top Q3 violation pairs table (use first model's data)
+    first_model = next(iter(q3_results))
+    model_key = first_model.lower().replace(" ", "_")
+    if not data_dir:
+        return
+    top_path = data_dir / f"q3_top_pairs_{model_key}_{ch}.parquet"
+    if top_path.exists():
+        top_df = pl.read_parquet(top_path)
+        top_html = make_gt(
+            top_df,
+            title=f"{chamber} — Top Q3 Violations ({first_model})",
+            number_formats={"abs_q3": ".3f"},
+            source_note=(
+                "Bill pairs with highest residual correlation. "
+                "These pairs share variance not explained by the IRT model."
+            ),
+        )
+        report.add(
+            TableSection(
+                id=f"q3-top-pairs-{ch}",
+                title=f"{chamber} — Top Q3 Violation Pairs",
+                html=top_html,
+            )
+        )
 
 
 def _add_loo_comparison(

@@ -639,6 +639,48 @@ def process_chamber(
         q3_df.write_parquet(ctx.data_dir / f"q3_matrix_{model_key}_{ch}.parquet")
         print(f"  Saved: q3_matrix_{model_key}_{ch}.parquet")
 
+        # Q3 heatmap plot
+        q3_mat = q3["q3_matrix"]
+        if q3_mat.shape[0] <= 300:  # Skip heatmap for very large matrices
+            fig_q3, ax_q3 = plt.subplots(figsize=(10, 8))
+            im = ax_q3.imshow(
+                np.abs(q3_mat),
+                cmap="YlOrRd",
+                vmin=0,
+                vmax=max(0.4, float(np.nanmax(np.abs(q3_mat)))),
+                aspect="auto",
+            )
+            fig_q3.colorbar(im, ax=ax_q3, label="|Q3| Residual Correlation")
+            ax_q3.set_title(
+                f"Q3 Local Dependence — {chamber} ({name})",
+                fontsize=12,
+            )
+            ax_q3.set_xlabel("Bill Index")
+            ax_q3.set_ylabel("Bill Index")
+            save_fig(
+                fig_q3,
+                ctx.plots_dir / f"q3_heatmap_{model_key}_{ch}.png",
+            )
+
+            # Top Q3 violation pairs
+            upper = np.triu_indices(q3_mat.shape[0], k=1)
+            q3_upper = np.abs(q3_mat[upper])
+            top_idx = np.argsort(q3_upper)[::-1][:20]
+            top_pairs_data: list[dict] = []
+            vote_ids = data.get("vote_ids", [])
+            for idx in top_idx:
+                i, j = int(upper[0][idx]), int(upper[1][idx])
+                pair: dict[str, object] = {
+                    "bill_i": vote_ids[i] if i < len(vote_ids) else f"item_{i}",
+                    "bill_j": vote_ids[j] if j < len(vote_ids) else f"item_{j}",
+                    "abs_q3": float(q3_upper[idx]),
+                }
+                top_pairs_data.append(pair)
+
+            if top_pairs_data:
+                top_df = pl.DataFrame(top_pairs_data)
+                top_df.write_parquet(ctx.data_dir / f"q3_top_pairs_{model_key}_{ch}.parquet")
+
     # ── Plots ──
     if ppc_results:
         plot_calibration(ppc_results, chamber, ctx.plots_dir)
