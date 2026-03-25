@@ -158,6 +158,10 @@ def build_network_report(
     if not skip_cross_chamber and "cross_chamber" in results:
         _add_cross_chamber_figure(report, plots_dir)
 
+    # Residual network (IRT-adjusted)
+    for chamber in chambers:
+        _add_residual_network(report, results[chamber], chamber, plots_dir)
+
     # Flagged and downstream
     _add_flagged_legislators(report, results, chambers)
     _add_downstream_findings(report, results, chambers, kappa_threshold)
@@ -1286,3 +1290,72 @@ def _add_analysis_parameters(
     df = pl.DataFrame(rows)
     html = make_gt(df, title="Analysis Parameters")
     report.add(TableSection(id="analysis-params", title="Analysis Parameters", html=html))
+
+
+def _add_residual_network(
+    report: ReportBuilder,
+    result: dict,
+    chamber: str,
+    plots_dir: Path,
+) -> None:
+    """Add residual network section (observed Kappa minus IRT-predicted)."""
+    resid = result.get("residual_network")
+    if not resid:
+        return
+
+    ch = chamber.lower()
+
+    # Plot
+    plot_path = plots_dir / f"residual_network_{ch}.png"
+    if plot_path.exists():
+        report.add(
+            FigureSection.from_file(
+                id=f"residual-network-{ch}",
+                title=f"{chamber} — Residual Network (IRT-Adjusted)",
+                path=plot_path,
+                alt_text=(
+                    f"Residual network for {chamber}: green edges = "
+                    "unexpectedly high agreement, red = unexpectedly low"
+                ),
+            )
+        )
+
+    # Top residual pairs table
+    top_pairs = resid.get("top_pairs", [])
+    if top_pairs:
+        df = pl.DataFrame(top_pairs)
+        html = make_gt(
+            df.select(["leg_i", "leg_j", "observed_kappa", "predicted_kappa", "residual"]),
+            title=f"Top Residual Edges — {chamber}",
+        )
+        report.add(
+            TableSection(
+                id=f"residual-edges-{ch}",
+                title=f"{chamber} — Top Unexplained Co-Voting Pairs",
+                html=html,
+            )
+        )
+
+    # Interpretation
+    n_edges = resid["n_edges"]
+    n_comm = resid["n_communities"]
+    threshold = resid["threshold"]
+    html = (
+        '<div style="background:#e8f4f8; border:1px solid #b8daff; '
+        'border-radius:6px; padding:12px 16px; margin:8px 0;">'
+        f"<strong>Residual Network ({chamber}):</strong> "
+        f"{n_edges} edges with |residual| &gt; {threshold}. "
+        f"Leiden finds {n_comm} communities in the residual structure. "
+        "Green edges = legislators who agree more than ideology predicts "
+        "(geographic caucus? committee effect?). "
+        "Red edges = legislators who disagree more than expected "
+        "(personal rivalry? strategic voting?)."
+        "</div>"
+    )
+    report.add(
+        TextSection(
+            id=f"residual-interp-{ch}",
+            title=f"{chamber} — Residual Network Interpretation",
+            html=html,
+        )
+    )

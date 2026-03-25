@@ -2995,6 +2995,143 @@ def main() -> None:
             print("Phase 06 (Network): skipping — no chambers had sufficient data")
             return
 
+        # ── Residual Network Analysis ──
+        print_header("RESIDUAL NETWORK (IRT-ADJUSTED)")
+        for ch, r in results.items():
+            kappa_df = r.get("kappa_matrix")
+            irt_df = r.get("ideal_points")
+            if kappa_df is None or irt_df is None:
+                print(f"  {ch}: skipping residual network (missing data)")
+                continue
+
+            try:
+                # Extract numpy arrays from Polars DataFrames
+                # Kappa matrix: first col is legislator ID, rest are values
+                kappa_cols = [c for c in kappa_df.columns if c != kappa_df.columns[0]]
+                kappa_mat = kappa_df.select(kappa_cols).to_numpy()
+                leg_ids = kappa_df[kappa_df.columns[0]].to_list()
+
+                # Match IRT ideal points to kappa matrix order
+                if "legislator_slug" in irt_df.columns:
+                    irt_slug_col = "legislator_slug"
+                else:
+                    irt_slug_col = irt_df.columns[0]
+                xi_col = "xi_mean" if "xi_mean" in irt_df.columns else None
+                if xi_col is None:
+                    print(f"  {ch}: no xi_mean column in IRT data")
+                    continue
+
+                # Build xi vector in same order as kappa matrix
+                irt_map = dict(
+                    zip(
+                        irt_df[irt_slug_col].to_list(),
+                        irt_df[xi_col].to_list(),
+                    )
+                )
+                xi_list = [irt_map.get(str(lid), 0.0) for lid in leg_ids]
+                xi = np.array(xi_list)
+                # Predicted agreement: P(agree) ≈ logistic(xi_i * xi_j)
+                # Higher product → both on same side → more agreement
+                xi_outer = np.outer(xi, xi)
+                predicted_kappa = 2.0 / (1.0 + np.exp(-xi_outer)) - 1.0
+                np.fill_diagonal(predicted_kappa, 0.0)
+
+                # Residual = observed - predicted
+                residual = kappa_mat - predicted_kappa
+                np.fill_diagonal(residual, 0.0)
+
+                # Build residual network (edges where |residual| > 0.15)
+                resid_threshold = 0.15
+                n_legs = residual.shape[0]
+                edges = []
+                weights = []
+                for i in range(n_legs):
+                    for j in range(i + 1, n_legs):
+                        if abs(residual[i, j]) > resid_threshold:
+                            edges.append((i, j))
+                            weights.append(float(residual[i, j]))
+
+                print(f"  {ch}: {len(edges)} residual edges (|r| > {resid_threshold})")
+
+                if edges:
+                    import igraph as ig
+
+                    g = ig.Graph(n=n_legs)
+                    g.add_edges(edges)
+                    g.es["weight"] = [abs(w) for w in weights]
+                    g.es["sign"] = [1 if w > 0 else -1 for w in weights]
+
+                    # Leiden on residual network
+                    import leidenalg
+
+                    part = leidenalg.find_partition(
+                        g,
+                        leidenalg.RBConfigurationVertexPartition,
+                        weights="weight",
+                        seed=42,
+                    )
+                    n_comm = len(set(part.membership))
+                    print(f"  {ch}: {n_comm} residual communities")
+
+                    # Top residual edges
+                    sorted_idx = np.argsort([abs(w) for w in weights])[::-1]
+                    top_pairs: list[dict] = []
+                    for idx in sorted_idx[:20]:
+                        i, j = edges[idx]
+                        top_pairs.append(
+                            {
+                                "leg_i": str(leg_ids[i]),
+                                "leg_j": str(leg_ids[j]),
+                                "observed_kappa": float(kappa_mat[i, j]),
+                                "predicted_kappa": float(predicted_kappa[i, j]),
+                                "residual": float(residual[i, j]),
+                            }
+                        )
+
+                    # Save
+                    residual_df = pl.DataFrame(top_pairs)
+                    residual_df.write_parquet(ctx.data_dir / f"residual_network_{ch}.parquet")
+
+                    r["residual_network"] = {
+                        "n_edges": len(edges),
+                        "n_communities": n_comm,
+                        "top_pairs": top_pairs,
+                        "threshold": resid_threshold,
+                    }
+
+                    # Plot residual network
+                    fig, ax = plt.subplots(figsize=(8, 8))
+                    if g.ecount() > 0:
+                        layout = g.layout_fruchterman_reingold(weights="weight")
+                        coords = np.array(layout.coords)
+                        for edge in g.es:
+                            src, tgt = edge.tuple
+                            color = "#2ECC71" if edge["sign"] > 0 else "#E74C3C"
+                            ax.plot(
+                                [coords[src, 0], coords[tgt, 0]],
+                                [coords[src, 1], coords[tgt, 1]],
+                                color=color,
+                                alpha=0.4,
+                                linewidth=0.5,
+                            )
+                        ax.scatter(
+                            coords[:, 0],
+                            coords[:, 1],
+                            s=30,
+                            c="steelblue",
+                            zorder=5,
+                            edgecolors="white",
+                        )
+                    ax.set_title(
+                        f"Residual Network — {ch.title()} ({len(edges)} unexplained edges)",
+                    )
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    save_fig(fig, ctx.plots_dir / f"residual_network_{ch}.png")
+
+            except Exception as e:
+                print(f"  {ch}: residual network failed: {e}")
+
         manifest_path = ctx.run_dir / "filtering_manifest.json"
         with open(manifest_path, "w") as f:
             json.dump(manifest, f, indent=2, default=str)
