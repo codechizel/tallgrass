@@ -39,6 +39,7 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | 26. Cross-Session | [cross_session.md](cross_session.md) | Affine IRT alignment, name matching, shift thresholds, prediction transfer, detection validation |
 | 27. Dynamic IRT | [dynamic_irt.md](dynamic_irt.md) | State-space IRT, random walk evolution, per-party tau, polarization decomposition, bridge coverage, post-hoc sign correction (ADR-0068) |
 | 28. Common Space | [common_space.md](common_space.md) | Pairwise chain affine alignment, delta-method uncertainty, cross-chamber unification via chamber-switchers, career scores via RE meta-analysis (ADR-0120) |
+| 30. W-NOMINATE Common Space | [wnominate_common_space.md](wnominate_common_space.md) | W-NOMINATE common space via same pairwise chain linking as Phase 28, cross-method validation against IRT |
 
 ## Investigations
 
