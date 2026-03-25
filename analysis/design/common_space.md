@@ -13,7 +13,7 @@ Produce a single ideological scale spanning all 14 bienniums (78th-91st, 1999-20
 
 1. **Canonical ideal points are the input.** Horseshoe-corrected scores from the routing system (ADR-0109). The common space phase does not estimate ideal points — it links existing ones.
 
-2. **Chambers are aligned separately.** House and Senate have different bills, different ideal point scales. Cross-chamber unification is an optional second step using career chamber-switchers.
+2. **Chambers are aligned separately, then linked.** House and Senate have different bills and different ideal point scales. Each chamber is aligned independently across time (steps 2-5), then the two chambers are linked via an affine transform estimated from 54 chamber-switcher bridge legislators. The unified scale uses House as the reference; Senate scores are mapped via `xi_unified = A * xi_senate + B`. Career scores are computed both per-chamber (for within-chamber analysis) and unified (one number per legislator across both chambers).
 
 3. **The 91st Legislature is the reference scale.** Most recent, best data quality, best convergence. All other bienniums are mapped onto its scale. A = 1, B = 0 for the reference.
 
@@ -122,11 +122,15 @@ Identify legislators who served in both House and Senate at different times. Use
 
 | File | Content |
 |------|---------|
-| `common_space_house.csv` | Every House legislator × biennium on common scale (columns: global_id, legislator_slug, full_name, party, session, chamber, xi_common, xi_common_lo, xi_common_hi, xi_canonical, source_phase, source_tier) |
+| `common_space_house.csv` | Every House legislator × biennium on common scale (columns: name_norm, legislator_slug, full_name, party, session, chamber, xi_common, xi_common_sd, xi_canonical) |
 | `common_space_senate.csv` | Same for Senate |
+| `common_space_unified.csv` | All legislators on unified cross-chamber scale (xi_unified = House scale; Senate mapped via affine transform from chamber-switchers) |
+| `career_scores_house.csv` | Per-chamber career scores — House (RE meta-analysis) |
+| `career_scores_senate.csv` | Per-chamber career scores — Senate (RE meta-analysis) |
+| `career_scores_unified.csv` | Unified career scores — one number per legislator across both chambers, 708 unique legislators |
 | `linking_coefficients.csv` | A_t, B_t per session with bootstrap CIs |
 | `bridge_coverage.csv` | Pairwise bridge counts |
-| `validation.json` | SM/DIME/Dynamic IRT correlations |
+| `validation.json` | Quality gates and configuration |
 | `common_space_report.html` | Full report (see Report Sections below) |
 
 ## Report Sections

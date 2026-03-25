@@ -774,3 +774,170 @@ def compute_career_scores(
         (pl.col("career_score") - 1.96 * pl.col("career_se")).alias("career_lo"),
         (pl.col("career_score") + 1.96 * pl.col("career_se")).alias("career_hi"),
     ).sort("career_score", descending=True)
+
+
+# ---------------------------------------------------------------------------
+# Cross-chamber unification
+# ---------------------------------------------------------------------------
+
+
+def link_chambers(
+    house_transformed: pl.DataFrame,
+    senate_transformed: pl.DataFrame,
+    trim_pct: int = TRIM_PCT,
+) -> tuple[pl.DataFrame, float, float]:
+    """Link House and Senate common-space scales via chamber-switchers.
+
+    Uses the same affine approach as cross-session linking: regress Senate
+    scores on House scores for legislators who served in both chambers.
+    Senate scores are mapped onto the House scale.
+
+    Returns (unified_df, A, B) where xi_unified = A * xi_senate + B for
+    Senate legislators, and xi_unified = xi_common for House legislators.
+    """
+    # Find chamber-switchers: legislators with scores in both chambers
+    house_by_name = (
+        house_transformed.group_by("name_norm")
+        .agg(pl.col("xi_common").mean().alias("xi_house_mean"))
+    )
+    senate_by_name = (
+        senate_transformed.group_by("name_norm")
+        .agg(pl.col("xi_common").mean().alias("xi_senate_mean"))
+    )
+    bridges = house_by_name.join(senate_by_name, on="name_norm")
+
+    if bridges.height < 5:
+        # Not enough bridges — return identity transform
+        unified = pl.concat([
+            house_transformed.with_columns(pl.col("xi_common").alias("xi_unified")),
+            senate_transformed.with_columns(pl.col("xi_common").alias("xi_unified")),
+        ])
+        return unified, 1.0, 0.0
+
+    x_senate = bridges["xi_senate_mean"].to_numpy()
+    y_house = bridges["xi_house_mean"].to_numpy()
+
+    # Trimmed regression (same as cross-session linking)
+    residuals = y_house - x_senate
+    lower = np.percentile(residuals, trim_pct)
+    upper = np.percentile(residuals, 100 - trim_pct)
+    mask = (residuals >= lower) & (residuals <= upper)
+    x_trim = x_senate[mask]
+    y_trim = y_house[mask]
+
+    if len(x_trim) < 3:
+        x_trim, y_trim = x_senate, y_house
+
+    # OLS: y_house = A * x_senate + B
+    X = np.column_stack([x_trim, np.ones(len(x_trim))])
+    coeffs, _, _, _ = np.linalg.lstsq(X, y_trim, rcond=None)
+    A, B = float(coeffs[0]), float(coeffs[1])
+
+    # Transform Senate scores onto House scale
+    senate_unified = senate_transformed.with_columns(
+        (pl.col("xi_common") * A + B).alias("xi_unified"),
+        (pl.col("xi_common_sd") * abs(A)).alias("xi_unified_sd"),
+    )
+    house_unified = house_transformed.with_columns(
+        pl.col("xi_common").alias("xi_unified"),
+        pl.col("xi_common_sd").alias("xi_unified_sd"),
+    )
+
+    unified = pl.concat([house_unified, senate_unified])
+    return unified, A, B
+
+
+def compute_unified_career_scores(
+    unified: pl.DataFrame,
+) -> pl.DataFrame:
+    """Compute one career score per legislator, pooling across both chambers.
+
+    Same DerSimonian-Laird RE meta-analysis as per-chamber career scores,
+    but using xi_unified (cross-chamber-linked) scores.
+    """
+    rows: list[dict] = []
+
+    for name_norm, group in unified.group_by("name_norm"):
+        name_val = name_norm[0]
+        group_sorted = group.sort("session")
+        T = group_sorted.height
+
+        last_row = group_sorted.row(-1, named=True)
+        first_row = group_sorted.row(0, named=True)
+
+        chambers_served = sorted(group_sorted["chamber"].unique().to_list())
+        chamber_str = " & ".join(chambers_served)
+
+        base = {
+            "name_norm": name_val,
+            "full_name": last_row["full_name"],
+            "party": last_row["party"],
+            "chambers": chamber_str,
+            "n_sessions": T,
+            "first_session": first_row["session"],
+            "last_session": last_row["session"],
+            "most_recent_score": last_row["xi_unified"],
+            "most_recent_chamber": last_row["chamber"],
+        }
+
+        if T == 1:
+            rows.append(
+                {
+                    **base,
+                    "career_score": last_row["xi_unified"],
+                    "career_se": last_row.get("xi_unified_sd", 0.0) or 0.0,
+                    "i_squared": None,
+                    "tau_squared": None,
+                    "movement_flag": None,
+                }
+            )
+            continue
+
+        x = group_sorted["xi_unified"].to_numpy()
+        sd = group_sorted["xi_unified_sd"].to_numpy()
+        sd = np.maximum(sd, 1e-6)
+        var = sd**2
+
+        w = 1.0 / var
+        w_sum = np.sum(w)
+        mu_fe = np.sum(w * x) / w_sum
+
+        Q = float(np.sum(w * (x - mu_fe) ** 2))
+        df = T - 1
+
+        i_sq = max(0.0, (Q - df) / Q) if Q > 0 else 0.0
+
+        c = w_sum - np.sum(w**2) / w_sum
+        tau_sq = max(0.0, (Q - df) / c) if c > 0 else 0.0
+
+        w_re = 1.0 / (var + tau_sq)
+        w_re_sum = np.sum(w_re)
+        mu_re = float(np.sum(w_re * x) / w_re_sum)
+        se_re = float(np.sqrt(1.0 / w_re_sum))
+
+        if i_sq < I_SQUARED_STABLE:
+            flag = "stable"
+        elif i_sq > I_SQUARED_MOVER:
+            flag = "mover"
+        else:
+            flag = "moderate"
+
+        rows.append(
+            {
+                **base,
+                "career_score": mu_re,
+                "career_se": se_re,
+                "i_squared": round(i_sq, 4),
+                "tau_squared": round(tau_sq, 4),
+                "movement_flag": flag,
+            }
+        )
+
+    if not rows:
+        return pl.DataFrame()
+
+    result = pl.DataFrame(rows)
+    return result.with_columns(
+        (pl.col("career_score") - 1.96 * pl.col("career_se")).alias("career_lo"),
+        (pl.col("career_score") + 1.96 * pl.col("career_se")).alias("career_hi"),
+    ).sort("career_score", descending=True)

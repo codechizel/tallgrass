@@ -42,6 +42,8 @@ try:
         compute_career_scores,
         compute_polarization_trajectory,
         compute_quality_gates,
+        compute_unified_career_scores,
+        link_chambers,
         solve_simultaneous_alignment,
         transform_scores,
     )
@@ -58,6 +60,8 @@ except ModuleNotFoundError:
         compute_career_scores,
         compute_polarization_trajectory,
         compute_quality_gates,
+        compute_unified_career_scores,
+        link_chambers,
         solve_simultaneous_alignment,
         transform_scores,
     )
@@ -541,9 +545,61 @@ def main() -> None:
                             pl.Series("also_served", annotations)
                         )
 
+        # Cross-chamber unification (link House + Senate scales)
+        chamber_keys = list(all_results.keys())
+        if len(chamber_keys) == 2 and "House" in all_results and "Senate" in all_results:
+            house_t = all_results["House"]["transformed"]
+            senate_t = all_results["Senate"]["transformed"]
+            print("\n  Linking House and Senate scales...")
+            unified, A_cs, B_cs = link_chambers(house_t, senate_t, trim_pct=TRIM_PCT)
+            n_bridges = unified.filter(
+                pl.col("name_norm").is_in(
+                    set(house_t["name_norm"].to_list()) & set(senate_t["name_norm"].to_list())
+                )
+            )["name_norm"].n_unique()
+            print(f"    {n_bridges} chamber-switcher bridges, A={A_cs:.4f}, B={B_cs:+.4f}")
+
+            # Save unified scores
+            unified.write_parquet(ctx.data_dir / "common_space_unified.parquet")
+            ctx.export_csv(
+                unified,
+                "common_space_unified.csv",
+                "Unified common space ideal points (House + Senate on one scale)",
+            )
+
+            # Unified career scores
+            print("\n  Computing unified career scores...")
+            unified_career = compute_unified_career_scores(unified)
+            if unified_career.height > 0:
+                unified_career.write_parquet(ctx.data_dir / "career_scores_unified.parquet")
+                ctx.export_csv(
+                    unified_career,
+                    "career_scores_unified.csv",
+                    "Unified career scores — one number per legislator across both chambers",
+                )
+                n_cross = unified_career.filter(
+                    pl.col("chambers").str.contains("&")
+                ).height
+                n_multi = unified_career.filter(pl.col("n_sessions") >= 2).height
+                n_stable = unified_career.filter(
+                    pl.col("movement_flag") == "stable"
+                ).height
+                n_mover = unified_career.filter(
+                    pl.col("movement_flag") == "mover"
+                ).height
+                print(
+                    f"    {unified_career.height} legislators, "
+                    f"{n_cross} cross-chamber, "
+                    f"{n_multi} multi-session, "
+                    f"{n_stable} stable, {n_mover} movers"
+                )
+                all_results["unified_career"] = unified_career
+                all_results["chamber_link"] = {"A": A_cs, "B": B_cs, "n_bridges": n_bridges}
+
         # Save combined linking coefficients
         if all_results:
-            all_coefs = pl.concat([r["coef_df"] for r in all_results.values()])
+            chamber_results = {k: v for k, v in all_results.items() if k in ("House", "Senate")}
+            all_coefs = pl.concat([r["coef_df"] for r in chamber_results.values()])
             all_coefs.write_parquet(ctx.data_dir / "linking_coefficients.parquet")
             ctx.export_csv(
                 all_coefs,
@@ -570,6 +626,7 @@ def main() -> None:
                     ],
                 }
                 for chamber, r in all_results.items()
+                if chamber in ("House", "Senate")
             },
         }
         with open(ctx.data_dir / "validation.json", "w") as f:

@@ -131,7 +131,7 @@ A key property: **within-session comparisons are exact**. Two legislators in the
 
 ### Cross-Chamber Unification
 
-House and Senate alignments run separately (different ideal point scales, different bill sets). Legislators who switched chambers during their career (e.g., served in the House in the 82nd and the Senate in the 84th) provide natural cross-chamber bridges. These are sparse but valuable — a supplementary alignment step can unify the two scales.
+House and Senate alignments run separately (different ideal point scales, different bill sets). Legislators who switched chambers during their career (e.g., served in the House in the 82nd and the Senate in the 84th) provide natural cross-chamber bridges. With 54 chamber-switchers across the 78th-91st legislatures, we estimate an affine transform (A, B) mapping Senate common-space scores onto the House scale using trimmed OLS regression on the switchers' mean scores in each chamber. This produces a unified scale where all 708 legislators get one career score, regardless of which chamber(s) they served in. Per-chamber career scores are retained for within-chamber analysis.
 
 ---
 

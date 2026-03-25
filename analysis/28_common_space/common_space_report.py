@@ -73,7 +73,8 @@ def build_common_space_report(
 
     # ---- 1. Key Findings ----
     findings: list[str] = []
-    for chamber, r in all_results.items():
+    for chamber in [k for k in all_results if k in ("House", "Senate")]:
+        r = all_results[chamber]
         n_pass = sum(1 for g in r["gates"] if g.passed)
         n_total = len(r["gates"])
         findings.append(
@@ -97,7 +98,9 @@ def build_common_space_report(
     _add_bridge_heatmap(report, bridge_matrix, sessions, plots_dir)
 
     # ---- Per-chamber sections ----
-    for chamber, r in all_results.items():
+    chamber_keys = [k for k in all_results if k in ("House", "Senate")]
+    for chamber in chamber_keys:
+        r = all_results[chamber]
         # ---- 3. Ideal Points Table (searchable/sortable) ----
         _add_ideal_points_table(report, r, chamber)
 
@@ -116,12 +119,17 @@ def build_common_space_report(
         # ---- 8. Career Trajectories ----
         _add_career_trajectories(report, r, chamber)
 
-        # ---- 9. Career Scores ----
+        # ---- 9. Per-Chamber Career Scores ----
         _add_career_scores_table(report, r, chamber)
         _add_career_vs_recent(report, r, chamber, plots_dir)
 
         # ---- 10. Quality Gates ----
         _add_quality_gates(report, r, chamber)
+
+    # ---- 11. Unified Career Scores (cross-chamber) ----
+    unified_career = all_results.get("unified_career")
+    if unified_career is not None:
+        _add_unified_career_scores_table(report, unified_career, all_results.get("chamber_link"))
 
 
 # ---------------------------------------------------------------------------
@@ -574,6 +582,91 @@ def _add_career_scores_table(
         InteractiveTableSection(
             id=f"career_scores_{chamber.lower()}",
             title=f"{chamber} — Career Scores (One Number Per Legislator)",
+            html=html,
+        )
+    )
+
+
+def _add_unified_career_scores_table(
+    report: ReportBuilder,
+    unified_career: pl.DataFrame,
+    chamber_link: dict | None,
+) -> None:
+    """Unified career scores — one row per legislator across both chambers."""
+    if unified_career.height == 0:
+        return
+
+    display_cols = [
+        "full_name",
+        "party",
+        "chambers",
+        "n_sessions",
+        "first_session",
+        "last_session",
+        "career_score",
+        "career_se",
+        "career_lo",
+        "career_hi",
+        "i_squared",
+        "movement_flag",
+    ]
+    available = [c for c in display_cols if c in unified_career.columns]
+    df = unified_career.select(available)
+
+    for col in ["career_score", "career_se", "career_lo", "career_hi", "i_squared"]:
+        if col in df.columns:
+            df = df.with_columns(pl.col(col).round(3))
+
+    for col in ["first_session", "last_session"]:
+        if col in df.columns:
+            df = df.with_columns(pl.col(col).str.split("_").list.first().alias(col))
+
+    link_note = ""
+    if chamber_link:
+        link_note = (
+            f" Senate scores mapped to House scale via {chamber_link['n_bridges']} "
+            f"chamber-switcher bridges (A={chamber_link['A']:.3f}, "
+            f"B={chamber_link['B']:+.3f})."
+        )
+
+    html = make_interactive_table(
+        df,
+        title=(
+            f"Unified Career Scores — All Legislators ({df.height} total, "
+            f"positive = conservative)"
+        ),
+        column_labels={
+            "full_name": "Legislator",
+            "party": "Party",
+            "chambers": "Chamber(s)",
+            "n_sessions": "Sessions",
+            "first_session": "First",
+            "last_session": "Last",
+            "career_score": "Career Score",
+            "career_se": "SE",
+            "career_lo": "95% CI Low",
+            "career_hi": "95% CI High",
+            "i_squared": "I²",
+            "movement_flag": "Stability",
+        },
+        number_formats={
+            "career_score": ".3f",
+            "career_se": ".3f",
+            "career_lo": ".3f",
+            "career_hi": ".3f",
+            "i_squared": ".2f",
+        },
+        caption=(
+            "One score per legislator, pooling all sessions across both chambers. "
+            "Random-effects meta-analysis of per-session common-space scores. "
+            "I² measures heterogeneity: <0.25 = stable, >0.75 = mover."
+            + link_note
+        ),
+    )
+    report.add(
+        InteractiveTableSection(
+            id="career_scores_unified",
+            title="Unified Career Scores — One Number Per Legislator (Both Chambers)",
             html=html,
         )
     )

@@ -96,7 +96,7 @@ The disadvantage is slightly lower statistical efficiency — session-level pool
 
 ## What the Output Looks Like
 
-One row per unique legislator per chamber:
+**Per-chamber tables** (`career_scores_house.parquet`, `career_scores_senate.parquet`): one row per unique legislator per chamber. **Unified table** (`career_scores_unified.parquet`): one row per legislator across both chambers, with Senate scores mapped onto House scale via 54 chamber-switcher bridges. Columns:
 
 | Column | Description |
 |--------|-------------|
