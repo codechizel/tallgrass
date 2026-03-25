@@ -648,6 +648,15 @@ def main() -> None:
             sub_report.write(sub_path)
             print(f"  Saved: common_space_{name}_report.html")
 
+            # Symlink at session root for easy access
+            session_root = results_base / "common-space"
+            link_path = session_root / f"common_space_{name}_report.html"
+            if link_path.is_symlink() or link_path.exists():
+                link_path.unlink()
+            link_path.symlink_to(
+                Path("common_space") / "latest" / f"common_space_{name}_report.html"
+            )
+
         # Also build combined report (ctx.report auto-written by RunContext)
         build_common_space_report(
             report=ctx.report,
