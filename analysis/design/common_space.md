@@ -51,7 +51,7 @@ Match legislators across all bienniums using the 3-phase matching from Phase 26:
 2. Normalized name (`phase_utils.normalize_name()`)
 3. Optional fuzzy matching (disabled by default)
 
-Output: a global roster DataFrame with columns `person_key`, `name_norm`, `legislator_slug`, `session`, `chamber`, `party`, `full_name`, `xi_canonical`. Identity resolution uses slug-based `person_key` (strips chamber prefix: `rep_smith_greg_1` → `smith_greg_1`), not `name_norm`, because name normalization is fragile across middle initials, nicknames, and punctuation (e.g., "J.R. Claeys" vs "J. R. Claeys" vs "Joseph Claeys"). A small override table in `_PERSON_KEY_OVERRIDES` handles known slug encoding variants (8 entries). Career scores are computed per chamber and unified (cross-chamber); 59 of 658 unique legislators served in both chambers.
+Output: a global roster DataFrame with columns `person_key`, `name_norm`, `legislator_slug`, `session`, `chamber`, `party`, `full_name`, `xi_canonical`. Identity resolution uses OpenStates OCD person IDs as primary key (loaded from `data/external/openstates/ks_slug_to_ocd.json`), falling back to slug-based keys for pre-2011 KanFocus sessions without OCD coverage. OCD IDs correctly separate same-name legislators (e.g., two different Mike Thompsons — one Senate, one House — who served simultaneously in the 90th). `_OCD_OVERRIDES` merges cases where OpenStates itself splits one person into multiple IDs (J.R. Claeys). `_SLUG_OVERRIDES` handles pre-2011 slug encoding variants (8 entries).
 
 ### Step 3: Compute Bridge Matrix
 

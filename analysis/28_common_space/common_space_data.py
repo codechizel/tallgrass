@@ -103,10 +103,34 @@ def _slug_to_person_key(slug: str) -> str:
     return parts[1] if len(parts) > 1 else slug
 
 
-# Overrides for known slug encoding differences (same person, different slug).
-# Only include cases verified by zero session overlap + editorial confirmation.
+def load_slug_to_ocd() -> dict[str, str]:
+    """Load the slug→OCD person ID mapping from the OpenStates cache.
+
+    Returns empty dict if cache is missing (graceful fallback).
+    """
+    from pathlib import Path
+
+    cache_path = Path("data/external/openstates/ks_slug_to_ocd.json")
+    if not cache_path.exists():
+        return {}
+    import json
+
+    return json.load(cache_path.open())
+
+
+# OCD-level overrides for cases where OpenStates itself splits one person
+# into multiple OCD IDs.  Format: {variant_ocd_id: canonical_ocd_id}
+_OCD_OVERRIDES: dict[str, str] = {
+    # J.R. Claeys: OpenStates has 3 OCD IDs for 1 person (different slug
+    # encodings: rep_claeys_j_r_1, sen_claeys_jr_1). Editorially confirmed.
+    "ocd-person/2bbf4d79-672b-46f7-8745-ee91db3169e3": (
+        "ocd-person/26607b1c-8e09-4c41-a1cc-aed9bf5216d5"
+    ),
+}
+
+# Slug-level overrides for sessions without OCD coverage (pre-2011 KanFocus).
 # Format: {variant_person_key: canonical_person_key}
-_PERSON_KEY_OVERRIDES: dict[str, str] = {
+_SLUG_OVERRIDES: dict[str, str] = {
     "claeys_jr_1": "claeys_j_r_1",  # J.R. Claeys: sen slug vs rep slug
     "crum_david_1": "crum_dave_1",  # Dave Crum
     "clifford_william_1": "clifford_bill_1",  # Bill Clifford
@@ -118,13 +142,48 @@ _PERSON_KEY_OVERRIDES: dict[str, str] = {
 }
 
 
+def build_person_key_lookup(slug_to_ocd: dict[str, str] | None = None) -> dict[str, str]:
+    """Build a slug→person_key lookup using OCD IDs as primary identity.
+
+    Strategy:
+    1. If slug has an OCD mapping, use the OCD ID as person_key (applying
+       _OCD_OVERRIDES for known OpenStates errors).
+    2. If no OCD mapping (pre-2011 KanFocus), fall back to slug-based key
+       with _SLUG_OVERRIDES for known encoding variants.
+
+    This correctly separates same-name legislators (e.g., two Mike Thompsons)
+    who have different OCD IDs, while merging same-person slug variants.
+    """
+    if slug_to_ocd is None:
+        slug_to_ocd = load_slug_to_ocd()
+
+    lookup: dict[str, str] = {}
+    for slug, ocd_id in slug_to_ocd.items():
+        canonical_ocd = _OCD_OVERRIDES.get(ocd_id, ocd_id)
+        lookup[slug] = canonical_ocd
+
+    # Store the mapping for use by resolve_person_key
+    return lookup
+
+
+# Module-level cache, populated by build_global_roster()
+_person_key_lookup: dict[str, str] = {}
+
+
 def resolve_person_key(slug: str) -> str:
     """Resolve a legislator slug to a stable person identity key.
 
-    Strips chamber prefix and applies overrides for known slug variants.
+    Uses OCD person ID when available (correctly separates same-name
+    legislators like two Mike Thompsons). Falls back to slug-based key
+    with overrides for pre-2011 sessions without OCD coverage.
     """
+    # Try OCD-based lookup first
+    if _person_key_lookup and slug in _person_key_lookup:
+        return _person_key_lookup[slug]
+
+    # Fallback: slug-based key with overrides
     raw = _slug_to_person_key(slug)
-    return _PERSON_KEY_OVERRIDES.get(raw, raw)
+    return _SLUG_OVERRIDES.get(raw, raw)
 
 
 # ---------------------------------------------------------------------------
@@ -151,10 +210,14 @@ def build_global_roster(
     DataFrame with columns: person_key, name_norm, legislator_slug, full_name,
     party, session, chamber, xi_canonical, xi_sd.
 
-    Identity resolution uses slug-based person_key (strips chamber prefix,
-    applies overrides for known slug variants) rather than name_norm, which
-    is fragile across middle initials, nicknames, and punctuation.
+    Identity resolution uses OpenStates OCD person IDs as primary key (correctly
+    separates same-name legislators like two Mike Thompsons). Falls back to
+    slug-based keys with overrides for pre-2011 sessions without OCD coverage.
     """
+    global _person_key_lookup  # noqa: PLW0603
+    slug_to_ocd = load_slug_to_ocd()
+    _person_key_lookup = build_person_key_lookup(slug_to_ocd)
+
     rows: list[dict] = []
     for session, chambers in sorted(all_scores.items()):
         for chamber, df in chambers.items():
