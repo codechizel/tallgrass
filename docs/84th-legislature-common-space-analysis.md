@@ -101,24 +101,46 @@ This explains the per-session common-space correlation for the 84th (r=0.564 bet
 
 ---
 
-## Recommendation: Override Canonical Source for the 84th
+## The Dimension Swap: Ideology Is on Dim 2, Not Dim 1
 
-The fix is straightforward: **for the 84th Legislature, use flat 2D Dim 1 instead of hierarchical 2D Dim 1 as the canonical source.**
+The dimension swap detection (`dimension_swap_corrected = YES` in the convergence summary) fired for both chambers — but it swapped the **wrong way**. A comprehensive comparison of all available IRT dimensions against W-NOMINATE Dim 1 reveals the error:
 
-The routing logic should add a W-NOMINATE cross-validation gate:
+| Model | House r | House rho | Senate r | Senate rho |
+|-------|---------|-----------|----------|------------|
+| 1D IRT | 0.617 | 0.865 | 0.288 | 0.578 |
+| Flat 2D Dim 1 | 0.968 | 0.984 | 0.918 | 0.893 |
+| Flat 2D Dim 2 | 0.520 | 0.324 | -0.812 | -0.754 |
+| H2D Dim 1 (current canonical) | 0.838 | 0.582 | 0.392 | 0.377 |
+| **H2D Dim 2** | **0.977** | **0.984** | **0.992** | **0.966** |
 
-> If W-NOMINATE scores are available, check the correlation between the canonical IRT Dim 1 and W-NOMINATE Dim 1. If the flat 2D model's correlation exceeds the hierarchical model's by more than 0.15, prefer the flat 2D model. This catches cases where party pooling distorts the ideology dimension.
+**H2D Dim 2 correlates r=0.992 with W-NOMINATE in the Senate** — near-perfect agreement. Within Republicans, the correlation is r=0.994 (n=30). This is the ideology dimension. What the routing system labeled "Dim 1" actually captures the party-pooling prior's forced party separation, not the natural ideology axis.
 
-This gate would fire only for the 84th (and possibly the 88th Senate, which also shows PCA axis instability). All other sessions would continue using the hierarchical model, which is generally superior.
+The hierarchical model's Dim 2 is the **best available option** for the 84th: it has the hierarchical model's superior convergence properties (ESS 261 House, 694 Senate) AND near-perfect agreement with the field-standard unsupervised estimator. The flat 2D Dim 1 (r=0.918/0.968) is the second-best option.
+
+### Why the swap detection failed
+
+The dimension swap detection uses PCA correlation: it checks which IRT dimension aligns better with PC1. But in the 84th, PCA itself has ambiguous axes (PC1 d=1.84, PC2 d=1.30 in the Senate). When PCA can't reliably identify the ideology axis, the swap detection inherits that ambiguity. Using W-NOMINATE as the cross-validation target instead of PCA would catch this case.
+
+---
+
+## Recommendation: Use H2D Dim 2 for the 84th
+
+The primary fix: **override the canonical source for the 84th to use H2D Dim 2 instead of H2D Dim 1.**
+
+This can be implemented as a W-NOMINATE cross-validation gate in the routing logic:
+
+> After selecting the canonical dimension, check its Pearson correlation with W-NOMINATE Dim 1 (when available). If the OTHER dimension of the same model correlates substantially better (delta r > 0.15), swap dimensions. This catches cases where the PCA-based swap detection fails due to ambiguous axes.
+
+This gate would fire for the 84th (and should be checked for the 88th Senate, which also shows PCA axis instability). All other sessions would be unaffected.
 
 ### Expected improvement
 
-After switching to flat 2D Dim 1 for the 84th:
-- Per-session Senate IRT-WNOM correlation: 0.392 → **0.918**
-- Per-session House IRT-WNOM correlation: 0.838 → **0.968**
-- Common-space 84th correlation: expected to improve significantly
-- The 84th-85th bridge link will be more reliable
-- All pre-84th sessions will benefit from the improved link
+After switching to H2D Dim 2 for the 84th:
+- Per-session Senate IRT-WNOM correlation: 0.392 → **0.992**
+- Per-session House IRT-WNOM correlation: 0.838 → **0.977**
+- Common-space 84th correlation: expected to improve dramatically
+- The 84th-85th bridge link will be far more reliable
+- All pre-84th sessions (78th-83rd) will benefit from the improved chain link
 
 ---
 
