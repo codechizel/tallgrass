@@ -28,7 +28,13 @@ Added `_OCD_OVERRIDES` entries for:
 
 Same pattern as the existing J.R. Claeys override (3 OCD IDs → 1 canonical).
 
-### 3. Duplicate detection quality gate
+### 3. Slug aliases for nickname/spelling variants
+
+`_SLUG_ALIASES` maps data slugs (from the KS Legislature website) to OCD-mapped slugs (from OpenStates) when the two sources use different name encodings for the same person. Applied in `build_person_key_lookup()` before cross-chamber expansion so both variants and their chamber counterparts resolve to the same OCD person ID.
+
+13 aliases covering nickname variants (Charlie/Charles, Dave/David, Russ/Russell, Tom/Thomas, Les/Leslie, Jan/Janice, Willie/William, Rob/Robert, Ron/Ron Jr.) and spelling variants (christmann/christman, lee_hahn/leehahn, odonnell/o_donnell, o'shea/oshea).
+
+### 4. Duplicate detection quality gate
 
 `detect_potential_duplicates()` runs after roster construction and checks for different person_keys that share the same slug root. If collisions are found that aren't in the `_SAME_NAME_DIFFERENT_PERSON` allowlist (currently just Mike Thompson), the phase raises `ValueError` with actionable guidance.
 
@@ -38,9 +44,10 @@ This ensures future chamber-switchers or OpenStates data quality issues are caug
 
 **Positive:**
 - Caryn Tyson (and 29 other chamber-switchers) correctly unified into single career scores
+- 13 nickname/spelling variants (Charlie Roth, Dave Crum, etc.) correctly resolved
 - Quality gate catches future regressions automatically — no manual checking needed
 - Allowlist pattern handles genuinely different same-name legislators (two Mike Thompsons)
-- 15 new tests cover the identity resolution and duplicate detection
+- 18 tests cover the identity resolution, slug aliases, and duplicate detection
 
 **Negative:**
 - `_SAME_NAME_DIFFERENT_PERSON` allowlist must be maintained if new same-name-different-person cases appear (rare)

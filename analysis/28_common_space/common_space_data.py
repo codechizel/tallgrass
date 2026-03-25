@@ -151,6 +151,28 @@ _SLUG_OVERRIDES: dict[str, str] = {
 }
 
 
+# Slug aliases: data slugs that differ from the OCD-mapped slug due to
+# nickname/spelling variants.  Format: {data_slug: ocd_mapped_slug}.
+# Applied in build_person_key_lookup() so the data slug resolves to the
+# same OCD person ID as the canonical slug.
+_SLUG_ALIASES: dict[str, str] = {
+    # Nickname variants (KS Legislature uses one form, OpenStates the other)
+    "rep_roth_charlie_1": "rep_roth_charles_1",  # Charlie / Charles Roth
+    "rep_crum_david_1": "rep_crum_dave_1",  # David / Dave Crum
+    "rep_jennings_russ_1": "rep_jennings_russell_1",  # Russ / Russell Jennings
+    "rep_phillips_tom_1": "rep_phillips_thomas_1",  # Tom / Thomas Phillips
+    "rep_osterman_leslie_1": "rep_osterman_les_1",  # Leslie / Les Osterman
+    "rep_pauls_janice_1": "rep_pauls_jan_1",  # Janice / Jan Pauls
+    "rep_prescott_william_1": "rep_prescott_willie_1",  # William / Willie Prescott
+    "sen_olson_rob_1": "sen_olson_robert_1",  # Rob / Robert Olson
+    "rep_ryckman_ron_1": "rep_ryckman_jr_ron_1",  # Ron Ryckman (pre-Jr. slug, 85th)
+    # Spelling variants (underscore, apostrophe, double-letter)
+    "rep_christmann_marshall_1": "rep_christman_marshall_1",  # christmann / christman
+    "rep_lee_hahn_tatum_1": "rep_leehahn_tatum_1",  # lee_hahn / leehahn
+    "sen_odonnell_michael_1": "sen_o_donnell_michael_1",  # odonnell / o_donnell
+    "sen_o'shea_kristen_1": "sen_oshea_kristen_1",  # o'shea / oshea
+}
+
 # Slug roots where different person_keys are expected — genuinely different
 # people who share the same name component.  The quality gate skips these.
 _SAME_NAME_DIFFERENT_PERSON: frozenset[str] = frozenset(
@@ -196,6 +218,12 @@ def build_person_key_lookup(slug_to_ocd: dict[str, str] | None = None) -> dict[s
     for slug, ocd_id in slug_to_ocd.items():
         canonical_ocd = _OCD_OVERRIDES.get(ocd_id, ocd_id)
         lookup[slug] = canonical_ocd
+
+    # Apply slug aliases: map data slugs (nickname/spelling variants) to
+    # the OCD-mapped canonical slug so they resolve to the same person_key.
+    for data_slug, canonical_slug in _SLUG_ALIASES.items():
+        if canonical_slug in lookup and data_slug not in lookup:
+            lookup[data_slug] = lookup[canonical_slug]
 
     # Expand cross-chamber variants: if only one chamber's slug is in the
     # OCD mapping, derive the other so chamber-switchers get the same

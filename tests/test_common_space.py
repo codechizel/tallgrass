@@ -547,6 +547,35 @@ class TestPersonIdentity:
         # When _person_key_lookup is empty, resolve falls back to slug-based
         assert _slug_to_person_key("rep_unknown_person_1") == "unknown_person_1"
 
+    def test_slug_aliases_resolve_nickname_variants(self):
+        """Slug aliases map data slugs to the same OCD ID as canonical slugs."""
+        slug_to_ocd = {"rep_roth_charles_1": "ocd-person/roth-ocd"}
+        lookup = build_person_key_lookup(slug_to_ocd)
+        # The alias rep_roth_charlie_1 → rep_roth_charles_1 should be applied
+        assert "rep_roth_charlie_1" in lookup
+        assert lookup["rep_roth_charlie_1"] == "ocd-person/roth-ocd"
+
+    def test_slug_aliases_do_not_overwrite_existing(self):
+        """If the data slug already has its own OCD mapping, alias is skipped."""
+        slug_to_ocd = {
+            "rep_roth_charles_1": "ocd-person/charles",
+            "rep_roth_charlie_1": "ocd-person/charlie-different",
+        }
+        lookup = build_person_key_lookup(slug_to_ocd)
+        # Both have their own mappings — alias doesn't overwrite
+        assert lookup["rep_roth_charlie_1"] == "ocd-person/charlie-different"
+        assert lookup["rep_roth_charles_1"] == "ocd-person/charles"
+
+    def test_slug_aliases_plus_cross_chamber_expansion(self):
+        """Aliases are applied before cross-chamber expansion, so both benefit."""
+        slug_to_ocd = {"rep_roth_charles_1": "ocd-person/roth-ocd"}
+        lookup = build_person_key_lookup(slug_to_ocd)
+        # Alias: rep_roth_charlie_1 → same OCD
+        assert lookup.get("rep_roth_charlie_1") == "ocd-person/roth-ocd"
+        # Cross-chamber expansion: sen_ variants of both
+        assert lookup.get("sen_roth_charles_1") == "ocd-person/roth-ocd"
+        assert lookup.get("sen_roth_charlie_1") == "ocd-person/roth-ocd"
+
 
 class TestDetectPotentialDuplicates:
     """Tests for the duplicate detection quality gate."""
