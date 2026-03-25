@@ -78,3 +78,32 @@ WNOM_GATE_DELTA: float = 0.10
 
 WNOM_GATE_MIN_R: float = 0.70
 """Minimum W-NOMINATE correlation for any candidate canonical source."""
+
+# ── Exploratory Graph Analysis (EGA) ────────────────────────────────────
+
+EGA_GLASSO_GAMMA: float = 0.50
+"""EBIC hyperparameter for GLASSO sparsity in EGA network estimation.
+
+Higher values prefer sparser networks. 0.50 is Golino's default.
+Range: [0, 1]. Lower (0.25) for exploratory; higher (0.75) for confirmatory.
+"""
+
+EGA_BOOT_N: int = 500
+"""Number of bootstrap replicates for bootEGA stability assessment.
+
+500 is Golino's recommendation. Reduce to 100 for quick diagnostics.
+"""
+
+EGA_STABILITY_THRESHOLD: float = 0.70
+"""Minimum item stability in bootEGA for an item to be considered dimensionally stable.
+
+Items below this threshold are assigned to different communities across
+bootstrap replicates — they are dimensionally ambiguous.
+"""
+
+UVA_WTO_THRESHOLD: float = 0.25
+"""Weighted topological overlap threshold for UVA redundancy detection.
+
+0.20 = small-to-moderate, 0.25 = moderate-to-large (default),
+0.30 = large-to-very-large redundancy.
+"""

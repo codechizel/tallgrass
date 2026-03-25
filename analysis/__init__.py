@@ -125,6 +125,8 @@ _MODULE_MAP: dict[str, str] = {
     "common_space": "28_common_space",
     "common_space_data": "28_common_space",
     "common_space_report": "28_common_space",
+    "ega_phase": "02b_ega",
+    "ega_phase_report": "02b_ega",
 }
 
 
