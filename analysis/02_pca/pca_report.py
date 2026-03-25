@@ -55,6 +55,7 @@ def build_pca_report(
         _add_axis_swap_warning(report, result, chamber)
         _add_pca_summary(report, result, chamber)
         _add_dimensionality_diagnostics(report, result, chamber)
+        _add_tefi_section(report, result, plots_dir, chamber)
         _add_scree_figure(report, plots_dir, chamber, result)
         _add_ideological_map_figure(report, plots_dir, chamber)
         _add_pc1_distribution_figure(report, plots_dir, chamber)
@@ -294,6 +295,57 @@ def _add_reconstruction_error(
         TableSection(
             id=f"recon-error-{chamber.lower()}",
             title=f"{chamber} Reconstruction Error",
+            html=html,
+        )
+    )
+
+
+def _add_tefi_section(
+    report: ReportBuilder,
+    result: dict,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Add TEFI dimensionality comparison section (if available)."""
+    tefi_scores = result.get("tefi_scores")
+    if not tefi_scores:
+        return
+
+    best_k = result.get("tefi_best_k", 1)
+    ch = chamber.lower()
+
+    # TEFI curve plot
+    tefi_path = plots_dir / f"tefi_{ch}.png"
+    if tefi_path.exists():
+        report.add(
+            FigureSection.from_file(
+                id=f"tefi-{ch}",
+                title=f"{chamber} — TEFI Dimensionality",
+                path=tefi_path,
+                alt_text=(
+                    f"TEFI curve for {chamber} showing fit across K=1 to K=5, best K={best_k}"
+                ),
+            )
+        )
+
+    # Interpretation text
+    ks = sorted(tefi_scores.keys())
+    rows = " ".join(f"K={k}: {tefi_scores[k]:.4f}{'*' if k == best_k else ''}" for k in ks)
+    html = (
+        '<div style="background:#e8f4f8; border:1px solid #b8daff; '
+        'border-radius:6px; padding:12px 16px; margin:8px 0;">'
+        f"<strong>TEFI Analysis ({chamber}):</strong> "
+        f"Best K = <b>{best_k}</b> (lowest entropy). "
+        f"Scores: {rows}. "
+        "TEFI uses Von Neumann entropy to compare dimensional structures — "
+        "lower values indicate better fit. Unlike RMSEA/CFI, TEFI properly "
+        "penalizes over-extraction."
+        "</div>"
+    )
+    report.add(
+        TextSection(
+            id=f"tefi-text-{ch}",
+            title=f"{chamber} — TEFI Interpretation",
             html=html,
         )
     )

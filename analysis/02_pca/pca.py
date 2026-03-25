@@ -1375,6 +1375,69 @@ def main() -> None:
             manifest["validation"] = validation_results
         save_filtering_manifest(manifest, ctx.run_dir)
 
+        # ── Phase 6b: TEFI dimensionality comparison ──
+        print_header("TEFI DIMENSIONALITY")
+        try:
+            from analysis.ega.tefi import compute_tefi
+
+            for label, result in results.items():
+                loadings = result["loadings_df"]
+                n_sig = result.get("n_significant", 2)
+                # Compute tetrachoric or use PCA loadings-based assignments
+                # Assign each bill to its highest-loading PC
+                pc_cols = [c for c in loadings.columns if c.startswith("PC")]
+                if pc_cols:
+                    loading_arr = loadings.select(pc_cols).to_numpy()
+                    # Correlation matrix from bill loadings
+                    corr_approx = np.corrcoef(loading_arr.T)
+                    p = loading_arr.shape[0]
+
+                    tefi_scores: dict[int, float] = {}
+                    for k in range(1, min(6, len(pc_cols) + 1)):
+                        if k == 1:
+                            assigns = np.zeros(p, dtype=np.int64)
+                        else:
+                            # Assign to highest-loading PC among first k
+                            assigns = np.argmax(np.abs(loading_arr[:, :k]), axis=1).astype(np.int64)
+                        tefi_scores[k] = compute_tefi(corr_approx, assigns)
+
+                    best_k = min(tefi_scores, key=tefi_scores.get)
+                    result["tefi_scores"] = tefi_scores
+                    result["tefi_best_k"] = best_k
+                    print(f"  {label}: TEFI best K={best_k}")
+
+                    # Save TEFI JSON
+                    import json as json_mod
+
+                    tefi_path = ctx.data_dir / f"tefi_pca_{label.lower()}.json"
+                    with open(tefi_path, "w") as f:
+                        json_mod.dump(
+                            {str(k): v for k, v in tefi_scores.items()},
+                            f,
+                            indent=2,
+                        )
+
+                    # Plot TEFI curve
+                    fig_tefi, ax_tefi = plt.subplots(figsize=(8, 5))
+                    ks = sorted(tefi_scores.keys())
+                    vals = [tefi_scores[k] for k in ks]
+                    ax_tefi.plot(ks, vals, "o-", color="#2C3E50", linewidth=2, markersize=8)
+                    ax_tefi.axvline(
+                        best_k,
+                        color="#E74C3C",
+                        linestyle="--",
+                        alpha=0.7,
+                        label=f"Best K={best_k}",
+                    )
+                    ax_tefi.set_xlabel("Number of Dimensions (K)")
+                    ax_tefi.set_ylabel("TEFI (lower = better)")
+                    ax_tefi.set_title(f"TEFI — {label}")
+                    ax_tefi.legend()
+                    ax_tefi.set_xticks(ks)
+                    save_fig(fig_tefi, ctx.plots_dir / f"tefi_{label.lower()}.png")
+        except ImportError:
+            print("  EGA library not available — skipping TEFI")
+
         # ── Phase 7: HTML report ──
         print_header("HTML REPORT")
         build_pca_report(
