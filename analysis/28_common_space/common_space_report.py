@@ -69,9 +69,42 @@ def build_common_space_report(
     reference: str,
     plots_dir: Path,
 ) -> None:
-    """Add all report sections."""
+    """Add all report sections to the main report (backward compat)."""
+    reports = build_common_space_reports(
+        all_results=all_results,
+        bridge_matrix=bridge_matrix,
+        sessions=sessions,
+        reference=reference,
+        plots_dir=plots_dir,
+    )
+    # Merge all sub-reports into the main report
+    for sub in reports.values():
+        if sub._key_findings is not None:
+            report.add(sub._key_findings)
+        for _, section in sub._sections:
+            report.add(section)
 
-    # ---- 1. Key Findings ----
+
+def build_common_space_reports(
+    *,
+    all_results: dict,
+    bridge_matrix: pl.DataFrame,
+    sessions: list[str],
+    reference: str,
+    plots_dir: Path,
+) -> dict[str, ReportBuilder]:
+    """Build separate reports for common space analysis.
+
+    Returns dict of {name: ReportBuilder}:
+      - "overview": key findings, bridge coverage, polarization, quality gates
+      - "house": House ideal points, linking, career trajectories/scores
+      - "senate": Senate ideal points, linking, career trajectories/scores
+      - "unified": unified cross-chamber career scores
+    """
+    reports: dict[str, ReportBuilder] = {}
+
+    # ---- Overview report ----
+    overview = ReportBuilder(title="Common Space — Overview")
     findings: list[str] = []
     for chamber in [k for k in all_results if k in ("House", "Senate")]:
         r = all_results[chamber]
@@ -92,44 +125,39 @@ def build_common_space_report(
                 f"({_short(first['session'])} → {_short(last['session'])})"
             )
     findings.append(f"Reference scale: {reference}")
-    report.add(KeyFindingsSection(findings=findings))
+    overview.add(KeyFindingsSection(findings=findings))
+    _add_bridge_heatmap(overview, bridge_matrix, sessions, plots_dir)
 
-    # ---- 2. Bridge Coverage Heatmap ----
-    _add_bridge_heatmap(report, bridge_matrix, sessions, plots_dir)
-
-    # ---- Per-chamber sections ----
-    chamber_keys = [k for k in all_results if k in ("House", "Senate")]
-    for chamber in chamber_keys:
+    for chamber in [k for k in all_results if k in ("House", "Senate")]:
         r = all_results[chamber]
-        # ---- 3. Ideal Points Table (searchable/sortable) ----
-        _add_ideal_points_table(report, r, chamber)
+        _add_polarization_trajectory(overview, r, chamber)
+        _add_quality_gates(overview, r, chamber)
 
-        # ---- 4. Linking Coefficients ----
-        _add_linking_coefficients(report, r, chamber, plots_dir)
+    reports["overview"] = overview
 
-        # ---- 5. Polarization Trajectory ----
-        _add_polarization_trajectory(report, r, chamber)
+    # ---- Per-chamber reports ----
+    for chamber in [k for k in all_results if k in ("House", "Senate")]:
+        r = all_results[chamber]
+        ch_report = ReportBuilder(title=f"Common Space — {chamber}")
+        _add_ideal_points_table(ch_report, r, chamber)
+        _add_linking_coefficients(ch_report, r, chamber, plots_dir)
+        _add_party_separation(ch_report, r, chamber, plots_dir)
+        _add_top_movers(ch_report, r, chamber)
+        _add_career_trajectories(ch_report, r, chamber)
+        _add_career_scores_table(ch_report, r, chamber)
+        _add_career_vs_recent(ch_report, r, chamber, plots_dir)
+        reports[chamber.lower()] = ch_report
 
-        # ---- 6. Party Separation ----
-        _add_party_separation(report, r, chamber, plots_dir)
-
-        # ---- 7. Top Movers ----
-        _add_top_movers(report, r, chamber)
-
-        # ---- 8. Career Trajectories ----
-        _add_career_trajectories(report, r, chamber)
-
-        # ---- 9. Per-Chamber Career Scores ----
-        _add_career_scores_table(report, r, chamber)
-        _add_career_vs_recent(report, r, chamber, plots_dir)
-
-        # ---- 10. Quality Gates ----
-        _add_quality_gates(report, r, chamber)
-
-    # ---- 11. Unified Career Scores (cross-chamber) ----
+    # ---- Unified career scores report ----
     unified_career = all_results.get("unified_career")
     if unified_career is not None:
-        _add_unified_career_scores_table(report, unified_career, all_results.get("chamber_link"))
+        unified_report = ReportBuilder(title="Common Space — Unified Career Scores")
+        _add_unified_career_scores_table(
+            unified_report, unified_career, all_results.get("chamber_link")
+        )
+        reports["unified"] = unified_report
+
+    return reports
 
 
 # ---------------------------------------------------------------------------

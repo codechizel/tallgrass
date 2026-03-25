@@ -67,9 +67,9 @@ except ModuleNotFoundError:
     )
 
 try:
-    from analysis.common_space_report import build_common_space_report
+    from analysis.common_space_report import build_common_space_report, build_common_space_reports
 except ModuleNotFoundError:
-    from common_space_report import build_common_space_report  # type: ignore[no-redef]
+    from common_space_report import build_common_space_report, build_common_space_reports  # type: ignore[no-redef]
 
 try:
     from analysis.phase_utils import normalize_name, print_header
@@ -632,8 +632,23 @@ def main() -> None:
         with open(ctx.data_dir / "validation.json", "w") as f:
             json.dump(validation, f, indent=2)
 
-        # Build report
-        print("\nBuilding report...")
+        # Build reports (separate HTML files for easier navigation)
+        print("\nBuilding reports...")
+        sub_reports = build_common_space_reports(
+            all_results=all_results,
+            bridge_matrix=bridge_matrix,
+            sessions=loaded_sessions,
+            reference=reference,
+            plots_dir=ctx.plots_dir,
+        )
+
+        for name, sub_report in sub_reports.items():
+            sub_path = ctx.run_dir / f"common_space_{name}_report.html"
+            sub_report.session = ctx.session
+            sub_report.write(sub_path)
+            print(f"  Saved: common_space_{name}_report.html")
+
+        # Also build combined report (ctx.report auto-written by RunContext)
         build_common_space_report(
             report=ctx.report,
             all_results=all_results,

@@ -131,19 +131,33 @@ Identify legislators who served in both House and Senate at different times. Use
 | `linking_coefficients.csv` | A_t, B_t per session with bootstrap CIs |
 | `bridge_coverage.csv` | Pairwise bridge counts |
 | `validation.json` | Quality gates and configuration |
-| `common_space_report.html` | Full report (see Report Sections below) |
+| `common_space_report.html` | Combined report (all sections, for backward compat) |
+| `common_space_overview_report.html` | Overview: key findings, bridge coverage, polarization, quality gates |
+| `common_space_house_report.html` | House: ideal points table, linking coefficients, career trajectories/scores |
+| `common_space_senate_report.html` | Senate: same as House |
+| `common_space_unified_report.html` | Unified career scores: one number per legislator across both chambers |
 
-## Report Sections
+## Reports
 
+Split into four focused reports for easier navigation, plus a combined report:
+
+### Overview (`common_space_overview_report.html`)
 1. **Key Findings** — summary stats: N legislators, N bienniums, polarization trend
 2. **Bridge Coverage** — heatmap of pairwise overlap, weakest links
-3. **Linking Coefficients** — scatter of (A, B) per session with bootstrap CIs
-4. **Polarization Trajectory** — party means over time on common scale
-5. **Party Separation** — Cohen's d per biennium on common scale
-6. **Top Movers** — legislators with largest cross-biennium shifts (genuine movers, not linking artifacts)
-7. **Career Trajectories** — interactive Plotly line chart for long-serving legislators
-8. **External Validation** — SM/DIME correlations, Dynamic IRT comparison
-9. **Quality Gates** — pass/fail table per biennium
+3. **Polarization Trajectory** — party means over time on common scale (both chambers)
+4. **Quality Gates** — pass/fail table per biennium (both chambers)
+
+### Per-Chamber (`common_space_{house,senate}_report.html`)
+1. **Ideal Points Table** — searchable/sortable: all legislator-sessions on common scale
+2. **Linking Coefficients** — scatter of (A, B) per session with bootstrap CIs
+3. **Party Separation** — Cohen's d per biennium on common scale
+4. **Top Movers** — legislators with largest cross-biennium shifts
+5. **Career Trajectories** — interactive Plotly line chart for long-serving legislators
+6. **Career Scores** — one number per legislator (RE meta-analysis, within-chamber)
+7. **Career vs Recent** — scatter comparing career-fixed score to most recent session
+
+### Unified (`common_space_unified_report.html`)
+1. **Unified Career Scores** — one number per legislator across both chambers
 
 ## Implementation Plan
 
