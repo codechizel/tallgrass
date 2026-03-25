@@ -155,7 +155,63 @@ These are **features, not bugs** — they reflect the genuine political complexi
 
 ---
 
-## The Bigger Picture: When Party Pooling Helps and Hurts
+## Why W-NOMINATE Just Works (And IRT Doesn't)
+
+The user's observation is accurate: W-NOMINATE produces correct dimension identification for the 84th with a single function call, while the IRT pipeline requires seven quality gates, three models (1D, flat 2D, hierarchical 2D), dimension swap detection, horseshoe correction, and canonical routing — and STILL gets it wrong. Why?
+
+The answer lies in three fundamental design differences.
+
+### 1. SVD Initialization Orders Dimensions by Variance, Not by Party
+
+W-NOMINATE's "Nominal Three-Step Estimation" starts by computing the eigenvalue decomposition of a double-centered legislator agreement matrix — mathematically equivalent to PCA on the co-voting structure. This produces dimensions ordered by **explained variance**: Dim 1 captures the largest source of systematic voting variation, Dim 2 the second-largest, and so on.
+
+In the 84th Senate, the largest source of variation is the moderate-conservative Republican factional split. W-NOMINATE places this on Dim 1 automatically because that's what explains the most votes. It doesn't know or care whether this is a "party" dimension or a "faction" dimension — it just finds the direction of maximum predictive power.
+
+The flat 2D IRT model uses the same PCA initialization (`--init-strategy pca-informed`), which is why it also gets the right answer (r=0.918 with W-NOMINATE). The problem is specific to the **hierarchical** 2D IRT, which overrides this natural ordering with party structure.
+
+### 2. No Party Information = No Party Bias
+
+W-NOMINATE is **completely unsupervised**. It receives a vote matrix (legislators x bills, yea/nay/missing) and nothing else. No party labels, no chamber metadata, no prior beliefs about which legislators should be similar. The algorithm finds the spatial arrangement that maximizes the likelihood of the observed votes, period.
+
+The hierarchical 2D IRT model adds **party-level hyperpriors**: each party's legislators share a hierarchical mean (`mu_R`, `mu_D`) and within-party variance (`sigma_R`, `sigma_D`). These priors tell the model "Republicans should cluster together and Democrats should cluster together." In most sessions, this is a helpful inductive bias — it improves estimation in small chambers by pooling information within parties.
+
+In the 84th Senate, this prior is **actively harmful**. The Republicans don't cluster together — they span the entire ideological spectrum from moderate (Steve Morris at -1.79) to ultraconservative. The hierarchical prior forces the model to find a dimension where Republicans DO cluster, which means finding a dimension that DOESN'T capture the factional split. The result: Dim 1 captures a weak, prior-dominated party signal, while the real ideology dimension gets pushed to Dim 2.
+
+This is the core lesson: **supervised methods (hierarchical IRT with party priors) can be misled by their own assumptions. Unsupervised methods (W-NOMINATE, flat IRT) cannot, because they have no assumptions to be misled by.**
+
+### 3. The Polarity Legislator vs. Anchor Selection
+
+W-NOMINATE resolves the sign ambiguity (which end is "conservative") with a **polarity legislator** — a single legislator designated by the user as positive. In Tallgrass, we select the legislator with the highest PCA PC1 score who has sufficient participation. This is simple, robust, and uses the same information that SVD initialization already computed.
+
+The IRT pipeline resolves sign ambiguity through **anchor selection** — fixing two legislators at extreme positions (e.g., the most liberal Democrat and most conservative Republican). The identification strategy system (ADR-0103) offers seven strategies: `anchor-pca`, `anchor-agreement`, `sort-constraint`, `positive-beta`, `hierarchical-prior`, `unconstrained`, `external-prior`.
+
+The sophistication of IRT's identification system is both its strength and its weakness. In normal sessions, the auto-detection selects the right strategy. In the 84th, where "most conservative Republican" might actually be a moderate by absolute standards (because the factional split dominates the party split), the anchors can land in misleading positions. The hierarchical model compounds this by pulling the anchor positions toward party means.
+
+### 4. Bounded Scale as Implicit Regularization
+
+W-NOMINATE constrains all positions to [-1, +1] (the unit hypersphere). This seems like a limitation, but it acts as **implicit regularization** that prevents the kind of extreme posterior exploration that MCMC can exhibit. The bounded scale means:
+
+- No legislator can "run away" to extreme positions
+- The optimization landscape has no unbounded directions
+- Convergence is guaranteed to a compact set
+
+IRT's unbounded latent trait means MCMC chains can explore extreme regions of parameter space, especially when identification is weak (as in the 84th Senate). The 1D model's R-hat of 1.83 and ESS of 3 reflect chains exploring incompatible posterior modes — a problem that simply can't occur in W-NOMINATE's bounded optimization.
+
+### 5. Deterministic Optimization vs. Stochastic Sampling
+
+W-NOMINATE uses **deterministic alternating optimization** (Newton-Raphson on per-legislator likelihoods). Given the same data and initialization, it always produces the same answer. There is no chain mixing problem, no R-hat diagnostic needed, no ESS to worry about.
+
+Bayesian IRT uses **MCMC sampling** (nutpie Rust NUTS), which explores the posterior distribution stochastically. This provides full uncertainty quantification — a genuine advantage — but introduces the possibility of chain mixing failures. The 84th's 1D IRT shows exactly this: R-hat 1.83 means different chains found different posterior modes. W-NOMINATE can't have this problem because it finds a single maximum, not a posterior distribution.
+
+### The Trade-off
+
+W-NOMINATE's simplicity is its strength for dimension identification: it finds what the data says without being influenced by modeling assumptions. IRT's complexity is its strength for everything else: posterior uncertainty, hierarchical borrowing, model comparison, and extensibility.
+
+The pipeline's architecture already reflects this trade-off: W-NOMINATE (Phase 16) is used as a **validation benchmark**, not as the primary estimator. The 84th Senate reveals the one case where the primary estimator's modeling assumptions (party pooling) conflict with the data's true structure. The fix — a W-NOMINATE cross-validation gate — explicitly uses W-NOMINATE's unsupervised dimension identification to catch these cases.
+
+---
+
+## The Broader Lesson: When Party Pooling Helps and Hurts
 
 The 84th teaches a general lesson about hierarchical models in political science:
 
@@ -165,14 +221,18 @@ The 84th teaches a general lesson about hierarchical models in political science
 
 This is analogous to the "ecological fallacy" in political science — assuming group-level patterns (party = ideology) hold at the individual level. In the 84th Senate, they don't.
 
-The flat 2D model avoids this problem because it has no party information. Like W-NOMINATE and DW-NOMINATE, it identifies dimensions purely from voting patterns. For sessions where party structure is ambiguous, unsupervised methods are more reliable.
+The 84th is not an edge case — it's the canonical example of a broader pattern. Any supermajority chamber with a significant intra-party factional split will exhibit this behavior. The Brownback-era Kansas Senate, the post-1964 Southern Democratic caucus, the pre-1994 moderate Republican House caucus — all are cases where party labels mask the true dimension of political conflict.
 
 ---
 
 ## References
 
 - Poole, K. T., & Rosenthal, H. (1997). *Congress: A Political-Economic History of Roll Call Voting*. Oxford.
+- Poole, K. T. (2005). *Spatial Models of Parliamentary Voting*. Cambridge.
 - Clinton, J., Jackman, S., & Rivers, D. (2004). The statistical analysis of roll call data. *APSR* 98(2): 355-370.
+- Carroll, R., Lewis, J. B., Lo, J., Poole, K. T., & Rosenthal, H. (2009). Measuring bias and uncertainty in DW-NOMINATE ideal point estimates. *Political Analysis* 17(3): 261-275.
+- Carroll, R., Lewis, J. B., Lo, J., Poole, K. T., & Rosenthal, H. (2013). The structure of utility in spatial models of voting. *AJPS* 57(4): 1008-1028.
+- Peress, M. (2009). Small chamber ideal point estimation. *Political Analysis* 17(3): 276-290.
 - Shor, B., & McCarty, N. (2011). The ideological mapping of American legislatures. *APSR* 105(3): 530-551.
 - Brownback, S. (2012). Interview with AP: described the tax cuts as "a real live experiment."
 - Kansas City Star (2012). Coverage of the August 2012 Republican primary results.
