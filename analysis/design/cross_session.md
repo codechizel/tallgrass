@@ -10,7 +10,7 @@
 
 2. **IRT ideal points are the canonical ideology measure.** Cross-session ideology comparisons use canonical IRT scores from Phase 06 routing (`load_all_upstream()`), which selects 2D Dim 1 for horseshoe-affected chambers and 1D IRT for balanced chambers. Vote prediction features (`vote_features_{chamber}.parquet`) also use canonical IRT via Phase 15's `_load_canonical_irt()` (ADR-0121). This ensures the `xi_mean` feature in XGBoost encodes ideology, not intra-party factionalism, preventing anti-prediction (AUC < 0.5) in cross-session transfer.
 
-3. **Legislators are matched by name, not slug.** Slugs (`rep_schreiber`) encode a session-specific hash and are not stable across bienniums. Matching uses normalized `full_name` (lowercased, stripped of whitespace and leadership suffixes).
+3. **Legislators are matched by OCD person ID, then name.** OCD person IDs (ADR-0085) are the primary matching key when available. Unmatched legislators fall back to normalized `full_name` (lowercased, stripped of whitespace and leadership suffixes). Raw slugs (`rep_schreiber`) are session-specific and not used directly for matching.
 
 4. **Affine alignment is sufficient for two time points.** With 131 overlapping legislators (78% overlap), the linear mapping has abundant anchor data. Dynamic IRT (random walk) is reserved for when three or more sessions are available.
 
@@ -56,17 +56,21 @@
 
 ### 1. Legislator Matching
 
-**Decision:** Match on `full_name` after normalization: lowercase, strip whitespace, remove known suffixes (leadership titles like " - House Minority Caucus Chair").
+**Decision:** Three-phase matching, preferring OCD person IDs over name-based matching (ADR-0085):
+
+0. **OCD ID join** (primary): When both sessions have `ocd_id` columns with data, inner-join on OCD person IDs. This correctly separates same-name legislators (two Mike Thompsons) and handles district changes from redistricting.
+1. **Name-norm join** (fallback): Unmatched legislators from Phase 0 are matched on `full_name` after normalization: lowercase, strip whitespace, remove known suffixes (leadership titles like " - House Minority Caucus Chair").
+2. **Fuzzy matching** (optional): Disabled by default. When enabled, unmatched names go through `fuzzy_match_legislators()` using `difflib.SequenceMatcher`.
 
 **Edge cases to handle:**
-- **Chamber switches** (e.g., a House member who ran for Senate): same name, different slugs, different chamber. Include these — they're analytically interesting.
+- **Chamber switches** (e.g., a House member who ran for Senate): same name, different slugs, different chamber. OCD IDs handle this correctly. Include these — they're analytically interesting.
 - **Party switches:** Same name, different party. Include and flag.
-- **Name changes:** Rare in practice. No fuzzy matching — require exact normalized match. Manual override list as a constant if needed.
+- **Name changes:** Rare in practice. OCD IDs handle this correctly when available. For sessions without OCD coverage, no fuzzy matching — require exact normalized match.
 
 **Alternatives considered:**
 - Match on district: rejected — redistricting between sessions makes district numbers unstable.
-- Fuzzy matching (Levenshtein): rejected — introduces false positives; 131 exact matches is already strong.
-- Match on slug: rejected — slugs are session-specific.
+- Fuzzy matching (Levenshtein): rejected as default — introduces false positives; 131 exact matches is already strong. Available as opt-in.
+- Match on slug: rejected — slugs are session-specific (but used as join key in OCD-matched results).
 
 ### 2. IRT Scale Alignment
 

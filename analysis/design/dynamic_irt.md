@@ -6,7 +6,7 @@
 
 ## Assumptions
 
-1. **Legislators are matched by normalized name** across bienniums. Leadership suffixes stripped. Same matching logic as cross-session validation (Phase 13).
+1. **Legislators are matched by normalized name** across bienniums. Leadership suffixes stripped. Same matching logic as cross-session validation (Phase 26). OCD person IDs are used as primary identity when available (ADR-0085).
 
 2. **Chambers analyzed separately**, consistent with all upstream phases. House and Senate are independent models.
 

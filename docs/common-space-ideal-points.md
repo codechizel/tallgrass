@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-24
 **Scope:** 78th-91st Legislatures (1999-2026), House and Senate
-**Related:** `docs/dynamic-ideal-points-deep-dive.md`, `docs/pca-ideology-axis-instability.md`, ADR-0058, ADR-0070, ADR-0118
+**Related:** `docs/dynamic-ideal-points-deep-dive.md`, `docs/pca-ideology-axis-instability.md`, ADR-0058, ADR-0070, ADR-0085, ADR-0118, ADR-0120, ADR-0122
 
 ---
 
@@ -60,7 +60,7 @@ Bailey's approach demonstrates that bridges need not be roll call votes — any 
 
 ## Kansas Bridge Coverage
 
-Adjacent biennium overlap, measured by name-matched legislators:
+Adjacent biennium overlap, measured by OCD-matched legislators (with name-norm fallback for pre-2011 sessions):
 
 | Pair | Bridges | Overlap |
 |------|---------|---------|
@@ -132,6 +132,18 @@ A key property: **within-session comparisons are exact**. Two legislators in the
 ### Cross-Chamber Unification
 
 House and Senate alignments run separately (different ideal point scales, different bill sets). Legislators who switched chambers during their career (e.g., served in the House in the 82nd and the Senate in the 84th) provide natural cross-chamber bridges. With 54 chamber-switchers across the 78th-91st legislatures, we estimate an affine transform (A, B) mapping Senate common-space scores onto the House scale using trimmed OLS regression on the switchers' mean scores in each chamber. This produces a unified scale where all 708 legislators get one career score, regardless of which chamber(s) they served in. Per-chamber career scores are retained for within-chamber analysis.
+
+#### Identity Resolution for Chamber-Switchers
+
+Correctly identifying chamber-switchers requires matching `rep_tyson_caryn_1` (House) with `sen_tyson_caryn_1` (Senate) as the same person. The identity resolution system (ADR-0085, ADR-0122) uses a three-layer approach:
+
+1. **OCD person IDs** (primary): OpenStates `ocd-person/{uuid}` identifiers, with auto-derived cross-chamber variants. If the OCD mapping contains `sen_tyson_caryn_1`, the system automatically creates `rep_tyson_caryn_1` → same OCD ID. This resolves 28 of 30 chamber-switch cases without manual overrides.
+
+2. **OCD overrides**: Where OpenStates itself splits one person into multiple OCD IDs across chambers (Dan Goddard, Ronald Ryckman Sr., J.R. Claeys), manual canonicalization entries merge them.
+
+3. **Slug-based fallback**: For pre-2011 KanFocus sessions without OCD coverage, chamber prefixes are stripped (`rep_`/`sen_`) and known encoding variants (e.g., `claeys_jr_1` → `claeys_j_r_1`) are normalized.
+
+A **duplicate detection quality gate** runs after roster construction and raises an error if different person_keys share the same slug root — preventing silent duplicates in career scores. Genuinely different same-name legislators (e.g., two Mike Thompsons — one House, one Senate, serving simultaneously) are allowlisted.
 
 ---
 

@@ -79,6 +79,8 @@ Constrain each legislator to a linear career trajectory. Fast but too rigid for 
 
 House and Senate are aligned independently across time (different bills, different IRT scales). After within-chamber alignment, the two scales are linked via 54 legislators who served in both chambers. An affine transform (A, B) maps Senate common-space scores onto the House scale, estimated via trimmed OLS on chamber-switchers' mean scores. This produces a unified scale for all 708 unique legislators.
 
+Identity resolution for chamber-switchers uses OCD person IDs with cross-chamber variant expansion (ADR-0122): `build_person_key_lookup()` auto-derives `rep_` ↔ `sen_` slug variants so that a legislator who served as `rep_tyson_caryn_1` in the House and `sen_tyson_caryn_1` in the Senate gets the same person_key. A duplicate detection quality gate (`detect_potential_duplicates()`) runs after roster construction and raises `ValueError` if unresolved identity collisions remain.
+
 Career scores are computed three ways:
 - **Per-chamber** (`career_scores_house.parquet`, `career_scores_senate.parquet`): DerSimonian-Laird random-effects meta-analysis pooling per-session common-space scores within each chamber
 - **Unified** (`career_scores_unified.parquet`): same RE meta-analysis but pooling across both chambers on the unified scale — one number per legislator

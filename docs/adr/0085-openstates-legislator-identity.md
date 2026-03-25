@@ -68,3 +68,7 @@ just cross-session / just dynamic-irt
 
 **Neutral:**
 - Existing analysis results unchanged — OCD ID matching produces same results for non-colliding names, and correctly handles the edge cases that name matching gets wrong
+
+## See Also
+
+- **ADR-0122** — Cross-chamber person identity resolution. Extends this ADR's OCD-based matching with auto-derived cross-chamber slug variants (`rep_` ↔ `sen_`) and a duplicate detection quality gate. Fixes 30 chamber-switch orphans where only one chamber's slug appeared in the OCD mapping.
