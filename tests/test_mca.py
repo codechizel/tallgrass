@@ -478,7 +478,7 @@ class TestConstants:
 
     def test_minority_threshold_matches_pca(self):
         """MCA minority threshold should match PCA for consistency."""
-        assert CONTESTED_THRESHOLD == 0.025
+        assert CONTESTED_THRESHOLD == 0.10
 
     def test_min_votes_matches_pca(self):
         """MCA min votes should match PCA for consistency."""

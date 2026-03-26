@@ -405,7 +405,7 @@ class TestConstants:
         assert MIN_VOTES == 20
 
     def test_minority_threshold(self) -> None:
-        assert CONTESTED_THRESHOLD == 0.025
+        assert CONTESTED_THRESHOLD == 0.10
 
     def test_salsa_threshold(self) -> None:
         assert SALSA_THRESHOLD == 0.80

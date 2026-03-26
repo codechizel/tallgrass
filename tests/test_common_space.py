@@ -355,6 +355,7 @@ class TestCareerScores:
         for i, session in enumerate(["A", "B", "C"]):
             rows.append(
                 {
+                    "person_key": "stable_r",
                     "name_norm": "stable_r",
                     "full_name": "Stable R",
                     "party": "Republican",
@@ -368,6 +369,7 @@ class TestCareerScores:
         for i, (session, score) in enumerate([("A", -1.0), ("B", 0.0), ("C", 1.5)]):
             rows.append(
                 {
+                    "person_key": "mover_d",
                     "name_norm": "mover_d",
                     "full_name": "Mover D",
                     "party": "Democrat",
@@ -380,6 +382,7 @@ class TestCareerScores:
         # Single-session legislator
         rows.append(
             {
+                "person_key": "single",
                 "name_norm": "single",
                 "full_name": "Single",
                 "party": "Republican",
@@ -399,7 +402,7 @@ class TestCareerScores:
     def test_single_session_passes_through(self):
         df = self._make_transformed()
         career = compute_career_scores(df, "House")
-        single = career.filter(pl.col("name_norm") == "single")
+        single = career.filter(pl.col("person_key") == "single")
         assert single.height == 1
         row = single.row(0, named=True)
         assert abs(row["career_score"] - 2.0) < 1e-6
@@ -409,7 +412,7 @@ class TestCareerScores:
     def test_stable_legislator_has_low_i_squared(self):
         df = self._make_transformed()
         career = compute_career_scores(df, "House")
-        stable = career.filter(pl.col("name_norm") == "stable_r")
+        stable = career.filter(pl.col("person_key") == "stable_r")
         row = stable.row(0, named=True)
         assert row["i_squared"] < 0.25
         assert row["movement_flag"] == "stable"
@@ -417,7 +420,7 @@ class TestCareerScores:
     def test_mover_has_high_i_squared(self):
         df = self._make_transformed()
         career = compute_career_scores(df, "House")
-        mover = career.filter(pl.col("name_norm") == "mover_d")
+        mover = career.filter(pl.col("person_key") == "mover_d")
         row = mover.row(0, named=True)
         assert row["i_squared"] > 0.75
         assert row["movement_flag"] == "mover"
@@ -425,8 +428,8 @@ class TestCareerScores:
     def test_career_se_wider_for_movers(self):
         df = self._make_transformed()
         career = compute_career_scores(df, "House")
-        stable = career.filter(pl.col("name_norm") == "stable_r").row(0, named=True)
-        mover = career.filter(pl.col("name_norm") == "mover_d").row(0, named=True)
+        stable = career.filter(pl.col("person_key") == "stable_r").row(0, named=True)
+        mover = career.filter(pl.col("person_key") == "mover_d").row(0, named=True)
         assert mover["career_se"] > stable["career_se"]
 
     def test_has_confidence_intervals(self):
@@ -441,7 +444,7 @@ class TestCareerScores:
     def test_most_recent_score_populated(self):
         df = self._make_transformed()
         career = compute_career_scores(df, "House")
-        mover = career.filter(pl.col("name_norm") == "mover_d").row(0, named=True)
+        mover = career.filter(pl.col("person_key") == "mover_d").row(0, named=True)
         assert abs(mover["most_recent_score"] - 1.5) < 1e-6
 
 
