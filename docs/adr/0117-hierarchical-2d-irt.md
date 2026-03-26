@@ -56,7 +56,7 @@ Updated routing preference for horseshoe-affected chambers:
 2. Flat 2D Dim 1 (existing)
 3. 1D IRT (fallback)
 
-**Caveat:** The party-pooling prior can force party separation on Dim 1 even when Dim 1 is not the ideology axis. In 6/28 chamber-sessions, H2D Dim 2 or another model better agrees with W-NOMINATE Dim 1. Manual PCA overrides (`analysis/pca_overrides.yaml`) handle dimension assignment for these sessions, preferring Dim 2 when the override indicates PC2 is the ideology axis. The W-NOMINATE gate (ADR-0123, demoted to diagnostic-only) reports correlation diagnostics without auto-swapping.
+**Caveat:** The party-pooling prior can force party separation on Dim 1 even when Dim 1 is not the ideology axis. In 6/28 chamber-sessions, H2D Dim 2 or another model better agrees with W-NOMINATE Dim 1. Manual PCA overrides (`analysis/pca_overrides.yaml`) handle dimension assignment for these sessions, preferring Dim 2 when the override indicates PC2 is the ideology axis. The W-NOMINATE gate (ADR-0123) was removed entirely — W-NOMINATE shares the same variance-ordering vulnerability (ADR-0127).
 
 ### PPC Integration
 

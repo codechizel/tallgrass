@@ -121,7 +121,7 @@ Standalone structural experiments (2D IRT, PC2-targeted IRT, joint pooled IRT) b
 
 ## Known Issues
 
-- **PCA axis instability in Senate sessions (MANAGED, ADR-0118):** In 7/14 sessions (78th-83rd, 88th), PCA PC1 captures intra-Republican factionalism rather than the party divide. Managed via manual PCA overrides (`analysis/pca_overrides.yaml`) for the 8 affected sessions + automated `detect_ideology_pc()` for unambiguous sessions. PCA rotation methods evaluated and rejected. W-NOMINATE gate demoted to diagnostic. See `docs/pca-rotation-and-human-intervention.md`.
+- **PCA axis instability in Senate sessions (MANAGED, ADR-0118):** In 7/14 sessions (78th-83rd, 88th), PCA PC1 captures intra-Republican factionalism rather than the party divide. Managed via manual PCA overrides (`analysis/pca_overrides.yaml`) for the 8 affected sessions + automated `detect_ideology_pc()` for unambiguous sessions. PCA rotation methods evaluated and rejected. W-NOMINATE gate removed (ADR-0127: shares same vulnerability). See `docs/pca-rotation-and-human-intervention.md`.
 
 ## Analytics Method Docs
 

@@ -127,11 +127,9 @@ The dimension swap detection uses PCA correlation: it checks which IRT dimension
 
 The primary fix: **override the canonical source for the 84th to use H2D Dim 2 instead of H2D Dim 1.**
 
-This can be implemented as a W-NOMINATE cross-validation gate in the routing logic:
+**Original proposal (superseded):** A W-NOMINATE cross-validation gate was proposed here (ADR-0123) but subsequently removed (ADR-0127) after discovering that W-NOMINATE shares the same variance-ordering vulnerability as PCA — its eigendecomposition initialization captures maximum-variance axes, not necessarily ideology.
 
-> After selecting the canonical dimension, check its Pearson correlation with W-NOMINATE Dim 1 (when available). If the OTHER dimension of the same model correlates substantially better (delta r > 0.15), swap dimensions. This catches cases where the PCA-based swap detection fails due to ambiguous axes.
-
-This gate would fire for the 84th (and should be checked for the 88th Senate, which also shows PCA axis instability). All other sessions would be unaffected.
+**Implemented fix:** Manual PCA overrides (`analysis/pca_overrides.yaml`) provide human-vetted dimension assignments for the 84th and 7 other problematic sessions. The override is the highest-priority layer in the 3-layer canonical routing system.
 
 ### Expected improvement
 
@@ -207,7 +205,7 @@ Bayesian IRT uses **MCMC sampling** (nutpie Rust NUTS), which explores the poste
 
 W-NOMINATE's simplicity is its strength for dimension identification: it finds what the data says without being influenced by modeling assumptions. IRT's complexity is its strength for everything else: posterior uncertainty, hierarchical borrowing, model comparison, and extensibility.
 
-The pipeline's architecture already reflects this trade-off: W-NOMINATE (Phase 16) is used as a **validation benchmark**, not as the primary estimator. The 84th Senate reveals the one case where the primary estimator's modeling assumptions (party pooling) conflict with the data's true structure. The fix — a W-NOMINATE cross-validation gate — explicitly uses W-NOMINATE's unsupervised dimension identification to catch these cases.
+The pipeline's architecture reflects this trade-off: W-NOMINATE (Phase 16) is used as a **publication validation benchmark**, not as a routing input. The 84th Senate reveals sessions where the primary estimator's modeling assumptions (party pooling) conflict with the data's factional structure. However, W-NOMINATE's unsupervised dimension identification suffers from the same variance-ordering vulnerability as PCA (ADR-0127), making it unreliable as a dimension oracle for exactly these sessions. Manual PCA overrides provide the stable solution.
 
 ---
 

@@ -113,7 +113,7 @@ Pairwise chaining avoids this because each link is a well-conditioned 1D regress
 
 ### Input: Canonical Ideal Points
 
-The alignment operates on *canonical* ideal points — the horseshoe-corrected scores from the pipeline's routing system (ADR-0109), validated by the W-NOMINATE cross-validation gate (ADR-0123). For horseshoe-affected sessions, the canonical score is the IRT dimension that best agrees with W-NOMINATE Dim 1 — which may be H2D Dim 1, H2D Dim 2, Flat 2D Dim 1, or even 1D IRT, depending on whether the party-pooling prior distorted the first dimension. For clean sessions, it's typically 1D IRT. The quality of the common-space chain depends critically on correct per-session dimension identification; the W-NOMINATE gate catches the 6/28 sessions where convergence and party-separation gates alone are insufficient (see `docs/84th-legislature-common-space-analysis.md`).
+The alignment operates on *canonical* ideal points — the horseshoe-corrected scores from the pipeline's 3-layer routing system (ADR-0109): (1) manual PCA overrides for the 8 problematic sessions (`analysis/pca_overrides.yaml`), (2) horseshoe detection, (3) tiered convergence. For overridden sessions, the canonical score uses the Dim 2 from whichever 2D model is available (H2D preferred, flat 2D fallback). For clean sessions, it's typically 1D IRT. The quality of the common-space chain depends critically on correct per-session dimension identification; human-vetted overrides handle the 8 sessions where automated gates alone are insufficient (see ADR-0127 for why the former W-NOMINATE gate was removed).
 
 ### Uncertainty: Delta Method Through the Chain
 

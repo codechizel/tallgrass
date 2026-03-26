@@ -848,43 +848,21 @@ The W-NOMINATE cross-validation gate (ADR-0123) was built on the premise that W-
 
 Full analysis: `docs/pca-rotation-and-human-intervention.md`. Manual PCA overrides (`analysis/pca_overrides.yaml`) already implemented for 8 problematic sessions.
 
-### CR1. Remove W-NOMINATE gate wiring from canonical routing
+### ~~CR1. Remove W-NOMINATE gate wiring from canonical routing~~ — Done (v2026.03.26.6)
 
-Strip `apply_wnominate_gate()` call from `route_canonical_ideal_points()` entirely. The gate adds complexity, the diagnostic metadata is misleading for 6/28 sessions (it would recommend swapping TO the wrong answer), and the override file handles dimension identification better. Phase 16 remains as a standalone validation phase — it just stops touching canonical routing.
+Removed `apply_wnominate_gate()`, `load_wnominate_scores()`, `wnom_dir` params, `WNOM_GATE_DELTA`/`WNOM_GATE_MIN_R` constants, W-NOMINATE dir resolution from Phase 06/07b, and 10 gate tests. **-321 lines.**
 
-**Files:** `analysis/canonical_ideal_points.py` (remove gate call, remove wnom_dir param from routing functions), callers in `irt_2d.py` and `hierarchical_2d.py` (remove wnom_dir resolution), `analysis/tuning.py` (remove `WNOM_GATE_DELTA` and `WNOM_GATE_MIN_R`).
+### ~~CR2. Strengthen PCA override / CR3. Simplify routing to 3 layers~~ — Done (v2026.03.26.7)
 
-**Tests:** Update `tests/test_canonical_ideal_points.py` — remove `TestWnominateGate` and `TestWnominateGateDiagnostic` classes, update routing tests that pass wnom_dir.
+Restructured routing to clean 3-layer architecture: (1) manual PCA override (highest priority, early return), (2) horseshoe detection, (3) tiered convergence. Override honored unconditionally when Dim 2 data is available.
 
-### CR2. Reframe H2D party-pooling prior as asset, not liability
+### ~~CR4. Update documentation~~ — Done (v2026.03.26.8)
 
-ADR-0123 characterized the hierarchical 2D model's party-pooling prior as a liability ("forces party separation on a non-ideology dimension"). This is backwards for the problematic sessions: the prior encodes the correct knowledge that parties exist and the party divide is substantively important. For the 79th Senate, H2D Dim 1 (r=0.330 vs W-NOMINATE) may be the most correct dimension — it captures the party divide, which is ideology, while W-NOMINATE and 1D IRT both capture factionalism.
+New ADR-0127 documenting W-NOMINATE's shared variance-ordering vulnerability. Updated ADR-0123 (superseded section explains WHY), ADR README, pca-rotation-and-human-intervention.md, CLAUDE.md, analysis-framework.md, design/wnominate.md.
 
-Review the 8 overridden sessions to determine whether the manual overrides should prefer H2D Dim 1 (party-prior dimension) rather than Dim 2. This may change some entries in `pca_overrides.yaml` or require a separate canonical routing preference for overridden sessions.
+### ~~CR5. Reframe Phase 16 as pure validation~~ — Done (v2026.03.26.9)
 
-**Files:** `analysis/pca_overrides.yaml` (review and potentially update), `analysis/canonical_ideal_points.py` (review override dimension selection logic).
-
-### CR3. Simplify routing architecture to three layers
-
-Current: horseshoe detection → tiered convergence → PCA override → W-NOMINATE diagnostic (4 layers). Target: override check → horseshoe detection → tiered convergence (3 layers). The override file handles the hard cases, horseshoe detection handles the clear cases, and convergence tiers handle model quality.
-
-**Depends on:** CR1 (gate removal).
-
-**Files:** `analysis/canonical_ideal_points.py` (reorder logic, move override check to top).
-
-### CR4. Update documentation to reflect W-NOMINATE vulnerability
-
-The existing docs (ADR-0123, W-NOMINATE deep dive, 84th case study, design docs) treat W-NOMINATE as an independent oracle. Update to reflect that W-NOMINATE shares the same variance-ordering vulnerability as PCA/IRT. Phase 16's value is field-standard publication validation (r>0.98 with IRT), not dimension identification.
-
-**Files:** `docs/w-nominate-deep-dive.md`, `docs/84th-legislature-common-space-analysis.md`, `analysis/design/wnominate.md`, `docs/adr/0123-wnominate-cross-validation-gate.md` (deeper revision beyond current "Superseded" note).
-
-### CR5. Reframe Phase 16 as pure validation
-
-Phase 16 currently loads raw Phase 05 1D IRT scores for its three-way correlation. For overridden sessions, this means it correlates W-NOMINATE against the horseshoe-distorted scores — which produces r=0.989 (agreement on the wrong axis). Consider loading canonical ideal points instead, so the reported correlation reflects the corrected dimension. This would make the publication-facing number ("our IRT correlates at r=X with W-NOMINATE") accurate.
-
-**Caveat:** If both W-NOMINATE and canonical IRT have different axis orderings (W-NOMINATE captures factionalism, canonical captures party), the correlation will drop for overridden sessions. This is honest — it reflects genuine methodological disagreement about what Dim 1 should represent.
-
-**Files:** `analysis/16_wnominate/wnominate.py` (load canonical instead of raw Phase 05), `analysis/16_wnominate/wnominate_data.py` (add canonical loading path).
+Updated Phase 16 module docstring to clarify standalone publication validation role with caveat about overridden sessions.
 
 ## Key Architectural Decisions Still Standing
 

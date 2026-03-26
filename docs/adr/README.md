@@ -315,7 +315,7 @@ What are the trade-offs?
 | [0120](0120-common-space-ideal-points.md) | Common space ideal points (cross-temporal alignment via bridge legislators) | Accepted | 2026-03-24 |
 | [0121](0121-prediction-canonical-irt-routing.md) | Prediction phase canonical IRT routing (fix horseshoe bypass in Phase 15 + Phase 26 path resolution) | Accepted | 2026-03-25 |
 | [0122](0122-cross-chamber-person-identity-resolution.md) | Cross-chamber person identity resolution (OCD expansion + duplicate quality gate) | Accepted | 2026-03-25 |
-| [0123](0123-wnominate-cross-validation-gate.md) | W-NOMINATE cross-validation gate (demoted to diagnostic; manual PCA overrides) | Superseded | 2026-03-25 |
+| [0123](0123-wnominate-cross-validation-gate.md) | W-NOMINATE cross-validation gate (removed entirely per ADR-0127) | Superseded | 2026-03-26 |
 | [0124](0124-exploratory-graph-analysis.md) | Exploratory Graph Analysis (EGA) — network psychometrics dimensionality (Phase 02b) | Accepted | 2026-03-25 |
 | [0125](0125-tefi-residual-network-q3-integration.md) | TEFI, residual network, and Q3 per-pair integration (Phases 02, 08, 11) | Accepted | 2026-03-25 |
 | [0126](0126-ega-glasso-direct-covariance-and-fragmentation-guard.md) | EGA GLASSO direct covariance and fragmentation guard (fix K=196 in small chambers) | Accepted | 2026-03-25 |

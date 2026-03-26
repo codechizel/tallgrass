@@ -379,6 +379,6 @@ See `docs/84th-legislature-common-space-analysis.md` for the full per-session cr
 
 ## Resolution (2026-03-26)
 
-PCA rotation methods (varimax, promax, oblimin, Procrustes) were evaluated and rejected — they cannot solve variance-ordering problems. The automated quality gates (R1-R7) and W-NOMINATE cross-validation gate (ADR-0123) catch most failures but still misroute 6/28 sessions.
+PCA rotation methods (varimax, promax, oblimin, Procrustes) were evaluated and rejected — they cannot solve variance-ordering problems. W-NOMINATE was found to share the same variance-ordering vulnerability (ADR-0127) — its eigendecomposition initialization is mathematically equivalent to PCA. The W-NOMINATE gate (ADR-0123) was removed entirely from canonical routing.
 
-**Implemented fix:** Manual PCA override file (`analysis/pca_overrides.yaml`) with entries for all 8 problematic sessions (78th-84th, 88th Senate). The W-NOMINATE gate is demoted from auto-routing to diagnostic-only. See `docs/pca-rotation-and-human-intervention.md` for the full analysis.
+**Implemented fix:** Manual PCA override file (`analysis/pca_overrides.yaml`) with entries for all 8 problematic sessions (78th-84th, 88th Senate). Three-layer canonical routing: (1) manual override, (2) horseshoe detection, (3) tiered convergence. Phase 16 (W-NOMINATE) retained as standalone publication validation. See `docs/pca-rotation-and-human-intervention.md` for the full analysis.
