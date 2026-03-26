@@ -8,7 +8,7 @@
 
 ## Assumptions
 
-1. **Validation-only phase.** W-NOMINATE and OC results do NOT feed into synthesis, profiles, or any downstream phase. They exist solely to validate our Bayesian IRT ideal points against field-standard methods. This simplifies the dependency graph and avoids circular validation.
+1. **Standalone publication validation.** W-NOMINATE and OC results do NOT feed into canonical routing, synthesis, profiles, or any downstream phase. They exist to validate our Bayesian IRT ideal points against field-standard methods for publication credibility (r > 0.98 with W-NOMINATE). W-NOMINATE shares the same variance-ordering vulnerability as PCA (ADR-0127): its eigendecomposition initialization captures maximum-variance axes, which in supermajority chambers may be intra-party factionalism rather than ideology. The high IRT-WNOM correlations in those sessions reflect agreement on the dominant-variance axis, not independent validation of dimension correctness.
 
 2. **Chambers analyzed separately**, consistent with all upstream phases.
 

@@ -82,15 +82,15 @@ The pipeline currently has three layers of automated correction:
 
 2. **Tiered convergence gate (ADR-0110):** Validates 2D IRT convergence and falls back to 1D when MCMC fails. Necessary but orthogonal to the axis-ordering problem.
 
-3. **W-NOMINATE cross-validation gate (ADR-0123):** Correlates canonical IRT dimension with W-NOMINATE Dim 1 and auto-swaps when a different dimension correlates better by > 0.10.
+3. **W-NOMINATE cross-validation gate (ADR-0123, removed):** Correlated canonical IRT dimension with W-NOMINATE Dim 1 and auto-swapped when a different dimension correlated better by > 0.10.
 
-The W-NOMINATE gate is the most effective — it catches all 6 misrouted sessions. But it has a structural flaw: **IRT defers to W-NOMINATE for dimension identification, making the Bayesian pipeline dependent on a frequentist method for a fundamental structural decision.** If W-NOMINATE itself fails in a future biennium (e.g., a competitive third party, or a session where both dimensions explain similar variance), the gate becomes a liability.
+The W-NOMINATE gate was removed entirely after discovering that **W-NOMINATE has the same variance-ordering vulnerability as PCA** (ADR-0127). W-NOMINATE initializes via eigendecomposition of the double-centered agreement score matrix — mathematically equivalent to PCA/classical MDS. In the 79th Senate, W-NOMINATE Dim 1 correlates r=0.989 with the horseshoe-distorted 1D IRT. Both methods find the factional axis because both are variance-ordered. The high correlation is agreement on the wrong answer, not validation.
 
-More fundamentally, each gate is a heuristic threshold. The party-d threshold of 1.5 was chosen because it works for the observed data. The W-NOMINATE delta of 0.10 was chosen because it catches the 6 known failures. These thresholds encode the specific structure of 2001-2026 Kansas politics. They have no theoretical basis that guarantees generalization.
+The gate's recommendations were actively harmful for the problematic sessions: it would have swapped TO the variance-dominated factional axis, not away from it. Being unsupervised is the *cause* of the problem, not the solution — unsupervised methods have no knowledge of party structure, so they cannot distinguish between "intra-party factionalism" and "ideology" when both generate similar amounts of variance.
 
-### The Circular Dependency
+### Why Automated Gates Reached Their Limits
 
-The deepest problem is the circular dependency identified in the original instability analysis (R3): the pipeline validates its own outputs against its own inputs. Tier 2 originally checked PCA PC1 correlation — but when PC1 is wrong, the check rejects correct answers and accepts wrong ones. The W-NOMINATE gate breaks this specific circle by using an external reference, but it creates a new dependency.
+Each gate is a heuristic threshold encoding the specific structure of 2001-2026 Kansas politics. The party-d threshold of 1.5 was chosen because it works for observed data. These thresholds have no theoretical basis that guarantees generalization. The solution is human judgment for the hard cases, not more heuristics.
 
 ---
 

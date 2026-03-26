@@ -95,7 +95,8 @@ What are the trade-offs?
 | [0112](0112-2d-irt-supermajority-tuning.md) | 2D IRT tuning for supermajority chambers (adaptive N_TUNE, beta init, contested-only) |
 | [0117](0117-hierarchical-2d-irt.md) | Hierarchical 2D IRT with PLT identification and party pooling (Phase 07b) |
 | [0118](0118-party-separation-quality-gates.md) | Party separation quality gates across pipeline (axis instability fix) |
-| [0123](0123-wnominate-cross-validation-gate.md) | W-NOMINATE cross-validation gate (demoted to diagnostic; manual PCA overrides for dimension assignment) |
+| [0123](0123-wnominate-cross-validation-gate.md) | W-NOMINATE cross-validation gate (superseded by ADR-0127) |
+| [0127](0127-wnominate-shared-variance-ordering-vulnerability.md) | W-NOMINATE shares PCA's variance-ordering vulnerability; gate removed, manual overrides retained |
 
 ### Classical Analysis
 
@@ -318,6 +319,7 @@ What are the trade-offs?
 | [0124](0124-exploratory-graph-analysis.md) | Exploratory Graph Analysis (EGA) — network psychometrics dimensionality (Phase 02b) | Accepted | 2026-03-25 |
 | [0125](0125-tefi-residual-network-q3-integration.md) | TEFI, residual network, and Q3 per-pair integration (Phases 02, 08, 11) | Accepted | 2026-03-25 |
 | [0126](0126-ega-glasso-direct-covariance-and-fragmentation-guard.md) | EGA GLASSO direct covariance and fragmentation guard (fix K=196 in small chambers) | Accepted | 2026-03-25 |
+| [0127](0127-wnominate-shared-variance-ordering-vulnerability.md) | W-NOMINATE shares PCA's variance-ordering vulnerability; gate removed | Accepted | 2026-03-26 |
 
 ## Creating a New ADR
 

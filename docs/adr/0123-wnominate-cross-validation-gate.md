@@ -76,10 +76,12 @@ If W-NOMINATE scores are unavailable (Phase 16 skipped due to missing R), the ga
 - ADR-0118 — Party separation quality gates (party-d checks, necessary but not sufficient)
 - `docs/84th-legislature-common-space-analysis.md` — Full investigation with per-session cross-validation table
 
-## Superseded (2026-03-26)
+## Superseded (2026-03-26) — ADR-0127
 
-The W-NOMINATE gate is demoted from auto-routing to diagnostic-only. The gate still computes all correlations and records them in the routing manifest, but it no longer triggers automatic dimension swaps. Instead, a manual PCA override file (`analysis/pca_overrides.yaml`) provides stable, auditable dimension assignments for the 8 problematic sessions.
+The W-NOMINATE gate has been **removed entirely** from canonical routing (not just demoted). The foundational premise — that W-NOMINATE is an independent dimension-identification oracle immune to the axis-swap problem — is false.
 
-**Rationale:** The gate makes the Bayesian IRT pipeline dependent on a frequentist method for a fundamental structural decision. The automated swap works for the observed data but has no theoretical guarantee of generalization to future bienniums. Manual overrides, updated biennially, are more durable.
+W-NOMINATE initializes via eigendecomposition of the double-centered agreement score matrix, which is mathematically equivalent to PCA/classical MDS. It has the same variance-ordering property: in supermajority chambers, Dim 1 captures whichever axis has the most variance, which is intra-party factionalism rather than the party divide. In the 79th Senate, W-NOMINATE Dim 1 correlates r=0.989 with the horseshoe-distorted 1D IRT — both methods found the same wrong axis.
 
-See `docs/pca-rotation-and-human-intervention.md` for the full analysis of rotation methods and the case for human intervention.
+The gate's recommendations were actively harmful for 6/28 sessions: it would have swapped TO the variance-dominated factional axis, not away from it.
+
+**Replacement:** Manual PCA overrides (`analysis/pca_overrides.yaml`) for 8 problematic sessions. See ADR-0127 for the full finding and `docs/pca-rotation-and-human-intervention.md` for the rotation evaluation.
