@@ -36,7 +36,7 @@ just scrape 2025 --auto-load                 # → scrape + load CSVs into Postg
 just extract report.html --section 15        # → tallgrass-extract (bespoke report extraction)
 ```
 
-Analysis recipes (all pass `*args` through): `just eda`, `just pca`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just hierarchical`, `just hierarchical-2d`, `just ppc`, `just clustering`, `just lca`, `just network`, `just bipartite`, `just indices`, `just betabinom`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just common-space`, `just wnominate`, `just text-analysis`, `just tbip`, `just issue-irt`, `just model-legislation`. Each maps to `uv run python analysis/NN_phase/phase.py`.
+Analysis recipes (all pass `*args` through): `just eda`, `just pca`, `just ega`, `just mca`, `just umap`, `just irt`, `just irt-2d`, `just hierarchical`, `just hierarchical-2d`, `just ppc`, `just clustering`, `just lca`, `just network`, `just bipartite`, `just indices`, `just betabinom`, `just synthesis`, `just profiles`, `just tsa`, `just cross-session`, `just external-validation`, `just dime`, `just dynamic-irt`, `just common-space`, `just wnominate`, `just text-analysis`, `just tbip`, `just issue-irt`, `just model-legislation`. Each maps to `uv run python analysis/NN_phase/phase.py`.
 
 Database recipes: `just db-up`, `just db-down`, `just db-migrate`, `just db-load`, `just db-load-all`, `just db-admin`, `just db-shell`, `just django <cmd>`. See `.claude/rules/database.md`.
 

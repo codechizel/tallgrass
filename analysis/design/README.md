@@ -11,7 +11,8 @@ Read these sequentially. Each phase inherits data from the previous one, so assu
 | Phase | Document | Key Downstream Effects |
 |-------|----------|----------------------|
 | 01. EDA | [eda.md](eda.md) | Binary encoding, filtering thresholds, chamber separation |
-| 02. PCA | [pca.md](pca.md) | Imputation method, scaling, PC1 sign convention, multidimensional interpretation (ADR-0115) |
+| 02. PCA | [pca.md](pca.md) | Imputation method, scaling, PC1 sign convention, multidimensional interpretation (ADR-0115), TEFI (ADR-0125) |
+| 02b. EGA | [ega.md](ega.md) | Tetrachoric correlations, GLASSO network, community detection, bootEGA stability, TEFI, UVA (ADR-0124) |
 | 03. MCA | [mca.md](mca.md) | Categorical encoding (Yea/Nay/Absent), Greenacre correction, prince library, horseshoe detection, PCA validation |
 | 04. UMAP | [umap.md](umap.md) | Cosine metric, n_neighbors default, Procrustes sensitivity, Spearman validation |
 | 05. IRT | [irt.md](irt.md) | Priors, anchor selection, missing data handling |

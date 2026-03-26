@@ -106,6 +106,14 @@
 
 **Why:** Kappa already captures the co-voting relationship between legislators in a more statistically principled way (chance-corrected). A bipartite projection to a one-mode legislator network would approximate what Kappa already provides directly. The high-discrimination subnetwork (above) addresses the flag about bill-level signal.
 
+### Residual network: observed Kappa − IRT-predicted Kappa (ADR-0125)
+
+**Decision:** After the main network analysis, compute predicted pairwise agreement from IRT ideal points (`P(agree) ≈ logistic(xi_i * xi_j)`), subtract from observed Kappa, build a network on residual edges (|residual| > 0.15), and run Leiden community detection.
+
+**Why:** The Kappa agreement network conflates ideological agreement (captured by IRT) with non-ideological co-voting (geographic caucuses, committee effects, personal alliances). The residual network isolates the latter by removing what ideology predicts. Green edges (positive residual) = more agreement than ideology predicts; red edges (negative residual) = less agreement than expected.
+
+**Impact:** Adds `residual_network_{chamber}.parquet` (top 20 residual edges) and `residual_network_{chamber}.png` to Phase 11 output. Three new report sections: residual network figure, top residual edges table, and interpretation text. Communities in the residual network suggest missing dimensions or non-ideological voting blocs.
+
 ## Downstream Implications
 
 ### For Prediction (Phase 7)

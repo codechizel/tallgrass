@@ -7,9 +7,9 @@ paths:
 
 ## Two Pipelines
 
-**Single-biennium** (`just pipeline 2025-26`): phases 01-25 + 07b in order. Phases 06, 07b, 08, 16-23 gracefully skip when prerequisites are missing (no R, no bill texts, biennium out of range for SM/DIME).
+**Single-biennium** (`just pipeline 2025-26`): phases 01-25 + 02b + 07b in order. Phases 02b, 06, 07b, 08, 16-23 gracefully skip when prerequisites are missing (no R, no bill texts, biennium out of range for SM/DIME).
 
-EDA → PCA → MCA → Bill Text → IRT → 2D IRT → Hierarchical IRT → Hierarchical 2D IRT → PPC → UMAP → Clustering → LCA → Network → Bipartite → Indices → Beta-Binomial → Prediction → W-NOMINATE → External Validation → DIME → TSA → TBIP → Issue IRT → Model Legislation → Synthesis → Profiles
+EDA → PCA → EGA → MCA → Bill Text → IRT → 2D IRT → Hierarchical IRT → Hierarchical 2D IRT → PPC → UMAP → Clustering → LCA → Network → Bipartite → Indices → Beta-Binomial → Prediction → W-NOMINATE → External Validation → DIME → TSA → TBIP → Issue IRT → Model Legislation → Synthesis → Profiles
 
 **Cross-biennium** (`just cross-pipeline`): phases 26-30. Requires data from multiple bienniums.
 
@@ -55,7 +55,8 @@ Each phase produces a self-contained HTML report with SPSS/APA-style tables and 
 Each phase has a design doc in `analysis/design/` — **read before interpreting results or adding a new phase:**
 
 - `eda.md` — Binary encoding, filtering thresholds, agreement metrics, literature diagnostics (ADR-0026)
-- `pca.md` — Imputation, standardization, sign convention, holdout design
+- `pca.md` — Imputation, standardization, sign convention, holdout design, TEFI dimensionality metric
+- `ega.md` — Tetrachoric correlations, GLASSO network, community detection, bootEGA stability, TEFI, UVA redundancy (ADR-0124)
 - `mca.md` — Categorical encoding (Yea/Nay/Absent), prince library, Greenacre correction, horseshoe detection, PCA validation
 - `irt.md` — Priors, MCMC settings, PCA-informed chain initialization, convergence diagnostics (R-hat, bulk/tail-ESS, E-BFMI)
 - `clustering.md` — Three methods for robustness, k=2 finding
@@ -67,7 +68,7 @@ Each phase has a design doc in `analysis/design/` — **read before interpreting
 - `external_validation_dime.md` — DIME/CFscore matching, min-givers filter, incumbent-only, cycle-to-biennium mapping
 - `tsa.md` — Rolling PCA drift, PELT changepoint detection, weekly Rice aggregation, CROPS penalty selection + Bai-Perron CIs (R enrichment). Deep dive: `docs/tsa-deep-dive.md`
 - `dynamic_irt.md` — State-space IRT, random walk evolution, polarization decomposition, bridge coverage, post-hoc sign correction (ADR-0068). Deep dive: `docs/dynamic-ideal-points-deep-dive.md`
-- `ppc.md` — PPC + LOO-CV model comparison, manual log-likelihood, Q3 local dependence, graceful degradation (ADR-0063)
+- `ppc.md` — PPC + LOO-CV model comparison, manual log-likelihood, Q3 local dependence + per-pair heatmap (ADR-0063, ADR-0125)
 - `bipartite.md` — BiCM backbone extraction, bill-side metrics, Newman projection, Leiden bill communities, Phase 6 comparison. Deep dive: `docs/bipartite-network-deep-dive.md`
 - `wnominate.md` — Field-standard comparison (W-NOMINATE, Optimal Classification), R subprocess, validation-only design. Deep dive: `docs/w-nominate-deep-dive.md`
 - `bill_text.md` — BERTopic topic modeling (FastEmbed + HDBSCAN + c-TF-IDF), CAP classification (Claude API, optional), bill similarity, caucus-splitting scores. Deep dive: `docs/bill-text-nlp-deep-dive.md`

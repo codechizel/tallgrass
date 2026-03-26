@@ -33,6 +33,14 @@
 
 Yen's Q3 correlates item residuals after conditioning on ability. |Q3| > 0.2 indicates local dependence not explained by the latent trait. Key use: if 1D shows Q3 violations that 2D resolves, the second dimension is empirically justified.
 
+### Q3 per-pair heatmap and top violations (ADR-0125)
+
+**Decision:** In addition to aggregate Q3 statistics, Phase 08 now generates per-bill-pair visualizations: a |Q3| heatmap (YlOrRd colormap) and a table of the top 20 violation pairs.
+
+**Why:** Aggregate Q3 (violation count, mean |Q3|) tells you *how much* local dependence exists but not *where*. The heatmap makes the dependence structure visible — clusters of high Q3 suggest amendment cascades, procedural vote sequences, or missing dimensions. The top violations table identifies specific bill pairs for investigation.
+
+**Impact:** Adds `q3_heatmap_{model}_{chamber}.png` and `q3_top_pairs_{model}_{chamber}.parquet` to Phase 08 output. Two new report sections appear after the Q3 summary table. Skips heatmap for matrices > 300 items (too large for useful visualization).
+
 ### LOO-CV via PSIS
 
 ArviZ `loo()` + `compare()`. PSIS-LOO estimates ELPD without refitting. Pareto k diagnostics identify observations where importance sampling is unreliable (k > 0.7). Stacking weights provide multi-model averaging.

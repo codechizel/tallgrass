@@ -126,7 +126,19 @@
 
 **Edge cases:** `n_significant = 1` → all new sections no-op. No Democrats → NaN fill in party profile. Missing PC columns → guard clauses return early. KanFocus data (no bill titles) → heatmap uses bill_number only.
 
+### TEFI dimensionality metric (ADR-0125)
+
+**Decision:** After PCA computation, compute the Total Entropy Fit Index (TEFI) for K=1..5 using PCA loading-based bill assignments. Each bill is assigned to its highest-loading PC among the first K components.
+
+**Why:** TEFI (Golino et al., 2021) uses Von Neumann entropy to compare dimensional structures. Unlike scree plots (subjective) and parallel analysis (threshold-dependent), TEFI provides a single number: lower = better fit. Critical property: TEFI properly penalizes over-extraction — if K=3 is specified but only 2 dimensions exist, TEFI increases.
+
+**Impact:** Advisory metric only. Saved to `data/tefi_pca_{chamber}.json`, plotted as a curve, and shown in the PCA report between dimensionality diagnostics and the scree plot. Does not change PCA fitting or downstream phases. Gracefully skips if the EGA library is unavailable.
+
 ## Downstream Implications
+
+### For EGA (Phase 02b)
+- **PCA loadings are compared to EGA community assignments.** Phase 02b loads PCA loadings to validate whether EGA's network-based communities align with PCA's variance-based components. Agreement strengthens confidence in both methods.
+- **TEFI on PCA assignments provides a baseline** for comparison with TEFI on EGA assignments (which use tetrachoric correlations rather than Pearson).
 
 ### For IRT (Phase 3)
 - **PCA scores are used to select IRT anchors.** IRT picks the most-conservative (highest PC1) and most-liberal (lowest PC1) legislators as anchors, constrained to xi=+1 and xi=-1 respectively. If PCA scores are wrong, the IRT model will be anchored to the wrong legislators.
