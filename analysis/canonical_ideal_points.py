@@ -428,18 +428,50 @@ def route_canonical_ideal_points(
         msg = f"No ideal points available for {chamber}"
         raise FileNotFoundError(msg)
 
-    # Detect horseshoe
+    # ── Layer 1: Manual PCA override (highest priority) ──────────────────
+    from analysis.init_strategy import load_pca_override
+
+    override_pc = load_pca_override(session, chamber)
+    if override_pc == "PC2":
+        # Try H2D Dim 2 first, then flat 2D Dim 2
+        dim2_ip: pl.DataFrame | None = None
+        dim2_label = ""
+        if h2d_dir is not None:
+            dim2_ip = load_dim2_ideal_points(h2d_dir, chamber, "ideal_points_h2d_")
+            dim2_label = "hierarchical_2d_dim2"
+        if dim2_ip is None:
+            dim2_ip = load_dim2_ideal_points(irt_2d_dir, chamber, "ideal_points_2d_")
+            dim2_label = "2d_dim2"
+        if dim2_ip is not None:
+            dim2_d = _compute_party_d(dim2_ip)
+            print(
+                f"  → PCA override: using {dim2_label} for {chamber} "
+                f"(party d={dim2_d:.2f}, from pca_overrides.yaml)"
+            )
+            metadata["reason"] = "pca_override"
+            metadata["pca_override"] = {
+                "override_pc": override_pc,
+                "source": dim2_label,
+                "party_d": dim2_d,
+            }
+            return (
+                dim2_ip.with_columns(pl.lit(dim2_label).alias("source")),
+                dim2_label,
+                metadata,
+            )
+        print(f"  PCA override requested PC2 but no Dim 2 data available for {chamber}")
+
+    # ── Layer 2: Horseshoe detection ─────────────────────────────────────
     horseshoe = detect_horseshoe_from_ideal_points(ip_1d)
     metadata["horseshoe"] = horseshoe
 
-    # ── Select initial canonical source via existing routing logic ──────────
     ip: pl.DataFrame
     source: str
 
     if horseshoe["detected"]:
         print(f"  Horseshoe DETECTED in {chamber}: {horseshoe['reason']}")
 
-        # Try Hierarchical 2D first (preferred: combines party pooling + 2D structure)
+        # ── Layer 3: Tiered convergence — try H2D, then flat 2D, then 1D ──
         ip_h2d: pl.DataFrame | None = None
         if h2d_dir is not None:
             ip_h2d = load_h2d_dim1_ideal_points(h2d_dir, chamber)
@@ -456,7 +488,7 @@ def route_canonical_ideal_points(
                     tier_label = (
                         "converged" if h2d_tier["tier"] == 1 else "point estimates credible"
                     )
-                    print(f"  → Initial selection: Hierarchical 2D Dim 1 ({tier_label})")
+                    print(f"  → Hierarchical 2D Dim 1 ({tier_label})")
                     metadata["reason"] = f"horseshoe_detected: {horseshoe['reason']}"
                     ip, source = ip_h2d, "hierarchical_2d_dim1"
                 else:
@@ -476,7 +508,7 @@ def route_canonical_ideal_points(
 
             if tier_result["usable"]:
                 tier_label = "converged" if tier_result["tier"] == 1 else "point estimates credible"
-                print(f"  → Initial selection: 2D Dim 1 ({tier_label})")
+                print(f"  → 2D Dim 1 ({tier_label})")
                 metadata["reason"] = f"horseshoe_detected: {horseshoe['reason']}"
                 ip, source = ip_2d, "2d_dim1"
                 selected_2d = True
@@ -491,41 +523,6 @@ def route_canonical_ideal_points(
         print(f"  No horseshoe in {chamber} — using 1D IRT")
         metadata["reason"] = "no_horseshoe"
         ip, source = ip_1d, "1d_irt"
-
-    # ── PCA override: prefer Dim 2 when PC2 is the ideology axis ──────────
-    from analysis.init_strategy import load_pca_override
-
-    override_pc = load_pca_override(session, chamber)
-    if override_pc == "PC2" and source.endswith("_dim1"):
-        dim2_label = source.replace("dim1", "dim2")
-        dim2_ip: pl.DataFrame | None = None
-        if source == "hierarchical_2d_dim1" and h2d_dir is not None:
-            dim2_ip = load_dim2_ideal_points(h2d_dir, chamber, "ideal_points_h2d_")
-        elif source == "2d_dim1":
-            dim2_ip = load_dim2_ideal_points(irt_2d_dir, chamber, "ideal_points_2d_")
-        if dim2_ip is not None:
-            dim2_d = _compute_party_d(dim2_ip)
-            dim1_d = _compute_party_d(ip)
-            if dim2_d > dim1_d:
-                print(
-                    f"  → PCA override: {dim2_label} (party d={dim2_d:.2f} > "
-                    f"dim1 d={dim1_d:.2f})"
-                )
-                ip, source = dim2_ip, dim2_label
-                metadata["pca_override"] = {
-                    "override_pc": override_pc,
-                    "dim1_party_d": dim1_d,
-                    "dim2_party_d": dim2_d,
-                    "swapped_to": dim2_label,
-                }
-            else:
-                metadata["pca_override"] = {
-                    "override_pc": override_pc,
-                    "dim1_party_d": dim1_d,
-                    "dim2_party_d": dim2_d,
-                    "kept": source,
-                    "reason": "dim1 has better party separation despite PC2 override",
-                }
 
     # ── Add extra columns from 1D and finalize ────────────────────────────
     extra_cols = []
