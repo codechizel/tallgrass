@@ -1,12 +1,19 @@
 """
 Kansas Legislature — W-NOMINATE + Optimal Classification Validation
 
-Standalone validation phase comparing our Bayesian IRT ideal points to the
-field-standard W-NOMINATE (Poole & Rosenthal) and nonparametric Optimal
-Classification (Poole 2000). Runs R via subprocess — matching Phase 16's
-emIRT pattern.
+Standalone publication validation comparing our Bayesian IRT ideal points to
+the field-standard W-NOMINATE (Poole & Rosenthal) and nonparametric Optimal
+Classification (Poole 2000). Runs R via subprocess.
 
-Does NOT feed into synthesis or profiles — purely a validation exercise.
+Does NOT feed into canonical routing, synthesis, or profiles — purely a
+validation exercise for publication credibility. Correlations are computed
+against raw Phase 05 (flat 1D IRT) scores, not canonical ideal points.
+
+**Caveat for overridden sessions (ADR-0127):** W-NOMINATE shares PCA's
+variance-ordering vulnerability. In supermajority chambers (e.g., 79th Senate),
+both W-NOMINATE and 1D IRT capture the intra-party factional axis rather than
+ideology. The reported r > 0.98 correlation reflects agreement on the
+dominant-variance axis, which is not necessarily the ideology axis.
 
 Usage:
   uv run python analysis/16_wnominate/wnominate.py --session 2025-26
