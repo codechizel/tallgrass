@@ -13,7 +13,7 @@ The answer is that no single strategy works for every session in the dataset. Ka
 - **Balanced chambers** where PC1 cleanly separates parties (the Kansas House in every session)
 - **Supermajority chambers** where PC1 captures intra-Republican factionalism instead of ideology (7 of 14 Senate sessions)
 - **Sessions with external benchmark data** (Shor-McCarty scores covering 2011–2020)
-- **Sessions with very small minority caucuses** (some Senate sessions with fewer than 10 Democrats)
+- **Sessions with very small minority caucuses** (some Senate sessions with as few as 7 Democrats)
 
 Each scenario calls for a different approach. Rather than hard-coding one strategy, Tallgrass implements seven and uses an automatic detection system to choose the best one for each chamber-session. Let's walk through all seven.
 

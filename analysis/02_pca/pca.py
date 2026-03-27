@@ -363,7 +363,7 @@ def build_scores_df(
     return df
 
 
-MIN_MINORITY_FOR_LDA = 10  # Min legislators in smaller party for LDA to be reliable
+MIN_MINORITY_FOR_LDA = 7  # Min legislators in smaller party for LDA to be reliable
 
 
 def compute_lda_projection(

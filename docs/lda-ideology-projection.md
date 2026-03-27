@@ -123,7 +123,9 @@ The pooled within-class covariance `S_w` combines contributions from both groups
 
 With 5 features and 10 Democrats, LDA has enough degrees of freedom to achieve near-perfect separation even when the true separation is modest. The 97-100% LOO accuracy is reassuring but not conclusive — LOO can overestimate accuracy when the separation is large relative to noise.
 
-**Mitigation: Reduce dimensionality.** Using only PC1+PC2 (p=2) drops the LDA improvement somewhat but dramatically improves stability. The tradeoff: PC3+ contains real party signal (especially in the 85th-90th), but estimating its contribution from 10 Democrats is unreliable. For sessions with fewer than 10 Democrats, restricting to PC1+PC2 is the safer choice.
+**Mitigation: Reduce dimensionality.** Using only PC1+PC2 (p=2) drops the LDA improvement somewhat but dramatically improves stability. The tradeoff: PC3+ contains real party signal (especially in the 85th-90th), but estimating its contribution from very few Democrats is unreliable.
+
+**Update (2026-03-27):** Empirical testing showed Ledoit-Wolf shrinkage produces stable, high-quality results even at n=7 Democrats. The 84th Senate (7D, 30R) — the "unsolvable" transitional session — achieved LDA d=5.06 vs best-PC d=1.89 (+167%), with LOO-CV accuracy of 94.6%. The 83rd Senate (9D) achieved d=6.35 vs PC2 d=4.53 (+40%), with 100% LOO-CV. The minimum threshold was lowered from 10 to 7, enabling LDA for all 14 Senate sessions in the Kansas dataset.
 
 ### Empirical assessment
 
@@ -208,7 +210,7 @@ The right architecture is to run both:
 
 - Use shrinkage LDA (`LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')`) to handle small Democrat groups
 - Fit on Republicans and Democrats only; project Independents after fitting
-- Use all available PCs (up to 5) for LDA, but fall back to PC1+PC2 when `n_D < 10`
+- Use all available PCs (up to 5) for LDA; minimum 7 legislators per party (validated empirically with shrinkage LDA)
 - Orient the LDA axis so Republicans are positive (same convention as PC1)
 - Store `ideology_score` and `establishment_score` in the PCA scores parquet
 

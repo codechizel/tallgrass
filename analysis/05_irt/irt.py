@@ -4166,15 +4166,19 @@ def main() -> None:
             # Print top/bottom ideal points
             print("\n  Top 5 (most conservative):")
             for row in ideal_points.head(5).iter_rows(named=True):
+                name = row["full_name"] or row["legislator_slug"]
+                party = row["party"] or "Unknown"
                 print(
-                    f"    {row['full_name']:30s}  {row['party']:12s}  "
+                    f"    {name:30s}  {party:12s}  "
                     f"xi={row['xi_mean']:+.3f}  [{row['xi_hdi_2.5']:+.3f}, "
                     f"{row['xi_hdi_97.5']:+.3f}]"
                 )
             print("  Bottom 5 (most liberal):")
             for row in ideal_points.tail(5).iter_rows(named=True):
+                name = row["full_name"] or row["legislator_slug"]
+                party = row["party"] or "Unknown"
                 print(
-                    f"    {row['full_name']:30s}  {row['party']:12s}  "
+                    f"    {name:30s}  {party:12s}  "
                     f"xi={row['xi_mean']:+.3f}  [{row['xi_hdi_2.5']:+.3f}, "
                     f"{row['xi_hdi_97.5']:+.3f}]"
                 )

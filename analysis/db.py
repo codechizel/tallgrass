@@ -34,23 +34,40 @@ def get_connection_uri() -> str:
     return os.environ.get("DATABASE_URL", _DEFAULT_DATABASE_URL)
 
 
+_connect_failed = False
+
+
 @lru_cache(maxsize=1)
 def _cached_connection():
     """Return a cached psycopg connection (one per process)."""
     import psycopg
 
-    return psycopg.connect(get_connection_uri(), autocommit=True)
+    return psycopg.connect(get_connection_uri(), autocommit=True, connect_timeout=5)
 
 
 def get_connection():
     """Return a psycopg connection, cached per process.
 
     Reconnects automatically if the cached connection is closed.
+    Short-circuits after the first connection failure to avoid repeated
+    5-second timeouts when PostgreSQL is unreachable.
     """
-    conn = _cached_connection()
+    global _connect_failed  # noqa: PLW0603
+    if _connect_failed:
+        msg = "PostgreSQL connection previously failed; skipping retry"
+        raise ConnectionError(msg)
+    try:
+        conn = _cached_connection()
+    except Exception:
+        _connect_failed = True
+        raise
     if conn.closed:
         _cached_connection.cache_clear()
-        conn = _cached_connection()
+        try:
+            conn = _cached_connection()
+        except Exception:
+            _connect_failed = True
+            raise
     return conn
 
 

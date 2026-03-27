@@ -71,7 +71,7 @@
 
 **Why:** No single PC reliably captures ideology across all sessions. LDA finds the optimal weighted combination automatically. Mean Cohen's d improves from ~5 (best single PC) to ~9.4 (LDA) across all 28 chamber-sessions. The "unsolvable" 84th Senate improves from d=1.89 to d=5.03.
 
-**Guard:** Skipped when either party has fewer than 10 members (LDA unreliable with tiny groups).
+**Guard:** Skipped when either party has fewer than 7 members. Ledoit-Wolf shrinkage stabilizes the within-class covariance estimate; empirically validated down to n=7 (84th Senate: LOO-CV 94.6%, d improved 1.89→5.06).
 
 **Impact:** Replaces `pca_overrides.yaml` (deprecated), `detect_ideology_pc()` (superseded), and canonical routing Layer 1 (removed). Downstream IRT initialization uses `ideology_score` when available, with full backward compatibility for old results without the column.
 

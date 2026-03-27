@@ -39,7 +39,7 @@ Deprecate `pca_overrides.yaml` — no longer read by the active pipeline, retain
 
 Classical LDA requires inverting the within-class covariance matrix `S_w`. With 5 PCA features and ~10 Democrats, `S_w` is poorly conditioned. Ledoit-Wolf shrinkage (Friedman 1989, Ledoit & Wolf 2004) pulls `S_w` toward the identity: `S_shrunk = alpha * I + (1-alpha) * S_sample`, where `alpha` is determined analytically. scikit-learn implements this as `LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')`.
 
-Guard: LDA is skipped entirely when either party has fewer than 10 members.
+Guard: LDA is skipped entirely when either party has fewer than 7 members. Original threshold was 10, lowered after empirical validation showed Ledoit-Wolf shrinkage produces stable results at n=7 (84th Senate: 7 Democrats, LOO-CV accuracy 94.6%, Cohen's d improved from 1.89 to 5.06). At n=9 (83rd Senate), LOO-CV accuracy is 100%. The shrinkage estimator pulls the within-class covariance toward spherical, compensating for the small sample.
 
 ### Why not replace PCA entirely
 
@@ -62,7 +62,7 @@ PCA remains the unsupervised discovery step. LDA is a party-oriented post-proces
 ### Limitations
 
 - Circularity: LDA defines party as the primary organizing dimension by construction. It cannot discover that factionalism exceeds partisanship.
-- Small-sample instability: with ~10 Democrats, the LDA direction has non-trivial variance. Shrinkage mitigates but does not eliminate this.
+- Small-sample instability: with ~7-10 Democrats, the LDA direction has non-trivial variance. Shrinkage mitigates but does not eliminate this. Empirically validated down to n=7 (84th Senate, LOO-CV 94.6%).
 - Party is not ideology: the score measures the direction that best separates party labels, not "ideology" per se.
 
 ### References
