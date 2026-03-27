@@ -19,7 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.pca import (
     ExtremePC2Legislator,
+    MIN_MINORITY_FOR_LDA,
     build_scores_df,
+    compute_lda_projection,
     compute_reconstruction_error,
     detect_extreme_pc2,
     filter_vote_matrix_for_sensitivity,
@@ -608,3 +610,111 @@ class TestComputeReconstructionError:
         df = compute_reconstruction_error(X, scores, pca, scaler, slugs)
         # All RMSE should be ~0
         assert df["reconstruction_rmse"].max() < 1e-10
+
+
+# -- LDA Ideology Projection --
+
+
+def _make_lda_fixtures(n_r: int = 20, n_d: int = 15, n_ind: int = 0, seed: int = 42):
+    """Build synthetic PCA scores and legislator DataFrame for LDA tests."""
+    rng = np.random.default_rng(seed)
+    n = n_r + n_d + n_ind
+    n_comp = 5
+
+    # R cluster at [+3, 0, ...], D cluster at [-3, 0, ...], noise on all dims
+    scores = rng.normal(0, 1, (n, n_comp))
+    scores[:n_r, 0] += 3.0  # Republicans right on PC1
+    scores[n_r : n_r + n_d, 0] -= 3.0  # Democrats left on PC1
+
+    slugs = [f"r{i}" for i in range(n_r)] + [f"d{i}" for i in range(n_d)]
+    parties = ["Republican"] * n_r + ["Democrat"] * n_d
+    if n_ind > 0:
+        slugs += [f"i{i}" for i in range(n_ind)]
+        parties += ["Independent"] * n_ind
+
+    legislators = pl.DataFrame(
+        {
+            "legislator_slug": slugs,
+            "full_name": slugs,
+            "party": parties,
+            "district": ["1"] * n,
+            "chamber": ["Senate"] * n,
+        }
+    )
+    pc_party_d = {"PC1": 6.0, "PC2": 0.5}
+    return scores, slugs, legislators, n_comp, pc_party_d
+
+
+class TestLdaProjection:
+    """Fisher's LDA ideology projection on PCA scores.
+
+    Run: uv run pytest tests/test_pca.py::TestLdaProjection -v
+    """
+
+    def test_basic_two_parties(self) -> None:
+        """LDA on clean two-party data returns a result dict."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures()
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        assert "ideology_scores" in result
+        assert "establishment_scores" in result
+        assert len(result["ideology_scores"]) == len(slugs)
+
+    def test_orientation_republicans_positive(self) -> None:
+        """ideology_score has Republican mean > Democrat mean."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures()
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        ideo = np.array(result["ideology_scores"])
+        parties = legislators["party"].to_list()
+        r_mean = ideo[[i for i, p in enumerate(parties) if p == "Republican"]].mean()
+        d_mean = ideo[[i for i, p in enumerate(parties) if p == "Democrat"]].mean()
+        assert r_mean > d_mean
+
+    def test_excludes_independents_from_fit(self) -> None:
+        """Independents are excluded from LDA fitting but still get projected."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures(n_ind=3)
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        # All legislators (including Independents) have scores
+        assert len(result["ideology_scores"]) == 20 + 15 + 3
+
+    def test_returns_none_small_minority(self) -> None:
+        """Returns None when minority party has fewer than MIN_MINORITY_FOR_LDA."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures(
+            n_r=25, n_d=MIN_MINORITY_FOR_LDA - 1
+        )
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is None
+
+    def test_cohens_d_exceeds_best_pc(self) -> None:
+        """LDA d >= best single PC d (by construction for well-separated data)."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures()
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        assert result["lda_cohens_d"] >= result["best_pc_d"] - 0.01  # small tolerance
+
+    def test_establishment_score_low_party_correlation(self) -> None:
+        """Establishment score has low correlation with ideology score."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures()
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        ideo = np.array(result["ideology_scores"])
+        estab = np.array(result["establishment_scores"])
+        r = np.corrcoef(ideo, estab)[0, 1]
+        assert abs(r) < 0.3  # approximately orthogonal
+
+    def test_weights_sum_to_100(self) -> None:
+        """LDA weight dict maps PC names to percentages summing to ~100%."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures()
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        total = sum(result["lda_weights"].values())
+        assert abs(total - 100.0) < 0.1
+
+    def test_loocv_accuracy_high(self) -> None:
+        """LOO accuracy should be high for well-separated data."""
+        scores, slugs, legislators, n_comp, pc_party_d = _make_lda_fixtures()
+        result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+        assert result is not None
+        assert result["loocv_accuracy"] > 0.90

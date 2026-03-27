@@ -32,7 +32,9 @@ import numpy as np
 import polars as pl
 from matplotlib.patches import Patch
 from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import LeaveOneOut, cross_val_score
 from sklearn.preprocessing import StandardScaler
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -361,6 +363,118 @@ def build_scores_df(
     return df
 
 
+MIN_MINORITY_FOR_LDA = 10  # Min legislators in smaller party for LDA to be reliable
+
+
+def compute_lda_projection(
+    scores: np.ndarray,
+    slugs: list[str],
+    legislators: pl.DataFrame,
+    n_components: int,
+    pc_party_d: dict[str, float],
+) -> dict | None:
+    """Compute Fisher's LDA ideology projection on PCA scores.
+
+    Finds the linear combination of PC1..PCn that best separates parties.
+    Returns ideology_score (party axis) and establishment_score (orthogonal
+    complement — intra-party factional axis).
+
+    Uses shrinkage LDA (Ledoit-Wolf) for stability with small Democrat groups.
+    Returns None if either party has fewer than MIN_MINORITY_FOR_LDA members.
+    """
+    slug_party = dict(legislators.select("legislator_slug", "party").iter_rows())
+    parties = [slug_party.get(s, "Unknown") for s in slugs]
+
+    # Build masks for R/D only (Independents excluded from fit, projected after)
+    r_mask = np.array([p == "Republican" for p in parties])
+    d_mask = np.array([p == "Democrat" for p in parties])
+    n_r, n_d = int(r_mask.sum()), int(d_mask.sum())
+
+    if n_d < MIN_MINORITY_FOR_LDA or n_r < MIN_MINORITY_FOR_LDA:
+        print(f"\n  LDA skipped: minority party too small (n_R={n_r}, n_D={n_d}, min={MIN_MINORITY_FOR_LDA})")
+        return None
+
+    # Fit shrinkage LDA on R/D legislators only
+    fit_mask = r_mask | d_mask
+    X_fit = scores[fit_mask, :n_components]
+    y_fit = r_mask[fit_mask].astype(int)  # R=1, D=0
+
+    lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
+    lda.fit(X_fit, y_fit)
+
+    # Project ALL legislators using LDA coefficients directly
+    # (lsqr solver doesn't support .transform(), so we project manually)
+    X_all = scores[:, :n_components]
+    w = lda.coef_[0].copy()
+    w /= np.linalg.norm(w)
+    ideology_raw = X_all @ w
+
+    # Orient: Republicans positive
+    r_mean = ideology_raw[r_mask].mean()
+    d_mean = ideology_raw[d_mask].mean()
+    if r_mean < d_mean:
+        ideology_raw *= -1
+        w *= -1
+    projection = (X_all @ w).reshape(-1, 1) * w.reshape(1, -1)
+    residual = X_all - projection
+    if residual.shape[1] >= 2:
+        from sklearn.decomposition import PCA as _PCA
+
+        residual_pca = _PCA(n_components=1)
+        establishment_raw = residual_pca.fit_transform(residual).ravel()
+    else:
+        establishment_raw = residual.ravel()
+
+    # Cohen's d on ideology score
+    r_ideo = ideology_raw[r_mask]
+    d_ideo = ideology_raw[d_mask]
+    pooled_sd = np.sqrt((r_ideo.std() ** 2 + d_ideo.std() ** 2) / 2)
+    lda_d = float(abs(r_ideo.mean() - d_ideo.mean()) / pooled_sd) if pooled_sd > 0 else 0.0
+
+    # Best single PC d for comparison
+    best_pc_d = max(pc_party_d.values()) if pc_party_d else 0.0
+    best_pc = max(pc_party_d, key=pc_party_d.get) if pc_party_d else "PC1"
+
+    # LOO cross-validation accuracy
+    loo = LeaveOneOut()
+    cv_scores = cross_val_score(
+        LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"),
+        X_fit,
+        y_fit,
+        cv=loo,
+        scoring="accuracy",
+    )
+    loocv_accuracy = float(cv_scores.mean())
+
+    # LDA weight distribution (which PCs contribute to ideology)
+    raw_weights = np.abs(lda.coef_[0])
+    total_weight = raw_weights.sum()
+    lda_weights = {}
+    for i in range(n_components):
+        pct = float(raw_weights[i] / total_weight * 100) if total_weight > 0 else 0.0
+        lda_weights[f"PC{i + 1}"] = pct
+
+    improvement = ((lda_d / best_pc_d - 1) * 100) if best_pc_d > 0 else 0.0
+    print(f"\n  LDA ideology projection:")
+    print(f"    LDA d = {lda_d:.2f}  vs  best PC ({best_pc}) d = {best_pc_d:.2f}  → +{improvement:.0f}%")
+    print(f"    LOO accuracy: {loocv_accuracy:.1%}")
+    top_pcs = sorted(lda_weights.items(), key=lambda x: x[1], reverse=True)[:3]
+    weight_str = ", ".join(f"{pc}: {w:.0f}%" for pc, w in top_pcs)
+    print(f"    Top weights: {weight_str}")
+
+    return {
+        "ideology_scores": ideology_raw.tolist(),
+        "establishment_scores": establishment_raw.tolist(),
+        "lda_weights": lda_weights,
+        "lda_cohens_d": lda_d,
+        "best_pc_d": best_pc_d,
+        "best_pc": best_pc,
+        "loocv_accuracy": loocv_accuracy,
+        "n_r": n_r,
+        "n_d": n_d,
+    }
+
+
 def build_loadings_df(
     loadings: np.ndarray,
     vote_ids: list[str],
@@ -473,6 +587,14 @@ def run_pca_for_chamber(
     scores_df = build_scores_df(scores, slugs, n_comp, legislators)
     loadings_df = build_loadings_df(loadings, vote_ids, n_comp, rollcalls)
 
+    # Fisher's LDA ideology projection — finds optimal party-separating direction
+    lda_result = compute_lda_projection(scores, slugs, legislators, n_comp, pc_party_d)
+    if lda_result is not None:
+        scores_df = scores_df.with_columns(
+            pl.Series("ideology_score", lda_result["ideology_scores"]),
+            pl.Series("establishment_score", lda_result["establishment_scores"]),
+        )
+
     # Print top/bottom PC1 legislators
     sorted_scores = scores_df.sort("PC1", descending=True)
     print("\n  Top 5 PC1 (most conservative):")
@@ -501,6 +623,7 @@ def run_pca_for_chamber(
         "n_significant": n_significant,
         "reconstruction_error_df": recon_df,
         "pc_party_d": pc_party_d,
+        "lda_result": lda_result,
     }
 
 
@@ -722,6 +845,90 @@ def plot_ideological_map(
 
     fig.tight_layout()
     save_fig(fig, out_dir / f"ideological_map_{chamber.lower()}.png")
+
+
+def plot_lda_ideological_map(
+    scores_df: pl.DataFrame,
+    chamber: str,
+    out_dir: Path,
+) -> None:
+    """LDA ideology vs establishment scatter — party-separated ideological map.
+
+    X-axis: ideology score (direction that best separates parties).
+    Y-axis: establishment score (dominant non-partisan dimension, typically
+    captures intra-party factionalism like moderate vs. conservative R).
+    """
+    if "ideology_score" not in scores_df.columns:
+        return
+    if "establishment_score" not in scores_df.columns:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    for party, color in PARTY_COLORS.items():
+        subset = scores_df.filter(pl.col("party") == party)
+        if subset.height == 0:
+            continue
+        ax.scatter(
+            subset["ideology_score"].to_numpy(),
+            subset["establishment_score"].to_numpy(),
+            c=color,
+            s=60,
+            alpha=0.7,
+            edgecolors="black",
+            linewidth=0.5,
+            label=party,
+        )
+
+    # Label outliers: top 5 by |ideology| and top 5 by |establishment|
+    labeled: set[str] = set()
+    for col in ["ideology_score", "establishment_score"]:
+        abs_vals = scores_df[col].abs()
+        top_idx = abs_vals.arg_sort(descending=True).head(5).to_list()
+        for idx in top_idx:
+            row = scores_df.row(idx, named=True)
+            slug = row["legislator_slug"]
+            if slug in labeled:
+                continue
+            labeled.add(slug)
+            raw_name = row.get("full_name") or slug
+            name = raw_name.split(" - ")[0].strip()
+            last_name = name.split()[-1] if name else slug
+            ax.annotate(
+                last_name,
+                (row["ideology_score"], row["establishment_score"]),
+                fontsize=8,
+                fontweight="bold",
+                ha="left",
+                va="bottom",
+                xytext=(6, 6),
+                textcoords="offset points",
+                bbox={"boxstyle": "round,pad=0.2", "fc": "wheat", "alpha": 0.7},
+                arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 0.8},
+            )
+
+    ax.set_xlabel("← More Liberal          Ideology Score          More Conservative →", fontsize=12)
+    ax.set_ylabel("Establishment Score", fontsize=12)
+    ax.set_title(
+        f"Legislators in Ideology-Establishment Space ({chamber}). "
+        "Red = Republican, Blue = Democrat.",
+        fontsize=13,
+        fontweight="bold",
+    )
+    ax.axvline(x=0, color="gray", linestyle="--", alpha=0.3)
+    ax.axhline(y=0, color="gray", linestyle="--", alpha=0.3)
+    ax.legend(
+        handles=[
+            Patch(facecolor=PARTY_COLORS["Republican"], label="Republican"),
+            Patch(facecolor=PARTY_COLORS["Democrat"], label="Democrat"),
+        ],
+        loc="best",
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+    save_fig(fig, out_dir / f"lda_ideological_map_{chamber.lower()}.png")
 
 
 def plot_pc1_distribution(
@@ -1312,6 +1519,7 @@ def main() -> None:
         for label, result in results.items():
             plot_scree(result["pca"], label, ctx.plots_dir, result["parallel_thresholds"])
             plot_ideological_map(result["scores_df"], label, ctx.plots_dir)
+            plot_lda_ideological_map(result["scores_df"], label, ctx.plots_dir)
             plot_pc1_distribution(result["scores_df"], label, ctx.plots_dir)
             n_sig = result["n_significant"]
             if n_sig >= 2:

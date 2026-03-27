@@ -1,8 +1,11 @@
-# Manual PCA dimension overrides for sessions where automated detection is ambiguous.
+# DEPRECATED (ADR-0129): This file is no longer read by the active pipeline.
+# Fisher's LDA in Phase 02 now computes ideology_score automatically, subsuming
+# manual PC overrides. This file is only used as a fallback when running against
+# old PCA results that lack the ideology_score column.
 #
-# Each entry specifies which PC to use as the ideology axis for IRT initialization
-# and canonical routing. Sessions not listed here use automated detect_ideology_pc()
-# logic (point-biserial correlation with party).
+# Original purpose: manual PCA dimension overrides for sessions where automated
+# detection was ambiguous. Each entry specified which PC to use as the ideology
+# axis for IRT initialization and canonical routing.
 #
 # Key format: "{legislature_name}_{Chamber}" (e.g., "79th_Senate")
 # See docs/pca-rotation-and-human-intervention.md for the full rationale.

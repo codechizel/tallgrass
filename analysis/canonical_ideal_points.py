@@ -428,38 +428,11 @@ def route_canonical_ideal_points(
         msg = f"No ideal points available for {chamber}"
         raise FileNotFoundError(msg)
 
-    # ── Layer 1: Manual PCA override (highest priority) ──────────────────
-    from analysis.init_strategy import load_pca_override
-
-    override_pc = load_pca_override(session, chamber)
-    if override_pc == "PC2":
-        # Try H2D Dim 2 first, then flat 2D Dim 2
-        dim2_ip: pl.DataFrame | None = None
-        dim2_label = ""
-        if h2d_dir is not None:
-            dim2_ip = load_dim2_ideal_points(h2d_dir, chamber, "ideal_points_h2d_")
-            dim2_label = "hierarchical_2d_dim2"
-        if dim2_ip is None:
-            dim2_ip = load_dim2_ideal_points(irt_2d_dir, chamber, "ideal_points_2d_")
-            dim2_label = "2d_dim2"
-        if dim2_ip is not None:
-            dim2_d = _compute_party_d(dim2_ip)
-            print(
-                f"  → PCA override: using {dim2_label} for {chamber} "
-                f"(party d={dim2_d:.2f}, from pca_overrides.yaml)"
-            )
-            metadata["reason"] = "pca_override"
-            metadata["pca_override"] = {
-                "override_pc": override_pc,
-                "source": dim2_label,
-                "party_d": dim2_d,
-            }
-            return (
-                dim2_ip.with_columns(pl.lit(dim2_label).alias("source")),
-                dim2_label,
-                metadata,
-            )
-        print(f"  PCA override requested PC2 but no Dim 2 data available for {chamber}")
+    # Layer 1 (manual PCA override) removed — Fisher's LDA in Phase 02 now
+    # handles axis instability automatically via ideology_score. The LDA-informed
+    # IRT init produces 1D ideal points on the correct (party) axis, making manual
+    # overrides unnecessary. pca_overrides.yaml retained for historical reference.
+    # See ADR-0129.
 
     # ── Layer 2: Horseshoe detection ─────────────────────────────────────
     horseshoe = detect_horseshoe_from_ideal_points(ip_1d)

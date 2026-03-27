@@ -63,7 +63,19 @@
 
 **Impact:** All downstream consumers of PC1 scores (IRT anchor selection, visualizations, reports) can assume positive = conservative.
 
-**Known limitation — axis instability:** In 7 of 14 Kansas Senate sessions (78th-83rd, 88th), PC1 captures intra-Republican factional variation rather than the party divide. Party separation (Cohen's d) is near-zero on PC1 and large on PC2. The sign convention correctly orients PC1 (Republicans positive), but PC1 isn't measuring ideology in these sessions. This affects PCA-informed IRT initialization and downstream models. See `docs/pca-ideology-axis-instability.md` for the full analysis.
+**Known limitation — axis instability (RESOLVED):** In several Kansas Senate sessions, PC1 captures intra-Republican factional variation rather than the party divide. Resolved by Fisher's LDA ideology projection (ADR-0129): after PCA, LDA finds the optimal party-separating direction across all PCs, producing `ideology_score` and `establishment_score` columns. See `docs/lda-ideology-projection.md`.
+
+### LDA ideology projection (ADR-0129)
+
+**Decision:** After PCA, fit Fisher's LDA (shrinkage, Ledoit-Wolf) on PC1-PC5 scores using party as the grouping variable. Project all legislators onto the discriminant direction to get `ideology_score`. The orthogonal complement's first PC is `establishment_score`.
+
+**Why:** No single PC reliably captures ideology across all sessions. LDA finds the optimal weighted combination automatically. Mean Cohen's d improves from ~5 (best single PC) to ~9.4 (LDA) across all 28 chamber-sessions. The "unsolvable" 84th Senate improves from d=1.89 to d=5.03.
+
+**Guard:** Skipped when either party has fewer than 10 members (LDA unreliable with tiny groups).
+
+**Impact:** Replaces `pca_overrides.yaml` (deprecated), `detect_ideology_pc()` (superseded), and canonical routing Layer 1 (removed). Downstream IRT initialization uses `ideology_score` when available, with full backward compatibility for old results without the column.
+
+**Limitations:** LDA is supervised — it defines the party axis as primary by construction. It cannot discover when factionalism exceeds partisanship. PCA remains the unsupervised discovery step; LDA is a party-oriented post-processing step. See `docs/lda-ideology-projection.md` for the circularity analysis.
 
 ### Holdout validation: mask-and-reconstruct
 

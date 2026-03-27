@@ -583,3 +583,76 @@ class TestPcaOverride:
         # Source should say PC2 directly (not "swapped from PC1")
         assert "PC2" in source
         assert "swapped" not in source
+
+
+class TestResolveWithLdaScores:
+    """resolve_init_source uses ideology_score when available (ADR-0129).
+
+    Run: uv run pytest tests/test_init_strategy.py::TestResolveWithLdaScores -v
+    """
+
+    def test_pca_informed_uses_ideology_score(self) -> None:
+        """When ideology_score column present and pca_column='PC1', uses it."""
+        from analysis.init_strategy import resolve_init_source
+
+        pca = pl.DataFrame({
+            "legislator_slug": ["r1", "r2", "d1", "d2"],
+            "party": ["Republican", "Republican", "Democrat", "Democrat"],
+            "PC1": [0.5, 0.3, -0.2, -0.4],
+            "PC2": [2.0, 1.5, -1.5, -2.0],
+            "ideology_score": [3.0, 2.5, -2.5, -3.0],
+            "establishment_score": [0.1, -0.2, 0.3, -0.1],
+        })
+        vals, _, source = resolve_init_source(
+            strategy="pca-informed",
+            slugs=["r1", "r2", "d1", "d2"],
+            pca_scores=pca,
+            pca_column="PC1",
+            session="79th_2001-2002",
+            chamber="senate",
+        )
+        assert "ideology_score" in source
+        assert len(vals) == 4
+
+    def test_pca_informed_falls_back_without_ideology_score(self) -> None:
+        """When ideology_score column missing, falls back to override/detection."""
+        from analysis.init_strategy import resolve_init_source
+
+        pca = pl.DataFrame({
+            "legislator_slug": ["r1", "r2", "d1", "d2"],
+            "party": ["Republican", "Republican", "Democrat", "Democrat"],
+            "PC1": [0.5, 0.3, -0.2, -0.4],
+            "PC2": [2.0, 1.5, -1.5, -2.0],
+        })
+        # 79th Senate has a manual override to PC2 — should fire as fallback
+        vals, _, source = resolve_init_source(
+            strategy="pca-informed",
+            slugs=["r1", "r2", "d1", "d2"],
+            pca_scores=pca,
+            pca_column="PC1",
+            session="79th_2001-2002",
+            chamber="senate",
+        )
+        assert "PC2" in source  # fallback to override
+
+    def test_dim2_uses_establishment_score(self) -> None:
+        """When pca_column='PC2' and establishment_score present, uses it."""
+        from analysis.init_strategy import resolve_init_source
+
+        pca = pl.DataFrame({
+            "legislator_slug": ["r1", "r2", "d1", "d2"],
+            "party": ["Republican", "Republican", "Democrat", "Democrat"],
+            "PC1": [0.5, 0.3, -0.2, -0.4],
+            "PC2": [2.0, 1.5, -1.5, -2.0],
+            "ideology_score": [3.0, 2.5, -2.5, -3.0],
+            "establishment_score": [0.1, -0.2, 0.3, -0.1],
+        })
+        vals, _, source = resolve_init_source(
+            strategy="pca-informed",
+            slugs=["r1", "r2", "d1", "d2"],
+            pca_scores=pca,
+            pca_column="PC2",
+            session="91st_2025-2026",
+            chamber="senate",
+        )
+        assert "establishment_score" in source

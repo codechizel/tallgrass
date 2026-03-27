@@ -268,34 +268,42 @@ def resolve_init_source(
                 "pca-informed strategy requires PCA results (Phase 02). "
                 "Run `just pca` first or use --init-strategy irt-informed."
             )
-        # Auto-detect best PC for ideology when caller requests default PC1.
-        # When pca_column is explicitly set to something other than PC1 (e.g., "PC2"
-        # for 2D IRT Dim 2 init), respect the caller's choice.
+        # Resolve which column to use for ideology initialization.
+        # Priority: LDA ideology_score > manual override > auto-detection > PC1
         actual_column = pca_column
-        # 1. Check manual override first (pca_overrides.yaml)
-        override_pc = load_pca_override(session, chamber) if pca_column == "PC1" else None
-        if override_pc is not None and override_pc in pca_scores.columns:
-            actual_column = override_pc
-            print(
-                f"  PCA override: using {override_pc} for {session} {chamber} "
-                f"(from pca_overrides.yaml)"
-            )
-        # 2. Fall back to automated party-correlation detection
-        elif pca_column == "PC1" and "party" in pca_scores.columns:
-            best_pc, best_corr, all_corrs = detect_ideology_pc(pca_scores)
-            pc1_corr = all_corrs.get("PC1", 0.0)
-            if (
-                best_pc != "PC1"
-                and abs(best_corr) > PC_SWAP_MIN_PARTY_CORR
-                and abs(best_corr) > abs(pc1_corr)
-                and best_pc in pca_scores.columns
-            ):
-                actual_column = best_pc
+
+        # 1. LDA ideology score (Phase 02 Fisher's LDA projection — ADR-0129)
+        if pca_column == "PC1" and "ideology_score" in pca_scores.columns:
+            actual_column = "ideology_score"
+            print(f"  Using LDA ideology_score (Fisher's discriminant, ADR-0129)")
+        elif pca_column == "PC2" and "establishment_score" in pca_scores.columns:
+            actual_column = "establishment_score"
+            print(f"  Using LDA establishment_score (orthogonal complement)")
+        # 2. Fallback: manual override (pca_overrides.yaml) — for old results without LDA
+        elif pca_column == "PC1":
+            override_pc = load_pca_override(session, chamber)
+            if override_pc is not None and override_pc in pca_scores.columns:
+                actual_column = override_pc
                 print(
-                    f"  PC swap detected: {best_pc} has stronger party correlation "
-                    f"(r={best_corr:.3f}) than PC1 (r={pc1_corr:.3f}) — "
-                    f"using {best_pc} for ideology init"
+                    f"  PCA override: using {override_pc} for {session} {chamber} "
+                    f"(from pca_overrides.yaml)"
                 )
+            # 3. Fallback: automated party-correlation detection
+            elif "party" in pca_scores.columns:
+                best_pc, best_corr, all_corrs = detect_ideology_pc(pca_scores)
+                pc1_corr = all_corrs.get("PC1", 0.0)
+                if (
+                    best_pc != "PC1"
+                    and abs(best_corr) > PC_SWAP_MIN_PARTY_CORR
+                    and abs(best_corr) > abs(pc1_corr)
+                    and best_pc in pca_scores.columns
+                ):
+                    actual_column = best_pc
+                    print(
+                        f"  PC swap detected: {best_pc} has stronger party correlation "
+                        f"(r={best_corr:.3f}) than PC1 (r={pc1_corr:.3f}) — "
+                        f"using {best_pc} for ideology init"
+                    )
         score_map = {
             row["legislator_slug"]: row[actual_column] for row in pca_scores.iter_rows(named=True)
         }

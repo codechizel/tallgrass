@@ -75,6 +75,7 @@ What are the trade-offs?
 | [0043](0043-hierarchical-irt-bill-matching-and-adaptive-priors.md) | Hierarchical IRT bill-matching and adaptive priors |
 | [0044](0044-hierarchical-pca-informed-init.md) | PCA-informed initialization for hierarchical IRT |
 | [0128](0128-phase05-pca-init-delegation.md) | Phase 05 PCA init delegation (fix hardcoded PC1, 3 flipped sessions) |
+| [0129](0129-lda-ideology-projection.md) | Fisher's LDA ideology projection — automated axis instability resolution |
 | [0045](0045-4-chain-hierarchical-irt.md) | 4-chain hierarchical IRT with adapt_diag initialization |
 | [0046](0046-2d-irt-experimental.md) | 2D IRT as experimental extension |
 | [0047](0047-positive-beta-constraint-experiment.md) | Positive beta constraint experiment |
@@ -322,6 +323,7 @@ What are the trade-offs?
 | [0126](0126-ega-glasso-direct-covariance-and-fragmentation-guard.md) | EGA GLASSO direct covariance and fragmentation guard (fix K=196 in small chambers) | Accepted | 2026-03-25 |
 | [0127](0127-wnominate-shared-variance-ordering-vulnerability.md) | W-NOMINATE shares PCA's variance-ordering vulnerability; gate removed | Accepted | 2026-03-26 |
 | [0128](0128-phase05-pca-init-delegation.md) | Phase 05 PCA init delegation (fix hardcoded PC1, 3 flipped sessions) | Accepted | 2026-03-26 |
+| [0129](0129-lda-ideology-projection.md) | Fisher's LDA ideology projection — automated axis instability resolution | Accepted | 2026-03-26 |
 
 ## Creating a New ADR
 

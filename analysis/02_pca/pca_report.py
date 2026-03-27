@@ -66,6 +66,7 @@ def build_pca_report(
         _add_horseshoe_diagnostic(report, result, chamber)
         _add_component_party_profile(report, result, chamber, n_sig)
         _add_component_interpretation(report, result, chamber, n_sig)
+        _add_lda_sections(report, result, plots_dir, chamber)
         for pc in range(1, n_sig + 1):
             _add_top_loadings(report, result, chamber, pc=pc)
         _add_legislator_scores(report, result, chamber)
@@ -1118,5 +1119,146 @@ def _add_analysis_parameters(report: ReportBuilder, n_components: int) -> None:
             id="analysis-params",
             title="Analysis Parameters",
             html=html,
+        )
+    )
+
+
+# ── LDA Ideology Projection Sections ──────────────────────────────────────────
+
+
+def _add_lda_sections(
+    report: ReportBuilder,
+    result: dict,
+    plots_dir: Path,
+    chamber: str,
+) -> None:
+    """Add all LDA-related sections for one chamber. Skips if LDA was not computed."""
+    lda = result.get("lda_result")
+    if lda is None:
+        return
+
+    ch = chamber.lower()
+
+    # 1. Plain-language explanation
+    report.add(
+        TextSection(
+            id=f"lda-explanation-{ch}",
+            title=f"{chamber} — Ideology Score (LDA Projection)",
+            html=(
+                '<div style="background:#e8f5e9; border:1px solid #4caf50; '
+                'border-radius:6px; padding:14px 18px; margin:8px 0; line-height:1.6;">'
+                "<p><strong>What this is:</strong> Standard PCA finds the directions of "
+                "greatest overall variation in voting patterns. In a legislature dominated "
+                "by one party, the largest source of variation can be internal party "
+                "divisions (moderate vs. conservative Republicans) rather than the "
+                "left-right party divide.</p>"
+                "<p><strong>The ideology score</strong> uses party labels to find the "
+                "direction that best distinguishes Republicans from Democrats, then "
+                "measures each legislator's position along that axis. It combines "
+                "information from multiple PCA dimensions, weighted by how much each "
+                "one contributes to party separation.</p>"
+                "<p><strong>The establishment score</strong> captures the dominant "
+                "remaining pattern after removing the party axis &mdash; typically "
+                "intra-party factionalism (e.g., moderate vs. far-right Republicans).</p>"
+                "<p><em>Method: Fisher's Linear Discriminant Analysis with Ledoit-Wolf "
+                "shrinkage on PC1&ndash;PC5 scores. Independents excluded from fitting "
+                "but projected onto the resulting axes.</em></p>"
+                "</div>"
+            ),
+        )
+    )
+
+    # 2. LDA ideological map figure
+    fig_path = plots_dir / f"lda_ideological_map_{ch}.png"
+    if fig_path.exists():
+        report.add(
+            FigureSection.from_file(
+                id=f"lda-map-{ch}",
+                title=f"{chamber} Ideology vs. Establishment Map",
+                path=fig_path,
+                caption=(
+                    f"Legislators in ideology-establishment space ({chamber}). "
+                    "The horizontal axis separates parties (liberal left, conservative "
+                    "right). The vertical axis captures within-party factional variation. "
+                    "Red = Republican, Blue = Democrat."
+                ),
+                alt_text=(
+                    f"Scatter plot of {chamber} legislators with ideology score on "
+                    "x-axis and establishment score on y-axis, colored by party."
+                ),
+            )
+        )
+
+    # 3. LDA weight table
+    weights = lda.get("lda_weights", {})
+    pc_party_d = result.get("pc_party_d", {})
+    if weights:
+        rows = []
+        for pc_name, weight_pct in sorted(weights.items(), key=lambda x: -x[1]):
+            if weight_pct < 1.0:
+                continue
+            party_d = pc_party_d.get(pc_name, None)
+            d_str = f"{party_d:.2f}" if party_d is not None else "—"
+            rows.append({"Component": pc_name, "Weight (%)": round(weight_pct, 1), "Party d": d_str})
+
+        if rows:
+            df = pl.DataFrame(rows)
+            html = make_gt(
+                df,
+                title=f"LDA Weight Distribution — {chamber}",
+                subtitle=(
+                    "How much each PCA dimension contributes to the ideology score. "
+                    "Higher weight means the dimension is more important for separating parties."
+                ),
+                source_note="Party d = Cohen's d on that single PC. LDA combines them optimally.",
+            )
+            report.add(
+                TableSection(
+                    id=f"lda-weights-{ch}",
+                    title=f"{chamber} LDA Weight Distribution",
+                    html=html,
+                )
+            )
+
+    # 4. LDA comparison card
+    lda_d = lda.get("lda_cohens_d", 0)
+    best_d = lda.get("best_pc_d", 0)
+    best_pc = lda.get("best_pc", "PC1")
+    loo = lda.get("loocv_accuracy", 0)
+    improvement = ((lda_d / best_d - 1) * 100) if best_d > 0 else 0
+
+    report.add(
+        TextSection(
+            id=f"lda-comparison-{ch}",
+            title=f"{chamber} LDA vs. Single PC Comparison",
+            html=(
+                '<div style="background:#e3f2fd; border:1px solid #2196f3; '
+                'border-radius:6px; padding:14px 18px; margin:8px 0;">'
+                "<table style='border-collapse:collapse; width:100%;'>"
+                "<tr>"
+                f"<td style='padding:6px 12px;'><strong>Best single PC ({best_pc})</strong></td>"
+                f"<td style='padding:6px 12px; text-align:right;'>d = {best_d:.2f}</td>"
+                "</tr>"
+                "<tr>"
+                "<td style='padding:6px 12px;'><strong>LDA ideology score</strong></td>"
+                f"<td style='padding:6px 12px; text-align:right;'>d = {lda_d:.2f}</td>"
+                "</tr>"
+                "<tr style='border-top:1px solid #90caf9;'>"
+                "<td style='padding:6px 12px;'><strong>Improvement</strong></td>"
+                f"<td style='padding:6px 12px; text-align:right;'>+{improvement:.0f}%</td>"
+                "</tr>"
+                "<tr>"
+                "<td style='padding:6px 12px;'><strong>Leave-one-out accuracy</strong></td>"
+                f"<td style='padding:6px 12px; text-align:right;'>{loo:.1%}</td>"
+                "</tr>"
+                "</table>"
+                "<p style='margin-top:10px; font-size:0.9em; color:#555;'>"
+                "Cohen's d measures the separation between party means in units of "
+                "pooled standard deviation. Values above 2.0 indicate strong separation. "
+                "Leave-one-out accuracy shows how reliably the ideology score predicts "
+                "party membership when each legislator is held out in turn."
+                "</p>"
+                "</div>"
+            ),
         )
     )
