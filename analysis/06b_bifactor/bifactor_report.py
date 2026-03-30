@@ -62,11 +62,15 @@ def build_bifactor_report(
         _add_convergence_table(report, result, chamber)
         _add_ideal_point_table(report, result, chamber)
         _add_general_forest_figure(report, plots_dir, chamber)
+        _add_general_forest_interactive(report, plots_dir, chamber)
         _add_scatter_figure(report, plots_dir, chamber)
         _add_scatter_interactive(report, plots_dir, chamber)
         _add_ecv_bar_figure(report, plots_dir, chamber)
+        _add_ecv_bar_interactive(report, plots_dir, chamber)
         _add_loadings_figure(report, plots_dir, chamber)
+        _add_loadings_interactive(report, plots_dir, chamber)
         _add_general_vs_1d_figure(report, plots_dir, chamber)
+        _add_general_vs_1d_interactive(report, plots_dir, chamber)
         _add_correlation_table(report, result, chamber)
 
     _add_interpretation_guide(report)
@@ -328,6 +332,24 @@ def _add_general_forest_figure(report: ReportBuilder, plots_dir: Path, chamber: 
         )
 
 
+def _add_general_forest_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"general_forest_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    report.add(
+        InteractiveSection(
+            id=f"interactive-general-forest-{chamber.lower()}",
+            title=f"{chamber} General Factor Forest (Interactive)",
+            html=path.read_text(),
+            caption=(
+                f"Interactive forest plot ({chamber}). "
+                "Hover to see legislator name, party, all three factor scores, and HDIs."
+            ),
+            aria_label=f"Interactive general factor forest plot for {chamber}",
+        )
+    )
+
+
 def _add_scatter_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
     path = plots_dir / f"bifactor_scatter_{chamber.lower()}.png"
     if path.exists():
@@ -375,6 +397,24 @@ def _add_ecv_bar_figure(report: ReportBuilder, plots_dir: Path, chamber: str) ->
         )
 
 
+def _add_ecv_bar_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"ecv_bar_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    report.add(
+        InteractiveSection(
+            id=f"interactive-ecv-bar-{chamber.lower()}",
+            title=f"{chamber} Variance Decomposition (Interactive)",
+            html=path.read_text(),
+            caption=(
+                f"Interactive ECV bar ({chamber}). "
+                "Hover for exact proportions and raw sum-of-squares values."
+            ),
+            aria_label=f"Interactive ECV bar chart for {chamber}",
+        )
+    )
+
+
 def _add_loadings_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
     path = plots_dir / f"factor_loadings_{chamber.lower()}.png"
     if path.exists():
@@ -389,6 +429,24 @@ def _add_loadings_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -
         )
 
 
+def _add_loadings_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"factor_loadings_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    report.add(
+        InteractiveSection(
+            id=f"interactive-factor-loadings-{chamber.lower()}",
+            title=f"{chamber} Factor Loadings (Interactive)",
+            html=path.read_text(),
+            caption=(
+                f"Interactive factor loadings heatmap ({chamber}). "
+                "Hover to see bill number, discrimination values, and bill group."
+            ),
+            aria_label=f"Interactive factor loadings heatmap for {chamber}",
+        )
+    )
+
+
 def _add_general_vs_1d_figure(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
     path = plots_dir / f"general_vs_1d_{chamber.lower()}.png"
     if path.exists():
@@ -401,6 +459,24 @@ def _add_general_vs_1d_figure(report: ReportBuilder, plots_dir: Path, chamber: s
                 alt_text=f"Bifactor theta_G vs 1D IRT scatter for {chamber}",
             )
         )
+
+
+def _add_general_vs_1d_interactive(report: ReportBuilder, plots_dir: Path, chamber: str) -> None:
+    path = plots_dir / f"general_vs_1d_interactive_{chamber.lower()}.html"
+    if not path.exists():
+        return
+    report.add(
+        InteractiveSection(
+            id=f"interactive-general-vs-1d-{chamber.lower()}",
+            title=f"{chamber} General Factor vs 1D IRT (Interactive)",
+            html=path.read_text(),
+            caption=(
+                f"Interactive correlation scatter ({chamber}). "
+                "Hover to see legislator name, party, theta_G, and 1D IRT ideal point."
+            ),
+            aria_label=f"Interactive bifactor vs 1D IRT scatter for {chamber}",
+        )
+    )
 
 
 def _add_correlation_table(

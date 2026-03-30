@@ -972,6 +972,210 @@ def plot_bifactor_scatter_interactive(
     print(f"  Saved: bifactor_scatter_interactive_{chamber.lower()}.html")
 
 
+def plot_general_forest_interactive(
+    ideal_bf: pl.DataFrame,
+    chamber: str,
+    output_dir: Path,
+) -> None:
+    """Plotly interactive forest plot of theta_G with HDIs."""
+    import plotly.graph_objects as go
+
+    sorted_df = ideal_bf.sort("theta_G_mean")
+    fig = go.Figure()
+
+    for party, color in PARTY_COLORS.items():
+        subset = sorted_df.filter(pl.col("party") == party)
+        if subset.is_empty():
+            continue
+
+        # Find y-positions matching the sorted order
+        name_to_y = {
+            row["legislator_slug"]: i for i, row in enumerate(sorted_df.iter_rows(named=True))
+        }
+        y_pos = [name_to_y[s] for s in subset["legislator_slug"].to_list()]
+
+        hover_text = [
+            f"<b>{row['full_name']}</b><br>"
+            f"Party: {row['party']}<br>"
+            f"theta_G: {row['theta_G_mean']:+.3f} "
+            f"[{row['theta_G_hdi_3%']:+.3f}, {row['theta_G_hdi_97%']:+.3f}]<br>"
+            f"theta_S1: {row['theta_S1_mean']:+.3f}<br>"
+            f"theta_S2: {row['theta_S2_mean']:+.3f}"
+            for row in subset.iter_rows(named=True)
+        ]
+
+        fig.add_trace(
+            go.Scatter(
+                x=subset["theta_G_mean"].to_list(),
+                y=y_pos,
+                mode="markers",
+                name=party,
+                marker={"color": color, "size": 7, "opacity": 0.8},
+                error_x={
+                    "type": "data",
+                    "symmetric": False,
+                    "array": [
+                        row["theta_G_hdi_97%"] - row["theta_G_mean"]
+                        for row in subset.iter_rows(named=True)
+                    ],
+                    "arrayminus": [
+                        row["theta_G_mean"] - row["theta_G_hdi_3%"]
+                        for row in subset.iter_rows(named=True)
+                    ],
+                    "color": color,
+                    "thickness": 1,
+                },
+                text=hover_text,
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        title=f"Bifactor General Factor — Kansas {chamber} (EXPERIMENTAL)",
+        xaxis_title="General Factor (theta_G)",
+        yaxis={
+            "tickvals": list(range(sorted_df.height)),
+            "ticktext": sorted_df["full_name"].to_list(),
+            "tickfont": {"size": 8},
+        },
+        hovermode="closest",
+        template="plotly_white",
+        width=700,
+        height=max(500, sorted_df.height * 18),
+        shapes=[
+            {
+                "type": "line",
+                "x0": 0,
+                "x1": 0,
+                "y0": 0,
+                "y1": 1,
+                "yref": "paper",
+                "line": {"color": "gray", "width": 0.5, "dash": "dash"},
+            }
+        ],
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+    (output_dir / f"general_forest_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: general_forest_interactive_{chamber.lower()}.html")
+
+
+def plot_general_vs_1d_interactive(
+    ideal_bf: pl.DataFrame,
+    irt_1d: pl.DataFrame,
+    chamber: str,
+    output_dir: Path,
+) -> None:
+    """Plotly interactive scatter: bifactor theta_G vs 1D IRT xi."""
+    import plotly.graph_objects as go
+
+    irt1d_map = {row["legislator_slug"]: row["xi_mean"] for row in irt_1d.iter_rows(named=True)}
+    shared = ideal_bf.filter(pl.col("legislator_slug").is_in(list(irt1d_map.keys())))
+
+    bf_vals = shared["theta_G_mean"].to_list()
+    irt_vals = [irt1d_map[s] for s in shared["legislator_slug"].to_list()]
+    r = float(np.corrcoef(bf_vals, irt_vals)[0, 1])
+
+    fig = go.Figure()
+    for party, color in PARTY_COLORS.items():
+        subset = shared.filter(pl.col("party") == party)
+        if subset.is_empty():
+            continue
+
+        hover_text = [
+            f"<b>{row['full_name']}</b><br>"
+            f"Party: {row['party']}<br>"
+            f"theta_G: {row['theta_G_mean']:+.3f}<br>"
+            f"1D IRT xi: {irt1d_map[row['legislator_slug']]:+.3f}"
+            for row in subset.iter_rows(named=True)
+        ]
+
+        fig.add_trace(
+            go.Scatter(
+                x=[irt1d_map[s] for s in subset["legislator_slug"].to_list()],
+                y=subset["theta_G_mean"].to_list(),
+                mode="markers",
+                name=party,
+                marker={
+                    "color": color,
+                    "size": 9,
+                    "opacity": 0.7,
+                    "line": {"width": 0.5, "color": "white"},
+                },
+                text=hover_text,
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        title=f"Bifactor theta_G vs 1D IRT — {chamber}  (r = {r:.4f})",
+        xaxis_title="1D IRT Ideal Point (xi)",
+        yaxis_title="Bifactor General Factor (theta_G)",
+        hovermode="closest",
+        template="plotly_white",
+        width=700,
+        height=640,
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+    (output_dir / f"general_vs_1d_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: general_vs_1d_interactive_{chamber.lower()}.html")
+
+
+def plot_ecv_bar_interactive(
+    bf_diag: dict,
+    chamber: str,
+    output_dir: Path,
+) -> None:
+    """Plotly interactive stacked bar of variance decomposition."""
+    import plotly.graph_objects as go
+
+    ecv = bf_diag["ecv"]
+    sum_aG = bf_diag["sum_aG_sq"]
+    sum_aS1 = bf_diag["sum_aS1_sq"]
+    sum_aS2 = bf_diag["sum_aS2_sq"]
+    total = sum_aG + sum_aS1 + sum_aS2
+    if total == 0:
+        return
+
+    labels = ["General (ideology)", "Specific 1 (partisan)", "Specific 2 (bipartisan)"]
+    values = [sum_aG / total, sum_aS1 / total, sum_aS2 / total]
+    raw = [sum_aG, sum_aS1, sum_aS2]
+    colors = ["#4A90D9", "#E81B23", "#999999"]
+
+    fig = go.Figure()
+    for label, frac, raw_val, color in zip(labels, values, raw, colors):
+        fig.add_trace(
+            go.Bar(
+                x=[frac],
+                y=[""],
+                orientation="h",
+                name=label,
+                marker_color=color,
+                text=f"{frac:.1%}",
+                textposition="inside",
+                hovertext=(
+                    f"<b>{label}</b><br>"
+                    f"Proportion: {frac:.1%}<br>"
+                    f"Sum(a^2): {raw_val:.2f}<br>"
+                    f"Total: {total:.2f}"
+                ),
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        barmode="stack",
+        title=f"Explained Common Variance — {chamber}  (ECV = {ecv:.3f})",
+        xaxis={"title": "Proportion of Discriminating Variance", "range": [0, 1]},
+        template="plotly_white",
+        width=800,
+        height=250,
+        showlegend=True,
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+    (output_dir / f"ecv_bar_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: ecv_bar_interactive_{chamber.lower()}.html")
+
+
 def plot_factor_loadings_heatmap(
     bill_params: pl.DataFrame,
     chamber: str,
@@ -1006,6 +1210,65 @@ def plot_factor_loadings_heatmap(
     fig.colorbar(im, ax=ax, label="Discrimination", shrink=0.8)
     fig.tight_layout()
     save_fig(fig, output_dir / f"factor_loadings_{chamber.lower()}.png")
+
+
+def plot_factor_loadings_interactive(
+    bill_params: pl.DataFrame,
+    chamber: str,
+    output_dir: Path,
+) -> None:
+    """Plotly interactive heatmap of factor loadings per bill."""
+    import plotly.graph_objects as go
+
+    df = bill_params.sort(pl.col("a_G_mean").abs(), descending=True).head(50)
+
+    bill_labels = df["bill_number"].to_list()
+    factor_labels = ["General (a_G)", "Specific 1 (a_S1)", "Specific 2 (a_S2)"]
+
+    z = [
+        df["a_G_mean"].to_list(),
+        df["a_S1_mean"].to_list(),
+        df["a_S2_mean"].to_list(),
+    ]
+    # Transpose: bills on y-axis, factors on x-axis
+    z_t = [[z[f][b] for f in range(3)] for b in range(len(bill_labels))]
+
+    # Custom hover text
+    hover = [
+        [
+            f"<b>{bill_labels[b]}</b><br>"
+            f"{factor_labels[f]}: {z[f][b]:+.3f}<br>"
+            f"Group: {df['bill_group'].to_list()[b]}"
+            for f in range(3)
+        ]
+        for b in range(len(bill_labels))
+    ]
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=z_t,
+            x=factor_labels,
+            y=bill_labels,
+            colorscale="RdBu_r",
+            zmid=0,
+            zmin=-2,
+            zmax=2,
+            text=hover,
+            hoverinfo="text",
+            colorbar={"title": "Discrimination"},
+        )
+    )
+
+    fig.update_layout(
+        title=f"Factor Loadings (top 50 by |a_G|) — {chamber}",
+        template="plotly_white",
+        width=600,
+        height=max(500, len(bill_labels) * 18),
+        yaxis={"tickfont": {"size": 8}, "autorange": "reversed"},
+    )
+    html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+    (output_dir / f"factor_loadings_interactive_{chamber.lower()}.html").write_text(html)
+    print(f"  Saved: factor_loadings_interactive_{chamber.lower()}.html")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -1288,11 +1551,15 @@ def main() -> None:
             plot_bifactor_scatter(ideal_bf, chamber, ctx.plots_dir)
             plot_bifactor_scatter_interactive(ideal_bf, chamber, ctx.plots_dir)
             plot_general_forest(ideal_bf, chamber, ctx.plots_dir)
+            plot_general_forest_interactive(ideal_bf, chamber, ctx.plots_dir)
             plot_ecv_bar(bf_diag, chamber, ctx.plots_dir)
+            plot_ecv_bar_interactive(bf_diag, chamber, ctx.plots_dir)
             plot_factor_loadings_heatmap(bill_params_bf, chamber, ctx.plots_dir)
+            plot_factor_loadings_interactive(bill_params_bf, chamber, ctx.plots_dir)
 
             if irt_1d is not None:
                 plot_general_vs_1d(ideal_bf, irt_1d, chamber, ctx.plots_dir)
+                plot_general_vs_1d_interactive(ideal_bf, irt_1d, chamber, ctx.plots_dir)
 
             # ── Print ideal points table ──
             print_header(f"BIFACTOR IDEAL POINTS — {chamber}")
