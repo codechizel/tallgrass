@@ -96,6 +96,7 @@ What are the trade-offs?
 | [0111](0111-canonical-init-strategy-hierarchical.md) | Canonical init strategy for hierarchical IRT (`--init-strategy canonical`) |
 | [0112](0112-2d-irt-supermajority-tuning.md) | 2D IRT tuning for supermajority chambers (adaptive N_TUNE, beta init, contested-only) |
 | [0117](0117-hierarchical-2d-irt.md) | Hierarchical 2D IRT with PLT identification and party pooling (Phase 07b) |
+| [0131](0131-bifactor-irt.md) | Bifactor IRT — general + specific factor ideal points (Phase 06b) |
 | [0118](0118-party-separation-quality-gates.md) | Party separation quality gates across pipeline (axis instability fix) |
 | [0123](0123-wnominate-cross-validation-gate.md) | W-NOMINATE cross-validation gate (superseded by ADR-0127) |
 | [0127](0127-wnominate-shared-variance-ordering-vulnerability.md) | W-NOMINATE shares PCA's variance-ordering vulnerability; gate removed, manual overrides retained |
@@ -326,6 +327,7 @@ What are the trade-offs?
 | [0128](0128-phase05-pca-init-delegation.md) | Phase 05 PCA init delegation (fix hardcoded PC1, 3 flipped sessions) | Accepted | 2026-03-26 |
 | [0129](0129-lda-ideology-projection.md) | Fisher's LDA ideology projection — automated axis instability resolution | Accepted | 2026-03-26 |
 | [0130](0130-bootstrap-support-values.md) | Bootstrap support values for hierarchical clustering | Accepted | 2026-03-28 |
+| [0131](0131-bifactor-irt.md) | Bifactor IRT — general + specific factor ideal points | Experimental | 2026-03-30 |
 
 ## Creating a New ADR
 
