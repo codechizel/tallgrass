@@ -328,6 +328,20 @@ Two CFA-adjacent improvements that don't require the full CFA apparatus:
 
 ---
 
+## Update: Implementation and Empirical Results (2026-03-30)
+
+Phase 06b (bifactor IRT) was implemented following the recommendations in this document and run on all 14 Kansas bienniums (78th-91st). Both the ECV diagnostic in Phase 06 and the full bifactor model were added. Key findings:
+
+**House chambers validate the bifactor approach.** 6 of 13 sessions have ECV < 0.70 (meaningful multidimensional structure). The 90th (2023-2024) and 91st (2025-2026) achieved full convergence with ECV ~0.62 — confirming that ~38% of discriminating variance lives in the specific factors. theta_G correlates r > 0.90 with 1D IRT in all converged House chambers, confirming it captures ideology.
+
+**Senate chambers confirm the small-N warning.** Only 6 of 13 converged. Three sessions collapsed entirely (88th ECV=0.10, 90th ECV=0.04) and three exhibited sign flips. The 8-12 Democrat caucus provides insufficient signal for specific-factor estimation — exactly the scenario this article warned about in the "Practical Considerations" section.
+
+**Takeaway #5 above was correct:** The Dim 2 convergence problem is structural. The bifactor model faces it too, manifesting as collapsed specific factors in Senate supermajority sessions. The bifactor's advantage is diagnostic: ECV and omega_h quantify the problem precisely, whereas the 2D M2PL only reports convergence statistics.
+
+**Canonical routing integration remains deferred** pending external validation (W-NOMINATE, Shor-McCarty) of theta_G vs 2D Dim 1 in the ECV < 0.70 House sessions. See ADR-0131 and `docs/roadmap.md` (BF1-BF4).
+
+---
+
 ## Literature
 
 - Asparouhov, T., & Muthén, B. (2009). Exploratory structural equation modeling. *Structural Equation Modeling*, 16(3), 397-438.

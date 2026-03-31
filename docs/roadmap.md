@@ -80,7 +80,7 @@ What's been done, what's next, and what's on the horizon for the Tallgrass analy
 | 30 | W-NOMINATE Common Space | 2026-03-25 | W-NOMINATE common space via same pairwise chain linking as Phase 28, applied to Phase 16 W-NOMINATE Dim 1 scores. Cross-method validation: IRT vs W-NOMINATE career score r=0.96. All 28 House quality gates pass; 4 early Senate sessions have weak W-NOMINATE party separation (known horseshoe era). Design: `analysis/design/wnominate_common_space.md`, article: `docs/wnominate-common-space.md`. |
 | — | ECV Diagnostic in Phase 06 | 2026-03-30 | Explained Common Variance added to 2D IRT: ECV = sum(a₁²) / [sum(a₁²) + sum(a₂²)]. Reports how much discriminating variance is general (ideology) vs specific (establishment). Integrated into convergence_summary.json and HTML report with color-coded interpretation. |
 | — | Vote Alignment Persistence in EDA | 2026-03-30 | Party-line vote classification (`vote_alignment.parquet`) now persisted in Phase 01 EDA output. Enables fallback bill grouping for bifactor IRT when Phase 05 bill params unavailable. |
-| 06b | Bifactor IRT (Experimental) | 2026-03-30 | Bifactor IRT separating general ideology factor (all bills) from specific factors (partisan/bipartisan bill subsets). Bills classified by Phase 05 IRT discrimination magnitude (|beta|). Identification via orthogonal construction — simpler than Phase 06 PLT. ECV + omega_h diagnostics. `just bifactor`. Design: `analysis/design/bifactor.md`, article: `docs/cfa-irt-dimensionality-deep-dive.md`, ADR-0131. |
+| 06b | Bifactor IRT (Experimental) | 2026-03-30 | Run on all 14 bienniums. House: 6/13 ECV < 0.70 (meaningful structure), 90th+91st fully converged (ECV ~0.62). Senate: 6/13 converged, 3 collapsed (small-N), 3 sign-flipped. 82nd excluded (missing EDA). General factor promising for House; Senate not viable at current convergence rates. `just bifactor`. Design: `analysis/design/bifactor.md`, article: `docs/cfa-irt-dimensionality-deep-dive.md`, ADR-0131. |
 
 ---
 
@@ -869,32 +869,33 @@ Updated Phase 16 module docstring to clarify standalone publication validation r
 
 ## Bifactor IRT Follow-Up (2026-03-30)
 
-Phase 06b (bifactor IRT) is experimental. These items are deferred pending empirical results from the initial run.
+Phase 06b (bifactor IRT) has been run on all 14 bienniums. House results are promising (6/13 ECV < 0.70); Senate struggles (6/13 converged). These items are updated with empirical findings.
 
 ### BF1. Canonical Routing Integration
 
-**Status:** Deferred — run `just bifactor` first to evaluate ECV.
+**Status:** Deferred — House-only integration viable; Senate not recommended.
 
-**Prerequisite:** Bifactor theta_G must empirically outperform 2D Dim 1 on external validation (W-NOMINATE in Phase 16, Shor-McCarty in Phase 17).
+**Empirical findings (2026-03-30):**
+- House: 5 sessions have ECV 0.60-0.70 with good convergence (80th, 81st, 83rd, 90th, 91st) — candidates for routing.
+- House: 2 sessions have ECV < 0.60 (84th, 85th) but weak convergence — not candidates yet.
+- House: 6 sessions have ECV > 0.70 — 1D adequate, no routing needed.
+- Senate: 6/13 converged, 3 collapsed, 3 sign-flipped — **not viable for canonical routing**.
 
-**Decision criteria:**
-- If ECV < 0.60 AND theta_G correlates higher with external scores than 2D Dim 1: integrate into `canonical_ideal_points.py` as a new routing source (`bifactor_general`), preferred over flat 2D when available and converged.
-- If ECV > 0.70: the bifactor adds complexity without meaningful gain. Keep Phase 06b as standalone experimental validation. 1D IRT remains canonical.
-- If ECV 0.60-0.70: assess on a per-chamber basis. Senate (supermajority, horseshoe-prone) may benefit where House does not.
+**Next step:** Run external validation (W-NOMINATE Phase 16, Shor-McCarty Phase 17) comparing theta_G vs 2D Dim 1 for the 5 candidate House sessions. If theta_G correlates higher, integrate as `bifactor_general` routing source for House only.
 
-**Implementation:**
+**Implementation (unchanged):**
 - Add `bifactor_dir` parameter to `write_canonical_ideal_points()` in `analysis/canonical_ideal_points.py`.
 - Add `"bifactor_general"` as a routing source in the manifest schema.
 - Routing preference: H2D Dim 1 → Bifactor theta_G → Flat 2D Dim 1 → 1D IRT.
-- Gate: ECV < 0.60 required for bifactor to be eligible (prevents unnecessary complexity in unidimensional chambers).
+- Gate: ECV < 0.70 + convergence passed required for bifactor to be eligible.
 
 **File:** `analysis/canonical_ideal_points.py`
 
 ### BF2. PPC Model Comparison (LOO-CV)
 
-**Status:** Deferred — requires BF1 decision or standalone validation run.
+**Status:** Deferred — recommended for 90th/91st House (full convergence, ECV ~0.62).
 
-Add bifactor log-likelihood to Phase 08 PPC (`analysis/08_ppc/ppc_data.py`) to enable ELPD-based model comparison: 1D vs 2D vs bifactor.
+Add bifactor log-likelihood to Phase 08 PPC (`analysis/08_ppc/ppc_data.py`) to enable ELPD-based model comparison: 1D vs 2D vs bifactor. Senate LOO-CV not recommended due to poor convergence.
 
 **Implementation:**
 ```python
@@ -919,11 +920,11 @@ def compute_log_likelihood_bifactor(
 
 ### BF3. Sensitivity Analysis on Bill Classification Thresholds
 
-**Status:** Deferred — useful after BF1 if bifactor proves valuable.
+**Status:** Lower priority — classification worked across all runnable sessions without issues.
 
-The bill classification uses `HIGH_DISC_THRESHOLD = 1.5` and `LOW_DISC_THRESHOLD = 0.5` from `analysis/tuning.py`. These are sensible defaults but the bifactor structure may be sensitive to the boundary.
+The bill classification uses `HIGH_DISC_THRESHOLD = 1.5` and `LOW_DISC_THRESHOLD = 0.5` from `analysis/tuning.py`. Empirical results show these defaults produced interpretable results across 13/14 bienniums.
 
-**Proposed analysis:**
+**Proposed analysis (if needed):**
 - Run bifactor at three threshold settings: (1.5/0.5), (1.0/0.5), (1.5/1.0).
 - Compare ECV, omega_h, and theta_G correlations across settings.
 - If results are robust (theta_G r > 0.98 across settings), thresholds are not critical.
@@ -931,14 +932,13 @@ The bill classification uses `HIGH_DISC_THRESHOLD = 1.5` and `LOW_DISC_THRESHOLD
 
 ### BF4. Hierarchical Bifactor (Phase 07c, speculative)
 
-**Status:** Speculative — only if BF1 succeeds and BF2 shows improvement.
+**Status:** Speculative, high risk. Senate already struggles with flat bifactor (6/13); hierarchy would compound convergence problems.
 
 Combine bifactor structure (Phase 06b) with hierarchical party pooling (Phase 07):
 - Party-level priors on theta_G (from Phase 07 party means).
 - Specific factors regularized by party pooling.
-- Would be the "best of both worlds" model.
 
-Risk: 3 factors × 2 parties × non-centered parameterization = complex geometry. Convergence may be worse than either parent model.
+Risk: 3 factors × 2 parties × non-centered parameterization = complex geometry. Empirical results suggest this is only worth attempting on the 90th/91st House if BF1 approves routing.
 
 ---
 

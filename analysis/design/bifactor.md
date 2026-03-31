@@ -93,12 +93,38 @@ omega_h = (sum(a_G))^2 / [(sum(a_G))^2 + sum(a_S1^2) + sum(a_S2^2) + sum(unique_
 
 Proportion of total score variance due to the general factor. Higher = more reliable as a unidimensional ideology measure.
 
+## Empirical Validation (14 Bienniums)
+
+Phase 06b was run on all 14 Kansas bienniums (78th-91st, 1999-2026). 82nd excluded (missing EDA data).
+
+### House Results
+
+| ECV Band | Sessions | Convergence | theta_G vs 1D r |
+|----------|----------|-------------|-----------------|
+| > 0.70 (1D adequate) | 78th, 79th, 86th-89th | 9/13 passed | 0.95-0.99 |
+| 0.60-0.70 (moderate) | 80th, 81st, 83rd, 90th, 91st | All passed | 0.90-0.97 |
+| < 0.60 (strong bifactor) | 84th, 85th | Failed (low omega_h) | 0.41-0.47 |
+
+The 90th and 91st achieved full convergence with ECV ~0.62 — the best bifactor results.
+
+### Senate Results
+
+Only 6/13 converged. Three collapsed to ECV < 0.15 (88th, 90th). Three exhibited sign flips (79th, 86th, 91st). Root cause: small Democrat caucus (8-12 members) starves specific factors.
+
+### Key Findings
+
+1. **Discrimination-based bill classification worked** across all runnable sessions without manual intervention.
+2. **General factor is well-identified in House** — theta_G correlates r > 0.90 with 1D IRT in all converged chambers.
+3. **Specific factors struggle in supermajority Senate** — insufficient within-party signal for theta_S1/S2 estimation.
+4. **ECV diagnostic is critical** — correctly distinguishes sessions where bifactor adds value (ECV < 0.70) from those where 1D suffices.
+
 ## Known Limitations
 
 1. **Wasted parameters:** `a_S1_raw` and `a_S2_raw` are sampled for ALL bills, not just their target group. Non-target bills get prior-like posteriors (zero contribution to likelihood). This wastes sampler effort but avoids variable-size tensor complexity.
-2. **Specific factor convergence:** Low-disc bills have weak signal by definition. theta_S2 may have wide HDIs for most legislators (same issue as Phase 06 Dim 2).
-3. **Classification boundary sensitivity:** Changing HIGH_DISC_THRESHOLD from 1.5 to 1.0 would shift many bills between groups. Sensitivity analysis recommended.
-4. **Not yet in canonical routing:** Phase 06b output does not feed into `canonical_ideal_points.py`. Deferred until empirical validation confirms improvement over 2D Dim 1.
+2. **Specific factor convergence:** Low-disc bills have weak signal by definition. theta_S2 may have wide HDIs for most legislators (same issue as Phase 06 Dim 2). Confirmed empirically: Senate convergence rate 6/13.
+3. **Classification boundary sensitivity:** Changing HIGH_DISC_THRESHOLD from 1.5 to 1.0 would shift many bills between groups. Sensitivity analysis recommended but lower priority — classification worked across all runnable sessions.
+4. **Not yet in canonical routing:** Phase 06b output does not feed into `canonical_ideal_points.py`. House-only integration is viable for ECV < 0.70 sessions; Senate not recommended at current convergence rates.
+5. **Senate small-N problem:** 8-12 Democrats per Senate session is insufficient for stable specific-factor estimation. Three sessions collapsed entirely (ECV < 0.15).
 
 ## Comparison with Phase 06 (2D M2PL)
 

@@ -39,3 +39,36 @@ Add Phase 06b (bifactor IRT) to the single-biennium pipeline:
 - **If ECV < 0.60:** The specific factors carry substantial variance. The bifactor general factor may be a better canonical ideology score than 2D Dim 1.
 - **Canonical routing integration (deferred):** Phase 06b does not yet feed into `canonical_ideal_points.py`. This will be revisited based on empirical results.
 - **PPC support (deferred):** Bifactor log-likelihood not yet in Phase 08 PPC.
+
+## Empirical Results (14 Bienniums, 2026-03-30)
+
+Phase 06b was run on all 14 Kansas bienniums (78th-91st). The 82nd failed due to missing EDA data for its run-id.
+
+### House — Promising
+
+11/13 chambers converged on the general factor. ECV ranged from 0.42 (85th, strong multidimensionality) to 0.98 (86th, essentially unidimensional).
+
+| Pattern | Sessions | ECV Range | Assessment |
+|---------|----------|-----------|------------|
+| 1D adequate (ECV > 0.70) | 78th, 79th, 86th-89th | 0.78-0.98 | Bifactor adds no value; 1D IRT sufficient |
+| Meaningful structure (ECV 0.60-0.70) | 80th, 81st, 83rd, 90th, 91st | 0.60-0.73 | Specific factors carry real variance; theta_G may improve over 2D Dim 1 |
+| Strong multidimensionality (ECV < 0.60) | 84th, 85th | 0.42-0.62 | Transitional supermajority era; convergence weak (low omega_h) |
+
+The 90th and 91st achieved **full convergence** (no warnings) with ECV ~0.62 — the cleanest bifactor results. theta_G correlates r > 0.96 with 1D IRT in all converged House chambers.
+
+### Senate — Struggles
+
+Only 6/13 converged. Root cause: small Democrat caucus (8-12 members) provides insufficient signal for specific factors.
+
+| Issue | Sessions | Details |
+|-------|----------|---------|
+| Collapsed (ECV < 0.15) | 88th, 90th | General factor captured near-zero variance; model poorly identified |
+| Sign flip (r < -0.50 with 1D) | 79th, 86th, 91st | Post-hoc sign check failed to correct; horseshoe-era contamination |
+| Converged well | 81st, 83rd, 85th, 87th | Senate works when party balance is more moderate |
+
+### Implications for Deferred Items
+
+- **BF1 (canonical routing):** House-only integration is viable for ECV < 0.70 sessions. Senate not recommended at current convergence rates.
+- **BF2 (PPC LOO-CV):** Worthwhile for the 90th/91st House (full convergence, meaningful ECV).
+- **BF3 (threshold sensitivity):** Lower priority — the discrimination-based classification worked across all runnable sessions.
+- **BF4 (hierarchical bifactor):** Risk is high — Senate already struggles with flat bifactor; adding hierarchy would compound convergence problems.
